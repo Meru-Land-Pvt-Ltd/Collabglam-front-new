@@ -4,7 +4,6 @@ import * as Api from "@/lib/api";
 import { post as libPost } from "@/lib/api";
 
 const INFLUENCER_BASE = "/influencer";
-const LIST_BASE = "/list";
 const CATEGORY_BASE = "/category";
 const CAMPAIGN_BASE = "/campaign";
 
@@ -35,7 +34,7 @@ export function unwrap<T>(res: ApiEnvelope<T>): T {
   // { success: true, data: ... }
   if (x && typeof x === "object" && "success" in x && x.data !== undefined) x = x.data;
 
-  // { data: ... }
+  // { data: ... }  (also covers { total, data })
   if (x && typeof x === "object" && x.data !== undefined) x = x.data;
 
   return x as T;
@@ -147,7 +146,7 @@ function authHeader(token?: string) {
 }
 
 /** -------------------------
- *  ✅ LIST APIs (BASE: /list)
+ *  ✅ LIST APIs
  *  ------------------------*/
 export type ListQuery = { limit?: number; search?: string };
 
@@ -155,43 +154,57 @@ export type CountryRow = {
   _id?: string;
   id?: string;
 
+  countryName?: string; // ✅ backend returns this
   countryNameEn?: string;
+
+  callingCode?: string;
+  countryCode?: string;
   flag?: string;
 
-  countryCode?: string;
   iso2?: string;
   iso3?: string;
-
   timeZone?: string;
   timezone?: string;
   timezones?: string[];
 };
 
-export type LangRow = { _id?: string; code?: string; name?: string };
+export type LangRow = { _id?: string; id?: string; code?: string; name?: string };
 
 export async function apiListCountries(params: ListQuery = {}) {
-  return apiGet<CountryRow[]>(`${LIST_BASE}/countries`, params);
+  return apiGet<CountryRow[]>(`/country/getall`, params);
 }
 
 export async function apiListContentLanguages(params: ListQuery = {}) {
-  return apiGet<LangRow[]>(`${LIST_BASE}/content-languages`, params);
+  // returns { total, data: [...] } -> unwrap() returns the data array
+  return apiGet<LangRow[]>(`/languages/all`, params);
 }
 
 /** -------------------------
- *  ✅ CATEGORY APIs
+ *  ✅ CATEGORY APIs  (UPDATED)
+ *  Endpoint: GET /category/categories
+ *  Response: { count, categories: [{ _id, name, subcategories: [...] }] }
+ *  UI needs only category name
  *  ------------------------*/
 export type CategoryRow = { id: string; name: string };
 
-export async function apiCategoryGetAll(input: { search?: string; page?: number; limit?: number } = {}) {
-  return apiPost<CategoryRow[]>(`${CATEGORY_BASE}/get-all`, {
-    search: input.search ?? "",
-    page: input.page ?? 1,
-    limit: input.limit ?? 50,
-  });
+export async function apiCategoryGetAll(_input: { search?: string; page?: number; limit?: number } = {}) {
+  // keep signature so signup page doesn't change
+  const raw = await apiGet<any>(`${CATEGORY_BASE}/categories`);
+
+  const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.categories) ? raw.categories : [];
+
+  return arr
+    .map((c: any) => ({
+      id: String(c?._id ?? c?.id ?? ""),
+      name: String(c?.name ?? ""),
+    }))
+    .filter((c: CategoryRow) => !!c.id);
 }
 
 /** -------------------------
- *  ✅ AUTH + SIGNUP
+ *  ✅ AUTH + SIGNUP (UPDATED)
+ *  Send OTP: POST /influencer/request-otp
+ *  Verify OTP: POST /influencer/verify-otp
  *  ------------------------*/
 export type InfluencerSignUpRoute = "page1" | "page2" | "page3" | "homepage";
 
@@ -199,19 +212,21 @@ export type SignupVerifyResponse = {
   message: string;
   influencerId: string;
   token: string;
-  route?: InfluencerSignUpRoute; // ✅ NEW
-  onboarding?: { page1Done: boolean; page2Done: boolean; page3Done: boolean }; // ✅ NEW
+  route?: InfluencerSignUpRoute;
+  onboarding?: { page1Done: boolean; page2Done: boolean; page3Done: boolean };
 };
 
-// ✅ UPDATED: supports multi category selection, still backward compatible with categoryId
 export async function apiSendInfluencerSignupOtp(input: {
   creatorName: string;
   email: string;
   password: string;
 
   countryId: string;
+
+  // signup page still uses single languageId select
   languageId?: string;
 
+  // multi-category
   categoryIds?: string[];
   categoryId?: string;
 }) {
@@ -223,39 +238,26 @@ export async function apiSendInfluencerSignupOtp(input: {
       : [];
 
   const payload: AnyObj = {
-    name: input.creatorName?.trim(),
-    creatorName: input.creatorName?.trim(),
     email: input.email?.trim(),
+    name: input.creatorName?.trim(),
     password: input.password,
-
     countryId: input.countryId,
-    languageId: input.languageId,
-
-    categoryIds: normalizedCategoryIds,
-    categoryId: normalizedCategoryIds[0],
-
-    // optional compatibility fields (safe if backend ignores)
-    locationCountryId: input.countryId,
-    location: input.countryId,
     languageIds: input.languageId ? [input.languageId] : [],
-    languages: input.languageId ? [input.languageId] : [],
-    categories: normalizedCategoryIds,
+    categoryIds: normalizedCategoryIds,
   };
 
-  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/send-otp-signup`, payload);
+  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/request-otp`, payload);
 }
 
-// ✅ UPDATED: now expects route + onboarding flags from backend
 export async function apiVerifyInfluencerOtpSignup(input: { email: string; otp: string }) {
-  return apiPost<SignupVerifyResponse>(`${INFLUENCER_BASE}/verify-otp-signup`, {
+  return apiPost<SignupVerifyResponse>(`${INFLUENCER_BASE}/verify-otp`, {
     email: input.email.trim(),
     otp: input.otp,
   });
 }
 
 /** -------------------------
- *  ✅ SIGN IN (UPDATED to match backend)
- *  Backend returns: { message, influencerId, token, route, onboarding? }
+ *  ✅ SIGN IN (kept as-is)
  *  ------------------------*/
 export type InfluencerSignInRoute = "page1" | "page2" | "page3" | "homepage";
 
@@ -276,7 +278,6 @@ export async function apiSignInInfluencer(email: string, password: string) {
 
 /** -------------------------
  *  ✅ ONBOARDING
- *  IMPORTANT: pass token in headers (protected route)
  *  ------------------------*/
 export type QA = { question: string; answers: string[] };
 
@@ -285,7 +286,7 @@ export async function apiSaveInfluencerOnboarding(
     page1?: QA[];
     page2?: QA[];
     page3?: QA[];
-    ispage1Skip?: boolean; // (backend currently doesn't use ispage1Skip, but safe)
+    ispage1Skip?: boolean;
     ispage2Skip?: boolean;
     ispage3Skip?: boolean;
 
@@ -331,7 +332,6 @@ export async function apiUpdateInfluencerPasswordWithResetToken(resetToken: stri
 
 /** -------------------------
  *  ✅ CAMPAIGN: ACTIVE CAMPAIGNS
- *  URL: POST /campaign/active
  *  ------------------------*/
 export type GetAllActiveCampaignsBody = {
   influencerId: string;
