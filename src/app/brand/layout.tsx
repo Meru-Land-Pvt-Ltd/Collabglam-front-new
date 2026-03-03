@@ -8,7 +8,7 @@ import BrandScaffold from "@/components/ui/brand/brandScaffold";
 export default function BrandAppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  const NO_SCAFFOLD_ROUTES = ["/brand/influencer-invitation"];
+  const NO_SCAFFOLD_ROUTES = ["/brand/login", "/brand/signup"];
 
   const skipScaffold = NO_SCAFFOLD_ROUTES.some(
     (route) => pathname === route
