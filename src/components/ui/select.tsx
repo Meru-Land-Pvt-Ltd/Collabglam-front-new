@@ -15,12 +15,6 @@ export const FIELD_SHELL_SIZE: Record<FieldSize, string> = {
   large: "min-h-[4.5rem] md:min-h-[4.75rem] xl:min-h-[5rem] 2xl:min-h-[5.5rem]",
 };
 
-/**
- * ✅ Direction control
- * - "auto": flips up/down based on viewport space
- * - "up": always open up
- * - "down": always open down
- */
 export type DropdownDirection = "auto" | "up" | "down";
 
 /* -------------------------------------------------------------------------------------------------

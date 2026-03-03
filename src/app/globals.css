@@ -14,6 +14,7 @@
 }
 
 /* Add this to your app/globals.css or main CSS file */
+
 @keyframes confetti-fall {
   0% {
     transform: translateY(-50px);
@@ -1958,12 +1959,3 @@ input:-webkit-autofill {
   animation-name: cgAutofillStart;
   animation-duration: 0.01s;
 }
-
-/* Quill generates .ql-font-{value} classes on <span> elements */
-.ql-font-inter          { font-family: 'Inter', sans-serif; }
-.ql-font-arial          { font-family: Arial, sans-serif; }
-.ql-font-georgia        { font-family: Georgia, serif; }
-.ql-font-times-new-roman { font-family: 'Times New Roman', Times, serif; }
-.ql-font-courier-new    { font-family: 'Courier New', Courier, monospace; }
-.ql-font-verdana        { font-family: Verdana, sans-serif; }
-.ql-font-trebuchet-ms   { font-family: 'Trebuchet MS', sans-serif; }
