@@ -1,4 +1,4 @@
-// app/layout.tsx OR app/brand/layout.tsx (wherever you use this)
+// app/brand/layout.tsx (wherever you use this)
 "use client";
 
 import React from "react";
