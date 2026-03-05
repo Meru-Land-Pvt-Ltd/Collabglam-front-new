@@ -5,8 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-import logo from "@/public/logo.png";
-
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
@@ -189,6 +187,8 @@ export default function ForgotPassword() {
       setIsVerifyingOtp(true);
       try {
         const res = await apiVerifyOtpForgot(email.trim(), otp.trim());
+        console.log(res.resetToken);
+        
         setResetToken(res.resetToken);
         setStep("new_password");
 
@@ -236,6 +236,8 @@ export default function ForgotPassword() {
 
       setIsUpdatingPw(true);
       try {
+        console.log(resetToken);
+        
         await apiUpdatePasswordWithResetToken(resetToken, password);
 
         toast({
@@ -305,7 +307,7 @@ export default function ForgotPassword() {
           "
         >
           <Link href="/" className="flex items-center gap-s">
-            <Image src={logo} alt="CollabGlam Logo" width={40} height={40} className="object-contain" priority />
+            <img src="/logo.png" alt="CollabGlam Logo" width={40} height={40} className="object-contain" />
             <span className="leading-tight">
               <span className="block text-[20px] font-bold text-tx-primary">CollabGlam</span>
               <span className="block text-[10px] leading-[12px] text-tx-tertiary -mt-[2px]">For Brands</span>

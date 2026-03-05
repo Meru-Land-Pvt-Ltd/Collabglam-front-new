@@ -1,7 +1,6 @@
 // services/brandApi.ts
 import axios from "axios";
 import * as Api from "@/lib/api";
-import { post as libPost } from "@/lib/api";
 
 const BRAND_BASE = "/brand";
 const LIST_BASE = "/list";
@@ -131,11 +130,6 @@ async function apiGet<T>(path: string, params?: AnyObj, config?: RequestConfig) 
 }
 
 async function apiPost<T>(path: string, body?: any, config?: RequestConfig) {
-  // Prefer your existing lib post() if present
-  if (typeof libPost === "function") {
-    const res = await (libPost as any)(path, body, config);
-    return unwrap<T>(res as any);
-  }
   return apiRequest<T>("POST", path, { data: body, config });
 }
 
