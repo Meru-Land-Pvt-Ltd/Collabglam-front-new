@@ -311,13 +311,13 @@ export default function InfluencerOnboardingPage() {
     deliveryPreference: [],
   });
 
-  React.useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      router.replace("/influencer/signup");
-      return;
-    }
-  }, [router, getToken]);
+  // React.useEffect(() => {
+  //   const token = getToken();
+  //   if (!token) {
+  //     router.replace("/influencer/signup");
+  //     return;
+  //   }
+  // }, [router, getToken]);
 
   const TOTAL_STEPS = 3;
   const progressPct = ((onboardStep + 1) / TOTAL_STEPS) * 100;

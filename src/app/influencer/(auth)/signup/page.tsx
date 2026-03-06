@@ -79,7 +79,8 @@ export default function InfluencerSignupPage() {
 
         setCountries(Array.isArray(c) ? c : []);
         setLanguagesList(Array.isArray(l) ? l : []);
-        setCategoriesList(Array.isArray(cat) ? cat : []);
+        const catRows = Array.isArray((cat as any)?.categories) ? (cat as any).categories : [];
+        setCategoriesList(catRows);
       } catch (err) {
         toast({
           icon: "error",
@@ -99,8 +100,12 @@ export default function InfluencerSignupPage() {
   // ✅ build multi-select options for categories
   const categoryOptions: Chip[] = React.useMemo(() => {
     return categoriesList
-      .filter((c) => !!c.id)
-      .map((c) => ({ label: c.name ?? "Category", value: String(c.id) }));
+      .map((c: any) => {
+        const id = String(c._id ?? c.id ?? "");
+        if (!id) return null;
+        return { label: c.name ?? "Category", value: id };
+      })
+      .filter(Boolean) as Chip[];
   }, [categoriesList]);
 
   // -------------------------
@@ -263,7 +268,9 @@ export default function InfluencerSignupPage() {
     const country = countries.find((x) => String(x._id ?? x.id) === String(countryId));
     const lang = languagesList.find((x) => String(x._id) === String(languageId));
 
-    const cats = categoriesList.filter((x) => categoryIds.includes(String(x.id)));
+    const cats = categoriesList.filter((x: any) =>
+      categoryIds.includes(String(x._id ?? x.id))
+    );
     const categoryNames = cats.map((c) => c.name).filter(Boolean);
 
     localStorage.setItem(
@@ -539,12 +546,25 @@ export default function InfluencerSignupPage() {
                       >
                         {countries
                           .filter((c) => !!(c._id ?? c.id))
-                          .map((c) => {
+                          .map((c: any) => {
                             const id = String(c._id ?? c.id);
-                            const label = `${c.flag ?? ""} ${c.countryNameEn ?? ""}`.trim();
+
+                            // ✅ pick whichever field actually exists in your API
+                            const name =
+                              c.countryName ??
+                              c.countryCode ??
+                              c.country ??
+                              c.label ??
+                              "";
+
                             return (
                               <SelectItem key={id} value={id}>
-                                {label}
+                                <div className="flex items-center gap-2">
+                                  <span>{c.flag ?? ""}</span>
+                                  <span className="text-[color:var(--Text-Primary,#1A1A1A)]">
+                                    {name}
+                                  </span>
+                                </div>
                               </SelectItem>
                             );
                           })}
