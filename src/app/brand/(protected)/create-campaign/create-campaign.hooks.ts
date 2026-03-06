@@ -222,10 +222,12 @@ export function useCampaignLists(enabled: boolean) {
   });
 
   const countriesByName: Option[] = useMemo(() => {
+    console.log(countriesRaw);
+    
     return uniqByValue(
       (countriesRaw.data ?? [])
         .map((c: any) => {
-          const name = String(c?.countryNameEn ?? "").trim();
+          const name = String(c?.countryName ?? "").trim();
           const flag = String(c?.flag ?? "").trim();
           const id = idOf(c) || String(c?.countryCode ?? "").trim().toLowerCase();
           return name && id ? { label: `${flag ? flag + " " : ""}${name}`, value: id } : null;
@@ -238,7 +240,7 @@ export function useCampaignLists(enabled: boolean) {
     return uniqByValue(
       (countriesRaw.data ?? [])
         .map((c: any) => {
-          const name = String(c?.countryNameEn ?? "").trim();
+          const name = String(c?.countryName ?? "").trim();
           const flag = String(c?.flag ?? "").trim();
           const id = countryKey(c);
           return name && id ? { label: `${flag ? flag + " " : ""}${name}`, value: id } : null;

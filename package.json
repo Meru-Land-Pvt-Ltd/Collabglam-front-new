@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@base-ui/react": "^1.2.0",
     "@headlessui/react": "^2.2.4",
     "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.2.0",

@@ -1,11 +1,14 @@
 // services/brandApi.ts
 import axios from "axios";
 import * as Api from "@/lib/api";
+import { post as libPost } from "@/lib/api";
 
 const BRAND_BASE = "/brand";
 const LIST_BASE = "/list";
 const CAMPAIGN_BASE = "/campaign";
 const WALLET_BASE = "/wallet";
+const INVITATION_BASE = "/invitation";
+const APPLY_BASE = "/apply-campaign";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -130,6 +133,11 @@ async function apiGet<T>(path: string, params?: AnyObj, config?: RequestConfig) 
 }
 
 async function apiPost<T>(path: string, body?: any, config?: RequestConfig) {
+  // Prefer your existing lib post() if present
+  if (typeof libPost === "function") {
+    const res = await (libPost as any)(path, body, config);
+    return unwrap<T>(res as any);
+  }
   return apiRequest<T>("POST", path, { data: body, config });
 }
 
@@ -579,8 +587,18 @@ export async function apiCampaignPause(payload: { campaignId: string; brandId?: 
   return apiPost<EnrichedCampaignDoc>(`${CAMPAIGN_BASE}/pause`, payload);
 }
 
+export type DeleteCampaignByCampaignIdResponse = {
+  message: string;
+  deleted: {
+    campaignId: string;
+    campaignTitle: string;
+    status: string;
+    hadContracts: boolean;
+  };
+};
+
 export async function apiCampaignDelete(payload: { brandId: string; campaignId: string }) {
-  return apiPost<any>(`${CAMPAIGN_BASE}/delete`, payload);
+  return apiPost<DeleteCampaignByCampaignIdResponse>(`${CAMPAIGN_BASE}/delete`, payload);
 }
 
 /** -------------------------
@@ -661,4 +679,174 @@ export async function apiGetFrozenAmountForCampaign(params: {
 }) {
   // ✅ calls: GET /wallet/freeze-amount?brandId=...&campaignId=...
   return apiGet<FrozenAmountResponse>(`${WALLET_BASE}/freeze-amount`, params);
+}
+
+
+export type RecommendedInfluencerRow = {
+  // keep legacy fields (safe)
+  influencerId: string;
+  name: string;
+
+  // optional: if backend now returns full influencer doc,
+  // you can gradually adopt without breaking callers
+  // [key: string]: any;
+};
+
+export type RecommendedInfluencersResponse = {
+  items: RecommendedInfluencerRow[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+};
+
+export async function apiCampaignRecommendedInfluencers(payload: {
+  brandId: string;     // ✅ NEW
+  campaignId: string;  // ✅ REQUIRED
+  page?: number;
+  limit?: number;
+}) {
+  return apiPost<RecommendedInfluencersResponse>(`${CAMPAIGN_BASE}/recommended-influencers`, {
+    brandId: payload.brandId,           // ✅ send brandId
+    campaignId: payload.campaignId,     // ✅ send campaignId
+    page: payload.page ?? 1,
+    limit: payload.limit ?? 20,
+  });
+}
+
+export type UpdateCampaignStatusPayload = {
+  brandId: string;
+  campaignId: string;
+  status: "draft" | "scheduled" | "active" | "paused" | "completed" | "archived";
+};
+
+export type UpdateCampaignStatusResponse = {
+  message: string;
+};
+
+export async function apiCampaignUpdateStatus(payload: UpdateCampaignStatusPayload) {
+  // backend endpoint: POST /campaign/update-status
+  return apiPost<UpdateCampaignStatusResponse>(`${CAMPAIGN_BASE}/update-status`, payload);
+}
+
+
+
+export type InviteInfluencerPayload = {
+  brandId: string;
+  campaignId: string;
+  influencerId: string;     // ✅ mandatory
+  modashId?: string;        // ✅ optional (ObjectId string)
+};
+
+export type InviteInfluencerResponse = {
+  message: string;
+  doc: any; // Invitation bucket doc (brandId + campaignId + invites[])
+};
+
+export async function apiCampaignInviteInfluencer(payload: InviteInfluencerPayload) {
+  // backend endpoint: POST /campaign/invite
+  return apiPost<InviteInfluencerResponse>(`${CAMPAIGN_BASE}/invite`, payload);
+}
+
+
+
+export type InvitedInfluencerRow = {
+  inviteId: string;
+  status: "invited" | "accepted" | "declined" | "cancelled";
+  invitedAt: string | null;
+  modashId: string | null;
+  influencer: any | null; // influencer doc (password excluded)
+};
+
+export type GetInvitationListByCampaignPayload = {
+  brandId: string;
+  campaignId: string;
+  page?: number;
+  limit?: number;
+};
+
+export type GetInvitationListByCampaignResponse = {
+  items: InvitedInfluencerRow[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
+};
+
+export async function apiGetInvitationListByCampaign(payload: GetInvitationListByCampaignPayload) {
+  // backend endpoint: POST /invitation/list
+  return apiPost<GetInvitationListByCampaignResponse>(`${INVITATION_BASE}/list`, {
+    brandId: payload.brandId,
+    campaignId: payload.campaignId,
+    page: payload.page ?? 1,
+    limit: payload.limit ?? 20,
+  });
+}
+
+export type ApplicantStatus = "applied" | "shortlisted" | "undecided" | "active" | "rejected";
+
+// ✅ Apply (Influencer)
+export type ApplyCampaignPayload = {
+  influencerId: string;
+  campaignId: string;
+};
+
+export type ApplyCampaignResponse = {
+  message: string;
+  campaignId: string;
+  campaignTitle: string;
+  totalApplicants: number;
+  contractsDone: number;
+  numberOfInfluencers: number;
+};
+
+export async function apiApplyToCampaign(payload: ApplyCampaignPayload) {
+  // backend: POST /apply-campaign/apply (influencerAuth)
+  return apiPost<ApplyCampaignResponse>(`${APPLY_BASE}/apply`, payload);
+}
+
+// ✅ Get Applicants (Brand) + optional status filter
+export type GetApplicantsByCampaignPayload = {
+  campaignId: string;
+  status?: ApplicantStatus; // optional filter
+};
+
+export type ApplicantRow = {
+  influencerId: string;
+  influencerName: string;
+  appliedAt: string;
+
+  status?: ApplicantStatus;
+  statusUpdatedAt?: string;
+};
+
+export type GetApplicantsByCampaignResponse = {
+  campaignId: string;
+  campaignTitle: string;
+  status: ApplicantStatus | null;
+  applicants: ApplicantRow[];
+  totalApplicants: number;
+};
+
+export async function apiGetApplicantsByCampaign(payload: GetApplicantsByCampaignPayload) {
+  // backend: POST /apply-campaign/applicants (brandAuth)
+  return apiPost<GetApplicantsByCampaignResponse>(`${APPLY_BASE}/applicants`, payload);
+}
+
+// ✅ Update Applicant Status (Brand)
+export type UpdateApplicantStatusPayload = {
+  campaignId: string;
+  influencerId: string;
+  status: ApplicantStatus;
+};
+
+export type UpdateApplicantStatusResponse = {
+  message: string;
+  campaignId: string;
+  influencerId: string;
+  status: ApplicantStatus;
+};
+
+export async function apiUpdateApplicantStatus(payload: UpdateApplicantStatusPayload) {
+  // backend: POST /apply-campaign/status/update (brandAuth)
+  return apiPost<UpdateApplicantStatusResponse>(`${APPLY_BASE}/status/update`, payload);
 }
