@@ -335,24 +335,41 @@ export default function BrandSubscriptionPage() {
 
           const brandId = localStorage.getItem("brandId");
           const planId = verifyResp.planId || localStorage.getItem("pendingPlanId") || "";
-          if (!brandId || !planId) throw new Error("Missing brandId/planId for subscription assignment.");
+          const billingCycle =
+            (localStorage.getItem("pendingBillingCycle") as BillingCycle | null) || "monthly";
 
-          await post("/subscription/assign", {
+          if (!brandId || !planId) {
+            throw new Error("Missing brandId/planId for subscription assignment.");
+          }
+
+          const assignResp = await post<{
+            message: string;
+            subscription?: {
+              planId?: string;
+              planName?: string;
+              expiresAt?: string | null;
+            };
+          }>("/subscription/assign", {
             userType: "Brand",
             userId: brandId,
             planId,
+            billingCycle,
           });
 
-          const planName = verifyResp.planName || localStorage.getItem("pendingPlanName") || "";
+          const planName = assignResp?.subscription?.planName
+            || verifyResp.planName
+            || localStorage.getItem("pendingPlanName")
+            || "";
 
           setCurrentPlan(planName || null);
-          setExpiresAt(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());
+          setExpiresAt(assignResp?.subscription?.expiresAt ?? null);
 
           localStorage.setItem("brandPlanId", planId);
           if (planName) localStorage.setItem("brandPlanName", planName);
 
           localStorage.removeItem("pendingPlanId");
           localStorage.removeItem("pendingPlanName");
+          localStorage.removeItem("pendingBillingCycle");
 
           setPaymentStatus("success");
           setPaymentMessage("Subscription updated successfully!");
@@ -393,7 +410,7 @@ export default function BrandSubscriptionPage() {
 
         const id = localStorage.getItem("brandId");
         if (id) {
-          const brand = await get<BrandData>(`/brand?id=${id}`);
+          const brand = await get<BrandData>(`/brand/${id}`);
 
           setCurrentPlan(brand.subscription?.planName || null);
           setExpiresAt(brand.subscription?.expiresAt ?? null);
@@ -578,6 +595,7 @@ export default function BrandSubscriptionPage() {
         userType: "Brand",
         userId: brandId,
         planId: selectedPlan.planId,
+        billingCycle: "monthly",
       });
 
       setCurrentPlan(selectedPlan.name);
@@ -629,8 +647,8 @@ export default function BrandSubscriptionPage() {
                   onClick={() => setBilling("monthly")}
                   aria-pressed={billing === "monthly"}
                   className={`px-6 py-2 rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400 ${billing === "monthly"
-                      ? "bg-white shadow text-gray-900"
-                      : "text-gray-600 hover:text-gray-900"
+                    ? "bg-white shadow text-gray-900"
+                    : "text-gray-600 hover:text-gray-900"
                     }`}
                 >
                   Monthly
@@ -639,8 +657,8 @@ export default function BrandSubscriptionPage() {
                   onClick={() => setBilling("annual")}
                   aria-pressed={billing === "annual"}
                   className={`px-6 py-2 rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400 ${billing === "annual"
-                      ? "bg-white shadow text-gray-900"
-                      : "text-gray-600 hover:text-gray-900"
+                    ? "bg-white shadow text-gray-900"
+                    : "text-gray-600 hover:text-gray-900"
                     }`}
                 >
                   Annual
@@ -693,10 +711,10 @@ export default function BrandSubscriptionPage() {
             <div className="max-w-md mx-auto mb-8">
               <div
                 className={`p-4 rounded-2xl border flex items-center justify-center gap-3 ${paymentStatus === "success"
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                    : paymentStatus === "processing"
-                      ? "bg-orange-50 border-orange-200 text-orange-800"
-                      : "bg-red-50 border-red-200 text-red-800"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : paymentStatus === "processing"
+                    ? "bg-orange-50 border-orange-200 text-orange-800"
+                    : "bg-red-50 border-red-200 text-red-800"
                   }`}
               >
                 {paymentStatus === "success" ? (
@@ -906,8 +924,8 @@ export default function BrandSubscriptionPage() {
                       onClick={() => handleSelect(plan)}
                       disabled={isActive || isProcessing}
                       className={`${baseButtonClasses} ${isActive || isProcessing
-                          ? "bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200"
-                          : "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF8C1A] hover:to-[#FF5C1E] text-white"
+                        ? "bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200"
+                        : "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF8C1A] hover:to-[#FF5C1E] text-white"
                         }`}
                     >
                       {isActive ? (
@@ -942,8 +960,8 @@ export default function BrandSubscriptionPage() {
                         >
                           <span
                             className={`mt-0.5 inline-flex items-center justify-center rounded-sm ring-1 h-5 w-5 flex-shrink-0 ${ok
-                                ? "bg-green-50 text-green-600 ring-green-200"
-                                : "bg-gray-100 text-gray-400 ring-gray-200"
+                              ? "bg-green-50 text-green-600 ring-green-200"
+                              : "bg-gray-100 text-gray-400 ring-gray-200"
                               }`}
                           >
                             {ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
@@ -1039,8 +1057,8 @@ export default function BrandSubscriptionPage() {
                 {contactToast.type !== "idle" && (
                   <div
                     className={`p-4 rounded-2xl border text-sm ${contactToast.type === "success"
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                        : "bg-red-50 border-red-200 text-red-800"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-red-50 border-red-200 text-red-800"
                       }`}
                   >
                     {contactToast.message}
@@ -1108,8 +1126,8 @@ export default function BrandSubscriptionPage() {
                     type="submit"
                     disabled={contactSubmitting}
                     className={`w-48 px-6 py-3 rounded-xl font-semibold text-white transition-colors ${contactSubmitting
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF7236] hover:to-[#FFA135] shadow-lg"
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF7236] hover:to-[#FFA135] shadow-lg"
                       }`}
                   >
                     {contactSubmitting ? (
@@ -1226,8 +1244,8 @@ export default function BrandSubscriptionPage() {
                   onClick={handleConfirmDowngrade}
                   disabled={confirmText.trim().toUpperCase() !== "CANCEL" || submittingDowngrade}
                   className={`px-6 py-3 rounded-xl font-semibold text-white transition-colors ${confirmText.trim().toUpperCase() === "CANCEL" && !submittingDowngrade
-                      ? "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF7236] hover:to-[#FFA135] shadow-lg"
-                      : "bg-gray-400 cursor-not-allowed"
+                    ? "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF7236] hover:to-[#FFA135] shadow-lg"
+                    : "bg-gray-400 cursor-not-allowed"
                     }`}
                 >
                   {submittingDowngrade ? (

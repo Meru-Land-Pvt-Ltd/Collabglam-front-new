@@ -18,14 +18,13 @@ function Inner({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative z-0">
         <div className="shrink-0 overflow-hidden">
-          <BrandTopbar
-            actionsOverride={actions}
-            onMenuToggle={() => setDrawerOpen((v) => !v)}
-          />
+          <BrandTopbar actionsOverride={actions} onMenuToggle={() => setDrawerOpen((v) => !v)} />
         </div>
 
         <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-          {children}
+          <div className="min-h-[calc(100dvh-var(--brand-topbar-h,72px))]">
+            {children}
+          </div>
           <ToastStyles />
         </div>
       </div>
