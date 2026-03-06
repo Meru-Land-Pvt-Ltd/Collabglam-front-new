@@ -11,6 +11,7 @@ import {
 import { format } from "date-fns";
 import { post } from "@/lib/api";
 import BrandTourModal from "@/components/common/BrandTourModal";
+import { Button } from "@/components/ui/buttonComp";
 
 /* ✅ FULLY MANAGED plan gate (use plan name + plan id) */
 const FULLY_MANAGED_PLAN_ID = "1f46c6f6-63ae-4c4f-943d-798d644257f9";
@@ -176,9 +177,9 @@ export default function BrandDashboardHome() {
       } catch (err: any) {
         setFatalError(
           err?.response?.data?.error ||
-            err?.response?.data?.message ||
-            err?.message ||
-            "Could not load dashboard"
+          err?.response?.data?.message ||
+          err?.message ||
+          "Could not load dashboard"
         );
         setInboxLoading(false);
         return;
@@ -210,9 +211,9 @@ export default function BrandDashboardHome() {
       } catch (err: any) {
         setInboxError(
           err?.response?.data?.error ||
-            err?.response?.data?.message ||
-            err?.message ||
-            "Could not load inbox"
+          err?.response?.data?.message ||
+          err?.message ||
+          "Could not load inbox"
         );
         setInbox([]);
       }
@@ -237,9 +238,8 @@ export default function BrandDashboardHome() {
     if (!q) return inbox;
 
     return inbox.filter((t) => {
-      const hay = `${t.influencer?.name || ""} ${t.subject || ""} ${t.snippet || ""} ${
-        t.status || ""
-      } ${t.lastMessageDirection || ""}`.toLowerCase();
+      const hay = `${t.influencer?.name || ""} ${t.subject || ""} ${t.snippet || ""} ${t.status || ""
+        } ${t.lastMessageDirection || ""}`.toLowerCase();
       return hay.includes(q);
     });
   }, [inbox, inboxSearch]);
@@ -274,7 +274,7 @@ export default function BrandDashboardHome() {
       <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden">
         <main className="flex-1 px-6 py-8">
           {/* Welcome */}
-          <div className="rounded-lg bg-white p-6 mb-8 mt-4 md:mt-6">
+          <div className="rounded-lg bg-white">
             <h2
               className="text-xl font-semibold mb-2"
               style={{
@@ -290,9 +290,8 @@ export default function BrandDashboardHome() {
 
           {/* Summary (✅ hide Hired + Total Applied for FULLY MANAGED) */}
           <div
-            className={`grid grid-cols-1 sm:grid-cols-2 ${
-              isFullyManaged ? "lg:grid-cols-2" : "lg:grid-cols-4"
-            } gap-6`}
+            className={`grid grid-cols-1 sm:grid-cols-2 ${isFullyManaged ? "lg:grid-cols-2" : "lg:grid-cols-4"
+              } gap-6`}
           >
             <StatCard
               icon={<HiOutlineChartBar className="text-[#ef2f5b]" size={32} />}
@@ -353,20 +352,17 @@ export default function BrandDashboardHome() {
               {!filteredCampaigns.length ? (
                 <div className="flex min-h-[440px] w-full items-center justify-center">
                   <div className="py-10 text-center text-gray-500 flex flex-wrap items-center justify-center gap-4">
-                    <button
+                    <Button
                       onClick={() => router.push("/brand/browse-influencer")}
-                      className="w-64 rounded-xl px-5 py-3 font-semibold shadow-sm transition border border-gray-300 bg-white text-gray-800 hover:bg-gray-50 cursor-pointer"
+                      variant="outline"
                     >
                       Browse Influencers
-                    </button>
+                    </Button>
 
-                    <button
-                      onClick={() => router.push("/brand/add-edit-campaign")}
-                      className="w-64 rounded-xl px-4 py-3 text-white font-semibold shadow hover:shadow-md transition cursor-pointer"
-                      style={{ background: `linear-gradient(to right, ${accentFrom}, ${accentTo})` }}
-                    >
+                    <Button
+                      onClick={() => router.push("/brand/add-edit-campaign")}                    >
                       Create New Campaign
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -436,9 +432,8 @@ export default function BrandDashboardHome() {
                                 title={c.hasAcceptedInfluencer ? "Open active influencers" : "Open applied influencers"}
                               >
                                 <span
-                                  className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
-                                    applied > 0 ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
-                                  }`}
+                                  className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${applied > 0 ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
+                                    }`}
                                 >
                                   {applied.toLocaleString()}
                                 </span>
@@ -453,11 +448,10 @@ export default function BrandDashboardHome() {
                           {!isFullyManaged && (
                             <div className="mt-3">
                               <span
-                                className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                  c.hasAcceptedInfluencer
-                                    ? "bg-indigo-100 text-indigo-700"
-                                    : "bg-yellow-100 text-yellow-700"
-                                }`}
+                                className={`px-2 py-1 rounded-full text-xs font-semibold ${c.hasAcceptedInfluencer
+                                  ? "bg-indigo-100 text-indigo-700"
+                                  : "bg-yellow-100 text-yellow-700"
+                                  }`}
                               >
                                 {c.hasAcceptedInfluencer ? "Accepted" : "Not accepted"}
                               </span>
@@ -539,9 +533,8 @@ export default function BrandDashboardHome() {
                                     title={c.hasAcceptedInfluencer ? "Open active influencers" : "Open applied influencers"}
                                   >
                                     <span
-                                      className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
-                                        applied > 0 ? "bg-[#EAF6EC] text-[#28A745]" : "bg-gray-100 text-gray-500"
-                                      }`}
+                                      className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${applied > 0 ? "bg-[#EAF6EC] text-[#28A745]" : "bg-gray-100 text-gray-500"
+                                        }`}
                                     >
                                       {applied.toLocaleString()}
                                     </span>
@@ -557,11 +550,10 @@ export default function BrandDashboardHome() {
                               {!isFullyManaged && (
                                 <td className="py-3 pr-4 hidden xl:table-cell">
                                   <span
-                                    className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                      c.hasAcceptedInfluencer
-                                        ? "bg-indigo-100 text-indigo-700"
-                                        : "bg-yellow-100 text-yellow-700"
-                                    }`}
+                                    className={`px-2 py-1 rounded-full text-xs font-semibold ${c.hasAcceptedInfluencer
+                                      ? "bg-indigo-100 text-indigo-700"
+                                      : "bg-yellow-100 text-yellow-700"
+                                      }`}
                                   >
                                     {c.hasAcceptedInfluencer ? "Accepted" : "Not accepted"}
                                   </span>
@@ -705,8 +697,8 @@ export default function BrandDashboardHome() {
             )}
           </div>
         </main>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
 
@@ -714,9 +706,8 @@ export default function BrandDashboardHome() {
 
 const StatCard = ({ icon, label, value, accentFrom, onClick }: any) => (
   <div
-    className={`bg-white rounded-lg shadow p-5 flex items-center space-x-4 transition-shadow ${
-      onClick ? "cursor-pointer hover:shadow-lg" : ""
-    }`}
+    className={`bg-white rounded-lg shadow p-5 flex items-center space-x-4 transition-shadow ${onClick ? "cursor-pointer hover:shadow-lg" : ""
+      }`}
     onClick={onClick}
   >
     <div className="p-3 rounded-full" style={{ backgroundColor: `${accentFrom}20` }}>
