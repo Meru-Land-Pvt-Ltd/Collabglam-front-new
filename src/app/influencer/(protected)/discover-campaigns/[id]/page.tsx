@@ -74,7 +74,7 @@ const CampaignDetailsPage = () => {
               <BookmarkSimple size={18} />
               Save
             </Button>
-            <Button className="bg-yellow-400 hover:bg-yellow-500 text-black">
+            <Button className="!bg-[#FBBF00] hover:bg-yellow-500 text-black">
               Apply Now
             </Button>
           </div>
