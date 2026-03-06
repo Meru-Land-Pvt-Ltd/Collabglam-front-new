@@ -170,11 +170,11 @@ export type CountryRow = {
 export type LangRow = { _id?: string; code?: string; name?: string };
 
 export async function apiListCountries(params: ListQuery = {}) {
-  return apiGet<CountryRow[]>(`${LIST_BASE}/countries`, params);
+  return apiGet<CountryRow[]>(`${Api.API_BASE_URL}/country/getall`, params);
 }
 
 export async function apiListContentLanguages(params: ListQuery = {}) {
-  return apiGet<LangRow[]>(`${LIST_BASE}/content-languages`, params);
+  return apiGet<LangRow[]>(`${Api.API_BASE_URL}/languages/all`, params);
 }
 
 /** -------------------------
@@ -183,7 +183,7 @@ export async function apiListContentLanguages(params: ListQuery = {}) {
 export type CategoryRow = { id: string; name: string };
 
 export async function apiCategoryGetAll(input: { search?: string; page?: number; limit?: number } = {}) {
-  return apiPost<CategoryRow[]>(`${CATEGORY_BASE}/get-all`, {
+  return apiGet<CategoryRow[]>(`${CATEGORY_BASE}/categories`, {
     search: input.search ?? "",
     page: input.page ?? 1,
     limit: input.limit ?? 50,
@@ -242,12 +242,12 @@ export async function apiSendInfluencerSignupOtp(input: {
     categories: normalizedCategoryIds,
   };
 
-  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/send-otp-signup`, payload);
+  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/request-otp`, payload);
 }
 
 // ✅ UPDATED: now expects route + onboarding flags from backend
 export async function apiVerifyInfluencerOtpSignup(input: { email: string; otp: string }) {
-  return apiPost<SignupVerifyResponse>(`${INFLUENCER_BASE}/verify-otp-signup`, {
+  return apiPost<SignupVerifyResponse>(`${INFLUENCER_BASE}/verify-otp`, {
     email: input.email.trim(),
     otp: input.otp,
   });
