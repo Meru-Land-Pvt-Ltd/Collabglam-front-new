@@ -1,36 +1,67 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import {
-  HiSearch,
-  HiChevronLeft,
-  HiChevronRight,
-  HiOutlineUserAdd,
-  HiOutlinePencil,
-  HiOutlineUsers,
-  HiOutlineDocumentText, // ✅ added
-} from "react-icons/hi";
+  MagnifyingGlass,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  Check,
+  X,
+  DotsThree,
+  PencilSimple,
+  Users,
+  YoutubeLogo,
+  FileMinus,
+  PaperPlaneTilt,
+  FileText,
+} from "@phosphor-icons/react";
 import { get, post } from "@/lib/api";
+
+const cx = (...c: Array<string | undefined | null | false>) =>
+  c.filter(Boolean).join(" ");
 
 type CampaignStatus = "open" | "paused";
 
-interface Campaign {
+type Option = {
+  label: string;
+  value: string;
+};
+
+type Campaign = {
   id: string;
   productOrServiceName: string;
   description: string;
-  timeline: { startDate: string; endDate: string };
+  timeline: {
+    startDate: string;
+    endDate: string;
+  };
   isActive: number;
   budget: number;
   applicantCount: number;
   campaignType?: string;
+  category?: string;
+  logoSrc?: string;
+  aiCreated?: boolean;
 
-  campaignStatus?: CampaignStatus; // open | paused
-  influencerWorking?: boolean; // ✅ from backend
+  campaignStatus?: CampaignStatus;
+  influencerWorking?: boolean;
   hasPendingUpdate?: boolean;
-}
 
-interface CampaignsResponse {
+  platformCount?: number | string;
+  contractCount?: number | string;
+  targetInfluencerCount?: number;
+  emailCount?: number | string;
+};
+
+type CampaignsResponse = {
   data: any[];
   pagination: {
     total: number;
@@ -39,47 +70,611 @@ interface CampaignsResponse {
     pages?: number;
     totalPages?: number;
   };
+};
+
+const WRAP_BASE =
+  "w-full rounded-[1.45rem] border border-[#E8E8E8] bg-white p-4 max-[520px]:p-3";
+
+const WRAP_GRID =
+  "grid grid-cols-1 gap-4 " +
+  "min-[980px]:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,19rem)] " +
+  "min-[980px]:items-center min-[980px]:gap-4";
+
+function useClickOutside(
+  ref: React.RefObject<HTMLElement | null>,
+  onClose: () => void
+) {
+  useEffect(() => {
+    const handle = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) onClose();
+    };
+
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [ref, onClose]);
 }
 
-const TABLE_GRADIENT_FROM = "#FFA135";
-const TABLE_GRADIENT_TO = "#FF7236";
+function statusPillBg(status: CampaignStatus) {
+  return status === "open" ? "bg-[#EAF7EE]" : "bg-[#FFF3D9]";
+}
 
-const sliceText = (text: string, max = 40) =>
-  text?.length > max ? `${text.slice(0, max - 3)}...` : text;
+function statusDotBg(status: CampaignStatus) {
+  return status === "open" ? "bg-[#2EAD4F]" : "bg-[#D69E2E]";
+}
+
+function statusLabel(status: CampaignStatus) {
+  return status === "open" ? "Active" : "Paused";
+}
+
+function normalizeMetric(value: string | number | undefined, prefix = "") {
+  if (value === undefined || value === null || value === "") return "—";
+  if (typeof value === "number") return `${prefix}${value}`;
+  return prefix && !String(value).startsWith(prefix) ? `${prefix}${value}` : value;
+}
+
+function formatInfluencerMetric(current: number, target?: number) {
+  const currentText = String(current ?? 0).padStart(2, "0");
+  if (!target && target !== 0) return currentText;
+  return `${currentText}/${String(target).padStart(2, "0")}`;
+}
+
+function getExpiryText(dateStr: string) {
+  if (!dateStr) return "No end date";
+
+  const end = new Date(dateStr);
+  if (Number.isNaN(end.getTime())) return "No end date";
+
+  const now = new Date();
+  const diffMs = end.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays > 1) return `Expiring in ${diffDays} days`;
+  if (diffDays === 1) return "Expiring tomorrow";
+  if (diffDays === 0) return "Expiring today";
+  if (diffDays === -1) return "Expired yesterday";
+  return `Expired ${Math.abs(diffDays)} days ago`;
+}
+
+function isExpired(dateStr: string) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getTime() < Date.now();
+}
+
+function isExpiringSoon(dateStr: string) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const diffMs = d.getTime() - Date.now();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= 7;
+}
+
+function isThisMonth(dateStr: string) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+
+  const now = new Date();
+  return (
+    d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+  );
+}
+
+function FilterCombobox({
+  label,
+  value,
+  options,
+  onChange,
+  widthClass = "w-[112px]",
+}: {
+  label: string;
+  value: string;
+  options: Option[];
+  onChange: (value: string) => void;
+  widthClass?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useClickOutside(ref, () => setOpen(false));
+
+  const selected =
+    options.find((option) => option.value === value) ?? options[0] ?? null;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((option) =>
+      option.label.toLowerCase().includes(q)
+    );
+  }, [options, query]);
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="whitespace-nowrap text-sm text-[#3B3B3B]">{label}</span>
+
+      <div ref={ref} className={cx("relative", widthClass)}>
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          className="inline-flex h-9 w-full items-center justify-between rounded-lg border border-[#E4E4E4] bg-white px-3 text-sm text-[#2B2B2B]"
+        >
+          <span className="truncate">{selected?.label ?? "All"}</span>
+          <CaretDown size={16} className="shrink-0 text-[#777]" />
+        </button>
+
+        {open ? (
+          <div className="absolute left-0 top-[calc(100%+0.45rem)] z-30 w-full min-w-[190px] rounded-xl border border-[#E8E8E8] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
+            <div className="relative mb-2">
+              <MagnifyingGlass
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9C9C9C]"
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={`Search ${label.toLowerCase()}`}
+                className="h-9 w-full rounded-lg border border-[#ECECEC] bg-[#FAFAFA] pl-9 pr-3 text-sm outline-none"
+              />
+            </div>
+
+            <div className="max-h-60 overflow-y-auto">
+              {filtered.length ? (
+                filtered.map((option) => {
+                  const active = option.value === value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        onChange(option.value);
+                        setOpen(false);
+                        setQuery("");
+                      }}
+                      className={cx(
+                        "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm",
+                        active
+                          ? "bg-[#F7F7F7] text-[#222]"
+                          : "text-[#444] hover:bg-[#F8F8F8]"
+                      )}
+                    >
+                      <span className="truncate">{option.label}</span>
+                      {active ? <Check size={16} /> : null}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="px-3 py-2 text-sm text-[#8A8A8A]">
+                  No results found.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function StatusDropdown({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: CampaignStatus;
+  disabled?: boolean;
+  onChange: (value: CampaignStatus) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useClickOutside(ref, () => setOpen(false));
+
+  const options: CampaignStatus[] = ["open", "paused"];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((prev) => !prev)}
+        className={cx(
+          "inline-flex items-center gap-2 rounded-lg px-1 py-1 text-sm text-[#707070]",
+          disabled ? "cursor-wait opacity-60" : ""
+        )}
+      >
+        <span
+          className={cx(
+            "inline-flex items-center rounded-full p-0.5",
+            statusPillBg(value)
+          )}
+        >
+          <span className={cx("h-2 w-2 rounded-full", statusDotBg(value))} />
+        </span>
+
+        <span>{statusLabel(value)}</span>
+        <CaretDown size={14} className="text-[#9B9B9B]" />
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 top-[calc(100%+0.45rem)] z-20 min-w-[140px] rounded-xl border border-[#E8E8E8] bg-white p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
+          {options.map((option) => {
+            const active = option === value;
+
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+                className={cx(
+                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
+                  active
+                    ? "bg-[#F7F7F7] text-[#222]"
+                    : "text-[#333] hover:bg-[#F8F8F8]"
+                )}
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    className={cx(
+                      "inline-block h-2 w-2 rounded-full",
+                      option === "open" ? "bg-[#2EAD4F]" : "bg-[#D69E2E]"
+                    )}
+                  />
+                  {statusLabel(option)}
+                </span>
+
+                {active ? <Check size={16} /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MetricItem({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0 flex flex-col items-center justify-center gap-0.5 text-center">
+      <div className="w-full truncate text-[0.86rem] leading-5 text-[#9A9A9A]">
+        {label}
+      </div>
+
+      <div className="flex min-w-0 items-center justify-center gap-1.5">
+        {icon ? (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#9A9A9A]">
+            {icon}
+          </span>
+        ) : null}
+
+        <span
+          className="min-w-0 truncate text-[0.95rem] font-medium leading-5 text-[#2E2E2E]"
+          title={typeof value === "string" ? value : undefined}
+        >
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MoreDotsButton() {
+  return (
+    <button
+      type="button"
+      className={cx(
+        "rounded-[0.8rem]",
+        "inline-flex items-center justify-center",
+        "border border-[#E6E6E6] bg-white text-[#4A4A4A]",
+        "hover:bg-[#F8F8F8]",
+        "h-10 w-10"
+      )}
+      aria-label="More options"
+    >
+      <DotsThree size={18} weight="bold" />
+    </button>
+  );
+}
+
+function IconButton({
+  href,
+  label,
+  children,
+}: {
+  href: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-[0.8rem] border border-[#E6E6E6] bg-white text-[#3F3F3F] hover:bg-[#F8F8F8]"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function CampaignThumb({
+  name,
+  logoSrc,
+}: {
+  name: string;
+  logoSrc?: string;
+}) {
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return (
+    <div className="h-[4.35rem] w-[4.35rem] shrink-0 overflow-hidden rounded-[0.9rem] bg-[#F3F3F3]">
+      {logoSrc ? (
+        <img
+          src={logoSrc}
+          alt={name}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-[#6E6E6E]">
+          {initials || <FileText size={24} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CampaignCard({
+  campaign,
+  statusUpdating,
+  onChangeStatus,
+}: {
+  campaign: Campaign;
+  statusUpdating: Record<string, boolean>;
+  onChangeStatus: (campaign: Campaign, next: CampaignStatus) => void;
+}) {
+  const status = (campaign.campaignStatus || "open") as CampaignStatus;
+  const isBusy = !!statusUpdating[campaign.id];
+  const tag = campaign.category || campaign.campaignType || "";
+  const expiryText = getExpiryText(campaign.timeline?.endDate);
+
+  return (
+    <div className={cx(WRAP_BASE, WRAP_GRID)}>
+      {/* LEFT */}
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
+          <CampaignThumb
+            name={campaign.productOrServiceName}
+            logoSrc={campaign.logoSrc}
+          />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-start gap-2 max-[560px]:flex-wrap">
+              <Link
+                href={`/brand/created-campaign/view-campaign?id=${campaign.id}`}
+                className="min-w-0 flex-1 line-clamp-2 break-words text-[1.04rem] font-semibold leading-snug text-[#262626] hover:text-[#111]"
+                title={campaign.productOrServiceName}
+              >
+                {campaign.productOrServiceName}
+              </Link>
+
+              {tag ? (
+                <span className="inline-flex h-7 items-center rounded-full bg-[#F4ECD9] px-3 text-[0.74rem] text-[#7A6A42]">
+                  {tag}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CENTER */}
+      <div className="w-full min-[980px]:flex min-[980px]:justify-center">
+        <div
+          className={cx(
+            "w-full max-w-[27rem] rounded-[0.95rem] border border-[#E7E7E7]",
+            "grid grid-cols-4 gap-2 px-4 py-3",
+            "max-[420px]:grid-cols-2"
+          )}
+        >
+          <MetricItem
+            label="Platform"
+            value={normalizeMetric(campaign.platformCount, "+")}
+            icon={<YoutubeLogo size={15} weight="regular" />}
+          />
+
+          <MetricItem
+            label="Contract"
+            value={normalizeMetric(campaign.contractCount)}
+            icon={<FileMinus size={15} weight="regular" />}
+          />
+
+          <MetricItem
+            label="Influencer"
+            value={formatInfluencerMetric(
+              campaign.applicantCount ?? 0,
+              campaign.targetInfluencerCount
+            )}
+            icon={<Users size={15} weight="regular" />}
+          />
+
+          <MetricItem
+            label="Email"
+            value={normalizeMetric(campaign.emailCount)}
+            icon={<PaperPlaneTilt size={15} weight="regular" />}
+          />
+        </div>
+      </div>
+
+      {/* RIGHT */}
+      <div className="min-w-0 min-[980px]:justify-self-end">
+        <div className="flex min-w-0 items-center justify-between gap-4 min-[980px]:justify-end max-[980px]:flex-col max-[980px]:items-end">
+          <StatusDropdown
+            value={status}
+            disabled={isBusy}
+            onChange={(next) => onChangeStatus(campaign, next)}
+          />
+
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                href={`/brand/created-campaign/view-campaign?id=${campaign.id}`}
+                className="inline-flex h-10 items-center justify-center rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8]"
+              >
+                View Campaign
+              </Link>
+
+              <IconButton
+                href={`/brand/edit-campaign?id=${campaign.id}`}
+                label="Edit campaign"
+              >
+                <PencilSimple size={16} weight="bold" />
+              </IconButton>
+
+              <MoreDotsButton />
+            </div>
+
+            <div
+              className="truncate text-right text-[0.78rem] text-[#A0A0A0]"
+              title={expiryText}
+            >
+              {campaign.hasPendingUpdate ? "Pending update request" : expiryText}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonList() {
+  return (
+    <div className="flex flex-col gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className={cx(WRAP_BASE, WRAP_GRID, "animate-pulse")}>
+          <div className="flex items-center gap-3">
+            <div className="h-[4.35rem] w-[4.35rem] rounded-[0.9rem] bg-[#EFEFEF]" />
+            <div className="flex-1">
+              <div className="mb-2 h-4 w-44 rounded bg-[#EFEFEF]" />
+              <div className="h-3 w-20 rounded bg-[#F4F4F4]" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2 rounded-[0.95rem] border border-[#E7E7E7] px-4 py-3 max-[420px]:grid-cols-2">
+            <div className="h-10 rounded bg-[#F4F4F4]" />
+            <div className="h-10 rounded bg-[#F4F4F4]" />
+            <div className="h-10 rounded bg-[#F4F4F4]" />
+            <div className="h-10 rounded bg-[#F4F4F4]" />
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            <div className="h-8 w-20 rounded bg-[#F2F2F2]" />
+            <div className="flex gap-2">
+              <div className="h-10 w-32 rounded bg-[#F2F2F2]" />
+              <div className="h-10 w-10 rounded bg-[#F2F2F2]" />
+              <div className="h-10 w-10 rounded bg-[#F2F2F2]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Pagination({
+  currentPage,
+  totalPages,
+  onPrev,
+  onNext,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-2 py-5">
+      <button
+        onClick={onPrev}
+        disabled={currentPage === 1}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E6E6E6] bg-white text-[#444] hover:bg-[#F8F8F8] disabled:opacity-50"
+      >
+        <CaretLeft size={18} weight="bold" />
+      </button>
+
+      <span className="text-sm text-[#5A5A5A]">
+        Page {currentPage} of {totalPages}
+      </span>
+
+      <button
+        onClick={onNext}
+        disabled={currentPage === totalPages}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E6E6E6] bg-white text-[#444] hover:bg-[#F8F8F8] disabled:opacity-50"
+      >
+        <CaretRight size={18} weight="bold" />
+      </button>
+    </div>
+  );
+}
 
 export default function BrandCreatedCampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [limit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
-  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  // ✅ per-row status update loading
+  const [campaignTypeFilter, setCampaignTypeFilter] = useState("all");
+  const [creatorStatusFilter, setCreatorStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+  const [aiCreatedOnly, setAiCreatedOnly] = useState(false);
+
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>(
     {}
   );
-const applyPendingPatch = (c: any) => {
-  const pending = c?.pendingUpdate?.status === "pending" && c?.pendingUpdate?.patch;
-  const patch = pending ? c.pendingUpdate.patch : null;
 
-  return {
-    ...c,
-    ...(patch || {}),
-    // ✅ deep merge nested objects you care about
-    timeline: {
-      ...(c.timeline || {}),
-      ...(patch?.timeline || {}),
-    },
-    targetAudience: {
-      ...(c.targetAudience || {}),
-      ...(patch?.targetAudience || {}),
-    },
+  const applyPendingPatch = (campaign: any) => {
+    const pending =
+      campaign?.pendingUpdate?.status === "pending" &&
+      campaign?.pendingUpdate?.patch;
+
+    const patch = pending ? campaign.pendingUpdate.patch : null;
+
+    return {
+      ...campaign,
+      ...(patch || {}),
+      timeline: {
+        ...(campaign.timeline || {}),
+        ...(patch?.timeline || {}),
+      },
+      targetAudience: {
+        ...(campaign.targetAudience || {}),
+        ...(patch?.targetAudience || {}),
+      },
+    };
   };
-};
 
   const fetchCampaigns = useCallback(
     async (page: number, term: string) => {
@@ -89,6 +684,7 @@ const applyPendingPatch = (c: any) => {
       try {
         const brandId =
           typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
+
         if (!brandId) throw new Error("No brandId found in localStorage.");
 
         const res = await get<CampaignsResponse>("/campaign/active", {
@@ -99,35 +695,67 @@ const applyPendingPatch = (c: any) => {
         });
 
         const raw = Array.isArray(res?.data) ? res.data : [];
-        const active = raw.filter((c: any) => c.isActive === 1);
+        const active = raw.filter((campaign: any) => campaign.isActive === 1);
 
-const normalized: Campaign[] = active.map((c: any) => {
-  const merged = applyPendingPatch(c);
+        const normalized: Campaign[] = active.map((campaign: any) => {
+          const merged = applyPendingPatch(campaign);
 
-  const rawStatus = String(merged.campaignStatus || "open")
-    .toLowerCase()
-    .trim();
+          const rawStatus = String(merged.campaignStatus || "open")
+            .toLowerCase()
+            .trim();
 
-  const safeStatus: CampaignStatus =
-    rawStatus === "paused" || rawStatus === "closed" ? "paused" : "open";
+          const safeStatus: CampaignStatus =
+            rawStatus === "paused" || rawStatus === "closed" ? "paused" : "open";
 
-  const hasPendingUpdate =
-    c?.pendingUpdate?.status === "pending" && !!c?.pendingUpdate?.patch;
+          const hasPendingUpdate =
+            campaign?.pendingUpdate?.status === "pending" &&
+            !!campaign?.pendingUpdate?.patch;
 
-  return {
-    id: merged.campaignsId ?? merged.id ?? merged._id,
-    productOrServiceName: merged.productOrServiceName ?? "",
-    description: merged.description ?? "",
-    timeline: merged.timeline ?? { startDate: "", endDate: "" },
-    isActive: merged.isActive ?? 0,
-    budget: merged.budget ?? 0,
-    applicantCount: merged.applicantCount ?? 0,
-    campaignType: merged.campaignType ?? "",
-    campaignStatus: safeStatus,
-    influencerWorking: Boolean(merged.influencerWorking),
-    hasPendingUpdate, // ✅
-  };
-});
+          return {
+            id: merged.campaignsId ?? merged.id ?? merged._id,
+            productOrServiceName: merged.productOrServiceName ?? "",
+            description: merged.description ?? "",
+            timeline: merged.timeline ?? { startDate: "", endDate: "" },
+            isActive: merged.isActive ?? 0,
+            budget: merged.budget ?? 0,
+            applicantCount: merged.applicantCount ?? 0,
+            campaignType: merged.campaignType ?? "",
+            category:
+              merged.category ??
+              merged.productCategory ??
+              merged.industry ??
+              "",
+            logoSrc:
+              merged.logoSrc ??
+              merged.logo ??
+              merged.thumbnailUrl ??
+              merged.image ??
+              "",
+            aiCreated: Boolean(
+              merged.aiCreated ?? merged.isAiCreated ?? merged.createdByAi
+            ),
+            campaignStatus: safeStatus,
+            influencerWorking: Boolean(merged.influencerWorking),
+            hasPendingUpdate,
+
+            platformCount:
+              merged.platformCount ??
+              merged.platformsCount ??
+              merged.platforms?.length,
+            contractCount:
+              merged.contractCount ??
+              merged.contractsCount ??
+              merged.totalContracts,
+            targetInfluencerCount:
+              merged.targetInfluencerCount ??
+              merged.requiredInfluencers ??
+              merged.influencerTarget,
+            emailCount:
+              merged.emailCount ??
+              merged.emailsCount ??
+              merged.totalEmails,
+          };
+        });
 
         setCampaigns(normalized);
         setTotalPages(res?.pagination?.totalPages ?? res?.pagination?.pages ?? 1);
@@ -140,20 +768,14 @@ const normalized: Campaign[] = active.map((c: any) => {
     [limit]
   );
 
-  // debounce search (also resets to page 1)
   useEffect(() => {
-    const t = setTimeout(() => {
-      setCurrentPage(1);
-      setDebouncedSearch(search.trim());
-    }, 400);
+    fetchCampaigns(currentPage, appliedSearch);
+  }, [fetchCampaigns, currentPage, appliedSearch]);
 
-    return () => clearTimeout(t);
-  }, [search]);
-
-  // single source of truth for fetching
-  useEffect(() => {
-    fetchCampaigns(currentPage, debouncedSearch);
-  }, [fetchCampaigns, currentPage, debouncedSearch]);
+  const applySearch = () => {
+    setCurrentPage(1);
+    setAppliedSearch(searchInput.trim());
+  };
 
   const updateStatus = async (campaignId: string, next: CampaignStatus) => {
     const brandId =
@@ -180,325 +802,243 @@ const normalized: Campaign[] = active.map((c: any) => {
 
   const onChangeStatus = async (campaign: Campaign, next: CampaignStatus) => {
     const id = campaign.id;
-    const prev = (campaign.campaignStatus || "open") as CampaignStatus;
+    const previous = (campaign.campaignStatus || "open") as CampaignStatus;
 
-    // optimistic update
-    setCampaigns((prevList) =>
-      prevList.map((c) => (c.id === id ? { ...c, campaignStatus: next } : c))
+    setCampaigns((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, campaignStatus: next } : item))
     );
 
-    setStatusUpdating((p) => ({ ...p, [id]: true }));
+    setStatusUpdating((prev) => ({ ...prev, [id]: true }));
     setError(null);
 
     try {
       await updateStatus(id, next);
-    } catch (e: any) {
-      // rollback
-      setCampaigns((prevList) =>
-        prevList.map((c) => (c.id === id ? { ...c, campaignStatus: prev } : c))
+    } catch (err: any) {
+      setCampaigns((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, campaignStatus: previous } : item
+        )
       );
-      setError(e?.message || "Failed to update status.");
+      setError(err?.message || "Failed to update status.");
     } finally {
-      setStatusUpdating((p) => ({ ...p, [id]: false }));
+      setStatusUpdating((prev) => ({ ...prev, [id]: false }));
     }
   };
 
-  const formatDate = (dateStr: string) =>
-    new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }).format(new Date(dateStr));
+  const campaignTypeOptions = useMemo<Option[]>(() => {
+    const set = new Set(
+      campaigns.map((item) => item.campaignType).filter((v): v is string => !!v)
+    );
 
-  const formatCurrency = (amt: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amt);
+    return [
+      { label: "All", value: "all" },
+      ...Array.from(set).map((value) => ({ label: value, value })),
+    ];
+  }, [campaigns]);
+
+  const categoryOptions = useMemo<Option[]>(() => {
+    const set = new Set(
+      campaigns.map((item) => item.category).filter((v): v is string => !!v)
+    );
+
+    return [
+      { label: "All", value: "all" },
+      ...Array.from(set).map((value) => ({ label: value, value })),
+    ];
+  }, [campaigns]);
+
+  const creatorStatusOptions: Option[] = [
+    { label: "All", value: "all" },
+    { label: "Invited", value: "invited" },
+    { label: "Working", value: "working" },
+    { label: "No Applicants", value: "no-applicants" },
+  ];
+
+  const dateOptions: Option[] = [
+    { label: "All", value: "all" },
+    { label: "Expiring Soon", value: "expiring-soon" },
+    { label: "This Month", value: "this-month" },
+    { label: "Expired", value: "expired" },
+  ];
+
+  const filteredCampaigns = useMemo(() => {
+    return campaigns.filter((campaign) => {
+      const matchesCampaignType =
+        campaignTypeFilter === "all" ||
+        campaign.campaignType === campaignTypeFilter;
+
+      const matchesCreatorStatus =
+        creatorStatusFilter === "all"
+          ? true
+          : creatorStatusFilter === "invited"
+          ? (campaign.applicantCount ?? 0) > 0
+          : creatorStatusFilter === "working"
+          ? !!campaign.influencerWorking
+          : (campaign.applicantCount ?? 0) === 0;
+
+      const matchesCategory =
+        categoryFilter === "all" || campaign.category === categoryFilter;
+
+      const matchesDate =
+        dateFilter === "all"
+          ? true
+          : dateFilter === "expiring-soon"
+          ? isExpiringSoon(campaign.timeline?.endDate)
+          : dateFilter === "this-month"
+          ? isThisMonth(campaign.timeline?.endDate)
+          : isExpired(campaign.timeline?.endDate);
+
+      const matchesAi = !aiCreatedOnly || !!campaign.aiCreated;
+
+      return (
+        matchesCampaignType &&
+        matchesCreatorStatus &&
+        matchesCategory &&
+        matchesDate &&
+        matchesAi
+      );
+    });
+  }, [
+    campaigns,
+    campaignTypeFilter,
+    creatorStatusFilter,
+    categoryFilter,
+    dateFilter,
+    aiCreatedOnly,
+  ]);
+
+  const clearFilters = () => {
+    setCampaignTypeFilter("all");
+    setCreatorStatusFilter("all");
+    setCategoryFilter("all");
+    setDateFilter("all");
+    setAiCreatedOnly(false);
+  };
 
   return (
-    <div className="p-6 min-h-screen">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-semibold">Created Campaigns</h1>
-      </div>
+    <div className="min-h-screen bg-[#FAFAFA] p-5">
+      {/* FILTER BAR */}
+      <div className="mb-5 border-b border-[#ECECEC] pb-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <FilterCombobox
+            label="Campaign Type"
+            value={campaignTypeFilter}
+            options={campaignTypeOptions}
+            onChange={setCampaignTypeFilter}
+            widthClass="w-[108px]"
+          />
 
-      {/* Search */}
-      <div className="mb-6 max-w-md">
-        <div className="relative">
-          <HiSearch
-            className="absolute inset-y-0 left-3 my-auto text-gray-400"
-            size={20}
+          <FilterCombobox
+            label="Creator Status"
+            value={creatorStatusFilter}
+            options={creatorStatusOptions}
+            onChange={setCreatorStatusFilter}
+            widthClass="w-[122px]"
           />
-          <input
-            type="text"
-            placeholder="Search campaigns..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-white border border-[#FFA135] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FF7236] focus:border-[#FF7236] text-sm"
+
+          <FilterCombobox
+            label="Category"
+            value={categoryFilter}
+            options={categoryOptions}
+            onChange={setCategoryFilter}
+            widthClass="w-[106px]"
           />
+
+          <FilterCombobox
+            label="Date"
+            value={dateFilter}
+            options={dateOptions}
+            onChange={setDateFilter}
+            widthClass="w-[90px]"
+          />
+
+          <label className="inline-flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAiCreatedOnly((prev) => !prev)}
+              className={cx(
+                "relative inline-flex h-6 w-10 items-center rounded-full transition-colors",
+                aiCreatedOnly ? "bg-[#1F1F1F]" : "bg-[#E3E3E3]"
+              )}
+              aria-pressed={aiCreatedOnly}
+            >
+              <span
+                className={cx(
+                  "inline-block h-5 w-5 rounded-full bg-white transition-transform",
+                  aiCreatedOnly ? "translate-x-[18px]" : "translate-x-0.5"
+                )}
+              />
+            </button>
+
+            <span className="text-sm text-[#3B3B3B]">AI Created</span>
+          </label>
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex h-9 items-center gap-1 rounded-lg bg-[#F3F3F3] px-3 text-sm text-[#333]"
+          >
+            <span>Clear</span>
+            <X size={14} weight="bold" />
+          </button>
+
+          <div className="ml-auto flex h-10 w-full max-w-[290px] overflow-hidden rounded-xl border border-[#E5E5E5] bg-white min-[900px]:w-[290px]">
+            <div className="relative flex-1">
+              <MagnifyingGlass
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8D8D8D]"
+              />
+              <input
+                type="text"
+                placeholder="Search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applySearch();
+                }}
+                className="h-full w-full border-0 bg-transparent pl-10 pr-3 text-sm text-[#222] outline-none placeholder:text-[#9A9A9A]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={applySearch}
+              className="border-l border-[#E5E5E5] bg-white px-4 text-sm font-semibold text-[#1F1F1F]"
+            >
+              Search
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* LIST VIEW ONLY */}
       {loading ? (
-        <SkeletonTable />
+        <SkeletonList />
       ) : error ? (
-        <p className="text-red-600">{error}</p>
-      ) : campaigns.length === 0 ? (
-        <p className="text-gray-700">No campaigns found.</p>
+        <p className="text-sm text-red-600">{error}</p>
+      ) : filteredCampaigns.length === 0 ? (
+        <div className="rounded-[1rem] border border-dashed border-[#D9D9D9] bg-white p-5 text-sm text-[#777]">
+          No campaigns found.
+        </div>
       ) : (
-        <TableView
-          data={campaigns}
-          onChangeStatus={onChangeStatus}
-          statusUpdating={statusUpdating}
-          formatDate={formatDate}
-          formatCurrency={formatCurrency}
-        />
+        <div className="flex flex-col gap-4">
+          {filteredCampaigns.map((campaign) => (
+            <CampaignCard
+              key={campaign.id}
+              campaign={campaign}
+              statusUpdating={statusUpdating}
+              onChangeStatus={onChangeStatus}
+            />
+          ))}
+        </div>
       )}
 
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
-        onPrev={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-        onNext={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+        onPrev={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+        onNext={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
       />
-    </div>
-  );
-}
-
-function SkeletonTable() {
-  return (
-    <div className="overflow-x-auto bg-white shadow rounded-lg animate-pulse">
-      <div className="p-6">
-        <div className="h-4 bg-gray-200 rounded w-3/4 mb-4" />
-        <div className="h-4 bg-gray-200 rounded w-full" />
-      </div>
-    </div>
-  );
-}
-
-function TableView({
-  data,
-  onChangeStatus,
-  statusUpdating,
-  formatDate,
-  formatCurrency,
-}: {
-  data: Campaign[];
-  onChangeStatus: (c: Campaign, next: "open" | "paused") => void;
-  statusUpdating: Record<string, boolean>;
-  formatDate: (d: string) => string;
-  formatCurrency: (n: number) => string;
-}) {
-  return (
-    <div
-      className="p-[1.5px] rounded-lg shadow"
-      style={{
-        backgroundImage: `linear-gradient(to right, ${TABLE_GRADIENT_FROM}, ${TABLE_GRADIENT_TO})`,
-      }}
-    >
-      <div className="bg-white rounded-[0.5rem] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-gray-600 border-collapse">
-            <thead
-              className="text-white"
-              style={{
-                backgroundImage: `linear-gradient(to right, ${TABLE_GRADIENT_FROM}, ${TABLE_GRADIENT_TO})`,
-              }}
-            >
-              <tr>
-                {[
-                  "Campaign",
-                  "Type",
-                  "Budget",
-                  "Campaign Timeline",
-                  "Influencers List",
-                  "Status",
-                  "Actions",
-                ].map((h) => (
-                  <th
-                    key={h}
-                    className="px-6 py-3 text-center font-medium whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {data.map((c, idx) => {
-                const status = (c.campaignStatus || "open") as "open" | "paused";
-                const isBusy = !!statusUpdating[c.id];
-
-                return (
-                  <tr
-                    key={c.id}
-                    className={[
-                      "border-b last:border-b-0",
-                      idx % 2 === 0 ? "bg-white" : "bg-gray-50",
-                      "transition-all duration-200",
-                      "hover:bg-gradient-to-r hover:from-[#FFA135]/10 hover:to-[#FF7236]/10",
-                    ].join(" ")}
-                  >
-                    {/* Campaign */}
-                    <td className="px-6 py-4 align-top">
-                      <div className="text-center">
-                        <Link
-                          href={`/brand/created-campaign/view-campaign?id=${c.id}`}
-                          className="inline-flex items-center gap-2 group"
-                          title={c.productOrServiceName}
-                        >
-                          <span className="font-bold text-gray-900 group-hover:text-[#FF7236] group-hover:underline">
-                            {sliceText(c.productOrServiceName, 40)}
-                          </span>
-                        </Link>
-                      </div>
-                    </td>
-
-                    {/* Type */}
-                    <td className="px-6 py-4 whitespace-nowrap align-top text-center">
-                      {c.campaignType && c.campaignType.trim() !== ""
-                        ? sliceText(c.campaignType, 30)
-                        : "—"}
-                    </td>
-
-                    {/* Budget */}
-                    <td className="px-6 py-4 whitespace-nowrap align-top text-center font-medium text-gray-900">
-                      {formatCurrency(c.budget)}
-                    </td>
-
-                    {/* Timeline */}
-                    <td className="px-6 py-4 whitespace-nowrap align-top text-center">
-                      {formatDate(c.timeline.startDate)} –{" "}
-                      {formatDate(c.timeline.endDate)}
-                    </td>
-
-                    {/* Influencers List */}
-                    <td className="px-6 py-4 align-top text-center">
-                      {(c.applicantCount ?? 0) > 0 ? (
-                        <Link
-                          href={`/brand/created-campaign/applied-inf?id=${c.id}`}
-                          className="group inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-900
-                 hover:border-[#FF7236] hover:bg-white hover:shadow-sm transition
-                 focus:outline-none focus:ring-2 focus:ring-[#FF7236]"
-                          title="View influencers"
-                          aria-label={`View influencers (${c.applicantCount ?? 0})`}
-                        >
-                          <HiOutlineUsers
-                            size={18}
-                            className="opacity-70 group-hover:text-[#FF7236]"
-                          />
-                          <span className="group-hover:underline underline-offset-2">
-                            Influencers
-                          </span>
-
-                          <span className="ml-1 inline-flex min-w-[2rem] justify-center rounded-full bg-gray-900 px-2 py-0.5 text-xs font-bold text-white group-hover:bg-[#FF7236]">
-                            {c.applicantCount ?? 0}
-                          </span>
-
-                          <HiChevronRight
-                            size={18}
-                            className="opacity-60 group-hover:opacity-100"
-                          />
-                        </Link>
-                      ) : (
-                        <span
-                          className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-400"
-                          title="No influencers yet"
-                          aria-label="No influencers yet"
-                        >
-                          <HiOutlineUsers size={18} className="opacity-60" />
-                          <span>Influencers</span>
-                          <span className="ml-1 inline-flex min-w-[2rem] justify-center rounded-full bg-gray-300 px-2 py-0.5 text-xs font-bold text-white">
-                            0
-                          </span>
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Status (open/paused) */}
-                    <td className="px-6 py-4 whitespace-nowrap align-top text-center">
-                      <select
-                        value={status}
-                        disabled={isBusy}
-                        onChange={(e) =>
-                          onChangeStatus(c, e.target.value as "open" | "paused")
-                        }
-                        className={[
-                          "px-3 py-2 rounded-lg text-sm font-semibold border",
-                          "bg-white",
-                          "focus:outline-none focus:ring focus:ring-[#FF7236] focus:border-[#FF7236]",
-                          isBusy ? "opacity-60 cursor-wait" : "",
-                        ].join(" ")}
-                        title="Update campaign status"
-                      >
-                        <option value="open">Open</option>
-                        <option value="paused">Paused</option>
-                      </select>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-6 py-4 whitespace-nowrap align-top text-center">
-                      <div className="flex items-center justify-center gap-2 flex-wrap">
-                        <Link
-                          href={`/brand/edit-campaign?id=${c.id}`}
-                          className="inline-flex items-center bg-white border border-gray-900 text-gray-900 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-semibold"
-                        >
-                          <HiOutlinePencil className="mr-1" size={18} />
-                          Edit
-                        </Link>
-
-                        <Link
-                          href={`/brand/browse-influencer?campaignId=${c.id}`}
-                          className="inline-flex items-center bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:opacity-90 px-3 py-2 rounded-lg text-sm font-semibold"
-                        >
-                          <HiOutlineUserAdd className="mr-1" size={18} />
-                          Invite
-                        </Link>
-
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Pagination({
-  currentPage,
-  totalPages,
-  onPrev,
-  onNext,
-}: {
-  currentPage: number;
-  totalPages: number;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="flex justify-end items-center p-4 space-x-2">
-      <button
-        onClick={onPrev}
-        disabled={currentPage === 1}
-        className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50"
-      >
-        <HiChevronLeft size={20} />
-      </button>
-      <span className="text-gray-700">
-        Page {currentPage} of {totalPages}
-      </span>
-      <button
-        onClick={onNext}
-        disabled={currentPage === totalPages}
-        className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50"
-      >
-        <HiChevronRight size={20} />
-      </button>
     </div>
   );
 }
