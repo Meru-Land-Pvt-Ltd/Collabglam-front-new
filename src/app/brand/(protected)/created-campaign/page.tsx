@@ -441,7 +441,7 @@ function TableView({
                     <td className="px-6 py-4 whitespace-nowrap align-top text-center">
                       <div className="flex items-center justify-center gap-2 flex-wrap">
                         <Link
-                          href={`/brand/add-edit-campaign?id=${c.id}`}
+                          href={`/brand/edit-campaign?id=${c.id}`}
                           className="inline-flex items-center bg-white border border-gray-900 text-gray-900 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm font-semibold"
                         >
                           <HiOutlinePencil className="mr-1" size={18} />

@@ -1045,7 +1045,6 @@ function SideModalPreview({
 
 /* ============================================================================
    ✅ Manual Screen (UPDATED: backend errors -> toast + field errors)
-   ✅ Schedule part removed completely
 ============================================================================ */
 function CreateManualScreen({
   sidebarOffsetPx,
