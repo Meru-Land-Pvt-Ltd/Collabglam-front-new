@@ -23,16 +23,31 @@ import {
   PaperPlaneTilt,
   FileText,
 } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/buttonComp";
 import { get, post } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 
 const cx = (...c: Array<string | undefined | null | false>) =>
   c.filter(Boolean).join(" ");
 
 type CampaignStatus = "open" | "paused";
 
-type Option = {
-  label: string;
-  value: string;
+type FilterOption = {
+  id: string;
+  name: string;
 };
 
 type Campaign = {
@@ -50,11 +65,9 @@ type Campaign = {
   category?: string;
   logoSrc?: string;
   aiCreated?: boolean;
-
   campaignStatus?: CampaignStatus;
   influencerWorking?: boolean;
   hasPendingUpdate?: boolean;
-
   platformCount?: number | string;
   contractCount?: number | string;
   targetInfluencerCount?: number;
@@ -73,12 +86,13 @@ type CampaignsResponse = {
 };
 
 const WRAP_BASE =
-  "w-full rounded-[1.45rem] border border-[#E8E8E8] bg-white p-4 max-[520px]:p-3";
+  "w-full rounded-[1.25rem] border border-[#E8E8E8] bg-white p-3 sm:p-4 lg:p-5";
 
 const WRAP_GRID =
   "grid grid-cols-1 gap-4 " +
-  "min-[980px]:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,19rem)] " +
-  "min-[980px]:items-center min-[980px]:gap-4";
+  "lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,18rem)] " +
+  "xl:grid-cols-[minmax(0,19rem)_minmax(0,1fr)_minmax(0,19rem)] " +
+  "lg:items-center lg:gap-4";
 
 function useClickOutside(
   ref: React.RefObject<HTMLElement | null>,
@@ -159,101 +173,84 @@ function isThisMonth(dateStr: string) {
   );
 }
 
-function FilterCombobox({
+function FilterPopover({
   label,
-  value,
   options,
+  value,
   onChange,
-  widthClass = "w-[112px]",
 }: {
   label: string;
+  options: FilterOption[];
   value: string;
-  options: Option[];
   onChange: (value: string) => void;
-  widthClass?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const ref = useRef<HTMLDivElement | null>(null);
 
-  useClickOutside(ref, () => setOpen(false));
-
-  const selected =
-    options.find((option) => option.value === value) ?? options[0] ?? null;
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((option) =>
-      option.label.toLowerCase().includes(q)
-    );
-  }, [options, query]);
+  const selectedOption =
+    options.find((option) => option.id === value) ?? options[0];
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="whitespace-nowrap text-sm text-[#3B3B3B]">{label}</span>
-
-      <div ref={ref} className={cx("relative", widthClass)}>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
-          onClick={() => setOpen((prev) => !prev)}
-          className="inline-flex h-9 w-full items-center justify-between rounded-lg border border-[#E4E4E4] bg-white px-3 text-sm text-[#2B2B2B]"
+          className={cn(
+            "inline-flex h-9 max-w-full items-center gap-1.5 rounded-[0.65rem] px-2.5 sm:px-3 transition-colors",
+            "text-[13px] sm:text-[14px] font-medium text-[#1A1A1A]",
+            "border border-transparent",
+            open ? "bg-[#ECEEF2]" : "bg-transparent hover:bg-[#F5F6F8]"
+          )}
         >
-          <span className="truncate">{selected?.label ?? "All"}</span>
-          <CaretDown size={16} className="shrink-0 text-[#777]" />
+          <span className="shrink-0">{label}</span>
+          <span className="max-w-[6.25rem] truncate text-muted-foreground sm:max-w-[7.5rem]">
+            {selectedOption?.name}
+          </span>
+          <CaretDown size={14} className="shrink-0" />
         </button>
+      </PopoverTrigger>
 
-        {open ? (
-          <div className="absolute left-0 top-[calc(100%+0.45rem)] z-30 w-full min-w-[190px] rounded-xl border border-[#E8E8E8] bg-white p-2 shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
-            <div className="relative mb-2">
-              <MagnifyingGlass
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9C9C9C]"
-              />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={`Search ${label.toLowerCase()}`}
-                className="h-9 w-full rounded-lg border border-[#ECECEC] bg-[#FAFAFA] pl-9 pr-3 text-sm outline-none"
-              />
-            </div>
-
-            <div className="max-h-60 overflow-y-auto">
-              {filtered.length ? (
-                filtered.map((option) => {
-                  const active = option.value === value;
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        onChange(option.value);
-                        setOpen(false);
-                        setQuery("");
-                      }}
-                      className={cx(
-                        "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm",
-                        active
-                          ? "bg-[#F7F7F7] text-[#222]"
-                          : "text-[#444] hover:bg-[#F8F8F8]"
-                      )}
-                    >
-                      <span className="truncate">{option.label}</span>
-                      {active ? <Check size={16} /> : null}
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="px-3 py-2 text-sm text-[#8A8A8A]">
-                  No results found.
-                </div>
-              )}
-            </div>
+      <PopoverContent
+        align="start"
+        className={cn(
+          "w-[min(18rem,calc(100vw-2rem))] rounded-[12px] border border-[#E6E6E6] bg-white p-2",
+          "shadow-[0_7px_20px_0_rgba(25,33,61,0.04)]"
+        )}
+      >
+        <Command>
+          <div className="relative">
+            <MagnifyingGlass
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <CommandInput
+              placeholder="Search..."
+              className="h-[40px] rounded-[10px] border border-[#E6E6E6] pl-9"
+            />
           </div>
-        ) : null}
-      </div>
-    </div>
+
+          <CommandEmpty>No results found.</CommandEmpty>
+
+          <CommandGroup className="mt-2 max-h-64 overflow-auto">
+            {options.map((option) => (
+              <CommandItem
+                key={option.id}
+                value={option.name}
+                onSelect={() => {
+                  onChange(option.id);
+                  setOpen(false);
+                }}
+                className="rounded-[10px]"
+              >
+                <span className="flex-1 truncate">{option.name}</span>
+                {selectedOption?.id === option.id ? (
+                  <Check size={16} className="shrink-0" />
+                ) : null}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -274,27 +271,30 @@ function StatusDropdown({
   const options: CampaignStatus[] = ["open", "paused"];
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative w-full sm:w-auto">
       <button
         type="button"
         disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         className={cx(
-          "inline-flex items-center gap-2 rounded-lg px-1 py-1 text-sm text-[#707070]",
-          disabled ? "cursor-wait opacity-60" : ""
+          "inline-flex h-9 w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-sm text-[#707070] sm:w-auto",
+          disabled ? "cursor-wait opacity-60" : "hover:bg-[#F8F8F8]"
         )}
       >
-        <span
-          className={cx(
-            "inline-flex items-center rounded-full p-0.5",
-            statusPillBg(value)
-          )}
-        >
-          <span className={cx("h-2 w-2 rounded-full", statusDotBg(value))} />
+        <span className="inline-flex items-center gap-2">
+          <span
+            className={cx(
+              "inline-flex items-center rounded-full p-0.5",
+              statusPillBg(value)
+            )}
+          >
+            <span className={cx("h-2 w-2 rounded-full", statusDotBg(value))} />
+          </span>
+
+          <span>{statusLabel(value)}</span>
         </span>
 
-        <span>{statusLabel(value)}</span>
-        <CaretDown size={14} className="text-[#9B9B9B]" />
+        <CaretDown size={14} className="shrink-0 text-[#9B9B9B]" />
       </button>
 
       {open ? (
@@ -348,7 +348,7 @@ function MetricItem({
 }) {
   return (
     <div className="min-w-0 flex flex-col items-center justify-center gap-0.5 text-center">
-      <div className="w-full truncate text-[0.86rem] leading-5 text-[#9A9A9A]">
+      <div className="w-full truncate text-[clamp(0.72rem,0.68rem+0.16vw,0.86rem)] leading-5 text-[#9A9A9A]">
         {label}
       </div>
 
@@ -360,7 +360,7 @@ function MetricItem({
         ) : null}
 
         <span
-          className="min-w-0 truncate text-[0.95rem] font-medium leading-5 text-[#2E2E2E]"
+          className="min-w-0 truncate text-[clamp(0.78rem,0.74rem+0.18vw,0.95rem)] font-medium leading-5 text-[#2E2E2E]"
           title={typeof value === "string" ? value : undefined}
         >
           {value}
@@ -372,39 +372,36 @@ function MetricItem({
 
 function MoreDotsButton() {
   return (
-    <button
+    <Button
+      variant="outline"
       type="button"
-      className={cx(
-        "rounded-[0.8rem]",
-        "inline-flex items-center justify-center",
-        "border border-[#E6E6E6] bg-white text-[#4A4A4A]",
-        "hover:bg-[#F8F8F8]",
-        "h-10 w-10"
-      )}
       aria-label="More options"
+      className="h-10 w-10 shrink-0 rounded-[0.8rem] border border-[#E6E6E6] bg-white p-0 text-[#4A4A4A] hover:bg-[#F8F8F8]"
     >
       <DotsThree size={18} weight="bold" />
-    </button>
+    </Button>
   );
 }
 
 function IconButton({
-  href,
+  onClick,
   label,
   children,
 }: {
-  href: string;
+  onClick: () => void;
   label: string;
   children: React.ReactNode;
 }) {
   return (
-    <Link
-      href={href}
+    <Button
+      type="button"
+      variant="outline"
+      onClick={onClick}
       aria-label={label}
-      className="inline-flex h-10 w-10 items-center justify-center rounded-[0.8rem] border border-[#E6E6E6] bg-white text-[#3F3F3F] hover:bg-[#F8F8F8]"
+      className="h-10 w-10 shrink-0 rounded-[0.8rem] border border-[#E6E6E6] bg-white p-0 text-[#3F3F3F] hover:bg-[#F8F8F8]"
     >
       {children}
-    </Link>
+    </Button>
   );
 }
 
@@ -423,7 +420,7 @@ function CampaignThumb({
     .join("");
 
   return (
-    <div className="h-[4.35rem] w-[4.35rem] shrink-0 overflow-hidden rounded-[0.9rem] bg-[#F3F3F3]">
+    <div className="h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.9rem] bg-[#F3F3F3] sm:h-[4.35rem] sm:w-[4.35rem]">
       {logoSrc ? (
         <img
           src={logoSrc}
@@ -445,10 +442,14 @@ function CampaignCard({
   campaign,
   statusUpdating,
   onChangeStatus,
+  onViewCampaign,
+  onEditCampaign,
 }: {
   campaign: Campaign;
   statusUpdating: Record<string, boolean>;
   onChangeStatus: (campaign: Campaign, next: CampaignStatus) => void;
+  onViewCampaign: (campaignId: string) => void;
+  onEditCampaign: (campaignId: string) => void;
 }) {
   const status = (campaign.campaignStatus || "open") as CampaignStatus;
   const isBusy = !!statusUpdating[campaign.id];
@@ -457,7 +458,6 @@ function CampaignCard({
 
   return (
     <div className={cx(WRAP_BASE, WRAP_GRID)}>
-      {/* LEFT */}
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-3">
           <CampaignThumb
@@ -466,32 +466,35 @@ function CampaignCard({
           />
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-start gap-2 max-[560px]:flex-wrap">
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
               <Link
                 href={`/brand/created-campaign/view-campaign?id=${campaign.id}`}
-                className="min-w-0 flex-1 line-clamp-2 break-words text-[1.04rem] font-semibold leading-snug text-[#262626] hover:text-[#111]"
+                className="min-w-0 flex-1 break-words text-[clamp(0.95rem,0.9rem+0.22vw,1.04rem)] font-semibold leading-snug text-[#262626] hover:text-[#111]"
                 title={campaign.productOrServiceName}
               >
-                {campaign.productOrServiceName}
+                <span className="line-clamp-2">{campaign.productOrServiceName}</span>
               </Link>
 
               {tag ? (
-                <span className="inline-flex h-7 items-center rounded-full bg-[#F4ECD9] px-3 text-[0.74rem] text-[#7A6A42]">
+                <span className="inline-flex max-w-full items-center truncate rounded-full bg-[#F4ECD9] px-3 py-1 text-[0.72rem] text-[#7A6A42] sm:h-7">
                   {tag}
                 </span>
               ) : null}
             </div>
+
+            {campaign.description ? (
+              <p className="mt-1 line-clamp-2 text-[0.82rem] leading-5 text-[#8A8A8A] sm:text-[0.86rem]">
+                {campaign.description}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
 
-      {/* CENTER */}
-      <div className="w-full min-[980px]:flex min-[980px]:justify-center">
+      <div className="w-full lg:flex lg:justify-center">
         <div
           className={cx(
-            "w-full max-w-[27rem] rounded-[0.95rem] border border-[#E7E7E7]",
-            "grid grid-cols-4 gap-2 px-4 py-3",
-            "max-[420px]:grid-cols-2"
+            "grid w-full max-w-[32rem] grid-cols-2 gap-2 rounded-[0.95rem] border border-[#E7E7E7] px-3 py-3 sm:grid-cols-4 sm:px-4"
           )}
         >
           <MetricItem
@@ -523,26 +526,27 @@ function CampaignCard({
         </div>
       </div>
 
-      {/* RIGHT */}
-      <div className="min-w-0 min-[980px]:justify-self-end">
-        <div className="flex min-w-0 items-center justify-between gap-4 min-[980px]:justify-end max-[980px]:flex-col max-[980px]:items-end">
+      <div className="min-w-0 lg:justify-self-end">
+        <div className="flex min-w-0 flex-col gap-3 lg:items-end">
           <StatusDropdown
             value={status}
             disabled={isBusy}
             onChange={(next) => onChangeStatus(campaign, next)}
           />
 
-          <div className="flex min-w-0 flex-col gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <Link
-                href={`/brand/created-campaign/view-campaign?id=${campaign.id}`}
-                className="inline-flex h-10 items-center justify-center rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8]"
+          <div className="flex min-w-0 w-full flex-col gap-2 lg:items-end">
+            <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => onViewCampaign(campaign.id)}
+                className="h-10 flex-1 rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8] sm:flex-none"
               >
                 View Campaign
-              </Link>
+              </Button>
 
               <IconButton
-                href={`/brand/edit-campaign?id=${campaign.id}`}
+                onClick={() => onEditCampaign(campaign.id)}
                 label="Edit campaign"
               >
                 <PencilSimple size={16} weight="bold" />
@@ -552,7 +556,7 @@ function CampaignCard({
             </div>
 
             <div
-              className="truncate text-right text-[0.78rem] text-[#A0A0A0]"
+              className="truncate text-left text-[0.78rem] text-[#A0A0A0] lg:max-w-[16rem] lg:text-right"
               title={expiryText}
             >
               {campaign.hasPendingUpdate ? "Pending update request" : expiryText}
@@ -570,24 +574,24 @@ function SkeletonList() {
       {Array.from({ length: 4 }).map((_, index) => (
         <div key={index} className={cx(WRAP_BASE, WRAP_GRID, "animate-pulse")}>
           <div className="flex items-center gap-3">
-            <div className="h-[4.35rem] w-[4.35rem] rounded-[0.9rem] bg-[#EFEFEF]" />
+            <div className="h-[4rem] w-[4rem] rounded-[0.9rem] bg-[#EFEFEF] sm:h-[4.35rem] sm:w-[4.35rem]" />
             <div className="flex-1">
-              <div className="mb-2 h-4 w-44 rounded bg-[#EFEFEF]" />
-              <div className="h-3 w-20 rounded bg-[#F4F4F4]" />
+              <div className="mb-2 h-4 w-40 rounded bg-[#EFEFEF] sm:w-44" />
+              <div className="h-3 w-24 rounded bg-[#F4F4F4]" />
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 rounded-[0.95rem] border border-[#E7E7E7] px-4 py-3 max-[420px]:grid-cols-2">
+          <div className="grid grid-cols-2 gap-2 rounded-[0.95rem] border border-[#E7E7E7] px-3 py-3 sm:grid-cols-4 sm:px-4">
             <div className="h-10 rounded bg-[#F4F4F4]" />
             <div className="h-10 rounded bg-[#F4F4F4]" />
             <div className="h-10 rounded bg-[#F4F4F4]" />
             <div className="h-10 rounded bg-[#F4F4F4]" />
           </div>
 
-          <div className="flex flex-col items-end gap-2">
-            <div className="h-8 w-20 rounded bg-[#F2F2F2]" />
-            <div className="flex gap-2">
-              <div className="h-10 w-32 rounded bg-[#F2F2F2]" />
+          <div className="flex flex-col gap-2 lg:items-end">
+            <div className="h-8 w-24 rounded bg-[#F2F2F2]" />
+            <div className="flex flex-wrap gap-2">
+              <div className="h-10 flex-1 rounded bg-[#F2F2F2] sm:w-32 sm:flex-none" />
               <div className="h-10 w-10 rounded bg-[#F2F2F2]" />
               <div className="h-10 w-10 rounded bg-[#F2F2F2]" />
             </div>
@@ -610,31 +614,35 @@ function Pagination({
   onNext: () => void;
 }) {
   return (
-    <div className="flex items-center justify-end gap-2 py-5">
-      <button
-        onClick={onPrev}
-        disabled={currentPage === 1}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E6E6E6] bg-white text-[#444] hover:bg-[#F8F8F8] disabled:opacity-50"
-      >
-        <CaretLeft size={18} weight="bold" />
-      </button>
-
-      <span className="text-sm text-[#5A5A5A]">
+    <div className="flex flex-col items-center justify-between gap-3 py-5 sm:flex-row sm:justify-end">
+      <span className="order-2 text-sm text-[#5A5A5A] sm:order-1">
         Page {currentPage} of {totalPages}
       </span>
 
-      <button
-        onClick={onNext}
-        disabled={currentPage === totalPages}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E6E6E6] bg-white text-[#444] hover:bg-[#F8F8F8] disabled:opacity-50"
-      >
-        <CaretRight size={18} weight="bold" />
-      </button>
+      <div className="order-1 flex items-center gap-2 sm:order-2">
+        <button
+          onClick={onPrev}
+          disabled={currentPage === 1}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E6E6E6] bg-white text-[#444] hover:bg-[#F8F8F8] disabled:opacity-50"
+        >
+          <CaretLeft size={18} weight="bold" />
+        </button>
+
+        <button
+          onClick={onNext}
+          disabled={currentPage === totalPages}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#E6E6E6] bg-white text-[#444] hover:bg-[#F8F8F8] disabled:opacity-50"
+        >
+          <CaretRight size={18} weight="bold" />
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function BrandCreatedCampaignsPage() {
+  const router = useRouter();
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -737,7 +745,6 @@ export default function BrandCreatedCampaignsPage() {
             campaignStatus: safeStatus,
             influencerWorking: Boolean(merged.influencerWorking),
             hasPendingUpdate,
-
             platformCount:
               merged.platformCount ??
               merged.platformsCount ??
@@ -771,6 +778,16 @@ export default function BrandCreatedCampaignsPage() {
   useEffect(() => {
     fetchCampaigns(currentPage, appliedSearch);
   }, [fetchCampaigns, currentPage, appliedSearch]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    campaignTypeFilter,
+    creatorStatusFilter,
+    categoryFilter,
+    dateFilter,
+    aiCreatedOnly,
+  ]);
 
   const applySearch = () => {
     setCurrentPage(1);
@@ -825,40 +842,40 @@ export default function BrandCreatedCampaignsPage() {
     }
   };
 
-  const campaignTypeOptions = useMemo<Option[]>(() => {
+  const campaignTypeOptions = useMemo<FilterOption[]>(() => {
     const set = new Set(
       campaigns.map((item) => item.campaignType).filter((v): v is string => !!v)
     );
 
     return [
-      { label: "All", value: "all" },
-      ...Array.from(set).map((value) => ({ label: value, value })),
+      { id: "all", name: "All" },
+      ...Array.from(set).map((value) => ({ id: value, name: value })),
     ];
   }, [campaigns]);
 
-  const categoryOptions = useMemo<Option[]>(() => {
+  const categoryOptions = useMemo<FilterOption[]>(() => {
     const set = new Set(
       campaigns.map((item) => item.category).filter((v): v is string => !!v)
     );
 
     return [
-      { label: "All", value: "all" },
-      ...Array.from(set).map((value) => ({ label: value, value })),
+      { id: "all", name: "All" },
+      ...Array.from(set).map((value) => ({ id: value, name: value })),
     ];
   }, [campaigns]);
 
-  const creatorStatusOptions: Option[] = [
-    { label: "All", value: "all" },
-    { label: "Invited", value: "invited" },
-    { label: "Working", value: "working" },
-    { label: "No Applicants", value: "no-applicants" },
+  const creatorStatusOptions: FilterOption[] = [
+    { id: "all", name: "All" },
+    { id: "invited", name: "Invited" },
+    { id: "working", name: "Working" },
+    { id: "no-applicants", name: "No Applicants" },
   ];
 
-  const dateOptions: Option[] = [
-    { label: "All", value: "all" },
-    { label: "Expiring Soon", value: "expiring-soon" },
-    { label: "This Month", value: "this-month" },
-    { label: "Expired", value: "expired" },
+  const dateOptions: FilterOption[] = [
+    { id: "all", name: "All" },
+    { id: "expiring-soon", name: "Expiring Soon" },
+    { id: "this-month", name: "This Month" },
+    { id: "expired", name: "Expired" },
   ];
 
   const filteredCampaigns = useMemo(() => {
@@ -871,10 +888,10 @@ export default function BrandCreatedCampaignsPage() {
         creatorStatusFilter === "all"
           ? true
           : creatorStatusFilter === "invited"
-          ? (campaign.applicantCount ?? 0) > 0
-          : creatorStatusFilter === "working"
-          ? !!campaign.influencerWorking
-          : (campaign.applicantCount ?? 0) === 0;
+            ? (campaign.applicantCount ?? 0) > 0
+            : creatorStatusFilter === "working"
+              ? !!campaign.influencerWorking
+              : (campaign.applicantCount ?? 0) === 0;
 
       const matchesCategory =
         categoryFilter === "all" || campaign.category === categoryFilter;
@@ -883,10 +900,10 @@ export default function BrandCreatedCampaignsPage() {
         dateFilter === "all"
           ? true
           : dateFilter === "expiring-soon"
-          ? isExpiringSoon(campaign.timeline?.endDate)
-          : dateFilter === "this-month"
-          ? isThisMonth(campaign.timeline?.endDate)
-          : isExpired(campaign.timeline?.endDate);
+            ? isExpiringSoon(campaign.timeline?.endDate)
+            : dateFilter === "this-month"
+              ? isThisMonth(campaign.timeline?.endDate)
+              : isExpired(campaign.timeline?.endDate);
 
       const matchesAi = !aiCreatedOnly || !!campaign.aiCreated;
 
@@ -916,73 +933,70 @@ export default function BrandCreatedCampaignsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] p-5">
-      {/* FILTER BAR */}
-      <div className="mb-5 border-b border-[#ECECEC] pb-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <FilterCombobox
-            label="Campaign Type"
-            value={campaignTypeFilter}
-            options={campaignTypeOptions}
-            onChange={setCampaignTypeFilter}
-            widthClass="w-[108px]"
-          />
+    <div className="min-h-screen bg-[#FAFAFA] px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
+      <div className="mb-5 rounded-[1rem] border border-[#ECECEC] bg-white p-3 sm:p-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <FilterPopover
+              label="Campaign Type"
+              value={campaignTypeFilter}
+              options={campaignTypeOptions}
+              onChange={setCampaignTypeFilter}
+            />
 
-          <FilterCombobox
-            label="Creator Status"
-            value={creatorStatusFilter}
-            options={creatorStatusOptions}
-            onChange={setCreatorStatusFilter}
-            widthClass="w-[122px]"
-          />
+            <FilterPopover
+              label="Creator Status"
+              value={creatorStatusFilter}
+              options={creatorStatusOptions}
+              onChange={setCreatorStatusFilter}
+            />
 
-          <FilterCombobox
-            label="Category"
-            value={categoryFilter}
-            options={categoryOptions}
-            onChange={setCategoryFilter}
-            widthClass="w-[106px]"
-          />
+            <FilterPopover
+              label="Category"
+              value={categoryFilter}
+              options={categoryOptions}
+              onChange={setCategoryFilter}
+            />
 
-          <FilterCombobox
-            label="Date"
-            value={dateFilter}
-            options={dateOptions}
-            onChange={setDateFilter}
-            widthClass="w-[90px]"
-          />
+            <FilterPopover
+              label="Date"
+              value={dateFilter}
+              options={dateOptions}
+              onChange={setDateFilter}
+            />
 
-          <label className="inline-flex items-center gap-2">
+            <label className="inline-flex h-9 items-center gap-2 rounded-[0.65rem] px-2.5 hover:bg-[#F5F6F8]">
+              <button
+                type="button"
+                onClick={() => setAiCreatedOnly((prev) => !prev)}
+                className={cx(
+                  "relative inline-flex h-6 w-10 items-center rounded-full transition-colors",
+                  aiCreatedOnly ? "bg-[#1F1F1F]" : "bg-[#E3E3E3]"
+                )}
+                aria-pressed={aiCreatedOnly}
+              >
+                <span
+                  className={cx(
+                    "inline-block h-5 w-5 rounded-full bg-white transition-transform",
+                    aiCreatedOnly ? "translate-x-[18px]" : "translate-x-0.5"
+                  )}
+                />
+              </button>
+
+              <span className="text-sm text-[#3B3B3B]">AI Created</span>
+            </label>
+
             <button
               type="button"
-              onClick={() => setAiCreatedOnly((prev) => !prev)}
-              className={cx(
-                "relative inline-flex h-6 w-10 items-center rounded-full transition-colors",
-                aiCreatedOnly ? "bg-[#1F1F1F]" : "bg-[#E3E3E3]"
-              )}
-              aria-pressed={aiCreatedOnly}
+              onClick={clearFilters}
+              className="inline-flex h-9 items-center gap-1 rounded-lg bg-[#F3F3F3] px-3 text-sm text-[#333] hover:bg-[#ECECEC]"
             >
-              <span
-                className={cx(
-                  "inline-block h-5 w-5 rounded-full bg-white transition-transform",
-                  aiCreatedOnly ? "translate-x-[18px]" : "translate-x-0.5"
-                )}
-              />
+              <span>Clear</span>
+              <X size={14} weight="bold" />
             </button>
+          </div>
 
-            <span className="text-sm text-[#3B3B3B]">AI Created</span>
-          </label>
-
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="inline-flex h-9 items-center gap-1 rounded-lg bg-[#F3F3F3] px-3 text-sm text-[#333]"
-          >
-            <span>Clear</span>
-            <X size={14} weight="bold" />
-          </button>
-
-          <div className="ml-auto flex h-10 w-full max-w-[290px] overflow-hidden rounded-xl border border-[#E5E5E5] bg-white min-[900px]:w-[290px]">
+          <div className="flex w-full overflow-hidden rounded-xl border border-[#E5E5E5] bg-white sm:max-w-[22rem] lg:ml-auto lg:max-w-[18rem] xl:max-w-[20rem]">
             <div className="relative flex-1">
               <MagnifyingGlass
                 size={18}
@@ -996,14 +1010,14 @@ export default function BrandCreatedCampaignsPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") applySearch();
                 }}
-                className="h-full w-full border-0 bg-transparent pl-10 pr-3 text-sm text-[#222] outline-none placeholder:text-[#9A9A9A]"
+                className="h-10 w-full border-0 bg-transparent pl-10 pr-3 text-sm text-[#222] outline-none placeholder:text-[#9A9A9A]"
               />
             </div>
 
             <button
               type="button"
               onClick={applySearch}
-              className="border-l border-[#E5E5E5] bg-white px-4 text-sm font-semibold text-[#1F1F1F]"
+              className="border-l border-[#E5E5E5] bg-white px-4 text-sm font-semibold text-[#1F1F1F] hover:bg-[#F8F8F8]"
             >
               Search
             </button>
@@ -1011,11 +1025,12 @@ export default function BrandCreatedCampaignsPage() {
         </div>
       </div>
 
-      {/* LIST VIEW ONLY */}
       {loading ? (
         <SkeletonList />
       ) : error ? (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="rounded-[1rem] border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+          {error}
+        </p>
       ) : filteredCampaigns.length === 0 ? (
         <div className="rounded-[1rem] border border-dashed border-[#D9D9D9] bg-white p-5 text-sm text-[#777]">
           No campaigns found.
@@ -1028,6 +1043,12 @@ export default function BrandCreatedCampaignsPage() {
               campaign={campaign}
               statusUpdating={statusUpdating}
               onChangeStatus={onChangeStatus}
+              onViewCampaign={(campaignId) =>
+                router.push(`/brand/created-campaign/view-campaign?id=${campaignId}`)
+              }
+              onEditCampaign={(campaignId) =>
+                router.push(`/brand/edit-campaign?id=${campaignId}`)
+              }
             />
           ))}
         </div>
