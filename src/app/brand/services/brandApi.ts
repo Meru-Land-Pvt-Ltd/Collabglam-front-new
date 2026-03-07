@@ -850,3 +850,14 @@ export async function apiUpdateApplicantStatus(payload: UpdateApplicantStatusPay
   // backend: POST /apply-campaign/status/update (brandAuth)
   return apiPost<UpdateApplicantStatusResponse>(`${APPLY_BASE}/status/update`, payload);
 }
+
+export type GetCampaignForEditPayload = ViewCampaignByBrandPayload;
+
+export type UpdateCampaignManualPayload = EditDraftPayload & {
+  productImages?: any[];
+};
+
+export async function apiCampaignUpdateManual(payload: UpdateCampaignManualPayload) {
+  const res = await apiPost<any>(`${CAMPAIGN_BASE}/update-manual`, payload);
+  return (res?.doc ?? res?.data ?? res) as EnrichedCampaignDoc;
+}

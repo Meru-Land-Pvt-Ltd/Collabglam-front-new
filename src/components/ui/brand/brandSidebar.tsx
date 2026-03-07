@@ -652,7 +652,7 @@ export default function BrandSidebar({
   );
 
   const handlePlanClick = useCallback(() => {
-    router.push("/brand/credits");
+    router.push("/brand/subscriptions");
     if (!isDesktop) setDrawerOpen(false);
   }, [router, isDesktop, setDrawerOpen]);
 
