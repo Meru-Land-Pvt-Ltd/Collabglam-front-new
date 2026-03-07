@@ -393,7 +393,7 @@ export default function BrandDashboardHome() {
                             </div>
 
                             <button
-                              className="text-sm font-semibold shrink-0"
+                              className="text-sm font-semibold shrink-0 cursor-pointer"
                               style={{
                                 background: `linear-gradient(to right, ${accentFrom}, ${accentTo})`,
                                 WebkitBackgroundClip: "text",
@@ -561,9 +561,9 @@ export default function BrandDashboardHome() {
                               )}
 
                               {/* Action */}
-                              <td className="py-3 text-right whitespace-nowrap">
+                              <td className="py-3 text-right whitespace-nowrap ">
                                 <button
-                                  className="text-sm font-semibold"
+                                  className="text-sm font-semibold cursor-pointer"
                                   style={{
                                     background: `linear-gradient(to right, ${accentFrom}, ${accentTo})`,
                                     WebkitBackgroundClip: "text",
