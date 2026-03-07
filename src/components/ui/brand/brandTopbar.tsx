@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { TopbarAction } from "./brandTopbarProvider";
 import { CaretRightIcon, ListDashes } from "@phosphor-icons/react";
 
@@ -140,8 +140,27 @@ export default function BrandTopbar({
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   // narrow helper for breadcrumb truncation
   const isNarrow = useMediaQuery("(max-width: 640px)");
-
+  const topbarRef = useRef<HTMLDivElement>(null);
   const showHamburger = !isDesktop && Boolean(onMenuToggle);
+
+    useEffect(() => {
+    const el = topbarRef.current;
+    if (!el) return;
+
+    const setVar = () => {
+      const h = el.getBoundingClientRect().height;
+      document.documentElement.style.setProperty(
+        "--brand-topbar-h",
+        `${Math.ceil(h)}px`
+      );
+    };
+
+    setVar();
+    const ro = new ResizeObserver(setVar);
+    ro.observe(el);
+
+    return () => ro.disconnect();
+  }, []);
 
   const crumbs = useMemo(() => getCrumbs(pathname), [pathname]);
 
@@ -159,7 +178,7 @@ export default function BrandTopbar({
   }, [actionsOverride, pathname]);
 
   return (
-    <div className="sticky top-0 z-40 w-full border-b border-neutral-200 bg-white">
+    <div ref={topbarRef} className="sticky top-0 z-40 w-full border-b border-neutral-200 bg-white">
       <div className="flex items-center gap-3 px-4 sm:px-6 py-4 min-w-0">
         {/* Hamburger (only when sidebar is drawer mode) */}
         {showHamburger ? (

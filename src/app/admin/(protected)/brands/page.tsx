@@ -14,7 +14,7 @@ import {
   HiOutlinePlus,
   HiPencil,
 } from "react-icons/hi";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,7 +34,7 @@ interface Subscription {
 }
 
 export interface Brand {
-  brandId: string;
+  _id: string;
   name: string;
   email: string;
   callingcode?: string;
@@ -115,179 +115,181 @@ const AdminBrandsPage: NextPage = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <h1 className="text-3xl font-bold">Brands Administration</h1>
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder="Search by name, email, plan..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full sm:w-64"
-          />
-          <Button variant="outline" onClick={fetchBrands} disabled={loading}>
-            <HiOutlineRefresh className={loading ? "animate-spin" : ""} />
-            Refresh
-          </Button>
+    <TooltipProvider delayDuration={0}>
+      <div className="p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+          <h1 className="text-3xl font-bold">Brands Administration</h1>
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Search by name, email, plan..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full sm:w-64"
+            />
+            <Button variant="outline" onClick={fetchBrands} disabled={loading}>
+              <HiOutlineRefresh className={loading ? "animate-spin" : ""} />
+              Refresh
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {error && <Card className="text-red-600 p-4">{error}</Card>}
+        {error && <Card className="text-red-600 p-4">{error}</Card>}
 
-      <Card className="overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead onClick={() => toggleSort("name")} className="cursor-pointer">
-                <div className="flex items-center justify-center">
-                  Name
-                  {sortBy === "name" &&
-                    (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
-                </div>
-              </TableHead>
+        <Card className="overflow-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead onClick={() => toggleSort("name")} className="cursor-pointer">
+                  <div className="flex items-center justify-center">
+                    Name
+                    {sortBy === "name" &&
+                      (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
+                  </div>
+                </TableHead>
 
-              <TableHead onClick={() => toggleSort("email")} className="cursor-pointer">
-                <div className="flex items-center justify-center">
-                  Email
-                  {sortBy === "email" &&
-                    (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
-                </div>
-              </TableHead>
+                <TableHead onClick={() => toggleSort("email")} className="cursor-pointer">
+                  <div className="flex items-center justify-center">
+                    Email
+                    {sortBy === "email" &&
+                      (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
+                  </div>
+                </TableHead>
 
-              <TableHead onClick={() => toggleSort("phone")} className="cursor-pointer">
-                <div className="flex items-center justify-center">
-                  Phone
-                  {sortBy === "phone" &&
-                    (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
-                </div>
-              </TableHead>
+                <TableHead onClick={() => toggleSort("phone")} className="cursor-pointer">
+                  <div className="flex items-center justify-center">
+                    Phone
+                    {sortBy === "phone" &&
+                      (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
+                  </div>
+                </TableHead>
 
-              <TableHead onClick={() => toggleSort("planName")} className="cursor-pointer">
-                <div className="flex items-center justify-center">
-                  Plan
-                  {sortBy === "planName" &&
-                    (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
-                </div>
-              </TableHead>
-              <TableHead onClick={() => toggleSort("expiresAt")} className="cursor-pointer">
-                <div className="flex items-center  justify-center">
-                  Expires{sortBy === "expiresAt" && (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
-                </div>
-              </TableHead>
-              <TableHead onClick={() => toggleSort("subscriptionExpired")} className="cursor-pointer">
-                <div className="flex items-center justify-center">
-                  Status
-                  {sortBy === "subscriptionExpired" &&
-                    (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
-                </div>
-              </TableHead>
+                <TableHead onClick={() => toggleSort("planName")} className="cursor-pointer">
+                  <div className="flex items-center justify-center">
+                    Plan
+                    {sortBy === "planName" &&
+                      (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
+                  </div>
+                </TableHead>
+                <TableHead onClick={() => toggleSort("expiresAt")} className="cursor-pointer">
+                  <div className="flex items-center  justify-center">
+                    Expires{sortBy === "expiresAt" && (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
+                  </div>
+                </TableHead>
+                <TableHead onClick={() => toggleSort("subscriptionExpired")} className="cursor-pointer">
+                  <div className="flex items-center justify-center">
+                    Status
+                    {sortBy === "subscriptionExpired" &&
+                      (sortOrder === "asc" ? <HiChevronUp /> : <HiChevronDown />)}
+                  </div>
+                </TableHead>
 
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
 
-          <TableBody>
-            {loading ? (
-              Array.from({ length: pageSize }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array(7)
-                    .fill(0)
-                    .map((_, j) => (
-                      <TableCell key={j}>
-                        <div className="h-4 bg-gray-200 rounded animate-pulse" />
-                      </TableCell>
-                    ))}
-                </TableRow>
-              )))
-              : brands.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
-                    No brands match the criteria.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                brands.map(b => (
-                  <TableRow key={b.brandId}>
-                    <TableCell>{b.name}</TableCell>
-                    <TableCell>{b.email}</TableCell>
-                    <TableCell>{b.callingcode ? `${b.callingcode} ${b.phone}` : b.phone}</TableCell>
-                    <TableCell>{b.subscription.planName}</TableCell>
-                    <TableCell>{new Date(b.subscription.expiresAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <span className={b.subscriptionExpired ? "text-red-600" : "text-green-600"}>
-                        {b.subscriptionExpired ? "Expired" : "Active"}
-                      </span>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: pageSize }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array(7)
+                      .fill(0)
+                      .map((_, j) => (
+                        <TableCell key={j}>
+                          <div className="h-4 bg-gray-200 rounded animate-pulse" />
+                        </TableCell>
+                      ))}
+                  </TableRow>
+                )))
+                : brands.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                      No brands match the criteria.
                     </TableCell>
-                    <TableCell>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Link href={`/admin/brands/view?brandId=${b.brandId}`}>
+                  </TableRow>
+                ) : (
+                  brands.map(b => (
+                    <TableRow key={b._id}>
+                      <TableCell>{b.name}</TableCell>
+                      <TableCell>{b.email}</TableCell>
+                      <TableCell>{b.callingcode ? `${b.callingcode} ${b.phone}` : b.phone}</TableCell>
+                      <TableCell>{b.subscription.planName}</TableCell>
+                      <TableCell>{new Date(b.subscription.expiresAt).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <span className={b.subscriptionExpired ? "text-red-600" : "text-green-600"}>
+                          {b.subscriptionExpired ? "Expired" : "Active"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon">
-                              <HiOutlineEye />
+                              <Link href={`/admin/brands/view?brandId=${b._id}`}>
+                                <HiOutlineEye />
+                              </Link>
                             </Button>
-                          </Link>
-                        </TooltipTrigger>
-                        <TooltipContent>View details</TooltipContent>
-                      </Tooltip>
+                          </TooltipTrigger>
+                          <TooltipContent>View details</TooltipContent>
+                        </Tooltip>
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Link href={`/admin/brands/create-campaign?brandId=${b.brandId}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon">
-                              <HiOutlinePlus />
+                              <Link href={`/admin/brands/create-campaign?brandId=${b._id}`}>
+                                <HiOutlinePlus />
+                              </Link>
                             </Button>
-                          </Link>
-                        </TooltipTrigger>
-                        <TooltipContent>Create Campaign</TooltipContent>
-                      </Tooltip>
+                          </TooltipTrigger>
+                          <TooltipContent>Create Campaign</TooltipContent>
+                        </Tooltip>
 
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Link href={`/admin/brands/review-campaigns?brandId=${b.brandId}`}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <Button variant="ghost" size="icon">
-                              <HiPencil />
+                              <Link href={`/admin/brands/review-campaigns?brandId=${b._id}`}>
+                                <HiPencil />
+                              </Link>
                             </Button>
-                          </Link>
-                        </TooltipTrigger>
-                        <TooltipContent>Review Campaigns</TooltipContent>
-                      </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                          </TooltipTrigger>
+                          <TooltipContent>Review Campaigns</TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+            </TableBody>
+          </Table>
+        </Card>
 
-      {!loading && !error && brands.length > 0 && (
-        <div className="flex justify-between items-center p-4">
-          <div className="text-sm text-gray-700">
-            Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
+        {!loading && !error && brands.length > 0 && (
+          <div className="flex justify-between items-center p-4">
+            <div className="text-sm text-gray-700">
+              Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
+            </div>
+            <div className="space-x-2">
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+              >
+                <HiChevronLeft />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+              >
+                <HiChevronRight />
+              </Button>
+            </div>
           </div>
-          <div className="space-x-2">
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={page === 1}
-              onClick={() => setPage((p) => Math.max(p - 1, 1))}
-            >
-              <HiChevronLeft />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              disabled={page === totalPages}
-              onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-            >
-              <HiChevronRight />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 };
 

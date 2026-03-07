@@ -10,8 +10,9 @@ import {
   useReducedMotion,
 } from "framer-motion";
 import type { Transition, Variants } from "framer-motion";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { get } from "@/lib/api";
 
 import {
   Bell,
@@ -32,6 +33,7 @@ import {
 } from "@phosphor-icons/react";
 
 /* -------------------------------- routing -------------------------------- */
+
 const CAMPAIGN_PREFIX = "/brand/campaign";
 
 const ROUTES: Record<string, string> = {
@@ -52,51 +54,12 @@ const ROUTES: Record<string, string> = {
   invite: "/brand/invite-members",
 };
 
-/* -------------------------------- utils -------------------------------- */
-
-function useMediaQuery(query: string) {
-  const [matches, setMatches] = useState(false);
-
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    const onChange = () => setMatches(mql.matches);
-    onChange();
-
-    if (mql.addEventListener) mql.addEventListener("change", onChange);
-    else mql.addListener(onChange);
-
-    return () => {
-      if (mql.removeEventListener) mql.removeEventListener("change", onChange);
-      else mql.removeListener(onChange);
-    };
-  }, [query]);
-
-  return matches;
-}
-
-function useViewportWidth(fallback = 375) {
-  const [w, setW] = useState<number>(() =>
-    typeof window !== "undefined" ? window.innerWidth : fallback
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onResize = () => setW(window.innerWidth);
-    window.addEventListener("resize", onResize, { passive: true });
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  return w;
-}
-
-const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#1a1a1a]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white";
-
-const ACTIVE_NAV = "bg-[#1a1a1a] text-white";
-const HOVER_NAV = "hover:bg-[#1a1a1a]/10 hover:text-[#1a1a1a]";
-const REST_NAV = "text-[#1a1a1a]";
-
 /* -------------------------------- types -------------------------------- */
+
+type BrandPlanRes = {
+  brandPlanId?: string | null;
+  brandPlanName?: string | null;
+};
 
 type Item = {
   key: string;
@@ -118,7 +81,61 @@ export type BrandSidebarProps = {
   setDrawerOpen?: (open: boolean) => void;
 };
 
-/* ------------------------------ constants ------------------------------ */
+/* -------------------------------- utils -------------------------------- */
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+
+    onChange();
+
+    if (mql.addEventListener) mql.addEventListener("change", onChange);
+    else mql.addListener(onChange);
+
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener("change", onChange);
+      else mql.removeListener(onChange);
+    };
+  }, [query]);
+
+  return matches;
+}
+
+function useViewportWidth(fallback = 375) {
+  const [w, setW] = useState<number>(() =>
+    typeof window !== "undefined" ? window.innerWidth : fallback
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const onResize = () => setW(window.innerWidth);
+    window.addEventListener("resize", onResize, { passive: true });
+
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  return w;
+}
+
+function titleCasePlan(value: string | null) {
+  if (!value) return "Free";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/* -------------------------------- styles -------------------------------- */
+
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#1a1a1a]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white";
+
+const ACTIVE_NAV = "bg-[#1a1a1a] text-white";
+const HOVER_NAV = "hover:bg-[#1a1a1a]/10 hover:text-[#1a1a1a]";
+const REST_NAV = "text-[#1a1a1a]";
 
 const UPGRADE_REST =
   "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.30) 31%, rgba(255, 255, 255, 0.50) 100%)";
@@ -145,15 +162,15 @@ const upgradeShellStyle: React.CSSProperties = {
 
 function WorkspaceLogo({ ws }: { ws: Workspace }) {
   return (
-    <div className="h-8 w-8 rounded-lg grid place-items-center overflow-hidden bg-white border border-neutral-200 shrink-0">
+    <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-white grid place-items-center">
       {ws.logoSrc ? (
         <img
           src={ws.logoSrc}
           alt={ws.name}
-          className="h-5 w-5 object-contain bg-white rounded"
+          className="h-5 w-5 rounded bg-white object-contain"
         />
       ) : (
-        <span className="text-[#1a1a1a] text-xs font-semibold">
+        <span className="text-xs font-semibold text-[#1a1a1a]">
           {ws.name.slice(0, 1).toUpperCase()}
         </span>
       )}
@@ -214,11 +231,6 @@ function PanelCaretGlyph({
   );
 }
 
-/**
- * UPDATED RowButton: 
- * Merges the logic of your previous `RailIconButton` and `RowButton`.
- * It morphs between the two styles to prevent unmounting/remounting glitches.
- */
 const RowButton = React.memo(function RowButton({
   active,
   icon: Icon,
@@ -242,22 +254,18 @@ const RowButton = React.memo(function RowButton({
       onClick={onClick}
       title={collapsed ? label : undefined}
       className={cn(
-        // Common base classes
-        "flex items-center rounded-lg transition-all duration-300 cursor-pointer overflow-hidden relative",
+        "relative flex cursor-pointer items-center overflow-hidden rounded-lg transition-all duration-300",
         FOCUS_RING,
         REST_NAV,
         active ? ACTIVE_NAV : HOVER_NAV,
-        // Collapsed vs Expanded styling logic
         collapsed
-          ? cn("justify-center mx-auto", tight ? "h-11 w-11" : "h-12 w-12") // Square shape (Rail style)
-          : cn("justify-start w-full", tight ? "h-9 py-2 px-2.5 gap-2" : "h-10 py-2 px-3 gap-2") // Wide shape (Row style)
+          ? cn("mx-auto justify-center", tight ? "h-11 w-11" : "h-12 w-12")
+          : cn("w-full justify-start", tight ? "h-9 gap-2 px-2.5 py-2" : "h-10 gap-2 px-3 py-2")
       )}
       style={{ fontFamily: "var(--Font-Family-Inter, Inter)" }}
     >
-      {/* Icon - Always visible, fixed size to prevent squishing */}
-      <Icon size={20} weight="regular" className="text-current shrink-0" />
+      <Icon size={20} weight="regular" className="shrink-0 text-current" />
 
-      {/* Label - Smoothly animates width and opacity */}
       <m.span
         initial={false}
         animate={{
@@ -266,7 +274,7 @@ const RowButton = React.memo(function RowButton({
         }}
         transition={{ duration: 0.2 }}
         className={cn(
-          "whitespace-nowrap overflow-hidden text-current",
+          "overflow-hidden whitespace-nowrap text-current",
           tight ? "text-[13px]" : "text-[14px]",
           "leading-5"
         )}
@@ -274,7 +282,6 @@ const RowButton = React.memo(function RowButton({
         {label}
       </m.span>
 
-      {/* Right Element (Caret or Badge) - Hidden when collapsed unless it's an indicator */}
       {!collapsed && right && (
         <m.span
           initial={false}
@@ -285,11 +292,10 @@ const RowButton = React.memo(function RowButton({
         </m.span>
       )}
 
-      {/* Indicator dot (replaces the 'hasIndicator' logic from RailIconButton) */}
       {collapsed && right && (
         <span
           className={cn(
-            "absolute top-2 right-2 h-2 w-2 rounded-full",
+            "absolute right-2 top-2 h-2 w-2 rounded-full",
             active ? "bg-white" : "bg-[#1a1a1a]"
           )}
         />
@@ -308,55 +314,63 @@ export default function BrandSidebar({
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
 
-  // breakpoints
+  /* ------------------------------- responsive ------------------------------ */
+
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const isXl = useMediaQuery("(min-width: 1280px)");
   const isShort = useMediaQuery("(max-height: 800px)");
   const supportsHover = useMediaQuery("(hover: hover)");
   const vw = useViewportWidth();
 
-  // nav state
+  /* --------------------------------- state -------------------------------- */
+
   const [active, setActive] = useState<string>("dashboard");
   const [campaignOpen, setCampaignOpen] = useState(false);
 
-  // workspace state
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workspaceKey, setWorkspaceKey] = useState<string>("nike");
 
-  // desktop collapse states
   const [collapsed, setCollapsed] = useState(true);
   const [widthCollapsed, setWidthCollapsed] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
 
-  // drawer state
   const [drawerOpenInternal, setDrawerOpenInternal] = useState(false);
   const drawerOpen = drawerOpenProp ?? drawerOpenInternal;
 
-  const setDrawerOpen = useCallback(
-    (open: boolean) => {
-      if (setDrawerOpenProp) setDrawerOpenProp(open);
-      else setDrawerOpenInternal(open);
-    },
-    [setDrawerOpenProp]
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [planName, setPlanName] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [brandId, setBrandId] = useState<string | null>(null);
+
+  const didFetchPlanRef = useRef(false);
+  const campaignHoverRef = useRef(false);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+
+  /* -------------------------------- derived -------------------------------- */
+
+  const tight = isShort;
+  const railMode = isDesktop && (collapsed || isClosing);
+  const compactUI = isDesktop ? collapsed || isClosing : false;
+
+  const normalizedPlanName = useMemo(
+    () => (planName ? planName.trim().toLowerCase() : null),
+    [planName]
   );
 
-  useEffect(() => {
-    if (isDesktop) {
-      setDrawerOpen(false);
-      setCollapsed(true);
-      setIsClosing(false);
-      setWidthCollapsed(true);
-    } else {
-      setCollapsed(false);
-      setIsClosing(false);
-      setWidthCollapsed(false);
-    }
-  }, [isDesktop, setDrawerOpen]);
+  const isPaidPlan = useMemo(() => {
+    if (!normalizedPlanName) return false;
+    return !["free", "basic", "trial"].includes(normalizedPlanName);
+  }, [normalizedPlanName]);
 
-  const railMode = isDesktop && (collapsed || isClosing);
-  const compactUI = isDesktop ? (collapsed || isClosing) : false;
+  const planLabel = useMemo(
+    () => titleCasePlan(normalizedPlanName),
+    [normalizedPlanName]
+  );
 
-  const campaignHoverRef = useRef(false);
+  const upgradeCardTitle = isPaidPlan ? "Manage Plan" : "Upgrade Plan";
+  const upgradeCardDesc = isPaidPlan
+    ? `You are currently on the ${planLabel} plan`
+    : "Upgrade anytime. No long-term commitment";
 
   const workspaces = useMemo<Workspace[]>(
     () => [
@@ -374,29 +388,88 @@ export default function BrandSidebar({
     []
   );
 
-  const selectedWorkspace = useMemo(() => {
-    return workspaces.find((w) => w.key === workspaceKey) ?? workspaces[0];
-  }, [workspaceKey, workspaces]);
+  const selectedWorkspace = useMemo(
+    () => workspaces.find((w) => w.key === workspaceKey) ?? workspaces[0],
+    [workspaceKey, workspaces]
+  );
 
-  // outside click for workspace menu
-  const workspaceRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!workspaceOpen) return;
+  const items = useMemo<Item[]>(
+    () => [
+      { key: "dashboard", label: "Dashboard", icon: House, section: "dashboard" },
+      { key: "create", label: "Create Campaign", icon: NotePencil, section: "dashboard" },
+      {
+        key: "campaigns",
+        label: "Campaigns",
+        icon: CardsThree,
+        section: "dashboard",
+        children: [
+          { key: "campaigns_all", label: "Created Campaigns" },
+          { key: "campaigns_active", label: "Active Campaigns" },
+          { key: "campaigns_draft", label: "Drafts Campaigns" },
+          { key: "campaigns_history", label: "Campaigns History" },
+        ],
+      },
+      { key: "browse", label: "Browse Influencer", icon: Users, section: "dashboard" },
+      { key: "inbox", label: "Inbox", icon: PaperPlaneTilt, section: "dashboard" },
+      { key: "wallet", label: "Wallet", icon: Wallet, section: "dashboard" },
+      {
+        key: "notification",
+        label: "Notification",
+        icon: Bell,
+        section: "manage",
+        right: (
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-neutral-100 text-[11px] text-[#1a1a1a]">
+            1
+          </span>
+        ),
+      },
+      { key: "credits", label: "Credits", icon: ContactlessPayment, section: "manage" },
+      { key: "help", label: "Help", icon: Question, section: "manage" },
+      { key: "invite", label: "Invite Members", icon: UserPlus, section: "manage" },
+    ],
+    []
+  );
 
-    const onPointerDown = (e: PointerEvent) => {
-      const el = workspaceRef.current;
-      if (!el) return;
-      if (el.contains(e.target as Node)) return;
-      setWorkspaceOpen(false);
-    };
+  const dashboardItems = useMemo(
+    () => items.filter((i) => i.section === "dashboard"),
+    [items]
+  );
 
-    window.addEventListener("pointerdown", onPointerDown, { capture: true });
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown, {
-        capture: true,
-      } as any);
-    };
-  }, [workspaceOpen]);
+  const manageItems = useMemo(
+    () => items.filter((i) => i.section === "manage"),
+    [items]
+  );
+
+  const isCampaignChildActive = active.startsWith("campaigns_");
+
+  const routePairs = useMemo(() => {
+    return Object.entries(ROUTES)
+      .filter(([key]) => key !== "campaigns")
+      .map(([key, path]) => ({ key, path }))
+      .sort((a, b) => b.path.length - a.path.length);
+  }, []);
+
+  const clamp = useCallback((v: number, min: number, max: number) => {
+    return Math.min(max, Math.max(min, v));
+  }, []);
+
+  const collapsedW = useMemo(() => {
+    const min = 92;
+    const max = isXl ? 136 : 124;
+    return Math.round(clamp(vw * 0.075, min, max));
+  }, [clamp, vw, isXl]);
+
+  const expandedW = useMemo(() => {
+    const min = isXl ? 300 : 280;
+    const max = isXl ? 420 : 360;
+    return Math.round(clamp(vw * 0.22, min, max));
+  }, [clamp, vw, isXl]);
+
+  const mobileW = useMemo(() => {
+    const max = 320;
+    const min = 260;
+    return Math.max(min, Math.min(max, Math.floor(vw - 24)));
+  }, [vw]);
 
   const motionTransitions = useMemo(() => {
     const content: Transition = reduceMotion
@@ -441,73 +514,134 @@ export default function BrandSidebar({
     []
   );
 
-  const items = useMemo<Item[]>(
-    () => [
-      { key: "dashboard", label: "Dashboard", icon: House, section: "dashboard" },
-      // { key: "hub", label: "Influencer Hub", icon: Users, section: "dashboard" },
-      { key: "create", label: "Create Campaign", icon: NotePencil, section: "dashboard" },
-      {
-        key: "campaigns",
-        label: "Campaigns",
-        icon: CardsThree,
-        section: "dashboard",
-        children: [
-          { key: "campaigns_created", label: "Created Campaigns" },
-          { key: "campaigns_active", label: "Active Campaigns" },
-          { key: "campaigns_draft", label: "Drafts Campaigns" },
-          { key: "campaigns_history", label: "Campaigns History" },
-        ],
-      },
-      { key: "browse", label: "Browse Influencer", icon: Users, section: "dashboard" },
-      { key: "inbox", label: "Inbox", icon: PaperPlaneTilt, section: "dashboard" },
-      { key: "wallet", label: "Wallet", icon: Wallet, section: "dashboard" },
-      {
-        key: "notification",
-        label: "Notification",
-        icon: Bell,
-        section: "manage",
-        right: (
-          <span className="grid h-5 w-5 place-items-center rounded-full bg-neutral-100 text-[11px] text-[#1a1a1a]">
-            1
-          </span>
-        ),
-      },
-      { key: "credits", label: "Credits", icon: ContactlessPayment, section: "manage" },
-      { key: "help", label: "Help", icon: Question, section: "manage" },
-      { key: "invite", label: "Invite Members", icon: UserPlus, section: "manage" },
-    ],
-    []
-  );
+  /* -------------------------------- effects -------------------------------- */
 
-  const dashboardItems = useMemo(() => items.filter((i) => i.section === "dashboard"), [items]);
-  const manageItems = useMemo(() => items.filter((i) => i.section === "manage"), [items]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-  const isCampaignChildActive = active.startsWith("campaigns_");
+    try {
+      const storedToken =
+        window.localStorage.getItem("token") ||
+        window.localStorage.getItem("accessToken");
 
-  const routePairs = useMemo(() => {
-    return Object.entries(ROUTES)
-      .filter(([key]) => key !== "campaigns")
-      .map(([key, path]) => ({ key, path }))
-      .sort((a, b) => b.path.length - a.path.length);
+      const storedBrandId =
+        window.localStorage.getItem("brandId") ||
+        window.localStorage.getItem("currentBrandId");
+
+      const cachedPlanId = window.localStorage.getItem("brandPlanId");
+      const cachedPlanName = window.localStorage.getItem("brandPlanName");
+
+      if (storedToken) setToken(storedToken);
+      if (storedBrandId) setBrandId(storedBrandId);
+      if (cachedPlanId) setPlanId(cachedPlanId);
+      if (cachedPlanName) setPlanName(cachedPlanName.toLowerCase());
+    } catch {}
   }, []);
 
   useEffect(() => {
+    if (!token || !brandId) return;
+    if (didFetchPlanRef.current) return;
+
+    didFetchPlanRef.current = true;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await get<BrandPlanRes>(
+          `/subscription/brand/current?brandId=${encodeURIComponent(brandId)}`
+        );
+
+        const latestId = data?.brandPlanId ?? null;
+        const latestName = data?.brandPlanName
+          ? String(data.brandPlanName).toLowerCase()
+          : null;
+
+        if (cancelled) return;
+
+        setPlanId(latestId);
+        setPlanName(latestName);
+
+        try {
+          if (latestId) window.localStorage.setItem("brandPlanId", latestId);
+          else window.localStorage.removeItem("brandPlanId");
+
+          if (latestName) window.localStorage.setItem("brandPlanName", latestName);
+          else window.localStorage.removeItem("brandPlanName");
+        } catch {}
+      } catch {
+        // keep cached values on failure
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, brandId]);
+
+  useEffect(() => {
+    if (isDesktop) {
+      setDrawerOpenProp?.(false);
+      if (!setDrawerOpenProp) setDrawerOpenInternal(false);
+      setCollapsed(true);
+      setIsClosing(false);
+      setWidthCollapsed(true);
+    } else {
+      setCollapsed(false);
+      setIsClosing(false);
+      setWidthCollapsed(false);
+    }
+  }, [isDesktop, setDrawerOpenProp]);
+
+  useEffect(() => {
+    if (!workspaceOpen) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = workspaceRef.current;
+      if (!el) return;
+      if (el.contains(e.target as Node)) return;
+      setWorkspaceOpen(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, { capture: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, {
+        capture: true,
+      } as EventListenerOptions);
+    };
+  }, [workspaceOpen]);
+
+  useEffect(() => {
     if (!pathname) return;
-    const p = pathname.replace(/\/+$/, "") || "/";
-    const match = routePairs.find(({ path }) => p === path || p.startsWith(path + "/"));
+
+    const currentPath = pathname.replace(/\/+$/, "") || "/";
+    const match = routePairs.find(
+      ({ path }) => currentPath === path || currentPath.startsWith(`${path}/`)
+    );
+
     const nextKey =
       match?.key ??
-      (p === CAMPAIGN_PREFIX || p.startsWith(CAMPAIGN_PREFIX + "/") ? "campaigns" : null);
+      (currentPath === CAMPAIGN_PREFIX || currentPath.startsWith(`${CAMPAIGN_PREFIX}/`)
+        ? "campaigns"
+        : null);
 
-    if (nextKey && nextKey !== active) {
-      setActive(nextKey);
-    }
+    if (nextKey && nextKey !== active) setActive(nextKey);
   }, [pathname, routePairs, active]);
 
   useEffect(() => {
     const inCampaigns = active === "campaigns" || active.startsWith("campaigns_");
     if (inCampaigns && !(isDesktop && collapsed)) setCampaignOpen(true);
   }, [active, isDesktop, collapsed]);
+
+  /* ------------------------------- callbacks ------------------------------- */
+
+  const setDrawerOpen = useCallback(
+    (open: boolean) => {
+      if (setDrawerOpenProp) setDrawerOpenProp(open);
+      else setDrawerOpenInternal(open);
+    },
+    [setDrawerOpenProp]
+  );
 
   const goTo = useCallback(
     (key: string) => {
@@ -517,14 +651,22 @@ export default function BrandSidebar({
     [router]
   );
 
+  const handlePlanClick = useCallback(() => {
+    router.push("/brand/credits");
+    if (!isDesktop) setDrawerOpen(false);
+  }, [router, isDesktop, setDrawerOpen]);
+
   const handleSetActive = useCallback(
     (key: string) => {
       setActive(key);
+
       if (!key.startsWith("campaigns")) {
         setCampaignOpen(false);
         campaignHoverRef.current = false;
       }
+
       goTo(key);
+
       if (!isDesktop) setDrawerOpen(false);
     },
     [goTo, isDesktop, setDrawerOpen]
@@ -554,61 +696,42 @@ export default function BrandSidebar({
   const handleCampaignMouseEnter = useCallback(() => {
     if (!supportsHover) return;
     if (collapsed || isClosing) return;
+
     campaignHoverRef.current = true;
     setCampaignOpen(true);
-  }, [collapsed, isClosing, supportsHover]);
+  }, [supportsHover, collapsed, isClosing]);
 
   const handleCampaignMouseLeave = useCallback(() => {
     if (!supportsHover) return;
     if (isClosing) return;
+
     campaignHoverRef.current = false;
     setCampaignOpen(false);
-  }, [isClosing, supportsHover]);
-
-  const tight = isShort;
-
-  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-
-  const collapsedW = useMemo(() => {
-    const min = 92;
-    const max = isXl ? 136 : 124;
-    return Math.round(clamp(vw * 0.075, min, max));
-  }, [vw, isXl]);
-
-  const expandedW = useMemo(() => {
-    const min = isXl ? 300 : 280;
-    const max = isXl ? 420 : 360;
-    return Math.round(clamp(vw * 0.22, min, max));
-  }, [vw, isXl]);
-
-  const mobileW = useMemo(() => {
-    const max = 320;
-    const min = 260;
-    return Math.max(min, Math.min(max, Math.floor(vw - 24)));
-  }, [vw]);
+  }, [supportsHover, isClosing]);
 
   const renderItem = useCallback(
-    (i: Item) => {
-      const isActiveItem = active === i.key;
+    (item: Item) => {
+      const isActiveItem = active === item.key;
       const campaignsActive =
-        i.key === "campaigns" && (active === "campaigns" || isCampaignChildActive);
+        item.key === "campaigns" && (active === "campaigns" || isCampaignChildActive);
 
-      // Determine if this item should look "collapsed"
-      // It is collapsed if desktop AND (collapsed OR closing)
       const isCollapsed = isDesktop && (collapsed || isClosing);
 
       return (
         <RowButton
-          key={i.key}
-          icon={i.icon}
-          label={i.label}
-          right={i.right}
+          key={item.key}
+          icon={item.icon}
+          label={item.label}
+          right={item.right}
           active={isActiveItem || campaignsActive}
           tight={tight}
           collapsed={isCollapsed}
           onClick={() => {
-            if (i.key === "campaigns" && isCollapsed) return openCampaignsFromRail();
-            handleSetActive(i.key);
+            if (item.key === "campaigns" && isCollapsed) {
+              openCampaignsFromRail();
+              return;
+            }
+            handleSetActive(item.key);
           }}
         />
       );
@@ -625,17 +748,12 @@ export default function BrandSidebar({
     ]
   );
 
+  /* -------------------------------- markup -------------------------------- */
+
   const SidebarBody = (
     <div className="flex h-full flex-col">
-      {/* TOP */}
       <div className={cn("flex flex-col", tight ? "gap-3" : "gap-4")}>
-        <div
-          className={cn(
-            "flex w-full items-center",
-            railMode ? "flex-col gap-3" : "gap-3"
-          )}
-        >
-          {/* Brand / Logo */}
+        <div className={cn("flex w-full items-center", railMode ? "flex-col gap-3" : "gap-3")}>
           <button
             type="button"
             onClick={() => {
@@ -646,7 +764,7 @@ export default function BrandSidebar({
               }
             }}
             className={cn(
-              "grid place-items-center flex-shrink-0",
+              "grid flex-shrink-0 place-items-center",
               FOCUS_RING,
               isDesktop && collapsed ? "cursor-pointer" : "cursor-default"
             )}
@@ -658,7 +776,6 @@ export default function BrandSidebar({
             />
           </button>
 
-          {/* Brand text */}
           <AnimatePresence initial={false}>
             {!compactUI && (
               <m.div
@@ -684,7 +801,6 @@ export default function BrandSidebar({
             )}
           </AnimatePresence>
 
-          {/* Collapse / Close */}
           {isDesktop ? (
             <button
               type="button"
@@ -693,7 +809,7 @@ export default function BrandSidebar({
                 else beginCloseDesktop();
               }}
               className={cn(
-                "grid h-10 w-10 flex-shrink-0 place-items-center transition rounded-lg",
+                "grid h-10 w-10 flex-shrink-0 place-items-center rounded-lg transition",
                 "text-[#343330] hover:bg-[#EDEDED] hover:text-[#1a1a1a]",
                 FOCUS_RING,
                 railMode ? "" : "ml-auto"
@@ -716,7 +832,6 @@ export default function BrandSidebar({
           )}
         </div>
 
-        {/* WORKSPACE SWITCHER */}
         <AnimatePresence initial={false}>
           {!compactUI && (
             <m.div
@@ -727,7 +842,7 @@ export default function BrandSidebar({
               animate="animate"
               exit="exit"
               transition={motionTransitions.content}
-              className="w-full relative z-50"
+              className="relative z-50 w-full"
               style={{ willChange: "transform, opacity" }}
             >
               <m.button
@@ -736,19 +851,28 @@ export default function BrandSidebar({
                 animate={{ scale: workspaceOpen ? 1.02 : 1 }}
                 transition={motionTransitions.content}
                 className={cn(
-                  "w-full flex items-center gap-3 text-left cursor-pointer transition border border-[#E6E6E6]",
-                  "rounded-s bg-white hover:bg-neutral-50",
-                  "p-2",
+                  "w-full cursor-pointer rounded-s border border-[#E6E6E6] bg-white p-2 text-left transition hover:bg-neutral-50",
+                  "flex items-center gap-3",
                   FOCUS_RING,
                   workspaceOpen ? "shadow-sm" : "shadow-none"
                 )}
               >
                 <WorkspaceLogo ws={selectedWorkspace} />
+
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[#1a1a1a] text-[14px] font-semibold leading-[20px]">
+                  <div className="truncate text-[14px] font-semibold leading-[20px] text-[#1a1a1a]">
                     {selectedWorkspace.name}
                   </div>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-[#1a1a1a]">
+                      {planLabel}
+                    </span>
+                    {planId && (
+                      <span className="truncate text-[11px] text-neutral-500">Current plan</span>
+                    )}
+                  </div>
                 </div>
+
                 <span className="ml-auto grid h-8 w-8 place-items-center">
                   <CaretUpDown size={20} className="text-[#1a1a1a]" />
                 </span>
@@ -763,7 +887,7 @@ export default function BrandSidebar({
                     animate="animate"
                     exit="exit"
                     transition={motionTransitions.content}
-                    className="absolute left-1/2 top-full mt-2 z-[60] w-[calc(100%+26px)] -translate-x-1/2"
+                    className="absolute left-1/2 top-full z-[60] mt-2 w-[calc(100%+26px)] -translate-x-1/2"
                   >
                     <m.div
                       initial={{ scale: 0.98, opacity: 0 }}
@@ -773,27 +897,27 @@ export default function BrandSidebar({
                       className="w-full rounded-s border border-[#E6E6E6] bg-white p-3 shadow-lg"
                     >
                       <div className="flex flex-col gap-2.5">
-                        {workspaces.map((w) => {
-                          const isSelected = w.key === selectedWorkspace.key;
+                        {workspaces.map((workspace) => {
+                          const isSelected = workspace.key === selectedWorkspace.key;
+
                           return (
                             <button
-                              key={w.key}
+                              key={workspace.key}
                               type="button"
                               onClick={() => {
-                                setWorkspaceKey(w.key);
+                                setWorkspaceKey(workspace.key);
                                 setWorkspaceOpen(false);
                               }}
                               className={cn(
-                                "w-full h-14 px-4 flex items-center gap-3 text-left cursor-pointer transition",
-                                "rounded-s border border-[#E6E6E6] bg-white hover:bg-neutral-50",
+                                "flex h-14 w-full cursor-pointer items-center gap-3 rounded-s border border-[#E6E6E6] bg-white px-4 text-left transition hover:bg-neutral-50",
                                 FOCUS_RING,
                                 isSelected ? "ring-1 ring-[#1a1a1a]/30" : ""
                               )}
                             >
-                              <WorkspaceLogo ws={w} />
+                              <WorkspaceLogo ws={workspace} />
                               <div className="min-w-0 flex-1">
-                                <div className="truncate text-[#1a1a1a] text-[14px] font-semibold leading-[20px]">
-                                  {w.name}
+                                <div className="truncate text-[14px] font-semibold leading-[20px] text-[#1a1a1a]">
+                                  {workspace.name}
                                 </div>
                               </div>
                               <CaretUpDown size={18} className="text-[#1a1a1a] opacity-70" />
@@ -810,7 +934,6 @@ export default function BrandSidebar({
         </AnimatePresence>
       </div>
 
-      {/* NAV */}
       <div className={cn("mt-6 flex min-h-0 flex-1 flex-col", tight ? "mt-4" : "")}>
         <div
           className={cn(
@@ -820,7 +943,6 @@ export default function BrandSidebar({
               : "overflow-y-auto pr-1"
           )}
         >
-          {/* Dashboard title */}
           <AnimatePresence initial={false}>
             {!compactUI && (
               <m.div
@@ -829,19 +951,18 @@ export default function BrandSidebar({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={motionTransitions.content}
-                className="mb-4 text-[16px] font-semibold text-neutral-600 w-full"
+                className="mb-4 w-full text-[16px] font-semibold text-neutral-600"
               >
                 Dashboard
               </m.div>
             )}
           </AnimatePresence>
 
-          {/* Dashboard items (except wallet) */}
-          <div className={cn("flex flex-col", railMode ? "gap-3" : "gap-2 w-full")}>
+          <div className={cn("flex flex-col", railMode ? "gap-3" : "w-full gap-2")}>
             {dashboardItems
-              .filter((i) => i.key !== "wallet")
-              .map((i) => {
-                if (i.key !== "campaigns") return renderItem(i);
+              .filter((item) => item.key !== "wallet")
+              .map((item) => {
+                if (item.key !== "campaigns") return renderItem(item);
 
                 const caret = (
                   <m.span
@@ -853,18 +974,20 @@ export default function BrandSidebar({
                   </m.span>
                 );
 
-                if (isDesktop && (collapsed || isClosing)) return renderItem(i);
+                if (isDesktop && (collapsed || isClosing)) {
+                  return renderItem(item);
+                }
 
                 return (
                   <div
-                    key={i.key}
+                    key={item.key}
                     className="w-full"
                     onMouseEnter={handleCampaignMouseEnter}
                     onMouseLeave={handleCampaignMouseLeave}
                   >
                     <RowButton
-                      icon={i.icon}
-                      label={i.label}
+                      icon={item.icon}
+                      label={item.label}
                       right={caret}
                       tight={tight}
                       active={campaignOpen || active === "campaigns" || isCampaignChildActive}
@@ -885,19 +1008,19 @@ export default function BrandSidebar({
                           animate="animate"
                           exit="exit"
                           transition={motionTransitions.content}
-                          className="overflow-hidden origin-top"
+                          className="origin-top overflow-hidden"
                         >
                           <div className="rounded-lg bg-white pt-1">
-                            {(i.children ?? []).map((child) => {
+                            {(item.children ?? []).map((child) => {
                               const isSubActive = active === child.key;
+
                               return (
                                 <button
                                   key={child.key}
                                   type="button"
                                   onClick={() => handleSetActive(child.key)}
                                   className={cn(
-                                    "w-full cursor-pointer transition text-left rounded-lg",
-                                    "px-6 py-2 my-1",
+                                    "my-1 w-full cursor-pointer rounded-lg px-6 py-2 text-left transition",
                                     FOCUS_RING,
                                     isSubActive
                                       ? "bg-[#dfdfdf] text-[#1a1a1a]"
@@ -929,9 +1052,8 @@ export default function BrandSidebar({
             )}
           />
 
-          {/* Wallet alone */}
-          <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "gap-2 w-full")}>
-            {dashboardItems.filter((i) => i.key === "wallet").map((i) => renderItem(i))}
+          <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "w-full gap-2")}>
+            {dashboardItems.filter((item) => item.key === "wallet").map((item) => renderItem(item))}
           </div>
 
           <div
@@ -942,7 +1064,6 @@ export default function BrandSidebar({
             )}
           />
 
-          {/* Manage title */}
           <AnimatePresence initial={false}>
             {!compactUI && (
               <m.div
@@ -951,21 +1072,19 @@ export default function BrandSidebar({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={motionTransitions.content}
-                className="mb-4 text-[16px] font-semibold text-neutral-600 w-full"
+                className="mb-4 w-full text-[16px] font-semibold text-neutral-600"
               >
                 Manage
               </m.div>
             )}
           </AnimatePresence>
 
-          {/* Manage items */}
-          <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "gap-2 w-full")}>
-            {manageItems.map((i) => renderItem(i))}
+          <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "w-full gap-2")}>
+            {manageItems.map((item) => renderItem(item))}
           </div>
         </div>
       </div>
 
-      {/* FOOTER */}
       <div className={cn("mt-auto pt-6", tight ? "pt-4" : "")}>
         <AnimatePresence initial={false} mode="wait">
           {isDesktop && collapsed ? (
@@ -979,11 +1098,13 @@ export default function BrandSidebar({
             >
               <m.button
                 type="button"
+                title={isPaidPlan ? `Current: ${planLabel}` : "Upgrade Plan"}
+                onClick={handlePlanClick}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
                 transition={upgradeSpring}
                 className={cn(
-                  "grid place-items-center overflow-hidden",
+                  "relative grid place-items-center overflow-hidden",
                   tight ? "h-12 w-12" : "h-14 w-14",
                   FOCUS_RING
                 )}
@@ -994,6 +1115,9 @@ export default function BrandSidebar({
                 }}
               >
                 <Lightning size={24} className="text-[#1a1a1a]" />
+                {isPaidPlan && (
+                  <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-[#1a1a1a]" />
+                )}
               </m.button>
 
               <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
@@ -1017,24 +1141,25 @@ export default function BrandSidebar({
               className="w-full"
               style={{ opacity: isDesktop && isClosing ? 0 : 1 }}
             >
-              {/* Upgrade card */}
               <m.div
                 initial="rest"
                 animate="rest"
                 whileHover="hover"
                 transition={upgradeSpring}
                 className={cn(
-                  "relative flex w-full flex-col items-start gap-2.5 overflow-hidden p-2 cursor-pointer",
+                  "relative flex w-full cursor-pointer flex-col items-start gap-2.5 overflow-hidden p-2",
                   FOCUS_RING
                 )}
                 style={upgradeShellStyle}
                 tabIndex={0}
                 role="button"
+                onClick={handlePlanClick}
               >
                 <div
                   className="pointer-events-none absolute inset-0"
                   style={{ background: UPGRADE_REST, borderRadius: "inherit" }}
                 />
+
                 <m.div
                   className="pointer-events-none absolute inset-0"
                   style={{ background: UPGRADE_HOVER, borderRadius: "inherit" }}
@@ -1042,38 +1167,43 @@ export default function BrandSidebar({
                   transition={upgradeSpring}
                 />
 
-                <div className="relative z-10 flex flex-col items-start gap-2.5">
-                  <div className="relative h-6 w-6">
-                    <m.span
-                      className="absolute inset-0 grid place-items-center"
-                      variants={{ rest: { opacity: 1 }, hover: { opacity: 0 } }}
-                      transition={upgradeSpring}
-                    >
-                      <Lightning size={24} weight="regular" className="text-[#1a1a1a]" />
-                    </m.span>
+                <div className="relative z-10 flex w-full flex-col items-start gap-2.5">
+                  <div className="flex w-full items-start justify-between gap-3">
+                    <div className="relative h-6 w-6">
+                      <m.span
+                        className="absolute inset-0 grid place-items-center"
+                        variants={{ rest: { opacity: 1 }, hover: { opacity: 0 } }}
+                        transition={upgradeSpring}
+                      >
+                        <Lightning size={24} weight="regular" className="text-[#1a1a1a]" />
+                      </m.span>
 
-                    <m.span
-                      className="absolute inset-0 grid place-items-center"
-                      variants={{ rest: { opacity: 0 }, hover: { opacity: 1 } }}
-                      transition={upgradeSpring}
-                    >
-                      <Lightning size={24} weight="fill" className="text-[#1a1a1a]" />
-                    </m.span>
+                      <m.span
+                        className="absolute inset-0 grid place-items-center"
+                        variants={{ rest: { opacity: 0 }, hover: { opacity: 1 } }}
+                        transition={upgradeSpring}
+                      >
+                        <Lightning size={24} weight="fill" className="text-[#1a1a1a]" />
+                      </m.span>
+                    </div>
+
+                    <span className="inline-flex items-center rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-[#1a1a1a]">
+                      {planLabel}
+                    </span>
                   </div>
 
-                  <div className="text-[#1a1a1a] text-[18px] font-semibold leading-[24px]">
-                    Upgrade Plan
+                  <div className="text-[18px] font-semibold leading-[24px] text-[#1a1a1a]">
+                    {upgradeCardTitle}
                   </div>
 
-                  <div className="text-[#1a1a1a] font-[Inter] text-[14px] font-normal leading-[18px]">
-                    Upgrade anytime. No long-term commitment
+                  <div className="font-[Inter] text-[14px] font-normal leading-[18px] text-[#1a1a1a]">
+                    {upgradeCardDesc}
                   </div>
                 </div>
               </m.div>
 
               <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
 
-              {/* User row */}
               <div className="flex w-full items-center gap-3 bg-white p-3">
                 <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
                   <img
@@ -1091,7 +1221,7 @@ export default function BrandSidebar({
                 <button
                   type="button"
                   className={cn(
-                    "flex-shrink-0 grid h-10 w-10 place-items-center rounded-xl text-[#1a1a1a] transition hover:bg-[#EDEDED]",
+                    "grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-[#1a1a1a] transition hover:bg-[#EDEDED]",
                     FOCUS_RING
                   )}
                 >
@@ -1105,13 +1235,11 @@ export default function BrandSidebar({
     </div>
   );
 
-  /* ---------------------------- desktop render ---------------------------- */
-
   const DesktopAside = (
     <m.aside
       data-cg-sidebar
       id="cg-sidebar"
-      className={cn("inline-flex flex-col border border-neutral-200 bg-white select-none h-dvh")}
+      className="inline-flex h-dvh flex-col select-none border border-neutral-200 bg-white"
       style={{
         padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",
         fontFamily: "var(--Font-Family-Inter, Inter)",
@@ -1131,13 +1259,10 @@ export default function BrandSidebar({
     </m.aside>
   );
 
-  /* ---------------------------- mobile drawer render ---------------------------- */
-
   const MobileDrawer = (
     <AnimatePresence>
       {drawerOpen ? (
         <>
-          {/* Backdrop */}
           <m.button
             type="button"
             aria-label="Close menu"
@@ -1149,14 +1274,10 @@ export default function BrandSidebar({
             onClick={() => setDrawerOpen(false)}
           />
 
-          {/* Drawer */}
           <m.aside
             data-cg-sidebar
             id="cg-sidebar"
-            className={cn(
-              "fixed left-0 top-0 bottom-0 z-[100]",
-              "border-r border-neutral-200 bg-white select-none"
-            )}
+            className="fixed bottom-0 left-0 top-0 z-[100] border-r border-neutral-200 bg-white select-none"
             style={{
               width: mobileW,
               padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",
