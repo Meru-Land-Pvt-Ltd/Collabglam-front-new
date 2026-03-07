@@ -40,6 +40,11 @@ import {
   WarningCircle,
   DotsThree,
   Newspaper,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  DownloadSimple,
+  FilePdf,
 } from "@phosphor-icons/react";
 
 import {
@@ -261,7 +266,6 @@ const statuses = [
   { label: "Active", dot: "bg-[#28A745]", ring: "bg-[#BCE4C5]" },
   { label: "Paused", dot: "bg-[#DC3545]", ring: "bg-[#F5C6CB]" },
   { label: "Draft", dot: "bg-[#9E9E9E]", ring: "bg-[#E0E0E0]" },
-  { label: "Scheduled", dot: "bg-[#4A90D9]", ring: "bg-[#BDD7F5]" },
   { label: "Completed", dot: "bg-[#F07B3F]", ring: "bg-[#FAD6C0]" },
 ];
 
@@ -945,9 +949,11 @@ export default function ViewCampaignPage() {
   const [recommendedLoadingMore, setRecommendedLoadingMore] = useState(false);
 
   const [invitingIds, setInvitingIds] = useState<Record<string, boolean>>({});
-
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
+  const [otherInfoOpen, setOtherInfoOpen] = useState(false);
+  const [audiencePlatformsOpen, setAudiencePlatformsOpen] = useState(false);
+  const [additionalInfoOpen, setAdditionalInfoOpen] = useState(false);
 
   useEffect(() => {
     const id =
@@ -1219,6 +1225,58 @@ export default function ViewCampaignPage() {
 
   const details = (doc as any)?.details ?? {};
   const countries = asArray(details?.targetCountries);
+  const ages = asArray(details?.targetAgeRanges);
+  const platforms = asArray<string>((doc as any)?.platformSelection);
+
+  const descriptionText = String(
+    (doc as any)?.description ??
+    (doc as any)?.campaignDescription ??
+    details?.description ??
+    details?.campaignDescription ??
+    ""
+  ).trim();
+
+  const additionalNotesText = String(
+    (doc as any)?.additionalNotes ??
+    (doc as any)?.notes ??
+    (doc as any)?.additionalInformation ??
+    details?.additionalNotes ??
+    details?.notes ??
+    details?.additionalInformation ??
+    ""
+  ).trim();
+
+  const hashtags = (() => {
+    const detailObjs = asArray((details as any)?.preferredHashtags ?? []);
+
+    const byId = new Map<string, string>();
+    detailObjs.forEach((h: any) => {
+      const key = normalizeMongoId(h?.id ?? h?._id);
+      const tag = typeof h?.tag === "string" ? h.tag.trim() : "";
+      if (key && tag) byId.set(key, tag);
+    });
+
+    const raw =
+      (doc as any)?.preferredHashtags ??
+      (details as any)?.preferredHashtags ??
+      (doc as any)?.hashtags ??
+      (details as any)?.hashtags ??
+      [];
+
+    return asArray(raw)
+      .map((h: any) => {
+        if (typeof h === "string") {
+          const s = h.trim();
+          if (byId.has(s)) return byId.get(s)!;
+          if (/^[a-f0-9]{24}$/i.test(s)) return "";
+          return s;
+        }
+
+        if (h && typeof h.tag === "string") return h.tag.trim();
+        return "";
+      })
+      .filter(Boolean);
+  })();
 
   const productImages = asArray<any>((doc as any)?.productImages);
 
@@ -1235,6 +1293,38 @@ export default function ViewCampaignPage() {
   ).trim();
 
   const videoThumbUrl = videoReferenceUrl ? getVideoThumb(videoReferenceUrl) : "";
+  const pdfRaw =
+    (doc as any)?.pdf ??
+    (doc as any)?.pdfAttachment ??
+    (doc as any)?.attachment ??
+    (doc as any)?.attachments ??
+    details?.pdf ??
+    details?.pdfAttachment ??
+    details?.attachment ??
+    details?.attachments ??
+    null;
+
+  const pdfItem = Array.isArray(pdfRaw) ? pdfRaw[0] : pdfRaw;
+
+  const pdfUrl =
+    typeof pdfItem === "string"
+      ? pdfItem
+      : (pdfItem?.url || pdfItem?.src || pdfItem?.path || "");
+
+  const pdfName =
+    typeof pdfItem === "object" && pdfItem?.name
+      ? String(pdfItem.name)
+      : (pdfUrl ? "Attachment.pdf" : "");
+
+  const pdfSizeBytes =
+    typeof pdfItem === "object" && pdfItem?.size != null
+      ? Number(pdfItem.size)
+      : NaN;
+
+  const pdfSizeText =
+    Number.isFinite(pdfSizeBytes) && pdfSizeBytes > 0
+      ? `${(pdfSizeBytes / (1024 * 1024)).toFixed(1)} MB`
+      : "";
 
   const targetCountryText = countries.length
     ? countries
@@ -1315,6 +1405,51 @@ export default function ViewCampaignPage() {
     .filter(Boolean);
 
   const carouselImages = backendImageUrls.length ? backendImageUrls : [];
+
+  const scrollToSlide = (idx: number) => {
+    const el = carouselRef.current;
+    if (!el || !carouselImages.length) return;
+
+    const clamped = Math.max(0, Math.min(idx, carouselImages.length - 1));
+    const child = el.children.item(clamped) as HTMLElement | null;
+    if (child) {
+      child.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+    }
+
+    setActiveSlide(clamped);
+  };
+
+  const onPrevSlide = () => scrollToSlide(activeSlide - 1);
+  const onNextSlide = () => scrollToSlide(activeSlide + 1);
+
+  const onCarouselScroll = () => {
+    const el = carouselRef.current;
+    if (!el) return;
+
+    const kids = Array.from(el.children) as HTMLElement[];
+    if (!kids.length) return;
+
+    const left = el.scrollLeft;
+    let bestIdx = 0;
+    let bestDist = Number.POSITIVE_INFINITY;
+
+    kids.forEach((k, i) => {
+      const d = Math.abs(k.offsetLeft - left);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    });
+
+    setActiveSlide(bestIdx);
+  };
+
+  const onDownloadPdf = () => {
+    if (!pdfUrl) return;
+    window.open(pdfUrl, "_blank", "noopener,noreferrer");
+  };
+
+
 
   const remainingValue = Number.isFinite(frozenAmount) ? frozenAmount : 0;
   const shownBudgetText = budgetTab === "remaining" ? remainingValue.toLocaleString("en-US") : "0";
@@ -1547,7 +1682,385 @@ export default function ViewCampaignPage() {
       </div>
 
       <div className="mb-[1.75rem] mt-[1.75rem] h-px w-full bg-[var(--Light-Border-Subtle,#E6E6E6)]" />
+      {/* ===== Collapsible Info Cards ===== */}
+      <div className="w-full rounded-[1.25rem] bg-[rgba(218,218,218,0.27)] p-5 flex flex-col items-start gap-6">
+        <div className="flex w-full justify-between items-start self-stretch">
+          <div className="flex flex-col justify-center items-start gap-1 flex-1">
+            <div className="text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]">
+              Other Information
+            </div>
 
+            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
+              {lorem10}
+            </div>
+          </div>
+
+          <Button
+            variant="raised"
+            size="sm"
+            onClick={() => setOtherInfoOpen((v) => !v)}
+            className="my-0 h-auto w-auto p-0 bg-transparent shadow-none border-0 hover:bg-transparent active:bg-transparent"
+            leftIcon={
+              <CaretDown
+                weight="bold"
+                style={{
+                  width: "1.25rem",
+                  height: "1.25rem",
+                  transform: otherInfoOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 150ms ease",
+                }}
+              />
+            }
+          />
+        </div>
+
+        {otherInfoOpen ? (
+          <div className="w-full">
+            <div className="mt-5 self-stretch text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]">
+              Description
+            </div>
+
+            <div className="mt-6 flex h-[14.8125rem] w-full flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 overflow-auto">
+              <div className="text-[#1A1A1A] text-[0.875rem] font-medium leading-[1.25rem] whitespace-pre-wrap">
+                {descriptionText || "—"}
+              </div>
+            </div>
+
+            <div className="mt-6 self-stretch text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]">
+              Image / Reference
+            </div>
+
+            <div className="mt-6 relative w-full">
+              {carouselImages.length ? (
+                <>
+                  <div
+                    ref={carouselRef}
+                    onScroll={onCarouselScroll}
+                    className="flex w-full items-center gap-5 py-5 overflow-x-auto scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                  >
+                    {carouselImages.map((src, idx) => (
+                      <div
+                        key={`${src}-${idx}`}
+                        className="flex-none w-[13.8125rem] h-[11.5rem] rounded-[1.1875rem] bg-cover bg-center"
+                        style={{ backgroundImage: `url(${src})` }}
+                      />
+                    ))}
+                  </div>
+
+                  <Button
+                    variant="raised"
+                    size="sm"
+                    onClick={onPrevSlide}
+                    disabled={activeSlide <= 0}
+                    className="my-0 absolute left-4 top-[5.625rem] h-[2.75rem] w-[2.75rem] px-0 rounded-[2.5rem] bg-[#F2F2F2] border border-transparent shadow-none"
+                    leftIcon={<CaretLeft weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />}
+                  />
+
+                  <Button
+                    variant="raised"
+                    size="sm"
+                    onClick={onNextSlide}
+                    disabled={activeSlide >= carouselImages.length - 1}
+                    className="my-0 absolute right-4 top-[5.625rem] h-[2.75rem] w-[2.75rem] px-0 rounded-[2.5rem] bg-[#F2F2F2] border border-transparent shadow-none"
+                    leftIcon={<CaretRight weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />}
+                  />
+
+                  <div className="mt-2 flex w-full items-center justify-center gap-2">
+                    {carouselImages.map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => scrollToSlide(i)}
+                        aria-label={`Go to slide ${i + 1}`}
+                        className="h-2 w-2 rounded-[0.5rem]"
+                        style={{ backgroundColor: i === activeSlide ? "#000000" : "#E8E8E8" }}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex h-[11.5rem] w-full items-center justify-center rounded-[0.75rem] border border-[#E6E6E6] bg-white text-[#969696] text-[0.875rem]">
+                  —
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 w-full rounded-[1.25rem] bg-[rgba(218,218,218,0.27)] p-5 flex flex-col items-start gap-6">
+        <div className="flex w-full justify-between items-start self-stretch">
+          <div className="flex flex-col justify-center items-start gap-1 flex-1">
+            <div className="text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]">
+              Audience &amp; Platforms
+            </div>
+
+            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
+              {lorem10}
+            </div>
+          </div>
+
+          <Button
+            variant="raised"
+            size="sm"
+            onClick={() => setAudiencePlatformsOpen((v) => !v)}
+            className="my-0 h-auto w-auto p-0 bg-transparent shadow-none border-0 hover:bg-transparent active:bg-transparent"
+            leftIcon={
+              <CaretDown
+                weight="bold"
+                style={{
+                  width: "1.25rem",
+                  height: "1.25rem",
+                  transform: audiencePlatformsOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 150ms ease",
+                }}
+              />
+            }
+          />
+        </div>
+
+        {audiencePlatformsOpen ? (
+          <div className="w-full mt-6 flex flex-col sm:flex-row gap-6">
+            <div className="w-full sm:w-1/2 flex flex-col gap-3">
+              <div className="flex h-[4.5rem] p-3 flex-col justify-between items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
+                <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
+                  Target Platform
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {platforms.length ? (
+                    platforms.map((p, idx) => {
+                      const key = `${p}-${idx}`;
+                      const lower = String(p).toLowerCase();
+
+                      if (lower === "instagram") {
+                        return (
+                          <Image
+                            key={key}
+                            src="/skill-icons_instagram.svg"
+                            alt="Instagram"
+                            width={20}
+                            height={20}
+                            className="w-5 h-5"
+                          />
+                        );
+                      }
+
+                      if (lower === "youtube") {
+                        return (
+                          <Image
+                            key={key}
+                            src="/logos_youtube-icon.svg"
+                            alt="YouTube"
+                            width={20}
+                            height={20}
+                            className="w-5 h-5"
+                          />
+                        );
+                      }
+
+                      if (lower === "tiktok") {
+                        return (
+                          <Image
+                            key={key}
+                            src="/ic_baseline-tiktok.svg"
+                            alt="TikTok"
+                            width={20}
+                            height={20}
+                            className="w-5 h-5"
+                          />
+                        );
+                      }
+
+                      return (
+                        <span
+                          key={key}
+                          className="flex h-7 items-center justify-center rounded-[1.25rem] bg-[#F9F9F9] px-3"
+                        >
+                          <span className="text-[#1A1A1A] text-[0.875rem] font-semibold leading-[1.25rem]">
+                            {String(p)}
+                          </span>
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className="text-[#969696] text-[0.875rem]">—</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex h-[4.5rem] p-3 flex-col justify-between items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
+                <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
+                  Target Country
+                </div>
+
+                <div className="mt-2 text-[#1A1A1A] text-[0.875rem] font-semibold leading-[1.25rem]">
+                  {targetCountryText}
+                </div>
+              </div>
+
+              <div className="flex p-3 flex-col items-start gap-3 self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
+                <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
+                  Target age group
+                </div>
+
+                <div className="flex flex-wrap gap-2 self-stretch">
+                  {ages.length ? (
+                    ages.map((a: any, idx: number) => (
+                      <span
+                        key={`${String(a?.id ?? a?._id ?? a?.range ?? idx)}-${idx}`}
+                        className="flex h-7 items-center justify-center rounded-[1.25rem] bg-[#F9F9F9] px-3"
+                      >
+                        <span className="text-[#1A1A1A] text-[0.875rem] font-semibold leading-[1.25rem]">
+                          {String(a?.range ?? "—")}
+                        </span>
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[#969696] text-[0.875rem]">—</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[15.9375rem]">
+              <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem] self-stretch">
+                Video Reference
+              </div>
+
+              {videoReferenceUrl ? (
+                <div className="flex flex-col gap-2">
+                  <a
+                    href={videoReferenceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem] break-all"
+                  >
+                    {videoReferenceUrl}
+                  </a>
+
+                  <a
+                    href={videoReferenceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-[12.875rem] h-[10.125rem] rounded-[0.25rem] bg-cover bg-center"
+                    style={{
+                      backgroundImage: videoThumbUrl ? `url(${videoThumbUrl})` : undefined,
+                      backgroundColor: videoThumbUrl ? undefined : "#eee",
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="text-[#969696] text-[0.875rem] font-normal leading-[1.25rem]">—</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 w-full rounded-[1.25rem] bg-[rgba(218,218,218,0.27)] p-5 flex flex-col items-start gap-6">
+        <div className="flex w-full justify-between items-start self-stretch">
+          <div className="flex flex-col justify-center items-start gap-1 flex-1">
+            <div className="text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]">
+              Additional Information
+            </div>
+
+            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
+              {lorem10}
+            </div>
+          </div>
+
+          <Button
+            variant="raised"
+            size="sm"
+            onClick={() => setAdditionalInfoOpen((v) => !v)}
+            className="my-0 h-auto w-auto p-0 bg-transparent shadow-none border-0 hover:bg-transparent active:bg-transparent"
+            leftIcon={
+              <CaretDown
+                weight="bold"
+                style={{
+                  width: "1.25rem",
+                  height: "1.25rem",
+                  transform: additionalInfoOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 150ms ease",
+                }}
+              />
+            }
+          />
+        </div>
+
+        {additionalInfoOpen ? (
+          <div className="w-full">
+            <div className="flex h-[14.8125rem] flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white overflow-hidden">
+              <div className="flex w-full items-center self-stretch px-3 py-2 border-b border-[#E6E6E6] rounded-t-[0.6875rem]">
+                <div className="text-[#969696] text-[1rem] font-medium leading-[1.5rem]">
+                  Additional Notes
+                </div>
+              </div>
+
+              <div className="flex flex-1 w-full p-3 items-start justify-between self-stretch overflow-auto">
+                <div className="text-[#1A1A1A] text-[0.875rem] font-medium leading-[1.25rem] whitespace-pre-wrap">
+                  {additionalNotesText || "—"}
+                </div>
+              </div>
+            </div>
+
+            {pdfUrl ? (
+              <div className="mt-5 flex w-full items-center justify-between self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white px-3 py-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <FilePdf weight="bold" style={{ width: "2rem", height: "2rem" }} />
+
+                  <div className="flex flex-col min-w-0">
+                    <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem] truncate">
+                      {pdfName}
+                    </div>
+                    {pdfSizeText ? (
+                      <div className="text-[#969696] text-[0.875rem] font-normal leading-[1.25rem]">
+                        {pdfSizeText}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <Button
+                  variant="raised"
+                  size="sm"
+                  onClick={onDownloadPdf}
+                  className="my-0 h-[2.0625rem] w-[7rem] px-2 rounded-[0.75rem] bg-white border border-transparent shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08),0_4px_8px_-2px_rgba(0,0,0,0.04)]"
+                  leftIcon={<DownloadSimple weight="bold" style={{ width: "0.875rem", height: "0.875rem" }} />}
+                >
+                  <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem]">
+                    Download
+                  </span>
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[11.4375rem] gap-[1.3125rem]">
+              <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem]">
+                Hashtags
+              </div>
+
+              <div className="flex flex-wrap gap-2 self-stretch">
+                {hashtags.length ? (
+                  hashtags.map((tag: string, idx: number) => (
+                    <span
+                      key={`${tag}-${idx}`}
+                      className="flex h-7 items-center justify-center rounded-[1.25rem] bg-[#F9F9F9] px-3"
+                    >
+                      <span className="text-[#1A1A1A] text-[0.75rem] font-medium leading-[1.25rem]">
+                        {tag}
+                      </span>
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[#969696] text-[0.875rem] leading-[1.25rem]">—</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
       {/* ===== Recommended Influencer ===== */}
       <div className="mt-7 w-full flex flex-col items-start self-stretch">
         <div className="self-stretch text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]" style={{ fontFamily: "Inter" }}>
