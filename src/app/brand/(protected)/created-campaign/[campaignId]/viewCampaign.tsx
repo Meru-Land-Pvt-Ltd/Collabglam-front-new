@@ -2126,17 +2126,19 @@ export default function ViewCampaignPage() {
             <>
               <InfluencerTable
                 rows={recommendedRows}
-                variant="recommended"
-                renderRecommendedActions={(row) => (
+                variant="default"
+                renderAction={(row) => (
                   <RecommendedActionItems
                     row={row}
-                    isInviting={!!invitingIds[row.id]}   // ✅ ADD
-                    onInvite={handleInviteInfluencer}    // ✅ CALL API
+                    isInviting={!!invitingIds[row.id]}
+                    onInvite={handleInviteInfluencer}
                     onDelete={(r) => {
                       setRecommendedRows((prev) => prev.filter((x) => x.id !== r.id));
                       toast({ icon: "success", title: `${r.profile.name} removed` });
                     }}
-                    onViewProfile={(r) => toast({ icon: "success", title: `View profile: ${r.profile.name}` })}
+                    onViewProfile={(r) =>
+                      toast({ icon: "success", title: `View profile: ${r.profile.name}` })
+                    }
                     onCopyProfileLink={async (r) => {
                       const link = `${window.location.origin}/influencer/${r.id}`;
                       try {
@@ -2146,8 +2148,12 @@ export default function ViewCampaignPage() {
                         toast({ icon: "error", title: "Could not copy link" });
                       }
                     }}
-                    onSaveToHub={(r) => toast({ icon: "success", title: `Saved ${r.profile.name} to HUB` })}
-                    onMoveToWorkspace={(r) => toast({ icon: "success", title: `Moved ${r.profile.name} to workspace` })}
+                    onSaveToHub={(r) =>
+                      toast({ icon: "success", title: `Saved ${r.profile.name} to HUB` })
+                    }
+                    onMoveToWorkspace={(r) =>
+                      toast({ icon: "success", title: `Moved ${r.profile.name} to workspace` })
+                    }
                     onNotRelevant={(r) => {
                       setRecommendedRows((prev) => prev.filter((x) => x.id !== r.id));
                       toast({ icon: "success", title: `${r.profile.name} marked not relevant` });

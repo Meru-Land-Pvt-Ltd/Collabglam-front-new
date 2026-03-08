@@ -8,7 +8,7 @@ import { FloatingInput } from "@/components/ui/floatingInput";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";
 
-import { FloatingSelect, SelectItem } from "@/components/ui/select";
+import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 import { useRouter } from "next/navigation";

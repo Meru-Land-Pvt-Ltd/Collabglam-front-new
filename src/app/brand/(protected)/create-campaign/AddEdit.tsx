@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/buttonComp";
 import { FloatingInput } from "@/components/ui/floatingInput";
-import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/select";
+import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 import { LabeledTextarea } from "@/components/ui/textAreaComp";
 import { ProductImagesUpload } from "@/components/ui/upload-card";
 import { ProductCardUpload } from "@/components/ui/productCard-Image";

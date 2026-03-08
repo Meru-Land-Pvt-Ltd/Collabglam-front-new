@@ -256,7 +256,7 @@ const AdminBrandsPage: NextPage = () => {
 
                     return (
                       <TableRow
-                        key={b.brandId}
+                        key={b._id}
                         className="border-b border-black/5 hover:bg-black/[0.02]"
                       >
                         <TableCell className="py-4">
@@ -319,7 +319,7 @@ const AdminBrandsPage: NextPage = () => {
                               className="min-w-[200px] rounded-xl border border-black/10 bg-white text-black shadow-lg"
                             >
                               <DropdownMenuItem asChild className="cursor-pointer focus:bg-black/5">
-                                <Link href={`/admin/brands/view?brandId=${b.brandId}`}>
+                                <Link href={`/admin/brands/view?brandId=${b._id}`}>
                                   <span className="flex items-center gap-2 text-[13px] font-semibold">
                                     <HiOutlineEye className="h-4 w-4" />
                                     View details
@@ -328,7 +328,7 @@ const AdminBrandsPage: NextPage = () => {
                               </DropdownMenuItem>
 
                               <DropdownMenuItem asChild className="cursor-pointer focus:bg-black/5">
-                                <Link href={`/admin/brands/create-campaign?brandId=${b.brandId}`}>
+                                <Link href={`/admin/brands/create-campaign?brandId=${b._id}`}>
                                   <span className="flex items-center gap-2 text-[13px] font-semibold">
                                     <HiOutlinePlus className="h-4 w-4" />
                                     Create Campaign
@@ -337,7 +337,7 @@ const AdminBrandsPage: NextPage = () => {
                               </DropdownMenuItem>
 
                               <DropdownMenuItem asChild className="cursor-pointer focus:bg-black/5">
-                                <Link href={`/admin/brands/review-campaigns?brandId=${b.brandId}`}>
+                                <Link href={`/admin/brands/review-campaigns?brandId=${b._id}`}>
                                   <span className="flex items-center gap-2 text-[13px] font-semibold">
                                     <HiPencil className="h-4 w-4" />
                                     Review Campaigns

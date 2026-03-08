@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@base-ui/react": "^1.2.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@headlessui/react": "^2.2.4",
@@ -39,9 +40,11 @@
     "@types/socket.io": "^3.0.1",
     "autoprefixer": "^10.4.21",
     "axios": "^1.9.0",
+    "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "cobe": "^0.6.5",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.13",
     "framer-motion": "^12.34.3",
@@ -73,6 +76,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
     "@types/react": "^19.2.14",
     "@types/react-beautiful-dnd": "^13.1.8",

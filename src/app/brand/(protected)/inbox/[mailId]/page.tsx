@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/buttonComp"
 import { Input } from "@/components/ui/input"
@@ -37,11 +37,6 @@ import {
   SmileyBlank
 } from "@phosphor-icons/react"
 
-type PageProps = {
-  params: {
-    mailId: string
-  }
-}
 
 type MailDetail = {
   id: string
@@ -131,12 +126,14 @@ function ToolbarButton({
   )
 }
 
-export default function BrandInboxMailDetailPage({ params }: PageProps) {
+export default function BrandInboxMailDetailPage() {
   const router = useRouter()
+  const params = useParams<{ mailId: string }>()
   const mail = mailMap[params.mailId] ?? fallbackMail
+
   const [showReply, setShowReply] = React.useState(false)
   const [replyText, setReplyText] = React.useState(
-    "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages."
+    "Lorem Ipsum is simply dummy text of the printing and typesetting industry..."
   )
 
   return (

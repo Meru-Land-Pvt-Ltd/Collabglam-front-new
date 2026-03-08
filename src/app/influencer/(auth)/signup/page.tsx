@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
-import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/select";
+import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";

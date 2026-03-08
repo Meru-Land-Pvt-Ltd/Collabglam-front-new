@@ -405,7 +405,7 @@ export default function BrandSidebar({
         children: [
           { key: "campaigns_all", label: "Created Campaigns" },
           { key: "campaigns_active", label: "Active Campaigns" },
-          { key: "campaigns_draft", label: "Drafts Campaigns" },
+          // { key: "campaigns_draft", label: "Drafts Campaigns" },
           { key: "campaigns_history", label: "Campaigns History" },
         ],
       },

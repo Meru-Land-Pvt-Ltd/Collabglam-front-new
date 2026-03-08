@@ -6,7 +6,7 @@ import { CaretLeft, InstagramLogo, YoutubeLogo, TiktokLogo } from "@phosphor-ico
 import { useRouter } from "next/navigation";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";
-import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/select";
+import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 
 // ✅ Toast
 import { toast, ToastStyles } from "@/components/ui/toast";

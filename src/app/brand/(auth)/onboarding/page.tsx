@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";
-import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/select";
+import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 import { CropImageModal } from "@/components/ui/crop-image-modal";
 import { VggCardStack } from "@/components/ui/brand/VggAnimatedCard";
 
