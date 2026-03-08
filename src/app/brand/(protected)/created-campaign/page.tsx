@@ -341,14 +341,18 @@ function MetricItem({
   label,
   value,
   icon,
+  onClick,
 }: {
   label: string;
   value: React.ReactNode;
   icon?: React.ReactNode;
+  onClick?: () => void;
 }) {
-  return (
-    <div className="min-w-0 flex flex-col items-center justify-center gap-0.5 text-center">
-      <div className="w-full truncate text-[clamp(0.72rem,0.68rem+0.16vw,0.86rem)] leading-5 text-[#9A9A9A]">
+  const clickable = !!onClick;
+
+  const content = (
+    <>
+      <div className="w-full truncate text-[0.86rem] leading-5 text-[#9A9A9A]">
         {label}
       </div>
 
@@ -360,12 +364,33 @@ function MetricItem({
         ) : null}
 
         <span
-          className="min-w-0 truncate text-[clamp(0.78rem,0.74rem+0.18vw,0.95rem)] font-medium leading-5 text-[#2E2E2E]"
+          className={cx(
+            "min-w-0 truncate text-[0.95rem] font-medium leading-5",
+            clickable ? "text-[#2E2E2E] hover:underline cursor-pointer" : "text-[#2E2E2E]"
+          )}
           title={typeof value === "string" ? value : undefined}
         >
           {value}
         </span>
       </div>
+    </>
+  );
+
+  if (clickable) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="min-w-0 flex flex-col items-center justify-center gap-0.5 text-center rounded-md px-1 py-1 hover:bg-[#F8F8F8]"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="min-w-0 flex flex-col items-center justify-center gap-0.5 text-center">
+      {content}
     </div>
   );
 }
@@ -444,12 +469,16 @@ function CampaignCard({
   onChangeStatus,
   onViewCampaign,
   onEditCampaign,
+  onViewContracts,
+  onViewAppliedInfluencers,
 }: {
   campaign: Campaign;
   statusUpdating: Record<string, boolean>;
   onChangeStatus: (campaign: Campaign, next: CampaignStatus) => void;
   onViewCampaign: (campaignId: string) => void;
   onEditCampaign: (campaignId: string) => void;
+  onViewContracts: (campaignId: string) => void;
+  onViewAppliedInfluencers: (campaignId: string) => void;
 }) {
   const status = (campaign.campaignStatus || "open") as CampaignStatus;
   const isBusy = !!statusUpdating[campaign.id];
@@ -507,6 +536,7 @@ function CampaignCard({
             label="Contract"
             value={normalizeMetric(campaign.contractCount)}
             icon={<FileMinus size={15} weight="regular" />}
+            onClick={() => onViewContracts(campaign.id)}
           />
 
           <MetricItem
@@ -516,6 +546,7 @@ function CampaignCard({
               campaign.targetInfluencerCount
             )}
             icon={<Users size={15} weight="regular" />}
+            onClick={() => onViewAppliedInfluencers(campaign.id)}
           />
 
           <MetricItem
@@ -1048,6 +1079,12 @@ export default function BrandCreatedCampaignsPage() {
               }
               onEditCampaign={(campaignId) =>
                 router.push(`/brand/edit-campaign?id=${campaignId}`)
+              }
+              onViewContracts={(campaignId) =>
+                router.push(`/brand/created-campaign/applied-inf?id=${campaignId}`)
+              }
+              onViewAppliedInfluencers={(campaignId) =>
+                router.push(`/brand/created-campaign/applied-inf?id=${campaignId}`)
               }
             />
           ))}
