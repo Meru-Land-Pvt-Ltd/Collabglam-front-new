@@ -1329,7 +1329,7 @@ export default function ViewCampaignPage() {
   const targetCountryText = countries.length
     ? countries
       .map((c: any) =>
-        `${String(c?.flag ?? "")} ${String(c?.countryNameEn ?? c?.countryCode ?? "").trim()}`.trim()
+        `${String(c?.flag ?? "")} ${String(c?.countryName ?? c?.countryCode ?? "").trim()}`.trim()
       )
       .filter(Boolean)
       .join(", ")
@@ -1889,7 +1889,7 @@ export default function ViewCampaignPage() {
                 </div>
               </div>
 
-              <div className="flex h-[4.5rem] p-3 flex-col justify-between items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
+              <div className="flex p-3 flex-col items-start gap-3 self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
                 <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
                   Target Country
                 </div>
@@ -1906,16 +1906,25 @@ export default function ViewCampaignPage() {
 
                 <div className="flex flex-wrap gap-2 self-stretch">
                   {ages.length ? (
-                    ages.map((a: any, idx: number) => (
-                      <span
-                        key={`${String(a?.id ?? a?._id ?? a?.range ?? idx)}-${idx}`}
-                        className="flex h-7 items-center justify-center rounded-[1.25rem] bg-[#F9F9F9] px-3"
-                      >
-                        <span className="text-[#1A1A1A] text-[0.875rem] font-semibold leading-[1.25rem]">
-                          {String(a?.range ?? "—")}
+                    [...ages]
+                      .sort((a: any, b: any) => {
+                        const getStartAge = (value: string) => {
+                          const match = String(value || "").match(/\d+/)
+                          return match ? Number(match[0]) : Infinity
+                        }
+
+                        return getStartAge(a?.range) - getStartAge(b?.range)
+                      })
+                      .map((a: any, idx: number) => (
+                        <span
+                          key={`${String(a?.id ?? a?._id ?? a?.range ?? idx)}-${idx}`}
+                          className="flex h-7 items-center justify-center rounded-[1.25rem] bg-[#F9F9F9] px-3"
+                        >
+                          <span className="text-[#1A1A1A] text-[0.875rem] font-semibold leading-[1.25rem]">
+                            {String(a?.range ?? "—")}
+                          </span>
                         </span>
-                      </span>
-                    ))
+                      ))
                   ) : (
                     <span className="text-[#969696] text-[0.875rem]">—</span>
                   )}
@@ -1923,7 +1932,7 @@ export default function ViewCampaignPage() {
               </div>
             </div>
 
-            <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[15.9375rem]">
+            <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-auto">
               <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem] self-stretch">
                 Video Reference
               </div>
