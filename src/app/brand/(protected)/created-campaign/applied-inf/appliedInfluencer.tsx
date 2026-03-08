@@ -13,27 +13,12 @@ import Swal from "sweetalert2";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import InfluencerFilter, { FilterState } from "@/components/ui/brand/InfluencerFilter";
 import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-import {
-  HiChevronLeft,
-  HiChevronRight,
-  HiOutlineChevronDown,
-  HiOutlineChevronUp,
-  HiSearch,
-  HiDocumentText,
-  HiClipboardList,
-  HiEye,
-  HiPaperAirplane,
-  HiCheck,
-  HiInformationCircle,
-} from "react-icons/hi";
+  InfluencerTable,
+  type InfluencerRow,
+  type PlatformType,
+} from "@/components/ui/brand/Influencertable";
 import {
   Tooltip,
   TooltipContent,
@@ -41,7 +26,20 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import dynamic from "next/dynamic";
-
+import {
+  DotsThree,
+  EnvelopeSimple,
+  Check,
+  PaperPlaneTilt,
+  Eye,
+  MagnifyingGlass,
+  CaretLeft,
+  CaretRight,
+  FileText,
+  Info,
+  ClipboardText,
+  EnvelopeOpen,
+} from "@phosphor-icons/react";
 /* ===============================================================
    THEME
    =============================================================== */
@@ -125,6 +123,108 @@ const buildReactSelectStyles = (opts?: { hasError?: boolean }) => {
 /* ===============================================================
    Types
    =============================================================== */
+
+type AppliedInfluencerRow = InfluencerRow & {
+  rawInfluencer: Influencer;
+  contractMeta: ContractMeta | null;
+  hasContract: boolean;
+  rejected: boolean;
+  typeLabel: string;
+  feeAmountValue: number;
+};
+
+const normalizePlatform = (platform?: string | null): PlatformType => {
+  switch ((platform || "").toLowerCase()) {
+    case "instagram":
+      return "instagram";
+    case "tiktok":
+      return "tiktok";
+    case "youtube":
+    default:
+      return "youtube";
+  }
+};
+
+const getEngagementValue = (inf: Influencer) => {
+  const raw = Number((inf as any)?.engagementRate ?? (inf as any)?.engagement ?? 0);
+  return Number.isFinite(raw) ? raw : 0;
+};
+
+const getFollowerTierBucket = (n: number) => {
+  if (n < 10_000) return "Nano";
+  if (n < 100_000) return "Micro";
+  if (n < 500_000) return "Mid";
+  if (n < 1_000_000) return "Macro";
+  return "Mega";
+};
+
+const matchesEngagementFilter = (value: number, filterValue: string) => {
+  if (!filterValue || filterValue === "All") return true;
+  if (filterValue === "0-2%") return value >= 0 && value < 2;
+  if (filterValue === "2-5%") return value >= 2 && value < 5;
+  if (filterValue === "5-8%") return value >= 5 && value < 8;
+  if (filterValue === "8-12%") return value >= 8 && value < 12;
+  if (filterValue === "12%+") return value >= 12;
+  return true;
+};
+
+const matchesDateFilter = (dateStr: string, filterValue: string) => {
+  if (!filterValue || filterValue === "All") return true;
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+  if (filterValue === "Today") {
+    return date.toDateString() === now.toDateString();
+  }
+  if (filterValue === "Last 7 Days") {
+    return diffDays <= 7;
+  }
+  if (filterValue === "Last 30 Days") {
+    return diffDays <= 30;
+  }
+  return true;
+};
+
+const getAppliedTypeLabel = (
+  meta: ContractMeta | null,
+  hasContract: boolean
+) => {
+  if (isRejectedMeta(meta)) return "Rejected";
+
+  const status = String(meta?.status || "");
+
+  if (!hasContract) return "Applied";
+
+  if (
+    status === CONTRACT_STATUS.CONTRACT_SIGNED ||
+    status === CONTRACT_STATUS.MILESTONES_CREATED
+  ) {
+    return "Active";
+  }
+
+  if (
+    status === CONTRACT_STATUS.INFLUENCER_ACCEPTED ||
+    status === CONTRACT_STATUS.BRAND_ACCEPTED ||
+    status === CONTRACT_STATUS.READY_TO_SIGN
+  ) {
+    return "Selected";
+  }
+
+  return "Invited";
+};
+
+const matchesInfluencerType = (
+  typeLabel: string,
+  filterValue: string
+) => {
+  if (!filterValue || filterValue === "All") return true;
+  return typeLabel.toLowerCase() === filterValue.toLowerCase();
+};
+
 interface Influencer {
   influencerId: string;
   name: string;
@@ -490,12 +590,24 @@ export default function AppliedInfluencersPage() {
 
   const [page, setPage] = useState(1);
   const [limit] = useState(PAGE_SIZE_OPTIONS[0]);
-  const [searchTerm, setSearchTerm] = useState("");
+
+  const [filters, setFilters] = useState<FilterState>({
+    "Influencer Type": "",
+    "Engagement Rate": "",
+    Follower: "",
+    Category: [],
+    Platform: [],
+    Date: "",
+  });
+
+  const [search, setSearch] = useState("");
+  const [sortValue, setSortValue] = useState("Priority");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [sortField, setSortField] = useState<keyof Influencer>("name");
-  const [sortOrder, setSortOrder] = useState<1 | 0>(1);
+  // keep backend sort stable, do UI sort client-side
+  const sortField = "createdAt" as keyof Influencer;
+  const sortOrder = 0 as 1 | 0;
 
   // Right Panel (send/edit contract)
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -638,24 +750,6 @@ export default function AppliedInfluencersPage() {
   const [isSendLoading, setIsSendLoading] = useState(false);
   const [isUpdateLoading, setIsUpdateLoading] = useState(false);
 
-  const toggleSort = (field: keyof Influencer) => {
-    setPage(1);
-    if (sortField === field) setSortOrder((o) => (o === 1 ? 0 : 1));
-    else {
-      setSortField(field);
-      setSortOrder(1);
-    }
-  };
-
-  const SortIndicator = ({ field }: { field: keyof Influencer }) =>
-    sortField === field ? (
-      sortOrder === 1 ? (
-        <HiOutlineChevronDown className="inline ml-1 w-4 h-4" />
-      ) : (
-        <HiOutlineChevronUp className="inline ml-1 w-4 h-4" />
-      )
-    ) : null;
-
   /* ---------------- Helpers: dates ---------------- */
   const toInputDate = (v?: string | Date | null) => {
     if (!v) return "";
@@ -738,9 +832,9 @@ export default function AppliedInfluencersPage() {
 
   /* ---------------- Debounce search ---------------- */
   useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    const id = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(id);
-  }, [searchTerm]);
+  }, [search]);
 
   /* ---------------- Keyboard shortcuts ---------------- */
   useEffect(() => {
@@ -753,7 +847,6 @@ export default function AppliedInfluencersPage() {
         tag === "TEXTAREA" ||
         tag === "SELECT";
 
-      // Don't hijack / when user is typing in a field
       if (isEditable) return;
 
       if (e.key === "/") {
@@ -865,7 +958,7 @@ export default function AppliedInfluencersPage() {
           campaignId,
           page,
           limit,
-          search: (search ?? searchTerm).trim(),
+          search: (search ?? "").trim(),
           sortField,
           sortOrder,
           createdPage,
@@ -899,7 +992,7 @@ export default function AppliedInfluencersPage() {
         setLoading(false);
       }
     },
-    [campaignId, page, limit, sortField, sortOrder, searchTerm]
+    [campaignId, page, limit]
   );
 
   useEffect(() => {
@@ -1199,24 +1292,24 @@ export default function AppliedInfluencersPage() {
       ? "Resend Contract"
       : "Update Contract";
 
-const openSidebar = async (inf: Influencer, mode: PanelMode) => {
-  if (isFullyManagedPlan) {
-    toast({
-      icon: "info",
-      title: "Fully Managed Plan",
-      text: "Contract sending is handled by CollabGlam for Fully Managed brands.",
-    });
-    return;
-  }
+  const openSidebar = async (inf: Influencer, mode: PanelMode) => {
+    if (isFullyManagedPlan) {
+      toast({
+        icon: "info",
+        title: "Fully Managed Plan",
+        text: "Contract sending is handled by CollabGlam for Fully Managed brands.",
+      });
+      return;
+    }
 
-  setSelectedInf(inf);
-  setPanelMode(mode);
-  const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
-  setSelectedMeta(meta || null);
-  prefillFormFor(inf, meta || null);
-  clearPreview();
-  setSidebarOpen(true);
-};
+    setSelectedInf(inf);
+    setPanelMode(mode);
+    const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
+    setSelectedMeta(meta || null);
+    prefillFormFor(inf, meta || null);
+    clearPreview();
+    setSidebarOpen(true);
+  };
 
   const closeSidebar = () => {
     setSidebarOpen(false);
@@ -1515,12 +1608,12 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
     if (!validateForPreview()) return;
 
     if (isFullyManagedPlan) {
-    return toast({
-      icon: "info",
-      title: "Not available on Fully Managed",
-      text: "Contract sending/preview is disabled for Fully Managed brands.",
-    });
-  }
+      return toast({
+        icon: "info",
+        title: "Not available on Fully Managed",
+        text: "Contract sending/preview is disabled for Fully Managed brands.",
+      });
+    }
 
     setIsPreviewLoading(true);
     try {
@@ -1671,13 +1764,13 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
     }
     if (!validateForPreview()) return;
 
-      if (isFullyManagedPlan) {
-    return toast({
-      icon: "info",
-      title: "Not available on Fully Managed",
-      text: "Contract sending is disabled for Fully Managed brands.",
-    });
-  }
+    if (isFullyManagedPlan) {
+      return toast({
+        icon: "info",
+        title: "Not available on Fully Managed",
+        text: "Contract sending is disabled for Fully Managed brands.",
+      });
+    }
 
     setIsSendLoading(true);
     try {
@@ -1722,13 +1815,13 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
     if (!pdfUrl) return toast({ icon: "info", title: "Preview required" });
     if (!validateForPreview()) return;
 
-      if (isFullyManagedPlan) {
-    return toast({
-      icon: "info",
-      title: "Not available on Fully Managed",
-      text: "Contract editing/resending is disabled for Fully Managed brands.",
-    });
-  }
+    if (isFullyManagedPlan) {
+      return toast({
+        icon: "info",
+        title: "Not available on Fully Managed",
+        text: "Contract editing/resending is disabled for Fully Managed brands.",
+      });
+    }
 
     setIsUpdateLoading(true);
     try {
@@ -1884,241 +1977,224 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
     );
   };
 
-  const RowActions = ({ inf, meta, hasContract, rejected, nowrap = false }: any) => {
+  function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
+    const inf = row.rawInfluencer;
+    const meta = row.contractMeta;
+    const hasContract = row.hasContract;
+
     const statusStr = meta?.status ? String(meta.status) : "";
     const locked = isLockedStatus(statusStr);
-    const editable = isEditableStatus(statusStr);
-    const brandNeedsAccept = needsBrandAcceptance(statusStr);
-    const signAllowed = canSignNow(statusStr);
-    const brandSigned = !!meta?.signatures?.brand?.signed;
-    const influencerSigned = !!meta?.signatures?.influencer?.signed;
+    const editable = isEditableStatus(statusStr) || row.rejected;
 
-    const milestonesAllowed =
-      hasContract &&
-      !rejected &&
-      statusStr !== CONTRACT_STATUS.MILESTONES_CREATED &&
-      (
-        statusStr === CONTRACT_STATUS.CONTRACT_SIGNED ||
-        (statusStr === CONTRACT_STATUS.READY_TO_SIGN && brandSigned && influencerSigned)
-      );
+    const handleSendContractClick = () => {
+      if (isFullyManagedPlan) {
+        toast({
+          icon: "info",
+          title: "Fully Managed Plan",
+          text: "Contract sending is handled by CollabGlam for Fully Managed brands.",
+        });
+        return;
+      }
+
+      if (!hasContract) {
+        openSidebar(inf, "send");
+        return;
+      }
+
+      if (!locked && editable) {
+        openSidebar(inf, "edit");
+        return;
+      }
+
+      handleViewContract(inf);
+    };
+
+    const handleManageClick = () => {
+      router.push(`/brand/influencers?id=${inf.influencerId}`);
+    };
+
+    const handleMoreClick = () => {
+      if (hasContract) {
+        handleViewContract(inf);
+        return;
+      }
+
+      if (isFullyManagedPlan) {
+        toast({
+          icon: "info",
+          title: "No contract yet",
+          text: "This influencer does not have a contract yet.",
+        });
+        return;
+      }
+
+      openSidebar(inf, "send");
+    };
 
     return (
-      <div
-        className={[
-          "items-center gap-2 md:gap-2 lg:gap-2",
-          "whitespace-nowrap",
-          nowrap ? "inline-flex flex-nowrap" : "flex flex-wrap justify-center",
-        ].join(" ")}
-      >
-
-        {/* Fully signed (Brand + Influencer) → allow Add Milestone */}
-        {milestonesAllowed && (
-          <ActionButton
-            title="Add milestones for this influencer"
-            variant="outline"
-            onClick={() =>
-              router.push(
-                `/brand/active-campaign/active-inf?id=${encodeURIComponent(
-                  campaignId || ""
-                )}&infId=${encodeURIComponent(inf.influencerId)}${meta?.contractId ? `&contractId=${encodeURIComponent(meta.contractId)}` : ""
-                }&name=${encodeURIComponent(
-                  campaignTitle || ""
-                )}`
-              )
-            }
-          >
-            Add Milestone
-          </ActionButton>
-        )}
-
-        {/* Influencer accepted → brand accepts */}
-        {hasContract && !rejected && !locked && brandNeedsAccept && (
-          <ActionButton
-            icon={HiCheck}
-            title="Brand Accept"
-            variant="outline"
-            onClick={() => handleBrandAccept(inf)}
-          >
-            Brand Accept
-          </ActionButton>
-        )}
-
-        {/* Both accepted → sign */}
-        {hasContract && !rejected && !locked && signAllowed && !brandSigned && (
-          <ActionButton
-            title="Sign as Brand"
-            variant="grad"
-            onClick={() => openSignModal(meta)}
-          >
-            Sign as Brand
-          </ActionButton>
-        )}
-
-        <ActionButton
-          title="View Influencer"
-          variant="outline"
-          onClick={() => router.push(`/brand/influencers?id=${inf.influencerId}`)}
+      <div className="flex items-center gap-2 whitespace-nowrap">
+        <button
+          type="button"
+          onClick={handleSendContractClick}
+          className="inline-flex h-9 items-center rounded-full border border-[#D9D9D9] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
         >
-          View Influencer
-        </ActionButton>
+          Send Contract
+        </button>
 
-        {/* No contract yet */}
-{!isFullyManagedPlan && !hasContract && !rejected && (
-          <ActionButton
-            icon={HiPaperAirplane}
-            title="Send contract"
-            variant="grad"
-            onClick={() => openSidebar(inf, "send")}
-          >
-            Send Contract
-          </ActionButton>
-        )}
+        <button
+          type="button"
+          onClick={handleManageClick}
+          className="inline-flex h-9 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Manage
+        </button>
 
-        {/* Rejected → allow resend (still controlled by your resend logic) */}
-{!isFullyManagedPlan && hasContract && rejected && !locked && (
-          <ActionButton
-            title="Resend contract"
-            variant="grad"
-            onClick={() => openSidebar(inf, "edit")}
-          >
-            Resend Contract
-          </ActionButton>
-        )}
+        <button
+          type="button"
+          onClick={() => handleViewMessage(inf)}
+          className="relative flex h-8 w-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+        >
+          <EnvelopeOpen size={16} />
+          {hasContract ? (
+            <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
+          ) : null}
+        </button>
 
-        {/* Always allow viewing if exists */}
-        {hasContract && (
-          <ActionButton
-            icon={HiEye}
-            title="View contract"
-            variant="grad"
-            disabled={metaCacheLoading && !meta}
-            onClick={() => handleViewContract(inf)}
-          >
-            View Contract
-          </ActionButton>
-        )}
-
-        {/* Editable window (pre-accept / change-request) */}
-{!isFullyManagedPlan && hasContract && !rejected && !locked && editable && (
-          <ActionButton
-            title="Edit contract"
-            variant="grad"
-            onClick={() => openSidebar(inf, "edit")}
-          >
-            Edit Contract
-          </ActionButton>
-        )}
+        <button
+          type="button"
+          onClick={handleMoreClick}
+          className="flex h-8 w-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+        >
+          <DotsThree size={16} weight="bold" />
+        </button>
       </div>
     );
-  };
-
-
+  }
   /* ---------------- Rows rendering ---------------- */
-  const rows = useMemo(
-    () =>
-      influencers.map((inf, idx) => {
-        const href = buildHandleUrl(inf.primaryPlatform, inf.handle);
-        const meta = metaCache[inf.influencerId] || null;
-        const hasContract = !!(
-          meta?.contractId ||
-          inf.contractId ||
-          inf.isAssigned
+  const tableRows = useMemo<AppliedInfluencerRow[]>(() => {
+    return influencers.map((inf) => {
+      const contractMeta = metaCache[inf.influencerId] || null;
+      const hasContract = !!(contractMeta?.contractId || inf.contractId || inf.isAssigned);
+      const rejected = isRejectedMeta(contractMeta);
+      const typeLabel = getAppliedTypeLabel(contractMeta, hasContract);
+      const engagement = getEngagementValue(inf);
+      const platform = normalizePlatform(inf.primaryPlatform);
+      const category = getCategoryLabel(inf);
+      const audience = Number(inf.audienceSize ?? 0);
+      const feeAmountValue = Number(inf.feeAmount ?? 0);
+
+      return {
+        id: inf.influencerId,
+        profile: {
+          name: inf.name,
+          handle: inf.handle ? sanitizeHandle(inf.handle) : "",
+          avatarUrl: (inf as any)?.avatarUrl || (inf as any)?.profileImage || "",
+        },
+        category,
+        followers: audience,
+        engagement,
+        platforms: [
+          {
+            platform,
+            followers: audience,
+            engagement,
+          },
+        ],
+        appliedDate: inf.createdAt || "",
+        status: prettyStatus(contractMeta, hasContract, true),
+        budget: feeAmountValue
+          ? `₹${feeAmountValue.toLocaleString("en-IN")}`
+          : "₹0",
+        rawInfluencer: inf,
+        contractMeta,
+        hasContract,
+        rejected,
+        typeLabel,
+        feeAmountValue,
+      };
+    });
+  }, [influencers, metaCache]);
+
+  const filteredRows = useMemo(() => {
+    let list = [...tableRows];
+
+    list = list.filter((row) => {
+      const engagementOk = matchesEngagementFilter(
+        row.engagement ?? 0,
+        filters["Engagement Rate"]
+      );
+
+      const influencerTypeOk = matchesInfluencerType(
+        row.typeLabel,
+        filters["Influencer Type"]
+      );
+
+      const categoryOk =
+        filters.Category.length === 0 ||
+        filters.Category.includes("All") ||
+        filters.Category.some((c) =>
+          row.category.toLowerCase().includes(c.toLowerCase())
         );
-        const iConfirmed = !!meta?.confirmations?.influencer?.confirmed;
-        const bConfirmed = !!meta?.confirmations?.brand?.confirmed;
-        const bSigned = !!meta?.signatures?.brand?.signed;
-        const locked = isLockedStatus(meta?.status ? String(meta.status) : null);
-        const rejected = isRejectedMeta(meta);
-        const statusStr = meta?.status ? String(meta.status) : "";
-        const editable = isEditableStatus(statusStr);
-        const brandNeedsAccept = needsBrandAcceptance(statusStr);
-        const signAllowed = canSignNow(statusStr);
 
-        const isHighlighted = highlightInfId === inf.influencerId;
+      const platformNames = (row.platforms || []).map((p) => p.platform.toLowerCase());
+      const platformOk =
+        filters.Platform.length === 0 ||
+        filters.Platform.includes("All") ||
+        filters.Platform.some((p) => platformNames.includes(p.toLowerCase()));
 
-        return (
-          <TableRow
-            key={inf.influencerId}
-            id={`inf-row-${inf.influencerId}`}
-            className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"
-              } hover:bg-gray-100/60 focus-within:bg-gray-100/80 transition-colors ${isHighlighted
-                ? "bg-[#FFF0D6] !bg-[#FFF0D6] shadow-[0_0_0_2px_rgba(234,88,12,0.9)] outline outline-2 outline-[#EA580C] animate-pulse"
-                : ""
-              }`}
-          >
-            <TableCell className="font-medium">
-              <div className="flex items-center gap-2">
-                <span
-                  className="truncate max-w-[220px]"
-                  title={inf.name}
-                >
-                  {inf.name}
-                </span>
-              </div>
-            </TableCell>
-            <TableCell className="whitespace-nowrap">
-              {href ? (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-black hover:underline"
-                  title="Open profile"
-                >
-                  {inf.handle || "—"}
-                </a>
-              ) : (
-                <span className="text-gray-500">—</span>
-              )}
-            </TableCell>
-            <TableCell>
-              <Badge
-                variant="secondary"
-                className="capitalize bg-gray-200 text-gray-800"
-              >
-                {getCategoryLabel(inf)}
-              </Badge>
-            </TableCell>
-            <TableCell>{formatAudience(inf.audienceSize)}</TableCell>
-            <TableCell className="whitespace-nowrap">
-              {inf.createdAt
-                ? new Date(inf.createdAt).toLocaleDateString()
-                : "—"}
-            </TableCell>
+      const dateOk = matchesDateFilter(row.appliedDate, filters.Date);
 
-            <TableCell className="text-center">
-              {rejected ? (
-                <div className="space-y-1">
-                  <Badge className="bg-black text-white shadow-none">
-                    Rejected
-                  </Badge>
-                  <p className="text-xs text-gray-500 break-words">
-                    {getRejectReasonFromMeta(meta) || "No reason provided"}
-                  </p>
-                </div>
-              ) : (
-                <StatusBadge meta={meta} hasContract={hasContract} />
-              )}
-            </TableCell>
+      const followerTierLabel = getFollowerTierBucket(row.followers ?? 0);
+      const followerOk =
+        !filters.Follower ||
+        filters.Follower === "All" ||
+        filters.Follower.toLowerCase().includes(followerTierLabel.toLowerCase());
 
-            <TableCell className="text-center">
-              <RowActions
-                inf={inf}
-                meta={meta}
-                hasContract={hasContract}
-                rejected={rejected}
-                iConfirmed={iConfirmed}
-                bConfirmed={bConfirmed}
-                bSigned={bSigned}
-                locked={locked}
-                nowrap
-              />
-            </TableCell>
-          </TableRow>
+      return (
+        engagementOk &&
+        influencerTypeOk &&
+        categoryOk &&
+        platformOk &&
+        dateOk &&
+        followerOk
+      );
+    });
+
+    switch (sortValue) {
+      case "Recently added":
+        list.sort(
+          (a, b) =>
+            new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
         );
-      }),
-    [influencers, metaCache, metaCacheLoading, highlightInfId]
-  );
+        break;
+
+      case "Highest engagement":
+        list.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0));
+        break;
+
+      case "Highest follower":
+        list.sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0));
+        break;
+
+      case "Price: Low to High":
+        list.sort((a, b) => a.feeAmountValue - b.feeAmountValue);
+        break;
+
+      case "Price: HIgh to Low":
+        list.sort((a, b) => b.feeAmountValue - a.feeAmountValue);
+        break;
+
+      case "Priority":
+      default:
+        list.sort(
+          (a, b) =>
+            new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
+        );
+        break;
+    }
+
+    return list;
+  }, [tableRows, filters, sortValue]);
 
   const EmptyState = () => (
     <div className="p-12 text-center space-y-3">
@@ -2128,7 +2204,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
           backgroundImage: `linear-gradient(to right, ${GRADIENT_FROM}, ${GRADIENT_TO})`,
         }}
       >
-        <HiSearch className="text-white w-6 h-6" />
+        <MagnifyingGlass className="text-white w-6 h-6" />
       </div>
       <h3 className="text-lg font-semibold">No applicants found</h3>
       <p className="text-sm text-gray-600">
@@ -2139,25 +2215,16 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
 
   const MobileCardList = () => (
     <div className="grid gap-3 md:hidden">
-      {influencers.map((inf) => {
-        const meta = metaCache[inf.influencerId] || null;
-        const hasContract = !!(
-          meta?.contractId ||
-          inf.contractId ||
-          inf.isAssigned
-        );
+      {filteredRows.map((row) => {
+        const inf = row.rawInfluencer;
+        const meta = row.contractMeta;
+        const hasContract = row.hasContract;
+        const rejected = row.rejected;
         const iConfirmed = !!meta?.confirmations?.influencer?.confirmed;
         const bConfirmed = !!meta?.confirmations?.brand?.confirmed;
         const bSigned = !!meta?.signatures?.brand?.signed;
         const locked = isLockedStatus(meta?.status ? String(meta.status) : null);
-        const rejected = isRejectedMeta(meta);
         const href = buildHandleUrl(inf.primaryPlatform, inf.handle);
-
-        const statusStr = meta?.status ? String(meta.status) : "";
-        const editable = isEditableStatus(statusStr);
-        const brandNeedsAccept = needsBrandAcceptance(statusStr);
-        const signAllowed = canSignNow(statusStr);
-
 
         return (
           <div
@@ -2173,14 +2240,13 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
                 From notification
               </span>
             )}
+
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div
-                  className="font-semibold truncate"
-                  title={inf.name}
-                >
+                <div className="font-semibold truncate" title={inf.name}>
                   {inf.name}
                 </div>
+
                 <div className="text-sm text-gray-600 truncate">
                   {href ? (
                     <a
@@ -2195,27 +2261,21 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
                     <span className="text-gray-500">—</span>
                   )}
                 </div>
+
                 <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
                   <Badge className="bg-gray-200 text-gray-800">
-                    {getCategoryLabel(inf)}
+                    {row.category}
                   </Badge>
                   <span>•</span>
                   <span>{formatAudience(inf.audienceSize)} audience</span>
                 </div>
               </div>
+
               <StatusBadge meta={meta} hasContract={hasContract} />
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <RowActions
-                inf={inf}
-                meta={meta}
-                hasContract={hasContract}
-                rejected={rejected}
-                iConfirmed={iConfirmed}
-                bConfirmed={bConfirmed}
-                bSigned={bSigned}
-                locked={locked}
-              />
+
+            <div className="mt-3">
+              <AppliedCampaignActionCell row={row} />
             </div>
           </div>
         );
@@ -2228,7 +2288,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
      =============================================================== */
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="min-h-screen p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto">
+      <div className="min-h-screen p-4 md:p-8 space-y-6 md:space-y-8 max-w-full mx-auto">
         <header className="flex items-center justify-between p-2 md:p-4 rounded-md sticky top-0 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-gray-100">
           <h1 className="text-xl md:text-3xl font-bold truncate">
             Campaign: {campaignTitle || "Unknown Campaign"}
@@ -2245,26 +2305,14 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
           </div>
         </header>
 
-        <div className="mb-2 md:mb-4 max-w-xl sticky top-[62px] z-10">
-          <div className="relative bg-white rounded-lg">
-            <HiSearch
-              className="absolute inset-y-0 left-3 my-auto text-gray-400"
-              size={20}
-            />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search influencers… (press / to focus)"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-              className="w-full h-[44px] pl-10 pr-4 border-2 rounded-lg text-sm border-gray-200 focus:outline-none focus-visible:outline-none focus:border-[#FF8A35] focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white"
-              aria-label="Search influencers"
-            />
-          </div>
-        </div>
+        <InfluencerFilter
+          filters={filters}
+          setFilters={setFilters}
+          search={search}
+          setSearch={setSearch}
+          sortValue={sortValue}
+          setSortValue={setSortValue}
+        />
 
         {loading ? (
           <div className="bg-white rounded-md shadow-sm">
@@ -2272,106 +2320,41 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
           </div>
         ) : error ? (
           <ErrorMessage>{error}</ErrorMessage>
-        ) : influencers.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="bg-white rounded-md shadow-sm">
             <EmptyState />
           </div>
         ) : (
           <>
-            {/* Desktop table */}
-            <div
-              className="bg-white rounded-md shadow-sm overflow-hidden hidden md:block"
-              aria-busy={loading}
-            >
-              <div className="overflow-x-auto">
-                <Table className="min-w-[1100px]">
-                  <TableHeader
-                    style={{
-                      backgroundImage: `linear-gradient(to right, ${GRADIENT_FROM}, ${GRADIENT_TO})`,
-                    }}
-                    className="text-white sticky top-0 z-10"
-                  >
-                    <TableRow>
-                      <TableHead
-                        onClick={() => toggleSort("name")}
-                        className="cursor-pointer font-semibold select-none"
-                        aria-sort={
-                          sortField === "name"
-                            ? sortOrder === 1
-                              ? "ascending"
-                              : "descending"
-                            : "none"
-                        }
-                      >
-                        {influencers.length} Applied{" "}
-                        <SortIndicator field="name" />
-                      </TableHead>
-                      <TableHead
-                        onClick={() => toggleSort("handle")}
-                        className="cursor-pointer font-semibold select-none"
-                        aria-sort={
-                          sortField === "handle"
-                            ? sortOrder === 1
-                              ? "ascending"
-                              : "descending"
-                            : "none"
-                        }
-                      >
-                        Social Handle <SortIndicator field="handle" />
-                      </TableHead>
-                      <TableHead
-                        onClick={() => toggleSort("category")}
-                        className="cursor-pointer font-semibold select-none"
-                        aria-sort={
-                          sortField === "category"
-                            ? sortOrder === 1
-                              ? "ascending"
-                              : "descending"
-                            : "none"
-                        }
-                      >
-                        Category <SortIndicator field="category" />
-                      </TableHead>
-                      <TableHead
-                        onClick={() => toggleSort("audienceSize")}
-                        className="cursor-pointer font-semibold select-none"
-                        aria-sort={
-                          sortField === "audienceSize"
-                            ? sortOrder === 1
-                              ? "ascending"
-                              : "descending"
-                            : "none"
-                        }
-                      >
-                        Audience <SortIndicator field="audienceSize" />
-                      </TableHead>
-                      <TableHead
-                        onClick={() => toggleSort("createdAt")}
-                        className="cursor-pointer font-semibold select-none"
-                        aria-sort={
-                          sortField === "createdAt"
-                            ? sortOrder === 1
-                              ? "ascending"
-                              : "descending"
-                            : "none"
-                        }
-                      >
-                        Date <SortIndicator field="createdAt" />
-                      </TableHead>
-                      <TableHead className="font-semibold">
-                        Status
-                      </TableHead>
-                      <TableHead className="text-center font-semibold w-[560px]">
-                        Actions
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>{rows}</TableBody>
-                </Table>
-              </div>
+            <div className="bg-white rounded-md shadow-sm overflow-hidden hidden md:block">
+              <InfluencerTable
+                rows={filteredRows}
+                variant="default"
+                renderStatus={(baseRow) => {
+                  const row = baseRow as AppliedInfluencerRow;
+
+                  if (row.rejected) {
+                    return (
+                      <div className="space-y-1 text-center">
+                        <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
+                          Rejected
+                        </span>
+                        <p className="max-w-[140px] break-words text-[11px] text-gray-500">
+                          {getRejectReasonFromMeta(row.contractMeta) || "No reason provided"}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-3 py-1 text-xs font-semibold text-[#1A1A1A]">
+                      {row.status || "Applied"}
+                    </span>
+                  );
+                }}
+              />
             </div>
 
-            {/* Mobile cards */}
             <MobileCardList />
           </>
         )}
@@ -2386,7 +2369,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
               className="text-black"
               aria-label="Previous page"
             >
-              <HiChevronLeft />
+              <CaretLeft />
             </Button>
             <span className="text-sm">
               Page <strong>{page}</strong> of {meta.totalPages}
@@ -2401,7 +2384,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
               className="text-black"
               aria-label="Next page"
             >
-              <HiChevronRight />
+              <CaretRight />
             </Button>
           </div>
         )}
@@ -2428,7 +2411,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
           {/* Campaign Details */}
           <SidebarSection
             title="Campaign Details"
-            icon={<HiDocumentText className="w-4 h-4" />}
+            icon={<FileText className="w-4 h-4" />}
           >
             <div className="space-y-4">
               <FloatingLabelInput
@@ -2647,7 +2630,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
           {/* Posting Window */}
           <SidebarSection
             title="Posting Window"
-            icon={<HiInformationCircle className="w-4 h-4" />}
+            icon={<Info className="w-4 h-4" />}
           >
             <div className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -2711,7 +2694,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
           {/* Deliverables (multi-row, everything per row) */}
           <SidebarSection
             title="Deliverables"
-            icon={<HiClipboardList className="w-4 h-4" />}
+            icon={<ClipboardText className="w-4 h-4" />}
           >
             <div className="space-y-4">
               {formErrors.deliverables && (
@@ -3167,7 +3150,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
           {/* Usage Bundle & Rights */}
           <SidebarSection
             title="Usage Bundle & Rights (Schedule)"
-            icon={<HiInformationCircle className="w-4 h-4" />}
+            icon={<Info className="w-4 h-4" />}
           >
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3255,7 +3238,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
                 </>
               ) : (
                 <>
-                  <HiEye className="w-5 h-5 mr-2" /> Preview
+                  <Eye className="w-5 h-5 mr-2" /> Preview
                 </>
               )}
             </Button>
@@ -3281,7 +3264,7 @@ const openSidebar = async (inf: Influencer, mode: PanelMode) => {
                   </>
                 ) : (
                   <>
-                    <HiPaperAirplane className="w-5 h-5 mr-2" /> Send
+                    <PaperPlaneTilt className="w-5 h-5 mr-2" /> Send
                     Contract
                   </>
                 )}
@@ -3826,7 +3809,7 @@ function ContractSidebar({
           <div className="relative z-10 p-6 text-white flex items-start justify-between h-full">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mt-1 shadow-sm">
-                <HiDocumentText className="w-6 h-6 text-white" />
+                <FileText className="w-6 h-6 text-white" />
               </div>
               <div>
                 <div
@@ -3855,7 +3838,7 @@ function ContractSidebar({
             <div className="w-full sm:w-1/2 p-6 border-r border-gray-100 flex flex-col">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <HiEye className="w-4 h-4" />
+                  <Eye className="w-4 h-4" />
                   <span>Preview</span>
                 </div>
                 {onClosePreview && (
@@ -3881,7 +3864,7 @@ function ContractSidebar({
           ) : (
             <div className="hidden sm:flex w-1/2 p-6 items-center justify-center text-gray-400 select-none">
               <div className="text-center">
-                <HiEye className="mx-auto w-8 h-8 mb-2" />
+                <Eye className="mx-auto w-8 h-8 mb-2" />
                 <div className="text-sm">
                   Generate a preview to see the PDF here
                 </div>
@@ -4273,7 +4256,7 @@ function InfoTip({ text }: { text: string }) {
           className="inline-flex items-center"
           aria-label="Info"
         >
-          <HiInformationCircle className="w-4 h-4 text-gray-500" />
+          <Info className="w-4 h-4 text-gray-500" />
         </button>
       </TooltipTrigger>
       <TooltipContent
@@ -4291,56 +4274,3 @@ const BTN_GRAD =
   "bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none";
 const BTN_OUTLINE = "border-gray-300 text-black";
 const BTN_BASE = "h-9 px-3 rounded-lg";
-
-function ActionButton({
-  onClick,
-  title,
-  disabled,
-  variant = "outline",
-  icon: Icon,
-  children,
-  className = "",
-}: {
-  onClick?: () => void;
-  title?: string;
-  disabled?: boolean;
-  variant?: "outline" | "grad" | "default";
-  icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const base = `${BTN_BASE} ${className}`;
-  const variantClass =
-    variant === "grad"
-      ? BTN_GRAD
-      : variant === "outline"
-        ? `border ${BTN_OUTLINE} bg-white`
-        : "bg-white text-black";
-
-  const BtnInner = (
-    <Button
-      size="sm"
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variantClass}`}
-      variant="outline"
-    >
-      {Icon ? <Icon className="mr-1 h-4 w-4" /> : null}
-      <span className="hidden sm:inline">{children}</span>
-    </Button>
-  );
-
-  return title ? (
-    <Tooltip>
-      <TooltipTrigger asChild>{BtnInner}</TooltipTrigger>
-      <TooltipContent
-        side="top"
-        className="text-xs bg-gray-800 text-white max-w-xs"
-      >
-        {title}
-      </TooltipContent>
-    </Tooltip>
-  ) : (
-    BtnInner
-  );
-}
