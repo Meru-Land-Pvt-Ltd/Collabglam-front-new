@@ -85,7 +85,7 @@ const Header: React.FC = () => {
           {/* Desktop CTAs */}
           <div className="hidden lg:flex items-center space-x-4">
             <button
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/brand/login')}
               className="
     px-6 py-2
     bg-gradient-to-r from-[#FFA135] to-[#FF7236]

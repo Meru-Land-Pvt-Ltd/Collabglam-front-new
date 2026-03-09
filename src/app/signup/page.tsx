@@ -9,7 +9,7 @@ import {
   FloatingMultiSelect,
   FloatingSelect,
   SelectItem,
-} from "@/components/ui/select";
+} from "@/components/ui/selectComp";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";

@@ -5,8 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-import logo from "@/public/logo.png";
-
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -187,13 +185,12 @@ export default function ForgotPassword() {
           "
                 >
                     <Link href="/" className="flex items-center gap-s">
-                        <Image
-                            src={logo}
+                        <img
+                            src="/logo.png"
                             alt="CollabGlam Logo"
                             width={40}
                             height={40}
                             className="object-contain"
-                            priority
                         />
                         <span className="leading-tight">
                             <span className="block text-[20px] font-bold text-tx-primary">CollabGlam</span>

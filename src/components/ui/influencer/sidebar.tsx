@@ -17,22 +17,14 @@ import {
   CardsThree,
   ChatCenteredText,
   DotsThree,
-  EnvelopeSimpleIcon,
   Gear,
-  HandshakeIcon,
-  ImageIcon,
   Lightning,
   Money,
-  PackageIcon,
   PaperPlaneTilt,
   Question,
-  RocketLaunchIcon,
-  SuitcaseIcon,
-  UserIcon,
   WalletIcon,
   X,
 } from "@phosphor-icons/react";
-import { Megaphone } from "lucide-react";
 
 /* -------------------------------- utils -------------------------------- */
 
@@ -393,18 +385,26 @@ export default function Sidebar({
         section: "main",
         href: "/influencer/dashboard",
       },
-      // {
-      //   key: "campaign",
-      //   label: "Campaigns",
-      //   icon: CardsThree,
-      //   section: "main",
-      //   href: "/influencer/campaign",
-      //   right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
-      // },
+      {
+        key: "campaign",
+        label: "Campaigns",
+        icon: CardsThree,
+        section: "main",
+        href: "/influencer/campaign",
+        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+      },
       {
         key: "discover-campaigns",
         label: "Discover Campaigns",
-        icon: Megaphone,
+        icon: CardsThree,
+        section: "main",
+        href: "/influencer/discover-campaigns",
+        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+      },
+      {
+        key: "discover-campaigns",
+        label: "Discover Campaigns",
+        icon: CardsThree,
         section: "main",
         href: "/influencer/discover-campaigns",
         right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
@@ -412,7 +412,7 @@ export default function Sidebar({
       {
         key: "invitations",
         label: "Invitations",
-        icon: EnvelopeSimpleIcon,
+        icon: CardsThree,
         section: "main",
         href: "/influencer/invitations",
         right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
@@ -420,27 +420,27 @@ export default function Sidebar({
       {
         key: "my-campaigns",
         label: "My Campaigns",
-        icon: SuitcaseIcon,
+        icon: CardsThree,
         section: "main",
         href: "/influencer/my-campaigns",
         right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
       },
-      // {
-      //   key: "deliverables",
-      //   label: "Deliverables",
-      //   icon: PackageIcon,
-      //   section: "main",
-      //   href: "/influencer/deliverables",
-      //   right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
-      // },
-      // {
-      //   key: "contracts",
-      //   label: "Contracts",
-      //   icon: HandshakeIcon,
-      //   section: "main",
-      //   href: "/influencer/contracts",
-      //   right: appliedBadge != null ? <Badge>{appliedBadge}</Badge> : undefined,
-      // },
+      {
+        key: "deliverables",
+        label: "Deliverables",
+        icon: CardsThree,
+        section: "main",
+        href: "/influencer/deliverables",
+        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+      },
+      {
+        key: "contracts",
+        label: "Contracts",
+        icon: PaperPlaneTilt,
+        section: "main",
+        href: "/influencer/contracts",
+        right: appliedBadge != null ? <Badge>{appliedBadge}</Badge> : undefined,
+      },
       {
         key: "earnings",
         label: "Earnings",
@@ -467,7 +467,7 @@ export default function Sidebar({
        {
         key: "media-kit",
         label: "Media Kit",
-        icon: ImageIcon,
+        icon: WalletIcon,
         section: "main",
         href: "/influencer/media-kit",
         right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
@@ -475,7 +475,7 @@ export default function Sidebar({
       {
         key: "profile",
         label: "Profile & Rate card",
-        icon: UserIcon,
+        icon: WalletIcon,
         section: "main",
         href: "/influencer/profile",
         right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
@@ -483,7 +483,7 @@ export default function Sidebar({
       {
         key: "boost-profile",
         label: "Boost Profile",
-        icon: RocketLaunchIcon,
+        icon: WalletIcon,
         section: "main",
         href: "/influencer/boost-profile",
         right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
@@ -738,8 +738,8 @@ export default function Sidebar({
         </div>
       </div>
 
-       {/* FOOTER  */}
-       {/* <div className={cn("mt-auto pt-6", tight ? "pt-4" : "")}>
+      {/* FOOTER */}
+      <div className={cn("mt-auto pt-6", tight ? "pt-4" : "")}>
         <AnimatePresence initial={false} mode="wait">
           {showCollapsedFooter ? (
             <m.div
@@ -789,7 +789,7 @@ export default function Sidebar({
               transition={motionTransitions.content}
               className="w-full"
             >
-              
+              {/* Boost Profile card */}
               <m.div
                 initial="rest"
                 animate="rest"
@@ -846,7 +846,7 @@ export default function Sidebar({
 
               <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
 
-             
+              {/* Profile row */}
               <div className="flex w-full items-center gap-3 bg-white p-3">
                 <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
                   <img
@@ -877,7 +877,7 @@ export default function Sidebar({
             </m.div>
           )}
         </AnimatePresence>
-      </div>  */}
+      </div>
     </div>
   );
 

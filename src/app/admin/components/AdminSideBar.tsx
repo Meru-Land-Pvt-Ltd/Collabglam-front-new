@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { Outfit } from "next/font/google";
 import {
   Home,
   Users,
@@ -11,32 +12,34 @@ import {
   Menu,
   X,
   DollarSign,
-  MessageCircleIcon,
   MailCheckIcon,
   FileText,
   ChevronDown,
   ChevronUp,
   LogOut,
-  Bell,             // 👈 NEW
+  Bell,
 } from "lucide-react";
 
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+});
+
+// ✅ Notifications moved AFTER Invited Influencer (same item, same route)
 const navItems = [
-  { label: "Notifications", href: "/admin/notifications", icon: Bell },
   { label: "Brands", href: "/admin/brands", icon: Home },
   { label: "Influencers", href: "/admin/influencers", icon: Users },
   { label: "All Campaigns", href: "/admin/campaigns", icon: List },
   { label: "Subscriptions", href: "/admin/subscriptions", icon: DollarSign },
   { label: "Disputes", href: "/admin/disputes", icon: FileText },
-  // { label: "Messages", href: "/admin/messages", icon: MessageCircleIcon },
   { label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
-  { label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
+  // { label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
   { label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },
   { label: "Invoice Details", href: "/admin/invoiceDetails", icon: DollarSign },
   { label: "Payment Notification", href: "/admin/payment", icon: Bell },
-  { label: "Youtube Handle", href: "/admin/youtube", icon: MailCheckIcon },
-  {label:"Modash Data", href:"/admin/modash", icon: MailCheckIcon},
-  {label:"Invited Influencer", href:"/admin/invitedInfluencer", icon: MailCheckIcon}
-
+  { label: "Influencer Data", href: "/admin/influencer-data", icon: MailCheckIcon },
+  { label: "Invited Influencer", href: "/admin/invitedInfluencer", icon: MailCheckIcon },
+  { label: "Notifications", href: "/admin/notifications", icon: Bell },
 ];
 
 const documentLinks = [
@@ -58,9 +61,7 @@ export default function AdminSidebar() {
   const [docsOpen, setDocsOpen] = useState(initialDocsOpen);
 
   useEffect(() => {
-    if (pathname.startsWith("/admin/documents/")) {
-      setDocsOpen(true);
-    }
+    if (pathname.startsWith("/admin/documents/")) setDocsOpen(true);
   }, [pathname]);
 
   useEffect(() => {
@@ -74,128 +75,168 @@ export default function AdminSidebar() {
 
   const handleLogout = () => {
     try {
-      if (typeof window !== "undefined") {
-        localStorage.clear();
-      }
+      if (typeof window !== "undefined") localStorage.clear();
     } catch (e) {
       // ignore
     }
     router.push("/admin/login");
   };
 
-  const renderLink = (
-    { label, href, icon: Icon }: any,
-    onClick?: () => void
-  ) => {
+  // ✅ Brands page vibe: clean + black hover/active + Outfit font
+  const linkBase =
+    "group block rounded-lg px-3 py-2 text-sm font-semibold transition focus:outline-none";
+  const linkActive = "bg-black text-white";
+  const linkInactive = "text-black/80 hover:bg-black hover:text-white";
+
+  const renderLink = ({ label, href, icon: Icon }: any, onClick?: () => void) => {
     const active = pathname === href || pathname.startsWith(href + "/");
     return (
       <Link
         key={href}
         href={href}
         onClick={onClick}
-        className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none ${
-          active
-            ? "bg-[#ef2f5b]/20 text-[#ef2f5b]"
-            : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-        }`}
+        className={`${linkBase} ${active ? linkActive : linkInactive}`}
       >
-        {Icon && (
-          <Icon
-            className={`mr-3 h-5 w-5 transition-colors ${
-              active ? "text-[#ef2f5b]" : "text-gray-400 hover:text-gray-500"
-            }`}
-          />
-        )}
-        <span className="whitespace-nowrap flex-1">{label}</span>
+        <span className="flex items-center gap-2">
+          {Icon ? (
+            <Icon
+              className={`h-4 w-4 ${
+                active ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
+            />
+          ) : null}
+          <span className="whitespace-nowrap flex-1">{label}</span>
+        </span>
       </Link>
     );
   };
 
-  const renderDocuments = (isMobile = false) => (
-    <div>
-      <button
-        onClick={() => setDocsOpen((prev) => !prev)}
-        className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none"
-      >
-        <FileText className="mr-3 h-5 w-5 text-gray-400 hover:text-gray-500" />
-        <span className="flex-1 text-left">Documents</span>
-        {docsOpen ? (
-          <ChevronUp className="h-4 w-4 text-gray-500" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-gray-500" />
-        )}
-      </button>
-      <AnimatePresence initial={false}>
-        {docsOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="ml-6 mt-2 space-y-1 overflow-hidden"
-          >
-            {documentLinks.map(({ label, href }) => {
-              const active = pathname === href || pathname.startsWith(href + "/");
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => {
-                    if (isMobile) setDrawerOpen(false);
-                  }}
-                  className={`block px-3 py-1 text-sm rounded-lg transition-colors focus:outline-none ${
-                    active
-                      ? "bg-[#ef2f5b]/20 text-[#ef2f5b]"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-800"
-                  }`}
-                >
-                  {label}
-                </Link>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
+  const renderDocuments = (isMobile = false) => {
+    const docsActive = pathname.startsWith("/admin/documents/");
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setDocsOpen((prev) => !prev)}
+          className={`${linkBase} w-full ${docsActive ? linkActive : linkInactive}`}
+        >
+          <span className="flex items-center gap-2">
+            <FileText
+              className={`h-4 w-4 ${
+                docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
+            />
+            <span className="flex-1 text-left">Documents</span>
+            {docsOpen ? (
+              <ChevronUp
+                className={`h-4 w-4 ${
+                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
+              />
+            ) : (
+              <ChevronDown
+                className={`h-4 w-4 ${
+                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
+              />
+            )}
+          </span>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {docsOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="ml-3 mt-2 space-y-1 overflow-hidden"
+            >
+              {documentLinks.map(({ label, href }) => {
+                const active = pathname === href || pathname.startsWith(href + "/");
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => {
+                      if (isMobile) setDrawerOpen(false);
+                    }}
+                    className={`${linkBase} ${
+                      active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+  const BrandHeader = ({ compact = false }: { compact?: boolean }) => (
+    <div className={compact ? "px-4 py-3" : "p-5"}>
+      <Link href="/admin" className="flex items-center gap-3">
+        <div className="h-10 w-10 rounded-xl border border-black/10 overflow-hidden bg-white">
+          <img src="/logo.png" alt="CollabGlam logo" className="h-full w-full object-contain" />
+        </div>
+        <div className="leading-tight">
+          <div className={compact ? "text-sm font-extrabold" : "text-base font-extrabold"}>
+            CollabGlam
+          </div>
+          <div className="text-xs text-black/60" />
+        </div>
+      </Link>
     </div>
   );
 
   return (
     <>
       {/* Mobile Topbar */}
-      <header className="md:hidden fixed inset-x-0 top-0 z-50 h-12 bg-white border-b flex items-center px-4 shadow-sm">
+      <header
+        className={`${outfit.className} md:hidden fixed inset-x-0 top-0 z-50 h-12 bg-white border-b border-black/10 flex items-center px-4`}
+      >
         <button
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
-          className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#ef2f5b]"
+          className="p-2 rounded-lg hover:bg-black/5 focus:outline-none"
         >
-          <Menu className="h-6 w-6 text-gray-700" />
+          <Menu className="h-6 w-6 text-black/80" />
         </button>
 
-        <div className="flex items-center space-x-2 px-4 py-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-100">
-          <img src="/logo.png" alt="CollabGlam logo" className="h-8 w-auto" />
-          <span className="text-xl font-semibold">CollabGlam</span>
+        <div className="ml-3">
+          <Link href="/admin" className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-xl border border-black/10 overflow-hidden bg-white">
+              <img src="/logo.png" alt="CollabGlam logo" className="h-full w-full object-contain" />
+            </div>
+            <span className="text-base font-extrabold">CollabGlam</span>
+          </Link>
         </div>
       </header>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:fixed md:inset-y-0 md:left-0 md:flex-col w-64 bg-white border-r transition-all duration-200 lg:w-72">
-        <div className="flex items-center space-x-2 px-4 py-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-100">
-          <img src="/logo.png" alt="CollabGlam logo" className="h-8 w-auto" />
-          <span className="text-xl font-semibold">CollabGlam</span>
+      <aside
+        className={`${outfit.className} hidden md:flex md:fixed md:inset-y-0 md:left-0 w-64 border-r border-black/10 bg-white h-screen flex-col`}
+      >
+        {/* Header */}
+        <BrandHeader compact={false} />
+
+        {/* Middle (scrolls) */}
+        <div className="flex-1 overflow-y-auto px-3 pb-3">
+          <nav className="space-y-1">
+            {navItems.map((item) => renderLink(item))}
+            {renderDocuments(false)}
+          </nav>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
-          {navItems.map((item) => renderLink(item))}
-          {renderDocuments(false)}
-        </nav>
-
-        {/* Desktop Logout Footer */}
-        <div className="border-t px-2 py-3">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-start px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 cursor-pointer"
-          >
-            <LogOut className="mr-3 h-5 w-5" />
-            <span>Logout</span>
+        {/* Bottom (pinned) */}
+        <div className="shrink-0 p-3 border-t border-black/10">
+          <button onClick={handleLogout} className={`${linkBase} w-full ${linkInactive}`}>
+            <span className="flex items-center gap-2">
+              <LogOut className="h-4 w-4 text-black/50 group-hover:text-white" />
+              <span>Logout</span>
+            </span>
           </button>
         </div>
       </aside>
@@ -213,45 +254,43 @@ export default function AdminSidebar() {
             />
 
             <motion.aside
-              className="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r flex flex-col"
+              className={`${outfit.className} fixed inset-y-0 left-0 z-50 w-64 border-r border-black/10 bg-white h-screen flex flex-col`}
               initial="hidden"
               animate="visible"
               exit="hidden"
               variants={drawerVariants}
               transition={{ type: "tween", duration: 0.2 }}
             >
-              <div className="h-12 flex items-center justify-between px-4 border-b">
-                <Link href="/admin" className="flex items-center space-x-2">
-                  <img src="/logo.png" alt="CollabGlam logo" className="h-8 w-auto" />
-                  <span className="text-lg font-semibold">CollabGlam</span>
-                </Link>
+              <div className="h-12 flex items-center justify-between border-b border-black/10">
+                <BrandHeader compact />
                 <button
                   onClick={() => setDrawerOpen(false)}
                   aria-label="Close menu"
-                  className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#ef2f5b]"
+                  className="mr-2 p-2 rounded-lg hover:bg-black/5 focus:outline-none"
                 >
-                  <X className="h-6 w-6 text-gray-700" />
+                  <X className="h-6 w-6 text-black/80" />
                 </button>
               </div>
 
-              <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-                {navItems.map((item) =>
-                  renderLink(item, () => setDrawerOpen(false))
-                )}
-                {renderDocuments(true)}
-              </nav>
+              <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
+                <nav className="space-y-1">
+                  {navItems.map((item) => renderLink(item, () => setDrawerOpen(false)))}
+                  {renderDocuments(true)}
+                </nav>
+              </div>
 
-              {/* Mobile Logout Footer */}
-              <div className="border-t px-4 py-3">
+              <div className="shrink-0 p-3 border-t border-black/10">
                 <button
                   onClick={() => {
                     setDrawerOpen(false);
                     handleLogout();
                   }}
-                  className="w-full flex items-center justify-start px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  className={`${linkBase} w-full ${linkInactive}`}
                 >
-                  <LogOut className="mr-3 h-5 w-5" />
-                  <span>Logout</span>
+                  <span className="flex items-center gap-2">
+                    <LogOut className="h-4 w-4 text-black/50 group-hover:text-white" />
+                    <span>Logout</span>
+                  </span>
                 </button>
               </div>
             </motion.aside>

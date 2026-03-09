@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Outfit } from "next/font/google";
 import { get, post } from "@/lib/api";
 import {
   HiChevronLeft,
@@ -46,6 +47,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 const API_LIST_PLANS = "/subscription/list";
 const API_CHECK_CHANGE = "/subscription/check-brand";
 const API_ADMIN_ASSIGN = "/admin/assignBrandPlan";
+
+/* ---------- Font ---------- */
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+});
 
 /* ---------- Types ---------- */
 interface Feature {
@@ -144,14 +151,14 @@ const formatDate = (iso?: string | null) => {
   });
 };
 
+// UI-aligned pill: Active is bold text; Inactive is a gray chip w/ dot (matches Brands page vibe)
 const statusPill = (isActive: number) =>
   isActive === 1 ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-      <HiCheckCircle className="h-4 w-4" /> Active
-    </span>
+    <span className="text-[13px] font-extrabold text-[#111827]">Active</span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
-      <HiXCircle className="h-4 w-4" /> Inactive
+    <span className="inline-flex items-center gap-2 rounded-full bg-black/[0.06] text-black/70 px-3 py-1 text-xs font-extrabold border border-black/10">
+      <span className="h-1.5 w-1.5 rounded-full bg-black/40" />
+      Inactive
     </span>
   );
 
@@ -371,11 +378,8 @@ export default function ViewBrandPage() {
 
       setAssignMsg("✅ Plan updated successfully.");
       setForceAssign(false);
-      // keep values but you can reset if you want:
-      // setCustomDays(""); setCustomExpiryDate(""); setValidityMode("plan_default");
 
       await fetchBrand(brandId);
-      // re-check after update
       await checkPlanChange(payload.planId);
     } catch (err: any) {
       setAssignMsg(`❌ ${err.message || "Failed to update plan."}`);
@@ -441,563 +445,660 @@ export default function ViewBrandPage() {
     setCampaignsPage(1);
   };
 
+  const expiryPreview = computeExpiryPreview();
+
+  // ---------- Loading / Error / Empty ----------
   if (loadingBrand)
     return (
-      <div className="max-w-5xl mx-auto p-8 space-y-6">
-        <Skeleton className="h-10 w-40" />
-        <Skeleton className="h-44 w-full" />
-        <Skeleton className="h-64 w-full" />
+      <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10 space-y-6">
+          <Skeleton className="h-10 w-48 rounded-xl" />
+          <Skeleton className="h-44 w-full rounded-2xl" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
       </div>
     );
 
   if (errorBrand)
     return (
-      <div className="max-w-5xl mx-auto p-8 text-red-600 font-semibold">
-        Error: {errorBrand}
+      <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            Error: {errorBrand}
+          </div>
+        </div>
       </div>
     );
 
   if (!brand)
     return (
-      <div className="max-w-5xl mx-auto p-8 text-gray-700">
-        No brand found.
+      <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10 text-black/70">
+          No brand found.
+        </div>
       </div>
     );
 
-  const expiryPreview = computeExpiryPreview();
+  const initials = (brand.name || "—").trim().slice(0, 1).toUpperCase();
 
   return (
-    <div className="max-w-6xl mx-auto p-6 md:p-8 space-y-8">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between">
-        <Button
-          onClick={() => router.back()}
-          className="bg-[#ef2f5b] text-white hover:bg-[#ef2f5b]/85 flex items-center gap-2 transition-all hover:shadow"
-        >
-          <HiChevronLeft className="h-5 w-5" /> Back
-        </Button>
-      </div>
+    <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
+      <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10 space-y-6">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            onClick={() => router.back()}
+            className="h-11 rounded-full border-black/10 bg-white px-4 text-[13px] font-extrabold text-black/80 hover:bg-black hover:text-white hover:border-black"
+          >
+            <HiChevronLeft className="mr-2 h-5 w-5" />
+            Back
+          </Button>
+        </div>
 
-      {/* Brand Header */}
-      <Card className="overflow-hidden border border-gray-100 shadow-md">
-        <div className="bg-gradient-to-r from-[#ef2f5b]/10 via-white to-white">
-          <div className="p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-3xl font-semibold text-gray-900 flex items-center gap-3">
-              {brand.name}
-              {brand.isVerifiedRepresentative ? (
-                <HiCheckCircle className="text-green-600" title="Verified" />
-              ) : (
-                <HiXCircle className="text-red-500" title="Not Verified" />
-              )}
-            </h2>
+        {/* Brand Header */}
+        <Card className="border border-black/10 bg-white rounded-2xl overflow-hidden">
+          <CardContent className="p-5 md:p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-full border border-black/10 bg-black/[0.06] flex items-center justify-center text-sm font-extrabold text-[#111827]">
+                  {initials}
+                </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-[#ef2f5b]/10 text-[#ef2f5b] px-3 py-1 text-sm font-medium">
-                {brand.subscriptionExpired
-                  ? "Subscription: Expired"
-                  : "Subscription: Active"}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[24px] md:text-[28px] font-extrabold tracking-tight text-[#111827] leading-tight truncate">
+                      {brand.name}
+                    </h2>
+                    {brand.isVerifiedRepresentative ? (
+                      <HiCheckCircle className="text-emerald-600" title="Verified" />
+                    ) : (
+                      <HiXCircle className="text-rose-600" title="Not Verified" />
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-[13px] font-semibold text-black/55">
+                    Created {formatDate(brand.createdAt)} • Updated {formatDate(brand.updatedAt)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {brand.subscriptionExpired ? (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-black/[0.06] text-black/70 px-3 py-1 text-xs font-extrabold border border-black/10">
+                    <span className="h-1.5 w-1.5 rounded-full bg-black/40" />
+                    Subscription: Expired
+                  </span>
+                ) : (
+                  <span className="text-[13px] font-extrabold text-[#111827]">
+                    Subscription: Active
+                  </span>
+                )}
+
+                <span className="inline-flex items-center rounded-full bg-black/[0.06] text-black/80 px-3 py-1 text-xs font-extrabold border border-black/10">
+                  Wallet: ${brand.walletBalance.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2 text-[13px] font-semibold text-black/70">
+                <p className="flex items-center gap-2">
+                  <HiOutlineMail className="text-black/45" /> {brand.email}
+                </p>
+                <p className="flex items-center gap-2">
+                  <HiPhone className="text-black/45" /> {brand.callingcode} {brand.phone}
+                </p>
+                <p className="flex items-center gap-2">
+                  <HiLocationMarker className="text-black/45" /> {brand.country}
+                </p>
+                <p className="flex items-center gap-2">
+                  <HiIdentification className="text-black/45" />
+                  Business Type: <span className="font-extrabold text-[#111827]">{brand.businessType}</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <HiUserGroup className="text-black/45" />
+                  Company Size: <span className="font-extrabold text-[#111827]">{brand.companySize}</span>
+                </p>
+              </div>
+
+              <div className="space-y-2 text-[13px] font-semibold text-black/70">
+                <p>
+                  <span className="text-black/55 font-extrabold">Category:</span> {brand.categoryName}
+                </p>
+                <p>
+                  <span className="text-black/55 font-extrabold">Referral Code:</span> {brand.referralCode}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Subscription */}
+        <Card className="border border-black/10 bg-white rounded-2xl overflow-hidden">
+          <CardContent className="p-5 md:p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-xl border border-black/10 bg-black/[0.06] flex items-center justify-center text-black/70">
+                  <HiClipboardList className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-[18px] md:text-[20px] font-extrabold text-[#111827]">
+                    Subscription
+                  </h3>
+                  <p className="text-[13px] font-semibold text-black/55">
+                    Plan status, billing and usage snapshot.
+                  </p>
+                </div>
+              </div>
+
+              <span className="inline-flex items-center rounded-full bg-black/[0.06] text-black/80 px-3 py-1 text-xs font-extrabold border border-black/10">
+                Plan: {brand.subscription?.planName || "—"}
               </span>
-              <span className="rounded-full bg-emerald-100 text-emerald-700 px-3 py-1 text-sm font-medium">
-                Wallet: ${brand.walletBalance.toFixed(2)}
-              </span>
             </div>
-          </div>
-        </div>
 
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-white text-gray-800">
-          <div className="space-y-3">
-            <p className="flex items-center gap-2">
-              <HiOutlineMail className="text-gray-500" /> {brand.email}
-            </p>
-            <p className="flex items-center gap-2">
-              <HiPhone className="text-gray-500" /> {brand.callingcode}{" "}
-              {brand.phone}
-            </p>
-            <p className="flex items-center gap-2">
-              <HiLocationMarker className="text-gray-500" /> {brand.country}
-            </p>
-            <p className="flex items-center gap-2">
-              <HiIdentification className="text-gray-500" /> Business Type:{" "}
-              <span className="font-medium">{brand.businessType}</span>
-            </p>
-            <p className="flex items-center gap-2">
-              <HiUserGroup className="text-gray-500" /> Company Size:{" "}
-              <span className="font-medium">{brand.companySize}</span>
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <p>
-              <strong>Category:</strong> {brand.categoryName}
-            </p>
-            <p>
-              <strong>Referral Code:</strong> {brand.referralCode}
-            </p>
-            <p className="text-sm text-gray-500">
-              Created: {formatDate(brand.createdAt)} &nbsp;|&nbsp; Updated:{" "}
-              {formatDate(brand.updatedAt)}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Subscription */}
-      <Card className="p-6 bg-white shadow-md border border-gray-100 hover:shadow-lg transition-all">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
-            <HiClipboardList /> Subscription
-          </h3>
-          <span className="rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-sm font-medium">
-            Plan: {brand.subscription?.planName || "—"}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-gray-700 mb-6">
-          <p>
-            <strong>Role:</strong> {brand.subscription?.role || "—"}
-          </p>
-          <p>
-            <strong>Status:</strong> {brand.subscription?.status || "—"}
-          </p>
-          <p>
-            <strong>Monthly Cost:</strong>{" "}
-            {typeof brand.subscription?.monthlyCost === "number" &&
-              brand.subscription.monthlyCost > 0
-              ? `$${brand.subscription.monthlyCost}`
-              : "Free / N.A."}
-          </p>
-          <p>
-            <strong>Auto Renew:</strong>{" "}
-            {typeof brand.subscription?.autoRenew === "boolean"
-              ? brand.subscription.autoRenew
-                ? "Yes"
-                : "No"
-              : "—"}
-          </p>
-          <p>
-            <strong>Started:</strong>{" "}
-            {brand.subscription?.startedAt ? formatDate(brand.subscription.startedAt) : "—"}
-          </p>
-          <p>
-            <strong>Expires:</strong>{" "}
-            {brand.subscription?.expiresAt ? formatDate(brand.subscription.expiresAt) : "—"}
-          </p>
-        </div>
-
-        {/* Subscription Features Table */}
-        <div className="overflow-hidden rounded-md border border-gray-200">
-          <Table className="w-full text-sm">
-            <TableHeader>
-              <TableRow className="bg-gray-50">
-                <TableHead className="px-4 py-3 text-left text-gray-600 font-semibold uppercase tracking-wide">
-                  Feature
-                </TableHead>
-                <TableHead className="px-4 py-3 text-gray-600 font-semibold uppercase tracking-wide">
-                  Limit
-                </TableHead>
-                <TableHead className="px-4 py-3 text-gray-600 font-semibold uppercase tracking-wide">
-                  Used
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody className="divide-y divide-gray-200">
-              {(brand.subscription?.features || []).map((f) => {
-                const pct =
-                  f.limit > 0
-                    ? Math.min(100, Math.round((f.used / f.limit) * 100))
-                    : 0;
-
-                return (
-                  <TableRow key={f.key}>
-                    <TableCell className="px-4 py-3 text-gray-800 capitalize text-left">
-                      {f.key.replace(/_/g, " ")}
-                    </TableCell>
-
-                    <TableCell className="px-4 py-3">
-                      {f.limit === -1 ? "Unlimited" : f.limit}
-                    </TableCell>
-
-                    <TableCell className="px-4 py-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{f.used}</span>
-                        <span className="text-xs text-gray-500">{pct}%</span>
-                      </div>
-
-                      <div className="mt-1 h-2 w-full rounded-full bg-gray-200 overflow-hidden">
-                        <div
-                          className="h-full bg-[#ef2f5b] transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {(brand.subscription?.features || []).length === 0 && (
-                <TableRow>
-                  <TableCell className="px-4 py-3 text-gray-500" colSpan={3}>
-                    No feature snapshot found.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* ✅ Admin Upgrade / Update Plan */}
-        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <HiChevronDoubleRight className="text-[#ef2f5b]" />
-                Upgrade / Update Plan
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] font-semibold text-black/70">
+              <p>
+                <span className="text-black/55 font-extrabold">Role:</span>{" "}
+                {brand.subscription?.role || "—"}
               </p>
-              <p className="text-xs text-gray-500">
-                Choose plan + set validity (days / expiry). You can also start from current expiry.
+              <p>
+                <span className="text-black/55 font-extrabold">Status:</span>{" "}
+                {brand.subscription?.status || "—"}
               </p>
-            </div>
-            {checking ? (
-              <span className="text-xs text-gray-500">Checking…</span>
-            ) : checkInfo ? (
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${checkInfo.canProceed
-                    ? "bg-green-50 text-green-700"
-                    : "bg-red-50 text-red-700"
-                  }`}
-              >
-                {checkInfo.message}
-              </span>
-            ) : null}
-          </div>
-
-          {planError && <p className="mt-2 text-sm text-red-600">{planError}</p>}
-
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-            {/* Plan */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">Plan</label>
-              <Select
-                value={selectedPlanId}
-                onValueChange={(val) => setSelectedPlanId(val)}
-                disabled={loadingPlans}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={loadingPlans ? "Loading..." : "Select plan"} />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  {plans.map((p) => (
-                    <SelectItem key={p.planId} value={p.planId}>
-                      {(p.displayName || p.name).toUpperCase()}{" "}
-                      {p.monthlyCost > 0 ? `- $${p.monthlyCost}/mo` : "- Free"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Billing Cycle */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">Billing Cycle</label>
-              <Select
-                value={billingCycle}
-                onValueChange={(val) => setBillingCycle(val as "monthly" | "annual")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select cycle" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="annual">Annual</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Apply From */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">
-                Start counting from
-              </label>
-              <Select
-                value={applyFrom}
-                onValueChange={(val) => setApplyFrom(val as "now" | "current_expiry")}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  <SelectItem value="now">Now</SelectItem>
-                  <SelectItem value="current_expiry">Current expiry (extend)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-gray-500">
-                Use <b>Current expiry</b> if you want to extend without losing remaining days.
+              <p>
+                <span className="text-black/55 font-extrabold">Monthly Cost:</span>{" "}
+                {typeof brand.subscription?.monthlyCost === "number" && brand.subscription.monthlyCost > 0
+                  ? `$${brand.subscription.monthlyCost}`
+                  : "Free / N.A."}
+              </p>
+              <p>
+                <span className="text-black/55 font-extrabold">Auto Renew:</span>{" "}
+                {typeof brand.subscription?.autoRenew === "boolean"
+                  ? brand.subscription.autoRenew
+                    ? "Yes"
+                    : "No"
+                  : "—"}
+              </p>
+              <p>
+                <span className="text-black/55 font-extrabold">Started:</span>{" "}
+                {brand.subscription?.startedAt ? formatDate(brand.subscription.startedAt) : "—"}
+              </p>
+              <p>
+                <span className="text-black/55 font-extrabold">Expires:</span>{" "}
+                {brand.subscription?.expiresAt ? formatDate(brand.subscription.expiresAt) : "—"}
               </p>
             </div>
 
-            {/* Validity Mode */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">
-                Validity
-              </label>
-              <Select
-                value={validityMode}
-                onValueChange={(val) =>
-                  setValidityMode(val as "plan_default" | "custom_days" | "exact_date")
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select validity" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  <SelectItem value="plan_default">Use plan default</SelectItem>
-                  <SelectItem value="custom_days">Custom days</SelectItem>
-                  <SelectItem value="exact_date">Exact expiry date</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Custom Days */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">
-                Days (if custom)
-              </label>
-              <Input
-                placeholder="e.g. 14"
-                value={customDays}
-                onChange={(e) => setCustomDays(e.target.value)}
-                disabled={validityMode !== "custom_days"}
-              />
-              <p className="text-[11px] text-gray-500">
-                Only used when validity is <b>Custom days</b>.
-              </p>
-            </div>
-
-            {/* Exact Expiry Date */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">
-                Expiry date (if exact)
-              </label>
-              <Input
-                type="date"
-                value={customExpiryDate}
-                onChange={(e) => setCustomExpiryDate(e.target.value)}
-                disabled={validityMode !== "exact_date"}
-              />
-              <p className="text-[11px] text-gray-500">
-                Only used when validity is <b>Exact expiry date</b>.
-              </p>
-            </div>
-
-            {/* Force Assign */}
-            <div className="md:col-span-2 flex items-end">
-              <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4"
-                  checked={forceAssign}
-                  onChange={(e) => setForceAssign(e.target.checked)}
-                />
-                Force assign (ignore upgrade rules / downgrade block)
-              </label>
-            </div>
-
-            {/* Action */}
-            <div className="flex items-end">
-              <Button
-                onClick={upgradeOrUpdatePlan}
-                disabled={!selectedPlanId || assigning}
-                className="w-full bg-[#ef2f5b] text-white hover:bg-[#ef2f5b]/85"
-              >
-                {assigning ? "Updating..." : "Update Plan"}
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-col gap-1">
-            {expiryPreview && (
-              <p className="text-sm text-gray-700">
-                <span className="font-medium">Preview expiry:</span>{" "}
-                {expiryPreview.toLocaleString()}
-              </p>
-            )}
-            {selectedPlan && (
-              <p className="text-xs text-gray-500">
-                Plan duration:{" "}
-                {selectedPlan.durationDays
-                  ? `${selectedPlan.durationDays} days`
-                  : selectedPlan.durationMins
-                    ? `${selectedPlan.durationMins} minutes`
-                    : selectedPlan.durationMinutes
-                      ? `${selectedPlan.durationMinutes} minutes`
-                      : "Default (30 days)"}
-              </p>
-            )}
-            {assignMsg && <p className="text-sm">{assignMsg}</p>}
-          </div>
-        </div>
-      </Card>
-
-      {/* Campaigns */}
-      <Card className="p-6 bg-white shadow-md border border-gray-100 hover:shadow-lg transition-all">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 space-y-2 sm:space-y-0">
-          <h3 className="text-2xl font-semibold text-gray-900">Campaigns</h3>
-
-          <div className="flex gap-2">
-            {/* Search */}
-            <div className="relative w-full sm:w-64">
-              <HiSearch
-                className="absolute inset-y-0 left-3 my-auto text-gray-400"
-                size={18}
-              />
-              <Input
-                placeholder="Search campaigns..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCampaignsPage(1);
-                }}
-                className="pl-9"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <Select
-              value={statusFilter.toString()}
-              onValueChange={(val) => {
-                setStatusFilter(Number(val) as 0 | 1 | 2);
-                setCampaignsPage(1);
-              }}
-            >
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                <SelectItem value="0">All</SelectItem>
-                <SelectItem value="1">Active</SelectItem>
-                <SelectItem value="2">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {loadingCampaigns ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, idx) => (
-              <Skeleton key={idx} className="h-6 w-full" />
-            ))}
-          </div>
-        ) : errorCampaigns ? (
-          <p className="text-red-600">Error: {errorCampaigns}</p>
-        ) : campaigns.length === 0 ? (
-          <div className="text-gray-600 flex items-center gap-2">
-            <span>😕</span> No campaigns found.
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
+            {/* Subscription Features Table */}
+            <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 bg-white">
+              <Table className="w-full">
                 <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    {[
-                      { label: "Name", key: "productOrServiceName" as any },
-                      { label: "Goal", key: "goal" as any },
-                      { label: "Start", key: "startDate" as any },
-                      { label: "End", key: "endDate" as any },
-                      { label: "Applicants", key: "applicantCount" as any },
-                      { label: "Status", key: "status" as any },
-                      { label: "Open", key: undefined },
-                    ].map((col) => (
-                      <TableHead
-                        key={col.label}
-                        className={`whitespace-nowrap ${col.key ? "cursor-pointer select-none" : ""
-                          }`}
-                        onClick={() => col.key && toggleSort(col.key)}
-                      >
-                        <div className="flex items-center justify-center">
-                          {col.label}
-                          {col.key && sortBy === col.key && (
-                            sortAsc ? (
-                              <HiChevronUp className="ml-1" />
-                            ) : (
-                              <HiChevronDown className="ml-1" />
-                            )
-                          )}
-                        </div>
-                      </TableHead>
-                    ))}
+                  <TableRow className="bg-white">
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">
+                      Feature
+                    </TableHead>
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">
+                      Limit
+                    </TableHead>
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">
+                      Used
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                  {campaigns.map((c, i) => (
-                    <TableRow
-                      key={c.campaignsId}
-                      className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                    >
-                      <TableCell
-                        className="font-medium max-w-[30ch] truncate"
-                        title={c.productOrServiceName}
+                  {(brand.subscription?.features || []).map((f) => {
+                    const pct =
+                      f.limit > 0
+                        ? Math.min(100, Math.round((f.used / f.limit) * 100))
+                        : 0;
+
+                    return (
+                      <TableRow
+                        key={f.key}
+                        className="border-b border-black/5 hover:bg-black/[0.02]"
                       >
-                        {formatCampaignName(c.productOrServiceName)}
-                      </TableCell>
+                        <TableCell className="py-4 text-[13px] font-extrabold text-[#111827] capitalize">
+                          {f.key.replace(/_/g, " ")}
+                        </TableCell>
 
-                      <TableCell className="max-w-[22ch] truncate" title={c.goal || ""}>
-                        {c.goal || "—"}
-                      </TableCell>
+                        <TableCell className="py-4 text-[13px] font-semibold text-black/70">
+                          {f.limit === -1 ? "Unlimited" : f.limit}
+                        </TableCell>
 
-                      <TableCell>{formatDate(c.timeline?.startDate)}</TableCell>
-                      <TableCell>{formatDate(c.timeline?.endDate)}</TableCell>
-                      <TableCell>{c.applicantCount ?? 0}</TableCell>
-                      <TableCell>{statusPill(c.isActive)}</TableCell>
+                        <TableCell className="py-4">
+                          <div className="flex items-center justify-between text-[13px] font-semibold text-black/70">
+                            <span className="font-extrabold text-[#111827]">{f.used}</span>
+                            <span className="text-xs font-extrabold text-black/50">
+                              {pct}%
+                            </span>
+                          </div>
 
-                      <TableCell>
-                        <Button
-                          onClick={() =>
-                            router.push(`/admin/campaigns/view?id=${c.campaignsId}`)
-                          }
-                          className="bg-[#ef2f5b] text-white hover:bg-[#ef2f5b]/85 hover:shadow-sm transition-all"
-                          size="sm"
-                        >
-                          View
-                        </Button>
+                          <div className="mt-2 h-2 w-full rounded-full bg-black/10 overflow-hidden">
+                            <div
+                              className="h-full bg-black transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+
+                  {(brand.subscription?.features || []).length === 0 && (
+                    <TableRow className="border-b border-black/5">
+                      <TableCell className="py-6 text-sm font-semibold text-black/55" colSpan={3}>
+                        No feature snapshot found.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </div>
 
-            {/* Pagination */}
-            {campaignsTotalPages > 1 && (
-              <div className="flex justify-end items-center space-x-2 mt-4">
-                <Button
-                  onClick={() => setCampaignsPage((p) => Math.max(p - 1, 1))}
-                  disabled={campaignsPage === 1}
-                  className="bg-[#ef2f5b] text-white hover:bg-[#ef2f5b]/85"
-                  size="sm"
-                >
-                  <HiChevronLeftIcon />
-                </Button>
-                <span className="text-sm text-gray-700">
-                  Page <span className="font-medium">{campaignsPage}</span> of{" "}
-                  <span className="font-medium">{campaignsTotalPages}</span>
-                </span>
-                <Button
-                  onClick={() =>
-                    setCampaignsPage((p) => Math.min(p + 1, campaignsTotalPages))
-                  }
-                  disabled={campaignsPage === campaignsTotalPages}
-                  className="bg-[#ef2f5b] text-white hover:bg-[#ef2f5b]/85"
-                  size="sm"
-                >
-                  <HiChevronRight />
-                </Button>
+            {/* Admin Upgrade / Update Plan */}
+            <div className="mt-6 rounded-2xl border border-black/10 bg-white p-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-[13px] font-extrabold text-[#111827] flex items-center gap-2">
+                    <HiChevronDoubleRight className="text-black/70" />
+                    Upgrade / Update Plan
+                  </p>
+                  <p className="text-xs font-semibold text-black/50">
+                    Choose plan + set validity (days / expiry). You can also start from current expiry.
+                  </p>
+                </div>
+
+                {checking ? (
+                  <span className="text-xs font-semibold text-black/50">Checking…</span>
+                ) : checkInfo ? (
+                  <span
+                    className={`text-xs px-3 py-1 rounded-full border font-extrabold ${
+                      checkInfo.canProceed
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-rose-50 text-rose-700 border-rose-200"
+                    }`}
+                  >
+                    {checkInfo.message}
+                  </span>
+                ) : null}
               </div>
-            )}
-          </>
-        )}
-      </Card>
+
+              {planError && (
+                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                  {planError}
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                {/* Plan */}
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-black/55">Plan</label>
+                  <Select
+                    value={selectedPlanId}
+                    onValueChange={(val) => setSelectedPlanId(val)}
+                    disabled={loadingPlans}
+                  >
+                    <SelectTrigger className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold">
+                      <SelectValue placeholder={loadingPlans ? "Loading..." : "Select plan"} />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      {plans.map((p) => (
+                        <SelectItem key={p.planId} value={p.planId}>
+                          {(p.displayName || p.name).toUpperCase()}{" "}
+                          {p.monthlyCost > 0 ? `- $${p.monthlyCost}/mo` : "- Free"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Billing Cycle */}
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-black/55">Billing Cycle</label>
+                  <Select
+                    value={billingCycle}
+                    onValueChange={(val) => setBillingCycle(val as "monthly" | "annual")}
+                  >
+                    <SelectTrigger className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold">
+                      <SelectValue placeholder="Select cycle" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="annual">Annual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Apply From */}
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-black/55">Start counting from</label>
+                  <Select
+                    value={applyFrom}
+                    onValueChange={(val) => setApplyFrom(val as "now" | "current_expiry")}
+                  >
+                    <SelectTrigger className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="now">Now</SelectItem>
+                      <SelectItem value="current_expiry">Current expiry (extend)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] font-semibold text-black/50">
+                    Use <b>Current expiry</b> if you want to extend without losing remaining days.
+                  </p>
+                </div>
+
+                {/* Validity Mode */}
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-black/55">Validity</label>
+                  <Select
+                    value={validityMode}
+                    onValueChange={(val) =>
+                      setValidityMode(val as "plan_default" | "custom_days" | "exact_date")
+                    }
+                  >
+                    <SelectTrigger className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold">
+                      <SelectValue placeholder="Select validity" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="plan_default">Use plan default</SelectItem>
+                      <SelectItem value="custom_days">Custom days</SelectItem>
+                      <SelectItem value="exact_date">Exact expiry date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Custom Days */}
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-black/55">Days (if custom)</label>
+                  <Input
+                    placeholder="e.g. 14"
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    disabled={validityMode !== "custom_days"}
+                    className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold"
+                  />
+                  <p className="text-[11px] font-semibold text-black/50">
+                    Only used when validity is <b>Custom days</b>.
+                  </p>
+                </div>
+
+                {/* Exact Expiry Date */}
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-black/55">Expiry date (if exact)</label>
+                  <Input
+                    type="date"
+                    value={customExpiryDate}
+                    onChange={(e) => setCustomExpiryDate(e.target.value)}
+                    disabled={validityMode !== "exact_date"}
+                    className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold"
+                  />
+                  <p className="text-[11px] font-semibold text-black/50">
+                    Only used when validity is <b>Exact expiry date</b>.
+                  </p>
+                </div>
+
+                {/* Force Assign */}
+                <div className="md:col-span-2 flex items-end">
+                  <label className="flex items-center gap-2 text-[13px] font-semibold text-black/70 select-none">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-black"
+                      checked={forceAssign}
+                      onChange={(e) => setForceAssign(e.target.checked)}
+                    />
+                    Force assign (ignore upgrade rules / downgrade block)
+                  </label>
+                </div>
+
+                {/* Action */}
+                <div className="flex items-end">
+                  <Button
+                    onClick={upgradeOrUpdatePlan}
+                    disabled={!selectedPlanId || assigning}
+                    className="w-full h-11 rounded-full bg-black text-white hover:bg-black/90 text-[13px] font-extrabold"
+                  >
+                    {assigning ? "Updating..." : "Update Plan"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-1">
+                {expiryPreview && (
+                  <p className="text-[13px] font-semibold text-black/70">
+                    <span className="font-extrabold text-black/55">Preview expiry:</span>{" "}
+                    {expiryPreview.toLocaleString()}
+                  </p>
+                )}
+                {selectedPlan && (
+                  <p className="text-xs font-semibold text-black/50">
+                    Plan duration:{" "}
+                    {selectedPlan.durationDays
+                      ? `${selectedPlan.durationDays} days`
+                      : selectedPlan.durationMins
+                      ? `${selectedPlan.durationMins} minutes`
+                      : selectedPlan.durationMinutes
+                      ? `${selectedPlan.durationMinutes} minutes`
+                      : "Default (30 days)"}
+                  </p>
+                )}
+                {assignMsg && (
+                  <p className="text-[13px] font-semibold text-black/70">{assignMsg}</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Campaigns */}
+        <Card className="border border-black/10 bg-white rounded-2xl overflow-hidden">
+          <CardContent className="p-5 md:p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h3 className="text-[18px] md:text-[20px] font-extrabold text-[#111827]">
+                  Campaigns
+                </h3>
+                <p className="text-[13px] font-semibold text-black/55">
+                  Browse campaigns for this brand.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Search (pill) */}
+                <div className="relative w-full sm:w-64">
+                  <HiSearch
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-black/45"
+                    size={18}
+                  />
+                  <Input
+                    placeholder="Search campaigns..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setCampaignsPage(1);
+                    }}
+                    className="h-11 rounded-full border-black/10 bg-white pl-11 text-[13px] font-semibold placeholder:text-black/40"
+                  />
+                </div>
+
+                {/* Status Filter (pill) */}
+                <Select
+                  value={statusFilter.toString()}
+                  onValueChange={(val) => {
+                    setStatusFilter(Number(val) as 0 | 1 | 2);
+                    setCampaignsPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-11 w-40 rounded-full border-black/10 bg-white text-[13px] font-semibold">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="0">All</SelectItem>
+                    <SelectItem value="1">Active</SelectItem>
+                    <SelectItem value="2">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              {loadingCampaigns ? (
+                <div className="space-y-2">
+                  {[...Array(6)].map((_, idx) => (
+                    <Skeleton key={idx} className="h-6 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : errorCampaigns ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                  Error: {errorCampaigns}
+                </div>
+              ) : campaigns.length === 0 ? (
+                <div className="text-[13px] font-semibold text-black/55">
+                  No campaigns found.
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-white">
+                          {[
+                            { label: "Name", key: "productOrServiceName" as any, align: "left" as const },
+                            { label: "Goal", key: "goal" as any, align: "left" as const },
+                            { label: "Start", key: "startDate" as any, align: "center" as const },
+                            { label: "End", key: "endDate" as any, align: "center" as const },
+                            { label: "Applicants", key: "applicantCount" as any, align: "center" as const },
+                            { label: "Status", key: "status" as any, align: "center" as const },
+                            { label: "Open", key: undefined, align: "right" as const },
+                          ].map((col) => (
+                            <TableHead
+                              key={col.label}
+                              className={`py-4 text-xs font-extrabold text-black/60 whitespace-nowrap ${
+                                col.key ? "cursor-pointer select-none" : ""
+                              } ${
+                                col.align === "center"
+                                  ? "text-center"
+                                  : col.align === "right"
+                                  ? "text-right"
+                                  : "text-left"
+                              }`}
+                              onClick={() => col.key && toggleSort(col.key)}
+                            >
+                              <div
+                                className={`flex items-center gap-1 ${
+                                  col.align === "center"
+                                    ? "justify-center"
+                                    : col.align === "right"
+                                    ? "justify-end"
+                                    : "justify-start"
+                                }`}
+                              >
+                                {col.label}
+                                {col.key && sortBy === col.key && (
+                                  sortAsc ? (
+                                    <HiChevronUp className="ml-1" />
+                                  ) : (
+                                    <HiChevronDown className="ml-1" />
+                                  )
+                                )}
+                              </div>
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+
+                      <TableBody>
+                        {campaigns.map((c) => (
+                          <TableRow
+                            key={c.campaignsId}
+                            className="border-b border-black/5 hover:bg-black/[0.02]"
+                          >
+                            <TableCell
+                              className="py-4 font-extrabold text-[#111827] max-w-[30ch] truncate"
+                              title={c.productOrServiceName}
+                            >
+                              {formatCampaignName(c.productOrServiceName)}
+                            </TableCell>
+
+                            <TableCell
+                              className="py-4 text-[13px] font-semibold text-black/70 max-w-[22ch] truncate"
+                              title={c.goal || ""}
+                            >
+                              {c.goal || "—"}
+                            </TableCell>
+
+                            <TableCell className="py-4 text-center text-[13px] font-semibold text-black/70">
+                              {formatDate(c.timeline?.startDate)}
+                            </TableCell>
+
+                            <TableCell className="py-4 text-center text-[13px] font-semibold text-black/70">
+                              {formatDate(c.timeline?.endDate)}
+                            </TableCell>
+
+                            <TableCell className="py-4 text-center text-[13px] font-extrabold text-[#111827]">
+                              {c.applicantCount ?? 0}
+                            </TableCell>
+
+                            <TableCell className="py-4 text-center">
+                              {statusPill(c.isActive)}
+                            </TableCell>
+
+                            <TableCell className="py-4 text-right">
+                              <Button
+                                onClick={() =>
+                                  router.push(`/admin/campaigns/view?id=${c.campaignsId}`)
+                                }
+                                className="h-9 rounded-full bg-black text-white hover:bg-black/90 px-4 text-[13px] font-extrabold"
+                                size="sm"
+                              >
+                                View
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination */}
+                  {campaignsTotalPages > 1 && (
+                    <div className="mt-4 flex justify-end items-center gap-2 flex-wrap">
+                      <Button
+                        onClick={() => setCampaignsPage((p) => Math.max(p - 1, 1))}
+                        disabled={campaignsPage === 1}
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full border-black/10 text-black/70 hover:bg-black hover:text-white hover:border-black"
+                      >
+                        <HiChevronLeftIcon />
+                      </Button>
+
+                      <span className="text-xs font-extrabold text-black/60">
+                        Page {campaignsPage} of {campaignsTotalPages}
+                      </span>
+
+                      <Button
+                        onClick={() =>
+                          setCampaignsPage((p) => Math.min(p + 1, campaignsTotalPages))
+                        }
+                        disabled={campaignsPage === campaignsTotalPages}
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full border-black/10 text-black/70 hover:bg-black hover:text-white hover:border-black"
+                      >
+                        <HiChevronRight />
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

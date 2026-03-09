@@ -1,22 +1,23 @@
-import './globals.css';
-import { Metadata } from 'next';
+import "./globals.css"
+import { Inter, Oswald } from "next/font/google"
 
-export const metadata: Metadata = {
-  title: 'CollabGlam',
-  description: 'A platform for seamless collaborations between brands and influencers.',
-  icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
-  },
-};
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+  display: "swap",
+})
+
+const oswald = Oswald({
+  subsets: ["latin"],
+  weight: ["700"],          // important: you use font-weight: 700
+  variable: "--font-oswald",
+  display: "swap",
+})
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="antialiased text-base font-sans">
-        {children}
-      </body>
+    <html lang="en" className={`${inter.variable} ${oswald.variable}`}>
+      <body>{children}</body>
     </html>
-  );
+  )
 }
