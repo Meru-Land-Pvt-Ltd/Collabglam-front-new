@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  CaretDown,
   CaretLeft,
   CaretRight,
   DotsThree,
@@ -21,12 +22,13 @@ import {
   ComboboxContent,
   ComboboxList,
   ComboboxItem,
+  ComboboxTrigger,
+  useComboboxAnchor,
 } from "@/components/ui/combobox";
 import { toast } from "@/components/ui/toast";
 import CampaignFilter, {
   DEFAULT_DATE_FILTER,
   type DateFilterValue,
-  type SelectOption,
 } from "./CampaignFilter";
 
 const cx = (...c: Array<string | undefined | null | false>) =>
@@ -45,8 +47,11 @@ type Campaign = {
   isActive: number;
   budget: number;
   applicantCount: number;
-  campaignType?: string;
-  category?: string;
+
+  campaignType?: string;     // normalized lowercase for filtering
+  categoryId?: string;       // for filter matching
+  categoryName?: string;     // for tag display
+
   logoSrc?: string;
   aiCreated?: boolean;
   campaignStatus?: CampaignStatus;
@@ -300,7 +305,6 @@ function matchesDateFilter(campaign: Campaign, filter: DateFilterValue) {
 const statuses = [
   { label: "Active", dot: "bg-[#28A745]", ring: "bg-[#BCE4C5]" },
   { label: "Paused", dot: "bg-[#DC3545]", ring: "bg-[#F5C6CB]" },
-  { label: "Draft", dot: "bg-[#9E9E9E]", ring: "bg-[#E0E0E0]" },
   { label: "Completed", dot: "bg-[#F07B3F]", ring: "bg-[#FAD6C0]" },
 ];
 
@@ -323,58 +327,55 @@ function StatusDropdown({
   disabled?: boolean;
   onChange: (value: CampaignStatus) => void;
 }) {
-  return (
-    <Combobox
-      value={value}
-      onValueChange={(next) => {
-        if (!next || disabled || next === value) return;
-        onChange(next as CampaignStatus);
-      }}
-    >
-      <button
-        type="button"
-        disabled={disabled}
-        className={cx(
-          "inline-flex items-center gap-1.5 h-8 px-2 bg-transparent text-sm font-medium text-[#1A1A1A]",
-          disabled ? "cursor-wait opacity-60" : ""
-        )}
-      >
-        {(() => {
-          const current = statuses.find((s) => s.label.toLowerCase() === value);
-          if (!current) return null;
-          return <StatusDot dot={current.dot} ring={current.ring} />;
-        })()}
-        <span className="capitalize">{value}</span>
-      </button>
+  const anchor = useComboboxAnchor();
 
-      <ComboboxContent
-        align="end"
-        className="
-          w-[13.6875rem]
-          max-h-[16.25rem]
-          rounded-[0.75rem]
-          bg-white
-          py-[1rem]
-          px-[0.75rem]
-        "
+  const current = statuses.find((s) => s.label.toLowerCase() === value);
+
+  return (
+    <div ref={anchor as any} className="inline-flex">
+      <Combobox
+        value={value}
+        onValueChange={(next) => {
+          if (!next || disabled || next === value) return;
+          onChange(next as CampaignStatus);
+        }}
       >
-        <ComboboxList>
-          {statuses.map((s) => (
-            <ComboboxItem
-              key={s.label}
-              value={s.label.toLowerCase()}
-              className="capitalize rounded-lg px-3 py-2"
-              showIndicator={false}
-            >
-              <div className="flex items-center gap-2 w-full text-sm leading-5 font-medium">
-                <StatusDot dot={s.dot} ring={s.ring} />
-                {s.label}
-              </div>
-            </ComboboxItem>
-          ))}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+        <ComboboxTrigger
+          aria-label="Campaign status"
+          disabled={disabled}
+          className={cx(
+            "inline-flex items-center gap-1.5 h-8 px-2 rounded-lg bg-transparent text-sm font-medium text-[#1A1A1A] hover:bg-[#F8F8F8]",
+            disabled ? "cursor-wait opacity-60" : ""
+          )}
+          icon={<CaretDown className="h-3 w-3" weight="bold" aria-hidden="true" />}
+        >
+          {current ? <StatusDot dot={current.dot} ring={current.ring} /> : null}
+          <span className="capitalize">{value}</span>
+        </ComboboxTrigger>
+
+        <ComboboxContent
+          anchor={anchor as any}
+          align="end"
+          className="w-[13.6875rem] max-h-[16.25rem] rounded-[0.75rem] bg-white py-[1rem] px-[0.75rem]"
+        >
+          <ComboboxList>
+            {statuses.map((s) => (
+              <ComboboxItem
+                key={s.label}
+                value={s.label.toLowerCase()}
+                className="capitalize rounded-lg px-3 py-2"
+                showIndicator={false}
+              >
+                <div className="flex items-center gap-2 w-full text-sm leading-5 font-medium">
+                  <StatusDot dot={s.dot} ring={s.ring} />
+                  {s.label}
+                </div>
+              </ComboboxItem>
+            ))}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    </div>
   );
 }
 
@@ -527,7 +528,7 @@ function CampaignCard({
 }) {
   const status = (campaign.campaignStatus || "draft") as CampaignStatus;
   const isBusy = !!statusUpdating[campaign.id];
-  const tag = campaign.category || campaign.campaignType || "";
+  const tag = campaign.categoryName || "";
   const expiryText = getExpiryText(campaign.timeline?.endDate);
 
   return (
@@ -540,7 +541,7 @@ function CampaignCard({
           />
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-start gap-2">
+            <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-4">
               <Link
                 href={`/brand/created-campaign/view-campaign?id=${campaign.id}`}
                 className="min-w-0 flex-1 break-words text-[clamp(0.95rem,0.9rem+0.22vw,1.04rem)] font-semibold leading-snug text-[#262626] hover:text-[#111]"
@@ -553,16 +554,10 @@ function CampaignCard({
 
               {tag ? (
                 <span className="inline-flex max-w-full items-center truncate rounded-full bg-[#F4ECD9] px-3 py-1 text-[0.72rem] text-[#7A6A42] sm:h-7">
-                  {tag}
+                    {tag}
                 </span>
               ) : null}
             </div>
-
-            {campaign.description ? (
-              <p className="mt-1 line-clamp-2 text-[0.82rem] leading-5 text-[#8A8A8A] sm:text-[0.86rem]">
-                {campaign.description}
-              </p>
-            ) : null}
           </div>
         </div>
       </div>
@@ -736,12 +731,10 @@ export default function BrandCreatedCampaignsPage() {
   const [dateFilter, setDateFilter] =
     useState<DateFilterValue>(DEFAULT_DATE_FILTER);
   const [aiCreatedOnly, setAiCreatedOnly] = useState(false);
-  const [catLoading] = useState(false);
 
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>(
     {}
   );
-  const [viewMode, setViewMode] = useState("list");
 
   const applyPendingPatch = (campaign: any) => {
     const pending =
@@ -804,68 +797,111 @@ export default function BrandCreatedCampaignsPage() {
             rawStatus === "active" || rawStatus === "open"
               ? "active"
               : rawStatus === "paused" || rawStatus === "closed"
-              ? "paused"
-              : rawStatus === "completed"
-              ? "completed"
-              : "draft";
+                ? "paused"
+                : rawStatus === "completed"
+                  ? "completed"
+                  : "draft";
 
           const hasPendingUpdate =
             campaign?.pendingUpdate?.status === "pending" &&
             !!campaign?.pendingUpdate?.patch;
 
+          const normalizedCampaignType = String(
+            merged.campaignType ?? ""
+          ).trim().toLowerCase();
+
+          const resolvedCategoryId = String(
+            merged.categoryId ??
+            merged.categories?.[0]?.categoryId ??
+            merged.category?._id ??
+            ""
+          ).trim();
+
+          const resolvedCategoryName = String(
+            merged.campaignCategory ??
+            merged.category?.name ??
+            merged.category?.categoryName ??
+            merged.categories?.[0]?.categoryName ??
+            merged.productCategory?.name ??
+            merged.productCategory ??
+            merged.industry?.name ??
+            merged.industry ??
+            ""
+          ).trim();
+
           return {
             id: merged.campaignsId ?? merged.id ?? merged._id,
-            productOrServiceName: merged.productOrServiceName ?? "",
-            description: merged.description ?? "",
-            timeline: merged.timeline ?? { startDate: "", endDate: "" },
-            isActive: merged.isActive ?? 0,
-            budget: merged.budget ?? 0,
-            applicantCount: merged.applicantCount ?? 0,
-            campaignType: merged.campaignType ?? "",
-            category:
-              merged.category ??
-              merged.productCategory ??
-              merged.industry ??
+            productOrServiceName:
+              merged.productOrServiceName ??
+              merged.campaignTitle ??
               "",
+            description: merged.description ?? "",
+            timeline: merged.timeline ?? {
+              startDate: merged.startAt ?? "",
+              endDate: merged.endAt ?? "",
+            },
+            isActive: merged.isActive ?? 0,
+            budget: merged.budget ?? merged.campaignBudget ?? 0,
+            applicantCount: merged.applicantCount ?? 0,
+
+            campaignType: normalizedCampaignType,
+            categoryId: resolvedCategoryId,
+            categoryName: resolvedCategoryName,
+
             logoSrc:
               merged.logoSrc ??
               merged.logo ??
               merged.thumbnailUrl ??
               merged.image ??
+              merged.productImages?.[0]?.dataUrl ??
+              merged.images?.[0]?.dataUrl ??
               "",
+
             aiCreated: Boolean(
-              merged.aiCreated ?? merged.isAiCreated ?? merged.createdByAi
+              merged.aiCreated ??
+              merged.isAiCreated ??
+              merged.createdByAi ??
+              merged.byAi
             ),
+
             campaignStatus: safeStatus,
             influencerWorking: Boolean(merged.influencerWorking),
             hasPendingUpdate,
+
             platformCount:
               merged.platformCount ??
               merged.platformsCount ??
+              merged.platformSelection?.length ??
               merged.platforms?.length,
+
             contractCount:
               merged.contractCount ??
               merged.contractsCount ??
               merged.totalContracts,
+
             targetInfluencerCount:
               merged.targetInfluencerCount ??
               merged.requiredInfluencers ??
-              merged.influencerTarget,
+              merged.influencerTarget ??
+              merged.numberOfInfluencers,
+
             emailCount:
               merged.emailCount ??
               merged.emailsCount ??
               merged.totalEmails,
+
             updatedAt:
               merged.updatedAt ??
               merged.updated_at ??
               merged.modifiedAt ??
               merged.lastEditedAt ??
               "",
+
             creatorStatus: String(
               merged.creatorStatus ??
-                merged.influencerStatus ??
-                merged.applicationStatus ??
-                ""
+              merged.influencerStatus ??
+              merged.applicationStatus ??
+              ""
             ).toLowerCase(),
           };
         });
@@ -974,52 +1010,27 @@ export default function BrandCreatedCampaignsPage() {
     }
   };
 
-  const campaignTypeOptions = useMemo<SelectOption[]>(() => {
-    const set = new Set(
-      campaigns.map((item) => item.campaignType).filter((v): v is string => !!v)
-    );
-
-    return [
-      { value: "all", label: "All" },
-      ...Array.from(set).map((value) => ({
-        value,
-        label: value,
-      })),
-    ];
-  }, [campaigns]);
-
-  const categoryOptions = useMemo<SelectOption[]>(() => {
-    const set = new Set(
-      campaigns.map((item) => item.category).filter((v): v is string => !!v)
-    );
-
-    return Array.from(set).map((value) => ({
-      value,
-      label: value,
-    }));
-  }, [campaigns]);
-
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter((campaign) => {
       const matchesCampaignType =
         campaignTypeFilter === "all" ||
-        campaign.campaignType === campaignTypeFilter;
+        campaign.campaignType === campaignTypeFilter.toLowerCase();
 
       const matchesCreatorStatus =
         creatorStatusFilter === "all"
           ? true
           : campaign.creatorStatus
-          ? campaign.creatorStatus === creatorStatusFilter
-          : creatorStatusFilter === "approved"
-          ? !!campaign.influencerWorking
-          : creatorStatusFilter === "invited" ||
-            creatorStatusFilter === "applied"
-          ? (campaign.applicantCount ?? 0) > 0
-          : true;
+            ? campaign.creatorStatus === creatorStatusFilter
+            : creatorStatusFilter === "approved"
+              ? !!campaign.influencerWorking
+              : creatorStatusFilter === "invited" ||
+                creatorStatusFilter === "applied"
+                ? (campaign.applicantCount ?? 0) > 0
+                : true;
 
       const matchesCategory =
         categoryIds.length === 0 ||
-        categoryIds.includes(campaign.category || "");
+        (campaign.categoryId ? categoryIds.includes(campaign.categoryId) : false);
 
       const matchesDate = matchesDateFilter(campaign, dateFilter);
 
@@ -1055,7 +1066,7 @@ export default function BrandCreatedCampaignsPage() {
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
-      <div className="mb-5 rounded-[1rem] border border-[#ECECEC] bg-white p-3 sm:p-4">
+      <div className="mb-6 rounded-[1rem] p-3 sm:p-4">
         <CampaignFilter
           campaignType={campaignTypeFilter}
           setCampaignType={setCampaignTypeFilter}
@@ -1070,16 +1081,6 @@ export default function BrandCreatedCampaignsPage() {
           searchInput={searchInput}
           setSearchInput={setSearchInput}
         />
-
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="inline-flex h-9 items-center rounded-lg bg-[#F3F3F3] px-3 text-sm text-[#333] hover:bg-[#ECECEC]"
-          >
-            Clear Filters
-          </button>
-        </div>
       </div>
 
       {loading ? (

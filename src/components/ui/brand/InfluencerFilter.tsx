@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/combobox";
 
 import {
-    apiGetAllCategories,
+    apiGetCategories,
     apiListInfluencerTiers } from '../../../app/brand/services/brandApi'
 
 type FilterKey =
@@ -148,7 +148,7 @@ export default function InfluencerFilter({
 
         async function load() {
             try {
-                const catRes = await apiGetAllCategories();
+                const catRes = await apiGetCategories();
                 const cats = unwrapArray(catRes)
                     .map((c: any) => {
                         const label = String(c?.name ?? c?.categoryName ?? c?.title ?? "");

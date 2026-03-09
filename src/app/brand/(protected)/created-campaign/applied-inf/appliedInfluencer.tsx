@@ -2200,9 +2200,7 @@ export default function AppliedInfluencersPage() {
     <div className="p-12 text-center space-y-3">
       <div
         className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center"
-        style={{
-          backgroundImage: `linear-gradient(to right, ${GRADIENT_FROM}, ${GRADIENT_TO})`,
-        }}
+        style={{ backgroundColor: "#000" }}
       >
         <MagnifyingGlass className="text-white w-6 h-6" />
       </div>

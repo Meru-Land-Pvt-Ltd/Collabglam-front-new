@@ -659,6 +659,26 @@ export default function CampaignFilter({
     };
   }, []);
 
+  const hasActiveFilters = useMemo(() => {
+    return (
+      campaignType !== "all" ||
+      creatorStatus !== "all" ||
+      categoryIds.length > 0 ||
+      isDateFilterActive(dateFilter) ||
+      aiCreated ||
+      searchInput.trim() !== ""
+    );
+  }, [campaignType, creatorStatus, categoryIds, dateFilter, aiCreated, searchInput]);
+
+  function handleClearFilters() {
+    setCampaignType("all");
+    setCreatorStatus("all");
+    setCategoryIds([]);
+    setDateFilter(DEFAULT_DATE_FILTER);
+    setAiCreated(false);
+    setSearchInput("");
+  }
+
   return (
     <div className="mt-8 flex w-full flex-wrap items-start justify-between gap-x-10 gap-y-3">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-3">
@@ -719,6 +739,17 @@ export default function CampaignFilter({
           </label>
           <span className={labelCls}>AI Created</span>
         </div>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={handleClearFilters}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.875rem] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors"
+          >
+            <X size={14} weight="bold" />
+            Clear
+          </button>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
