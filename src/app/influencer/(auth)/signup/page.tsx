@@ -1,3 +1,4 @@
+// app/influencer/signup/page.tsx
 "use client";
 
 import * as React from "react";
@@ -5,11 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
-import {
-  FloatingMultiSelect,
-  FloatingSelect,
-  SelectItem,
-} from "@/components/ui/select";
+import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";
@@ -49,6 +46,24 @@ const CLEAR_VALUE = "__clear__";
 // ✅ simple option type for FloatingMultiSelect
 type Chip = { label: string; value: string };
 
+// ✅ local normalizer (extra safe)
+const normalizeArray = <T,>(x: any): T[] => {
+  if (Array.isArray(x)) return x as T[];
+  if (Array.isArray(x?.data)) return x.data as T[];
+  if (Array.isArray(x?.result)) return x.result as T[];
+  if (Array.isArray(x?.items)) return x.items as T[];
+  return [];
+};
+
+// ✅ render flag as image (so it won’t degrade into country code letters)
+const emojiToCodePoint = (emoji: string) =>
+  Array.from(emoji)
+    .map((ch) => ch.codePointAt(0)!.toString(16))
+    .join("-");
+
+const twemojiSvgUrl = (emoji: string) =>
+  `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${emojiToCodePoint(emoji)}.svg`;
+
 export default function InfluencerSignupPage() {
   const router = useRouter();
 
@@ -77,10 +92,9 @@ export default function InfluencerSignupPage() {
 
         if (!mounted) return;
 
-        setCountries(Array.isArray(c) ? c : []);
-        setLanguagesList(Array.isArray(l) ? l : []);
-        const catRows = Array.isArray((cat as any)?.categories) ? (cat as any).categories : [];
-        setCategoriesList(catRows);
+        setCountries(normalizeArray<CountryRow>(c));
+        setLanguagesList(normalizeArray<LangRow>(l));
+        setCategoriesList(normalizeArray<CategoryRow>(cat));
       } catch (err) {
         toast({
           icon: "error",
@@ -100,12 +114,8 @@ export default function InfluencerSignupPage() {
   // ✅ build multi-select options for categories
   const categoryOptions: Chip[] = React.useMemo(() => {
     return categoriesList
-      .map((c: any) => {
-        const id = String(c._id ?? c.id ?? "");
-        if (!id) return null;
-        return { label: c.name ?? "Category", value: id };
-      })
-      .filter(Boolean) as Chip[];
+      .filter((c) => !!c?.id)
+      .map((c) => ({ label: c.name ?? "Category", value: String(c.id) }));
   }, [categoriesList]);
 
   // -------------------------
@@ -187,8 +197,8 @@ export default function InfluencerSignupPage() {
       ? !creatorName.trim()
         ? "Creator name is required."
         : !creatorNameOk(creatorName)
-          ? "Only letters and spaces are allowed. (.'- allowed)"
-          : ""
+        ? "Only letters and spaces are allowed. (.'- allowed)"
+        : ""
       : "";
 
   const emailError =
@@ -196,14 +206,12 @@ export default function InfluencerSignupPage() {
       ? !email.trim()
         ? "Work email is required."
         : !emailOk(email)
-          ? "Please enter a valid email address."
-          : ""
+        ? "Please enter a valid email address."
+        : ""
       : "";
 
   const countryError =
-    attemptedSubmit && !clearedOnFocus.countryId && !countryId
-      ? "Location is required."
-      : "";
+    attemptedSubmit && !clearedOnFocus.countryId && !countryId ? "Location is required." : "";
 
   const categoryError =
     attemptedSubmit && !clearedOnFocus.categoryIds && categoryIds.length === 0
@@ -215,8 +223,8 @@ export default function InfluencerSignupPage() {
       ? !password.trim()
         ? "Password is required."
         : !pwOk(password)
-          ? "Password must be 8–16 characters and include uppercase, lowercase, and a number."
-          : ""
+        ? "Password must be 8–16 characters and include uppercase, lowercase, and a number."
+        : ""
       : "";
 
   const agreedError =
@@ -260,17 +268,19 @@ export default function InfluencerSignupPage() {
       otp: code,
     });
 
-    // ✅ IMPORTANT: store token with the SAME key onboarding expects
-    localStorage.setItem("influencerToken", res.token);
-    localStorage.setItem("token", res.token); // optional compatibility
-    localStorage.setItem("influencerId", res.influencerId);
+    // ✅ store token with the SAME key onboarding expects (only if present)
+    if ((res as any)?.token) {
+      localStorage.setItem("influencerToken", (res as any).token);
+      localStorage.setItem("token", (res as any).token); // optional compatibility
+    }
+    if ((res as any)?.influencerId) {
+      localStorage.setItem("influencerId", (res as any).influencerId);
+    }
 
     const country = countries.find((x) => String(x._id ?? x.id) === String(countryId));
-    const lang = languagesList.find((x) => String(x._id) === String(languageId));
+    const lang = languagesList.find((x) => String(x._id ?? x.id) === String(languageId));
 
-    const cats = categoriesList.filter((x: any) =>
-      categoryIds.includes(String(x._id ?? x.id))
-    );
+    const cats = categoriesList.filter((x) => categoryIds.includes(String(x.id)));
     const categoryNames = cats.map((c) => c.name).filter(Boolean);
 
     localStorage.setItem(
@@ -279,22 +289,18 @@ export default function InfluencerSignupPage() {
         creatorName: creatorName.trim(),
         email: email.trim(),
         countryId,
-        countryName: country?.countryNameEn,
-        countryFlag: country?.flag,
+        countryName: (country as any)?.countryName ?? country?.countryNameEn ?? null,
+        countryFlag: country?.flag ?? null,
         languageId: languageId || null,
-        languageName: lang?.name,
+        languageName: lang?.name ?? lang?.code ?? null,
         categoryIds,
         categoryNames,
       })
     );
 
-    // ✅ POST token to server (cookie/session setter) + include credentials
-    await fetch("/api-1/influencer-auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include", // ✅ IMPORTANT if server sets cookies
-      body: JSON.stringify({ token: res.token }),
-    });
+    // ✅ IMPORTANT CHANGE:
+    // Do NOT call /api-1/influencer-auth here (it was blocking/triggering that flow).
+    // We should directly move user to onboarding.
 
     return res;
   };
@@ -361,9 +367,9 @@ export default function InfluencerSignupPage() {
         text: "Redirecting to onboarding…",
       });
 
-      // ✅ Redirect to onboarding
+      // ✅ Redirect to onboarding (no influencer-auth hop)
       router.replace("/influencer/onboarding");
-      router.refresh(); // ✅ helps when auth/middleware depends on cookie/session
+      router.refresh();
     } catch (err) {
       toast({
         icon: "error",
@@ -546,25 +552,28 @@ export default function InfluencerSignupPage() {
                       >
                         {countries
                           .filter((c) => !!(c._id ?? c.id))
-                          .map((c: any) => {
+                          .map((c) => {
                             const id = String(c._id ?? c.id);
-
-                            // ✅ pick whichever field actually exists in your API
-                            const name =
-                              c.countryName ??
-                              c.countryCode ??
-                              c.country ??
-                              c.label ??
-                              "";
+                            const name = (c as any)?.countryName ?? c.countryNameEn ?? "";
+                            const flagEmoji = c.flag ?? "";
 
                             return (
                               <SelectItem key={id} value={id}>
-                                <div className="flex items-center gap-2">
-                                  <span>{c.flag ?? ""}</span>
-                                  <span className="text-[color:var(--Text-Primary,#1A1A1A)]">
-                                    {name}
-                                  </span>
-                                </div>
+                                <span className="inline-flex items-center gap-2">
+                                  {flagEmoji ? (
+                                    <img
+                                      src={twemojiSvgUrl(flagEmoji)}
+                                      alt={flagEmoji}
+                                      className="w-4 h-4"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        // fallback to emoji text if image fails
+                                        (e.currentTarget as HTMLImageElement).style.display = "none";
+                                      }}
+                                    />
+                                  ) : null}
+                                  <span>{name || "Country"}</span>
+                                </span>
                               </SelectItem>
                             );
                           })}
@@ -585,12 +594,15 @@ export default function InfluencerSignupPage() {
                         <SelectItem value={CLEAR_VALUE}>None</SelectItem>
 
                         {languagesList
-                          .filter((l) => !!l._id)
-                          .map((l) => (
-                            <SelectItem key={l._id as string} value={l._id as string}>
-                              {l.name ?? l.code ?? "Language"}
-                            </SelectItem>
-                          ))}
+                          .filter((l) => !!(l._id ?? l.id))
+                          .map((l) => {
+                            const id = String(l._id ?? l.id);
+                            return (
+                              <SelectItem key={id} value={id}>
+                                {l.name ?? l.code ?? "Language"}
+                              </SelectItem>
+                            );
+                          })}
                       </FloatingSelect>
 
                       {/* Categories */}

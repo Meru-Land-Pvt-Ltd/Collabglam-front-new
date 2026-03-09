@@ -46,6 +46,18 @@ const attachBearer = (
   return config
 }
 
+const hasAuthHeader = (headers: any) => {
+  if (!headers) return false;
+
+  try {
+    if (typeof headers.get === "function") {
+      return !!headers.get("Authorization") || !!headers.get("authorization");
+    }
+  } catch {}
+
+  return !!headers.Authorization || !!headers.authorization;
+};
+
 /** -------------------- AXIOS INSTANCES -------------------- */
 /**
  * IMPORTANT:
@@ -74,21 +86,18 @@ const api2 = axios.create({
 
 /** PRIMARY: must have token; otherwise logout immediately */
 const attachAuthPrimary = (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
-  // If request is FormData, never allow a manual Content-Type (boundary issue)
   if (isFormData((config as any).data)) {
     config.headers = stripContentType(config.headers) as any
   }
+
+  // ✅ ADD THIS
+  if (hasAuthHeader(config.headers)) return config;
 
   if (typeof window !== 'undefined') {
     try {
       const token = localStorage.getItem(TOKEN_KEY)
       if (token) return attachBearer(config, token)
-      // No token -> logout (only for primary API)
-      // forceLogout()
-    } catch {
-      // storage error -> treat like missing token
-      // forceLogout()
-    }
+    } catch {}
   }
   return config
 }
