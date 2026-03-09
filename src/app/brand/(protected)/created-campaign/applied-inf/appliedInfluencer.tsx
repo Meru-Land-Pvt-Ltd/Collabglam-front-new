@@ -234,7 +234,7 @@ interface AuditEvent {
   byUserId?: string;
   role?: string;
   type: string;
-  details?: { reason?: string; [k: string]: any };
+  details?: { reason?: string;[k: string]: any };
   at?: string;
 }
 
@@ -1218,16 +1218,16 @@ export default function AppliedInfluencersPage() {
     return () => clearTimeout(timeout);
   }, [influencerId, influencers]);
 
-const clearPreview = useCallback(() => {
-  setPdfUrl((prev) => {
-    if (prev) URL.revokeObjectURL(prev);
-    return "";
-  });
-}, []);
+  const clearPreview = useCallback(() => {
+    setPdfUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
+  }, []);
 
-useEffect(() => {
-  clearPreview();
-}, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
+  useEffect(() => {
+    clearPreview();
+  }, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
 
   const prefillFormFor = useCallback(
     (inf: Influencer, meta?: ContractMeta | null) => {
@@ -1297,14 +1297,14 @@ useEffect(() => {
       setDeliverables(
         Array.isArray(deliverablesFromMeta) && deliverablesFromMeta.length
           ? deliverablesFromMeta.map((row, index) => ({
-              id: createRowId(),
-              srNo: Number(row?.srNo ?? index + 1),
-              platformHandle: String(row?.platformHandle || ""),
-              deliverableFormat: String(row?.deliverableFormat || ""),
-              qty: String(row?.qty ?? "1"),
-              draftDue: String(row?.draftDue || ""),
-              liveDate: String(row?.liveDate || ""),
-            }))
+            id: createRowId(),
+            srNo: Number(row?.srNo ?? index + 1),
+            platformHandle: String(row?.platformHandle || ""),
+            deliverableFormat: String(row?.deliverableFormat || ""),
+            qty: String(row?.qty ?? "1"),
+            draftDue: String(row?.draftDue || ""),
+            liveDate: String(row?.liveDate || ""),
+          }))
           : [seededDeliverable]
       );
 
@@ -1354,47 +1354,47 @@ useEffect(() => {
     };
   }, [sidebarOpen]);
 
-const buildContentPayload = useCallback(() => {
-  const content = deepClone(contractForm);
+  const buildContentPayload = useCallback(() => {
+    const content = deepClone(contractForm);
 
-  return {
-    ...content,
-    campaign: {
-      ...content.campaign,
-      effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
-    },
-    scheduleA: {
-      ...content.scheduleA,
-      deliverables: deliverables.map((row, index) => ({
-        srNo: index + 1,
-        platformHandle: row.platformHandle,
-        deliverableFormat: row.deliverableFormat,
-        qty: Number(row.qty || "0") || 0,
-        draftDue: row.draftDue,
-        liveDate: row.liveDate,
-      })),
-      review: {
-        ...content.scheduleA.review,
-        includedRevisionRounds:
-          Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+    return {
+      ...content,
+      campaign: {
+        ...content.campaign,
+        effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
       },
-      commercial: {
-        ...content.scheduleA.commercial,
-        totalCampaignFee:
-          Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
-      },
-      usageRights: {
-        ...content.scheduleA.usageRights,
-        rows: content.scheduleA.usageRights.rows.map((row) => ({
-          usageRight: row.usageRight,
-          selected: row.selected,
-          duration: row.duration,
-          territoryNotes: row.territoryNotes,
+      scheduleA: {
+        ...content.scheduleA,
+        deliverables: deliverables.map((row, index) => ({
+          srNo: index + 1,
+          platformHandle: row.platformHandle,
+          deliverableFormat: row.deliverableFormat,
+          qty: Number(row.qty || "0") || 0,
+          draftDue: row.draftDue,
+          liveDate: row.liveDate,
         })),
+        review: {
+          ...content.scheduleA.review,
+          includedRevisionRounds:
+            Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+        },
+        commercial: {
+          ...content.scheduleA.commercial,
+          totalCampaignFee:
+            Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+        },
+        usageRights: {
+          ...content.scheduleA.usageRights,
+          rows: content.scheduleA.usageRights.rows.map((row) => ({
+            usageRight: row.usageRight,
+            selected: row.selected,
+            duration: row.duration,
+            territoryNotes: row.territoryNotes,
+          })),
+        },
       },
-    },
-  };
-}, [contractForm, deliverables, requestedEffDate]);
+    };
+  }, [contractForm, deliverables, requestedEffDate]);
   const buildBrandUpdatesPayload = useCallback(() => {
     return {
       content: buildContentPayload(),
@@ -1525,10 +1525,10 @@ const buildContentPayload = useCallback(() => {
         );
       }
 
-setPdfUrl((prev) => {
-  if (prev) URL.revokeObjectURL(prev);
-  return URL.createObjectURL(res.data);
-});
+      setPdfUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(res.data);
+      });
       toast({ icon: "success", title: "Preview ready" });
     } catch (e: any) {
       toast({
@@ -1854,9 +1854,8 @@ setPdfUrl((prev) => {
     const rejected = isRejectedMeta(meta);
     return (
       <span
-        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-          rejected ? "bg-black text-white" : "bg-[#F7F7F7] text-[#1A1A1A]"
-        }`}
+        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${rejected ? "bg-black text-white" : "bg-[#F7F7F7] text-[#1A1A1A]"
+          }`}
       >
         {label}
       </span>
@@ -1992,11 +1991,10 @@ setPdfUrl((prev) => {
           <div
             key={inf.influencerId}
             id={`inf-card-${inf.influencerId}`}
-            className={`relative rounded-xl border bg-white p-4 transition-all duration-300 ${
-              highlightInfId === inf.influencerId
+            className={`relative rounded-xl border bg-white p-4 transition-all duration-300 ${highlightInfId === inf.influencerId
                 ? "border-[#EA580C] bg-[#FFE4C4] shadow-[0_0_0_2px_rgba(234,88,12,0.9),0_18px_45px_rgba(0,0,0,0.35)] animate-pulse scale-[1.02]"
                 : "border-gray-200 hover:-translate-y-[1px] hover:shadow-md"
-            }`}
+              }`}
           >
             {highlightInfId === inf.influencerId ? (
               <span className="absolute -top-2 right-3 rounded-full bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
@@ -2278,9 +2276,8 @@ setPdfUrl((prev) => {
                       setRequestedEffDate(e.target.value);
                       setContractField("campaign.effectiveDate", e.target.value);
                     }}
-                    className={`mt-1 h-[44px] w-full rounded-lg border-2 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] ${
-                      formErrors.requestedEffDate ? "border-red-500" : "border-gray-200"
-                    }`}
+                    className={`mt-1 h-[44px] w-full rounded-lg border-2 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] ${formErrors.requestedEffDate ? "border-red-500" : "border-gray-200"
+                      }`}
                   />
                   {formErrors.requestedEffDate ? (
                     <div className="mt-1 text-xs text-red-600">{formErrors.requestedEffDate}</div>
@@ -2462,16 +2459,16 @@ setPdfUrl((prev) => {
               </div>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-<Checkbox
-  id="pre-shoot-script-required"
-  label="Pre-Shoot Script Required"
-  checked={Boolean(
-    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
-  )}
-  onChange={(checked: boolean) =>
-    setContractField("scheduleA.preShootScriptRequired", checked)
-  }
-/>
+                <Checkbox
+                  id="pre-shoot-script-required"
+                  label="Pre-Shoot Script Required"
+                  checked={Boolean(
+                    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+                  )}
+                  onChange={(checked: boolean) =>
+                    setContractField("scheduleA.preShootScriptRequired", checked)
+                  }
+                />
                 <div>
                   <LabelWithInfo text="Pre-Shoot Script Due" />
                   <input
