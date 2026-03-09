@@ -1,376 +1,437 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
-import {
-  Users,
-  CurrencyDollar,
-  FileText,
-} from "@phosphor-icons/react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { post } from "@/lib/api";
+import { Button } from "@/components/ui/buttonComp";
 
-const cx = (...c: Array<string | undefined | null | false>) =>
-  c.filter(Boolean).join(" ");
+import ListCardView, {
+  ListCardViewItem,
+  StatusVariant,
+} from "@/components/ui/brand/list";
 
-const WRAP_BASE =
-  "w-full rounded-[1.25rem] border border-[#E8E8E8] bg-white p-3 sm:p-4 lg:p-5";
+import CampaignFilter, {
+  DEFAULT_DATE_FILTER,
+  type DateFilterValue,
+} from "../../../../components/ui/brand/CampaignFilter";
 
-const WRAP_GRID =
-  "grid grid-cols-1 gap-4 " +
-  "lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,16rem)] " +
-  "xl:grid-cols-[minmax(0,19rem)_minmax(0,1fr)_minmax(0,17rem)] " +
-  "lg:items-center lg:gap-4";
+type Goal = "Brand Awareness" | "Sales" | "Engagement";
+type SortBy = "createdAt" | "budget" | "applicantCount";
+type SortOrder = "asc" | "desc";
 
-export type TimelineState = "none" | "running" | "expired";
+interface RawCampaignCategory {
+  categoryId?: string;
+  categoryName?: string;
+  subcategoryId?: string;
+  subcategoryName?: string;
+}
 
-export interface CampaignHistoryItem {
+interface RawCampaign {
+  campaignsId?: string;
+  _id?: string;
+
+  campaignTitle?: string;
+  productOrServiceName?: string;
+  description?: string;
+
+  budget?: number;
+  campaignBudget?: number;
+  applicantCount?: number;
+
+  isActive?: number;
+  computedIsActive?: number;
+  influencerWorking?: boolean;
+
+  campaignStatus?: string;
+  status?: string;
+  publishStatus?: string;
+
+  createdAt?: string;
+  updatedAt?: string;
+  statusUpdatedAt?: string;
+  publishedAt?: string;
+
+  goal?: string;
+
+  category?: string;
+  campaignCategory?: string;
+  campaignSubcategory?: string;
+  categories?: RawCampaignCategory[];
+
+  brandName?: string;
+}
+
+interface CampaignsApiResponse {
+  data?: RawCampaign[];
+}
+
+interface CampaignHistoryItem {
   id: string;
   productOrServiceName: string;
   budget: number;
   applicantCount: number;
   isActive: number;
   campaignStatus: string;
+  status: string;
   createdAt?: string;
   statusUpdatedAt?: string;
-  timelineState: TimelineState;
+  goal?: string;
+  category?: string;
+  description?: string;
+  brandName?: string;
 }
 
-const HISTORY_INFLUENCER_ROUTE = "/brand/campaign-history/applied-inf";
+const HISTORY_ENDPOINT = "/campaign/history";
 
-function formatCurrency(n: number) {
-  return new Intl.NumberFormat("en-US", {
+function useDebouncedValue<T>(value: T, delay = 400) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+
+  return debounced;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
-  }).format(Number(n || 0));
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value || 0);
 }
 
-function formatDateTime(dateStr?: string) {
-  if (!dateStr) return "—";
-  const d = new Date(dateStr);
+function formatDate(value?: string) {
+  if (!value) return "—";
+  const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
     month: "short",
-    day: "numeric",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   }).format(d);
 }
 
-function statusPillBg(status: "open" | "paused") {
-  return status === "open" ? "bg-[#EAF7EE]" : "bg-[#FFF3D9]";
+function getStatusVariant(item: CampaignHistoryItem): StatusVariant {
+  const campaignStatus = (item.campaignStatus || "").toLowerCase();
+  const status = (item.status || "").toLowerCase();
+
+  if (campaignStatus === "paused" || status === "paused") return "paused";
+  if (status === "active" || (campaignStatus === "open" && item.isActive === 1)) return "active";
+  if (campaignStatus === "open") return "scheduled";
+  return "draft";
 }
 
-function statusDotBg(status: "open" | "paused") {
-  return status === "open" ? "bg-[#2EAD4F]" : "bg-[#D69E2E]";
+function getStatusLabel(item: CampaignHistoryItem) {
+  const campaignStatus = (item.campaignStatus || "").toLowerCase();
+  const status = (item.status || "").toLowerCase();
+
+  if (campaignStatus === "paused" || status === "paused") return "Paused";
+  if (status === "active" || (campaignStatus === "open" && item.isActive === 1)) return "Active";
+  if (campaignStatus === "open") return "Open";
+  return "Draft";
 }
 
-function statusLabel(status: "open" | "paused") {
-  return status === "open" ? "Open" : "Paused";
+function getCampaignCategory(c: RawCampaign) {
+  return (
+    c.campaignCategory ||
+    c.category ||
+    c.categories?.[0]?.categoryName ||
+    "Uncategorized"
+  );
 }
 
-function activeStatusStyles(isActive: number) {
-  if (isActive === 1) {
-    return {
-      wrap: "bg-[#EAF7EE]",
-      dot: "bg-[#2EAD4F]",
-      label: "Active",
+function getCampaignName(c: RawCampaign) {
+  return c.campaignTitle || c.productOrServiceName || "Untitled Campaign";
+}
+
+function isDefaultDateFilter(value: DateFilterValue) {
+  return (
+    value.quickFilter === DEFAULT_DATE_FILTER.quickFilter &&
+    value.allDatesOption === DEFAULT_DATE_FILTER.allDatesOption &&
+    value.startDate === DEFAULT_DATE_FILTER.startDate &&
+    value.endDate === DEFAULT_DATE_FILTER.endDate
+  );
+}
+
+function getDateFilterPayload(value: DateFilterValue) {
+  const payload: Record<string, any> = {};
+
+  if (isDefaultDateFilter(value)) return payload;
+
+  if (value.quickFilter) payload.quickFilter = value.quickFilter;
+  if (value.allDatesOption && value.allDatesOption !== "all") {
+    payload.allDatesOption = value.allDatesOption;
+  }
+  if (value.startDate) payload.startDate = value.startDate;
+  if (value.endDate) payload.endDate = value.endDate;
+
+  return payload;
+}
+
+export default function BrandCampaignHistoryPage() {
+  const router = useRouter();
+
+  const [campaigns, setCampaigns] = useState<CampaignHistoryItem[]>([]);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 400);
+
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
+  const [campaignType, setCampaignType] = useState("all");
+  const [creatorStatus, setCreatorStatus] = useState("all");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(DEFAULT_DATE_FILTER);
+  const [aiCreated, setAiCreated] = useState(false);
+
+  const lastFetchKeyRef = useRef<string>("");
+
+  const buildPayload = useCallback(
+    (brandId: string) => {
+      const payload: Record<string, any> = {
+        brandId,
+        page: 1,
+        limit: 500,
+        search: String(debouncedSearch || "").trim(),
+        sortBy,
+        sortOrder,
+        includeDescription: 1,
+
+        campaignType: campaignType !== "all" ? campaignType : undefined,
+        creatorStatus: creatorStatus !== "all" ? creatorStatus : undefined,
+        categoryIds: categoryIds.length ? categoryIds : undefined,
+        aiCreated: aiCreated ? true : undefined,
+
+        ...getDateFilterPayload(dateFilter),
+      };
+
+      Object.keys(payload).forEach((k) => {
+        if (
+          payload[k] === undefined ||
+          payload[k] === "" ||
+          (Array.isArray(payload[k]) && payload[k].length === 0)
+        ) {
+          delete payload[k];
+        }
+      });
+
+      return payload;
+    },
+    [aiCreated, campaignType, categoryIds, creatorStatus, dateFilter, debouncedSearch, sortBy, sortOrder]
+  );
+
+  const fetchHistory = useCallback(
+    async (opts?: { force?: boolean }) => {
+      const brandId =
+        typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
+
+      if (!brandId) throw new Error("No brandId found in localStorage.");
+
+      const payload = buildPayload(brandId);
+      const fetchKey = JSON.stringify(payload);
+
+      if (!opts?.force && fetchKey === lastFetchKeyRef.current) return;
+      lastFetchKeyRef.current = fetchKey;
+
+      setError(null);
+      setUpdating(true);
+
+      try {
+        const res = await post<CampaignsApiResponse>(HISTORY_ENDPOINT, payload);
+        const list = Array.isArray(res?.data) ? res.data : [];
+
+        const normalized: CampaignHistoryItem[] = list.map((c, idx) => ({
+          id: String(c.campaignsId ?? c._id ?? `row-${idx}`),
+          productOrServiceName: getCampaignName(c),
+          budget: Number(c.budget ?? c.campaignBudget ?? 0),
+          applicantCount: Number(c.applicantCount ?? 0),
+          isActive: Number(c.computedIsActive ?? c.isActive ?? 0),
+          campaignStatus: c.campaignStatus ?? "",
+          status: c.status ?? "",
+          createdAt: c.createdAt,
+          statusUpdatedAt: c.statusUpdatedAt ?? c.updatedAt ?? c.publishedAt,
+          goal: c.goal as Goal | undefined,
+          category: getCampaignCategory(c),
+          description: c.description,
+          brandName: c.brandName,
+        }));
+
+        setCampaigns(normalized);
+      } finally {
+        setUpdating(false);
+        setLoading(false);
+      }
+    },
+    [buildPayload]
+  );
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        await fetchHistory();
+      } catch (e: any) {
+        if (!alive) return;
+        setUpdating(false);
+        setLoading(false);
+        setError(e?.message || "Failed to load campaign history.");
+      }
+    })();
+
+    return () => {
+      alive = false;
     };
-  }
+  }, [fetchHistory]);
 
-  return {
-    wrap: "bg-[#F1F3F5]",
-    dot: "bg-[#7B7B7B]",
-    label: "Completed",
-  };
-}
-
-function StatusPill({
-  label,
-  wrapClass,
-  dotClass,
-}: {
-  label: string;
-  wrapClass: string;
-  dotClass: string;
-}) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-medium text-[#333]">
-      <span className={cx("inline-flex items-center rounded-full p-0.5", wrapClass)}>
-        <span className={cx("h-2 w-2 rounded-full", dotClass)} />
-      </span>
-      <span>{label}</span>
-    </span>
-  );
-}
-
-function CampaignStatusPill({ status }: { status: string }) {
-  const safeStatus: "open" | "paused" =
-    String(status || "").toLowerCase() === "paused" ? "paused" : "open";
-
-  return (
-    <StatusPill
-      label={statusLabel(safeStatus)}
-      wrapClass={statusPillBg(safeStatus)}
-      dotClass={statusDotBg(safeStatus)}
-    />
-  );
-}
-
-function ActiveStatusPill({ isActive }: { isActive: number }) {
-  const styles = activeStatusStyles(isActive);
-
-  return (
-    <StatusPill
-      label={styles.label}
-      wrapClass={styles.wrap}
-      dotClass={styles.dot}
-    />
-  );
-}
-
-function MetricBox({
-  label,
-  value,
-  icon,
-  href,
-  disabled,
-}: {
-  label: string;
-  value: React.ReactNode;
-  icon?: React.ReactNode;
-  href?: string;
-  disabled?: boolean;
-}) {
-  const content = (
-    <>
-      <div className="w-full truncate text-[0.82rem] leading-5 text-[#9A9A9A]">
-        {label}
-      </div>
-
-      <div className="mt-0.5 flex min-w-0 items-center justify-center gap-1.5">
-        {icon ? (
-          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#9A9A9A]">
-            {icon}
-          </span>
-        ) : null}
-
-        <span className="min-w-0 truncate text-[0.95rem] font-medium leading-5 text-[#2E2E2E]">
-          {value}
-        </span>
-      </div>
-    </>
-  );
-
-  if (href && !disabled) {
-    return (
-      <Link
-        href={href}
-        className="min-w-0 rounded-[0.8rem] border border-[#E7E7E7] bg-white px-3 py-3 text-center transition hover:bg-[#F8F8F8] hover:border-[#DCDCDC]"
-      >
-        {content}
-      </Link>
-    );
-  }
-
-  return (
-    <div
-      className={cx(
-        "min-w-0 rounded-[0.8rem] border border-[#E7E7E7] bg-white px-3 py-3 text-center",
-        disabled ? "opacity-60" : ""
-      )}
-    >
-      {content}
-    </div>
-  );
-}
-
-function CampaignThumb({ name }: { name: string }) {
-  const initials = name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-
-  return (
-    <div className="h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.9rem] bg-[#F3F3F3] sm:h-[4.35rem] sm:w-[4.35rem]">
-      <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-[#6E6E6E]">
-        {initials || <FileText size={24} />}
-      </div>
-    </div>
-  );
-}
-
-function CampaignHistoryRow({
-  campaign,
-  isFullyManaged,
-}: {
-  campaign: CampaignHistoryItem;
-  isFullyManaged: boolean;
-}) {
-  const influencerCount = Number(campaign.applicantCount || 0);
-
-  const influencerHref = `${HISTORY_INFLUENCER_ROUTE}?id=${campaign.id}&name=${encodeURIComponent(
-    campaign.productOrServiceName
-  )}`;
-
-  return (
-    <div className={cx(WRAP_BASE, WRAP_GRID)}>
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-3">
-          <CampaignThumb name={campaign.productOrServiceName} />
-
-          <div className="min-w-0 flex-1">
-            <Link
-              href={`/brand/campaign-history/view-campaign?id=${campaign.id}`}
-              className="min-w-0 block break-words text-[clamp(0.95rem,0.9rem+0.22vw,1.04rem)] font-semibold leading-snug text-[#262626] hover:text-[#111]"
-              title={campaign.productOrServiceName}
-            >
-              <span className="line-clamp-2">{campaign.productOrServiceName}</span>
-            </Link>
-
-            <div className="mt-1 text-[0.78rem] text-[#A0A0A0]">
-              Created {formatDateTime(campaign.createdAt)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="w-full lg:flex lg:justify-center">
-        <div
-          className={cx(
-            "grid w-full max-w-[28rem] gap-2 rounded-[0.95rem] border border-[#E7E7E7] bg-[#FCFCFC] px-3 py-3 sm:px-4",
-            isFullyManaged ? "grid-cols-1" : "grid-cols-2"
-          )}
-        >
-          <MetricBox
-            label="Budget"
-            value={formatCurrency(campaign.budget)}
-            icon={<CurrencyDollar size={15} weight="regular" />}
-          />
-
-          {!isFullyManaged ? (
-            <MetricBox
-              label="Influencer"
-              value={String(influencerCount)}
-              icon={<Users size={15} weight="regular" />}
-              href={influencerCount > 0 ? influencerHref : undefined}
-              disabled={influencerCount <= 0}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      <div className="min-w-0 lg:justify-self-end">
-        <div className="flex min-w-0 flex-col gap-3 lg:items-end">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
-            <CampaignStatusPill status={campaign.campaignStatus} />
-            <ActiveStatusPill isActive={campaign.isActive} />
-          </div>
-
-          <Link
-            href={`/brand/campaign-history/view-campaign?id=${campaign.id}`}
-            className="inline-flex h-10 items-center justify-center rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8]"
+  const cardItems = useMemo<ListCardViewItem[]>(
+    () =>
+      campaigns.map((campaign) => ({
+        key: campaign.id,
+        name: campaign.productOrServiceName,
+        categoryTag: campaign.category || "Uncategorized",
+        statusLabel: getStatusLabel(campaign),
+        statusVariant: getStatusVariant(campaign),
+        showStatusChevron: false,
+        showMoreButton: false,
+        menuSlot: false,
+        actionSlot: (
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => router.push(`/brand/campaign-history/${campaign.id}`)}
+            className="h-10 flex-1 rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8] sm:flex-none"
           >
             View Campaign
-          </Link>
-        </div>
-      </div>
-    </div>
+          </Button>
+        ),
+        metrics: [
+          {
+            id: "budget",
+            label: "Budget",
+            value: formatCurrency(campaign.budget),
+          },
+          {
+            id: "applicants",
+            label: "",
+            value: (
+              <div className="w-full rounded-[0.5rem] px-2 py-2 text-center transition-colors hover:bg-[#EDEDED]">
+                <div className="text-sm text-[#6F6F6F]">Applicants</div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/brand/created-campaign/applied-inf?id=${campaign.id}`);
+                  }}
+                  className="mt-1 w-full cursor-pointer text-center font-semibold text-[#2B2B2B] hover:text-black"
+                >
+                  {campaign.applicantCount}
+                </button>
+              </div>
+            ),
+          },
+          {
+            id: "campaign",
+            label: "Campaign",
+            value: campaign.campaignStatus || "—",
+          },
+          {
+            id: "created",
+            label: "Created",
+            value: formatDate(campaign.createdAt),
+          },
+        ],
+      })),
+    [campaigns, router]
   );
-}
-
-function SkeletonList({ isFullyManaged }: { isFullyManaged: boolean }) {
   return (
-    <div className="flex flex-col gap-4">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className={cx(WRAP_BASE, WRAP_GRID, "animate-pulse")}>
-          <div className="flex items-center gap-3">
-            <div className="h-[4rem] w-[4rem] rounded-[0.9rem] bg-[#EFEFEF] sm:h-[4.35rem] sm:w-[4.35rem]" />
-            <div className="flex-1">
-              <div className="mb-2 h-4 w-44 rounded bg-[#EFEFEF]" />
-              <div className="h-3 w-32 rounded bg-[#F4F4F4]" />
-            </div>
-          </div>
-
-          <div
-            className={cx(
-              "grid gap-2 rounded-[0.95rem] border border-[#E7E7E7] bg-[#FCFCFC] px-3 py-3 sm:px-4",
-              isFullyManaged ? "grid-cols-1" : "grid-cols-2"
-            )}
-          >
-            <div className="h-14 rounded-[0.8rem] bg-[#F4F4F4]" />
-            {!isFullyManaged ? <div className="h-14 rounded-[0.8rem] bg-[#F4F4F4]" /> : null}
-          </div>
-
-          <div className="flex flex-col gap-2 lg:items-end">
-            <div className="h-8 w-28 rounded bg-[#F2F2F2]" />
-            <div className="h-10 w-32 rounded bg-[#F2F2F2]" />
-          </div>
+    <div className="min-h-screen p-6">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold text-gray-900">Campaign History</h1>
         </div>
-      ))}
-    </div>
-  );
-}
 
-export default function CampaignHistoryList({
-  campaigns,
-  loading,
-  error,
-  isFullyManaged,
-  onRetry,
-}: {
-  campaigns: CampaignHistoryItem[];
-  loading: boolean;
-  error: string | null;
-  isFullyManaged: boolean;
-  onRetry: () => void;
-}) {
-  if (loading) {
-    return <SkeletonList isFullyManaged={isFullyManaged} />;
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-[1rem] border border-red-200 bg-red-50 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-red-700">
-              Couldn’t load campaign history
-            </p>
-            <p className="mt-1 text-sm text-red-600">{error}</p>
+        {updating && (
+          <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm">
+            Updating...
           </div>
-
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex h-10 items-center justify-center rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8]"
-          >
-            Retry
-          </button>
-        </div>
+        )}
       </div>
-    );
-  }
 
-  if (campaigns.length === 0) {
-    return (
-      <div className="rounded-[1rem] border border-dashed border-[#D9D9D9] bg-white p-5 text-sm text-[#777]">
-        No campaign history found.
-      </div>
-    );
-  }
+      <div className="mb-6 rounded-2xl  p-5 ">
 
-  return (
-    <div className="flex flex-col gap-4">
-      {campaigns.map((campaign) => (
-        <CampaignHistoryRow
-          key={campaign.id}
-          campaign={campaign}
-          isFullyManaged={isFullyManaged}
+        <CampaignFilter
+          campaignType={campaignType}
+          setCampaignType={setCampaignType}
+          creatorStatus={creatorStatus}
+          setCreatorStatus={setCreatorStatus}
+          categoryIds={categoryIds}
+          setCategoryIds={setCategoryIds}
+          dateFilter={dateFilter}
+          setDateFilter={setDateFilter}
+          aiCreated={aiCreated}
+          setAiCreated={setAiCreated}
+          searchInput={search}
+          setSearchInput={setSearch}
         />
-      ))}
+      </div>
+
+      {loading ? (
+        <div className="animate-pulse rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="mb-4 h-4 w-1/3 rounded bg-gray-200" />
+          <div className="mb-2 h-4 w-full rounded bg-gray-200" />
+          <div className="h-4 w-5/6 rounded bg-gray-200" />
+        </div>
+      ) : error ? (
+        <div className="rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold text-red-700">
+                Couldn’t load campaign history
+              </div>
+              <div className="mt-1 text-sm text-gray-600">{error}</div>
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setLoading(true);
+                setError(null);
+                lastFetchKeyRef.current = "";
+
+                try {
+                  await fetchHistory({ force: true });
+                } catch (e: any) {
+                  setError(e?.message || "Failed to load campaign history.");
+                  setLoading(false);
+                  setUpdating(false);
+                }
+              }}
+              className="rounded-xl border border-gray-900 bg-white px-4 py-2 text-sm font-semibold hover:bg-gray-50"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : campaigns.length === 0 ? (
+        <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center shadow-sm">
+          <p className="font-semibold text-gray-900">No campaign history found</p>
+          <p className="mt-1 text-sm text-gray-600">Try different keywords or change filters.</p>
+        </div>
+      ) : (
+        <ListCardView
+          items={cardItems}
+          className="gap-4"
+          emptyState="No campaign history found."
+        />
+      )}
     </div>
   );
 }

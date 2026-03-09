@@ -29,7 +29,7 @@ import { toast } from "@/components/ui/toast";
 import CampaignFilter, {
   DEFAULT_DATE_FILTER,
   type DateFilterValue,
-} from "./CampaignFilter";
+} from "../../../../components/ui/brand/CampaignFilter";
 
 const cx = (...c: Array<string | undefined | null | false>) =>
   c.filter(Boolean).join(" ");
