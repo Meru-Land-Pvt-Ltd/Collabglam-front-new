@@ -1,4 +1,3 @@
-// components/ui/brand/Influencertable.tsx
 "use client";
 
 import * as React from "react";
@@ -10,9 +9,7 @@ import {
   QuestionMark,
   Check,
   DotsThree,
-  EnvelopeOpen,
 } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/buttonComp"
 
 export type PlatformType = "instagram" | "youtube" | "tiktok";
 
@@ -29,29 +26,27 @@ export type InfluencerRow = {
   platforms?: Array<{
     platform: PlatformType;
     followers: number;
-    engagement: number; // %
+    engagement: number;
   }>;
 
   followers?: number;
   engagement?: number;
 
-  appliedDate: string; // ISO ("2026-02-12") or text
+  appliedDate: string;
 
-  // shortlisted
-  status?: string; // "Contract Sent"
-  budget?: string; // "₹25,000"
+  status?: string;
+  budget?: string;
 };
+
+type RowRenderer = (row: InfluencerRow) => React.ReactNode;
 
 type InfluencerTableProps = {
   rows: InfluencerRow[];
   onActionClick?: (row: InfluencerRow) => void;
   variant?: "default" | "shortlisted" | "recommended";
-
-  renderRecommendedActions?: (row: InfluencerRow) => React.ReactNode;
-
-  // add these
-  renderShortlistedActions?: (row: InfluencerRow) => React.ReactNode;
-  renderStatus?: (row: InfluencerRow) => React.ReactNode;
+  renderRecommendedActions?: RowRenderer;
+  renderShortlistedActions?: RowRenderer;
+  renderStatus?: RowRenderer;
 };
 
 const headerTextStyle: React.CSSProperties = {
@@ -66,6 +61,7 @@ const headerTextStyle: React.CSSProperties = {
 
 function HeaderCarets() {
   const iconClass = "h-3 w-3 text-[var(--stone,#343330)]";
+
   return (
     <span className="flex flex-col items-center leading-none">
       <ChevronUp className={iconClass} strokeWidth={3} />
@@ -74,12 +70,17 @@ function HeaderCarets() {
   );
 }
 
-/** helpers */
 function formatCompact(n: number) {
   const abs = Math.abs(n);
-  if (abs >= 1_000_000)
+
+  if (abs >= 1_000_000) {
     return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (abs >= 1_000) return `${Math.round(n / 1_000)}K`;
+  }
+
+  if (abs >= 1_000) {
+    return `${Math.round(n / 1_000)}K`;
+  }
+
   return `${n}`;
 }
 
@@ -111,18 +112,40 @@ function getPlatformRows(r: InfluencerRow) {
 function formatDDMMYY(input: string) {
   const d = new Date(input);
   if (Number.isNaN(d.getTime())) return input;
+
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yy = String(d.getFullYear()).slice(-2);
+
   return `${dd}/${mm}/${yy}`;
 }
 
-/** platform icon chips (your svg files) */
 const PLATFORM_ICON_SRC: Record<PlatformType, string> = {
   instagram: "/skill-icons_instagram.svg",
   youtube: "/logos_youtube-icon.svg",
   tiktok: "/ic_baseline-tiktok.svg",
 };
+
+function AvatarThumb({
+  avatarUrl,
+  sizeClass = "h-12 w-12",
+}: {
+  avatarUrl?: string;
+  sizeClass?: string;
+}) {
+  return (
+    <div
+      className={`${sizeClass} shrink-0 rounded-[0.5rem] border bg-black`}
+      style={{
+        borderColor:
+          "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
+        backgroundImage: avatarUrl ? `url(${avatarUrl})` : undefined,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    />
+  );
+}
 
 function PlatformBubble({ platform }: { platform: PlatformType }) {
   return (
@@ -155,6 +178,7 @@ function PlatformBubble({ platform }: { platform: PlatformType }) {
 
 function PlatformOverlap({ platforms }: { platforms: PlatformType[] }) {
   const list = Array.from(new Set(platforms)).slice(0, 3);
+
   return (
     <div className="flex items-center justify-center">
       {list.map((p, idx) => (
@@ -199,12 +223,11 @@ function PillTag({ text, title }: { text: string; title?: string }) {
   );
 }
 
-/** DEFAULT table action group (X ? ✓) */
 function ActionGroup({ onSelect }: { onSelect?: () => void }) {
   const b = "var(--Light-Border-Primary,#D6D6D6)";
+
   return (
     <div className="inline-flex items-stretch justify-center h-[3.375rem] w-fit">
-      {/* X */}
       <button
         type="button"
         className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
@@ -214,17 +237,18 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           borderLeft: `1px solid ${b}`,
           borderRadius: "0.5rem 0 0 0.5rem",
         }}
-        onMouseEnter={(e) =>
-        (e.currentTarget.style.background =
-          "var(--Light-Background-Negative-Subtle, #F9CACA)")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background =
+            "var(--Light-Background-Negative-Subtle, #F9CACA)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
         aria-label="Reject"
       >
         <X size={18} weight="bold" />
       </button>
 
-      {/* ? */}
       <button
         type="button"
         className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
@@ -234,17 +258,18 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           borderLeft: `1px solid ${b}`,
           borderRadius: 0,
         }}
-        onMouseEnter={(e) =>
-        (e.currentTarget.style.background =
-          "var(--Light-Background-BrandSubtle, #FFF9E6)")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background =
+            "var(--Light-Background-BrandSubtle, #FFF9E6)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
         aria-label="Undecided"
       >
         <QuestionMark size={18} weight="bold" />
       </button>
 
-      {/* ✓ */}
       <button
         type="button"
         className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
@@ -255,10 +280,12 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           borderRight: `1px solid ${b}`,
           borderRadius: "0 0.5rem 0.5rem 0",
         }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background = "var(--Success-50, #EAF6EC)")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--Success-50, #EAF6EC)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+        }}
         aria-label="Selected"
         onClick={onSelect}
       >
@@ -268,7 +295,6 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
   );
 }
 
-/** scroll wrapper: scroll only when needed + hide scrollbar */
 function XScroll({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -283,16 +309,14 @@ function XScroll({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** DEFAULT table column widths */
 const colDefault = {
   profile: "min-w-[16rem] flex-[3_1_0%] min-w-0",
   category: "min-w-[10rem] flex-[2.5_1_0%] min-w-0",
-  followers: "min-w-[9rem]  flex-[2.5_1_0%] min-w-0",
-  engagement: "min-w-[9rem]  flex-[2.5_1_0%] min-w-0",
+  followers: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
+  engagement: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
   applied: "min-w-[10rem] flex-[2.5_1_0%] min-w-0",
   actions: "min-w-[18rem] flex-[3_1_0%] min-w-0",
 };
-
 
 const colShort = {
   checkbox: "flex-none w-[3.5rem]",
@@ -313,12 +337,15 @@ function DefaultTable({
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
-  const allChecked = rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
+  const allChecked =
+    rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
   const someChecked = rows.some((r) => Boolean(selected[r.id])) && !allChecked;
 
   const toggleAll = (checked: boolean) => {
     const next: Record<string, boolean> = {};
-    rows.forEach((r) => (next[r.id] = checked));
+    rows.forEach((r) => {
+      next[r.id] = checked;
+    });
     setSelected(next);
   };
 
@@ -329,9 +356,7 @@ function DefaultTable({
   return (
     <div className="flex w-full flex-col">
       <XScroll>
-        {/* inner takes full width but can grow (so border wraps in scroll) */}
         <div className="min-w-full w-max">
-          {/* HEADER */}
           <div
             className="
               flex h-14 w-full min-w-full items-center
@@ -345,7 +370,9 @@ function DefaultTable({
               <div className="flex h-14 items-center justify-center gap-1 py-[0.625rem] pl-[1rem] pr-[0.75rem] rounded-tl-[0.75rem]">
                 <Checkbox
                   className="cursor-pointer"
-                  checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                  checked={
+                    allChecked ? true : someChecked ? "indeterminate" : false
+                  }
                   onCheckedChange={(v) => toggleAll(Boolean(v))}
                   aria-label="Select all influencers"
                 />
@@ -363,7 +390,6 @@ function DefaultTable({
               <span style={headerTextStyle}>Category</span>
               <HeaderCarets />
             </div>
-
 
             <div
               className={`${colDefault.followers} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
@@ -386,18 +412,21 @@ function DefaultTable({
               <HeaderCarets />
             </div>
 
-            <div className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}>
+            <div
+              className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}
+            >
               <span style={headerTextStyle}>Action</span>
             </div>
           </div>
 
-          {/* GAP */}
           <div className="mt-[2rem] w-full space-y-3">
             {rows.map((r) => {
               const plat = getPlatformRows(r);
-              const appliedText = r.appliedDate.toLowerCase().startsWith("applied")
-                ? r.appliedDate
-                : `applied ${r.appliedDate}`;
+              const appliedText =
+                typeof r.appliedDate === "string" &&
+                r.appliedDate.toLowerCase().startsWith("applied")
+                  ? r.appliedDate
+                  : `applied ${r.appliedDate}`;
 
               return (
                 <div
@@ -410,7 +439,6 @@ function DefaultTable({
                     overflow-hidden
                   "
                 >
-                  {/* PROFILE */}
                   <div
                     className={`${colDefault.profile} flex h-[5.5rem] items-center bg-white rounded-l-[12px] px-4 py-[10px]`}
                   >
@@ -423,18 +451,7 @@ function DefaultTable({
                       />
 
                       <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="h-12 w-12 shrink-0 rounded-[0.5rem] border bg-black"
-                          style={{
-                            borderColor:
-                              "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
-                            backgroundImage: r.profile.avatarUrl
-                              ? `url(${r.profile.avatarUrl})`
-                              : undefined,
-                            backgroundSize: "cover",
-                            backgroundPosition: "center",
-                          }}
-                        />
+                        <AvatarThumb avatarUrl={r.profile.avatarUrl} />
 
                         <div className="flex min-w-0 flex-col">
                           <span
@@ -474,24 +491,32 @@ function DefaultTable({
                     </div>
                   </div>
 
-                  {/* CATEGORY */}
                   <div
                     className={`${colDefault.category} flex h-[5.5rem] items-center justify-center bg-white px-4 py-[0.625rem]`}
                   >
                     <PillTag text={r.category} />
                   </div>
 
-                  {/* FOLLOWERS */}
-                  <div className={`${colDefault.followers} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}>
+                  <div
+                    className={`${colDefault.followers} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}
+                  >
                     <div className="mx-auto flex w-fit flex-col justify-center gap-2">
                       {plat.map((p) => (
-                        <div key={`f-${r.id}-${p.platform}`} className="flex w-fit items-center gap-2">
+                        <div
+                          key={`f-${r.id}-${p.platform}`}
+                          className="flex w-fit items-center gap-2"
+                        >
                           <span
                             className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--Light-Border-Subtle,#E6E6E6)] bg-white"
                             style={{ borderWidth: "0.5px", padding: "0.25rem" }}
                             aria-hidden="true"
                           >
-                            <img src={PLATFORM_ICON_SRC[p.platform]} alt="" className="h-5 w-5" draggable={false} />
+                            <img
+                              src={PLATFORM_ICON_SRC[p.platform]}
+                              alt=""
+                              className="h-5 w-5"
+                              draggable={false}
+                            />
                           </span>
 
                           <span
@@ -511,11 +536,15 @@ function DefaultTable({
                     </div>
                   </div>
 
-                  {/* ENGAGEMENT */}
-                  <div className={`${colDefault.engagement} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}>
+                  <div
+                    className={`${colDefault.engagement} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}
+                  >
                     <div className="mx-auto flex w-fit flex-col justify-center gap-2">
                       {plat.map((p) => (
-                        <div key={`e-${r.id}-${p.platform}`} className="flex w-fit items-center gap-2">
+                        <div
+                          key={`e-${r.id}-${p.platform}`}
+                          className="flex w-fit items-center gap-2"
+                        >
                           <ChartLine size={16} weight="bold" color="#D6D6D6" />
                           <span
                             style={{
@@ -534,7 +563,6 @@ function DefaultTable({
                     </div>
                   </div>
 
-                  {/* APPLIED DATE */}
                   <div
                     className={`${colDefault.applied} flex h-[5.5rem] items-center justify-center bg-white px-4 py-[0.625rem]`}
                   >
@@ -559,7 +587,6 @@ function DefaultTable({
                     </span>
                   </div>
 
-                  {/* ACTIONS */}
                   <div
                     className={`${colDefault.actions} flex h-[5.5rem] items-center justify-end gap-2 bg-white pl-4 pr-4 py-[0.625rem] rounded-r-[0.75rem]`}
                   >
@@ -589,17 +616,20 @@ function ShortlistedTable({
   renderStatus,
 }: {
   rows: InfluencerRow[];
-  renderActions?: (row: InfluencerRow) => React.ReactNode;
-  renderStatus?: (row: InfluencerRow) => React.ReactNode;
+  renderActions?: RowRenderer;
+  renderStatus?: RowRenderer;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
-  const allChecked = rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
+  const allChecked =
+    rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
   const someChecked = rows.some((r) => Boolean(selected[r.id])) && !allChecked;
 
   const toggleAll = (checked: boolean) => {
     const next: Record<string, boolean> = {};
-    rows.forEach((r) => (next[r.id] = checked));
+    rows.forEach((r) => {
+      next[r.id] = checked;
+    });
     setSelected(next);
   };
 
@@ -647,65 +677,73 @@ function ShortlistedTable({
     <div className="flex w-full flex-col">
       <XScroll>
         <div className="min-w-full w-max">
-          {/* HEADER (GRID) */}
           <div
             className="
-    flex w-full min-w-[73rem] items-center
-    bg-[var(--Light-Background-Neutral,#F2F2F2)]
-    rounded-tr-[0.75rem] rounded-bl-[0.75rem] rounded-br-[0.75rem]
-    h-14
-  "
+              flex w-full min-w-[73rem] items-center
+              bg-[var(--Light-Background-Neutral,#F2F2F2)]
+              rounded-tr-[0.75rem] rounded-bl-[0.75rem] rounded-br-[0.75rem]
+              h-14
+            "
           >
-            {/* Checkbox */}
-            <div className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}>
+            <div
+              className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}
+            >
               <Checkbox
                 className="cursor-pointer"
-                checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                checked={
+                  allChecked ? true : someChecked ? "indeterminate" : false
+                }
                 onCheckedChange={(v) => toggleAll(Boolean(v))}
                 aria-label="Select all"
               />
             </div>
 
-            {/* Profile (✅ keep auto spacing overall, but control label↔caret spacing with gap) */}
-
-            <div className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Profile</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Status</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Platform</span>
               <HeaderCarets />
             </div>
 
-
-            <div className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Budget</span>
               <HeaderCarets />
             </div>
 
-
-            <div className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Date</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Action</span>
             </div>
           </div>
 
-          {/* GAP + ROWS */}
           <div className="mt-[2rem] w-full space-y-3">
             {rows.map((r) => {
               const platRows = getPlatformRows(r);
               const platforms = platRows.map((p) => p.platform);
-
               const statusText = r.status ?? "Contract Sent";
               const budgetText = r.budget ?? "₹0";
               const dateText = formatDDMMYY(r.appliedDate);
@@ -721,8 +759,9 @@ function ShortlistedTable({
                     overflow-hidden
                   "
                 >
-                  {/* checkbox */}
-                  <div className={`${colShort.checkbox} flex h-[5.5rem] items-center justify-center`}>
+                  <div
+                    className={`${colShort.checkbox} flex h-[5.5rem] items-center justify-center`}
+                  >
                     <Checkbox
                       className="cursor-pointer"
                       checked={Boolean(selected[r.id])}
@@ -731,21 +770,11 @@ function ShortlistedTable({
                     />
                   </div>
 
-                  {/* profile */}
-                  <div className={`${colShort.profile} flex h-[5.5rem] items-center px-4`}>
+                  <div
+                    className={`${colShort.profile} flex h-[5.5rem] items-center px-4`}
+                  >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className="h-12 w-12 shrink-0 rounded-[0.5rem] border bg-black"
-                        style={{
-                          borderColor:
-                            "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
-                          backgroundImage: r.profile.avatarUrl
-                            ? `url(${r.profile.avatarUrl})`
-                            : undefined,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                        }}
-                      />
+                      <AvatarThumb avatarUrl={r.profile.avatarUrl} />
 
                       <div className="flex min-w-0 flex-col">
                         <span
@@ -798,21 +827,31 @@ function ShortlistedTable({
                     </div>
                   </div>
 
-                  {/* status */}
-                  <div className={`${colShort.status} flex h-[5.5rem] items-center justify-center px-4`}>
-                    {renderStatus ? renderStatus(r) : <PillTag text={statusText} />}
+                  <div
+                    className={`${colShort.status} flex h-[5.5rem] items-center justify-center px-4`}
+                  >
+                    {renderStatus ? (
+                      renderStatus(r)
+                    ) : (
+                      <PillTag text={statusText} />
+                    )}
                   </div>
 
-                  <div className={`${colShort.platform} flex h-[5.5rem] items-center justify-center px-4`}>
+                  <div
+                    className={`${colShort.platform} flex h-[5.5rem] items-center justify-center px-4`}
+                  >
                     <PlatformOverlap platforms={platforms} />
                   </div>
 
-                  <div className={`${colShort.budget} flex h-[5.5rem] items-center justify-center px-4`}>
+                  <div
+                    className={`${colShort.budget} flex h-[5.5rem] items-center justify-center px-4`}
+                  >
                     <PillTag text={budgetText} />
                   </div>
 
-                  {/* date */}
-                  <div className={`${colShort.date} flex h-[5.5rem] items-center justify-center pl-4 pr-9`}>
+                  <div
+                    className={`${colShort.date} flex h-[5.5rem] items-center justify-center pl-4 pr-9`}
+                  >
                     <span
                       style={{
                         flex: "1 0 0",
@@ -831,69 +870,17 @@ function ShortlistedTable({
                     </span>
                   </div>
 
-                  {/* actions */}
-                  <div className={`${colShort.actions} flex h-[5.5rem] items-center justify-end pl-9 pr-4`}>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        className="border border-[var(--Light-Border-Subtle,#E6E6E6)] shadow-none"
-                        style={{
-                          display: "flex",
-                          width: "7.75rem",
-                          height: "2rem",
-                          justifyContent: "center",
-                          alignItems: "center",
-                        }}
-                      >
-                        Send Contract
-                      </Button>
-
-                      <Button
-                        className="bg-[var(--Light-Background-Selected,#1A1A1A)] text-white shadow-none"
-                        style={{
-                          display: "flex",
-                          width: "6.25rem",
-                          height: "2rem",
-                          justifyContent: "center",
-                          alignItems: "center",
-                        }}
-                      >
-                        Manage
-                      </Button>
-
-                      <button
-                        type="button"
-                        aria-label="Mail"
-                        className="relative flex h-8 w-8 items-center justify-center"
-                        style={{
-                          borderRadius: "var(--Border-Radius-S, 0.5rem)",
-                          border: "1px solid var(--Light-Border-Subtle, #E6E6E6)",
-                          background: "var(--Light-Background-Primary, #FFF)",
-                        }}
-                      >
-                        <EnvelopeOpen
-                          size={18}
-                          weight="regular"
-                          color="var(--Light-Border-Selected, #1A1A1A)"
-                        />
-                      </button>
-
-                      <button
-                        type="button"
-                        aria-label="More"
-                        className="flex h-8 w-8 items-center justify-center"
-                        style={{
-                          borderRadius: "var(--Border-Radius-S, 0.5rem)",
-                          border: "1px solid var(--Light-Border-Subtle, #E6E6E6)",
-                          background: "var(--Light-Background-Primary, #FFF)",
-                        }}
-                      >
-                        <DotsThree
-                          size={18}
-                          weight="bold"
-                          color="var(--Light-Border-Selected, #1A1A1A)"
-                        />
-                      </button>
+                  <div
+                    className={`${colShort.actions} flex h-[5.5rem] items-center justify-end pl-9 pr-4`}
+                  >
+                    <div className="flex w-full justify-end">
+                      {renderActions ? (
+                        renderActions(r)
+                      ) : (
+                        <span className="text-xs text-[var(--Light-Text-Secondary,#969696)]">
+                          No actions available
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -906,8 +893,6 @@ function ShortlistedTable({
   );
 }
 
-
-
 const RECO_MID_GRID =
   "grid flex-1 grid-cols-[minmax(8rem,0.9fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(10rem,1fr)]";
 
@@ -916,7 +901,7 @@ function RecommendedTable({
   renderActions,
 }: {
   rows: InfluencerRow[];
-  renderActions?: (row: InfluencerRow) => React.ReactNode;
+  renderActions?: RowRenderer;
 }) {
   const border = "var(--Light-Border-Primary,#D6D6D6)";
 
@@ -926,14 +911,14 @@ function RecommendedTable({
         <div className="min-w-full w-max space-y-3">
           {rows.map((r) => {
             const plat = getPlatformRows(r);
-
-            const appliedText = r.appliedDate?.toLowerCase?.().startsWith("applied")
-              ? r.appliedDate
-              : `applied ${r.appliedDate}`;
+            const appliedText =
+              typeof r.appliedDate === "string" &&
+              r.appliedDate.toLowerCase().startsWith("applied")
+                ? r.appliedDate
+                : `applied ${r.appliedDate}`;
 
             return (
               <div key={r.id} className="flex w-full min-w-[60rem]">
-                {/* ===================== PROFILE CELL (fixed width) ===================== */}
                 <div
                   style={{
                     display: "flex",
@@ -952,18 +937,7 @@ function RecommendedTable({
                   }}
                 >
                   <div className="flex w-full items-center gap-3 min-w-0">
-                    <div
-                      className="h-12 w-12 shrink-0 rounded-[0.5rem] border bg-black"
-                      style={{
-                        borderColor:
-                          "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
-                        backgroundImage: r.profile.avatarUrl
-                          ? `url(${r.profile.avatarUrl})`
-                          : undefined,
-                        backgroundSize: "cover",
-                        backgroundPosition: "center",
-                      }}
-                    />
+                    <AvatarThumb avatarUrl={r.profile.avatarUrl} />
 
                     <div className="flex min-w-0 flex-col">
                       <span
@@ -1000,7 +974,6 @@ function RecommendedTable({
                   </div>
                 </div>
 
-                {/* ===================== MIDDLE GRID (border-top/bottom only) ===================== */}
                 <div
                   className={`${RECO_MID_GRID} h-[5.5rem] items-center bg-white py-[0.625rem]`}
                   style={{
@@ -1010,12 +983,10 @@ function RecommendedTable({
                     boxSizing: "border-box",
                   }}
                 >
-                  {/* Category */}
                   <div className="flex items-center justify-center px-4">
                     <PillTag text={r.category} />
                   </div>
 
-                  {/* Platforms + Followers */}
                   <div className="flex items-center justify-center px-4">
                     <div className="flex w-full flex-col justify-center gap-1">
                       {plat.map((p) => (
@@ -1052,7 +1023,6 @@ function RecommendedTable({
                     </div>
                   </div>
 
-                  {/* Engagement */}
                   <div className="flex items-center justify-center px-4">
                     <div className="flex w-full flex-col justify-center gap-2">
                       {plat.map((p) => (
@@ -1077,7 +1047,6 @@ function RecommendedTable({
                     </div>
                   </div>
 
-                  {/* Applied date */}
                   <div className="flex items-center justify-center px-4">
                     <span
                       className="truncate"
@@ -1100,7 +1069,6 @@ function RecommendedTable({
                   </div>
                 </div>
 
-                {/* ===================== ACTION CELL (same shell, UI injected from page) ===================== */}
                 <div
                   className="flex items-center justify-center bg-white"
                   style={{
@@ -1129,7 +1097,6 @@ function RecommendedTable({
     </div>
   );
 }
-
 
 export function InfluencerTable({
   rows,

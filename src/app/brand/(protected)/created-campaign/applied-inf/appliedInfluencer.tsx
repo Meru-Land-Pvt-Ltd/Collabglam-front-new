@@ -1,19 +1,22 @@
 "use client";
 
 import React, {
+  useCallback,
   useEffect,
   useMemo,
-  useState,
   useRef,
-  useCallback,
+  useState,
 } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import api, { post } from "@/lib/api";
+import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import Swal from "sweetalert2";
+import api, { post } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import InfluencerFilter, { FilterState } from "@/components/ui/brand/InfluencerFilter";
+import InfluencerFilter, {
+  type FilterState,
+} from "@/components/ui/brand/InfluencerFilter";
 import {
   InfluencerTable,
   type InfluencerRow,
@@ -22,41 +25,32 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipTrigger,
   TooltipProvider,
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
-import dynamic from "next/dynamic";
 import {
-  DotsThree,
-  EnvelopeSimple,
-  Check,
-  PaperPlaneTilt,
-  Eye,
-  MagnifyingGlass,
   CaretLeft,
   CaretRight,
+  ClipboardText,
+  DotsThree,
+  EnvelopeOpen,
+  Eye,
   FileText,
   Info,
-  ClipboardText,
-  EnvelopeOpen,
+  MagnifyingGlass,
+  PaperPlaneTilt,
+  PenNib,
+  SealCheck,
+  Signature,
 } from "@phosphor-icons/react";
-/* ===============================================================
-   THEME
-   =============================================================== */
-const GRADIENT_FROM = "#FFA135";
-const GRADIENT_TO = "#FF7236";
-
-const MILESTONE_SPLIT_PRESETS = [
-  { value: "100", label: "100% on completion" },
-  { value: "50/50", label: "50% upfront / 50% on completion" },
-  { value: "30/70", label: "30% on signing / 70% on completion" },
-  { value: "40/30/30", label: "40% / 30% / 30%" },
-  { value: "custom", label: "Custom split…" },
-] as const;
 
 const ReactSelect = dynamic(() => import("react-select"), { ssr: false });
 
-// ✅ Canonical contract statuses (match backend constants/contract.js)
+const GRADIENT_FROM = "#FFA135";
+const GRADIENT_TO = "#FF7236";
+const DEFAULT_TIMEZONE = "America/Los_Angeles";
+const PAGE_SIZE = 10;
+
 const CONTRACT_STATUS = {
   DRAFT: "DRAFT",
   BRAND_SENT_DRAFT: "BRAND_SENT_DRAFT",
@@ -71,158 +65,129 @@ const CONTRACT_STATUS = {
   SUPERSEDED: "SUPERSEDED",
 } as const;
 
-export type ContractStatus =
-  (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
+type ContractStatus = (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
+type PanelMode = "send" | "edit";
+type FormErrors = Record<string, string>;
+type CurrencyOption = { value: string; label: string; meta?: any };
+type TzOption = { value: string; label: string; meta?: any };
 
-const buildReactSelectStyles = (opts?: { hasError?: boolean }) => {
-  const hasError = opts?.hasError;
-  return {
-    control: (base: any, state: any) => ({
-      ...base,
-      minHeight: 44,
-      borderRadius: 8,
-      borderWidth: 2,
-      borderColor: hasError
-        ? "#ef4444"
-        : state.isFocused
-          ? "#FF8A35"
-          : "#e5e7eb",
-      boxShadow: state.isFocused
-        ? "0 0 0 1px #FF8A35, 0 0 0 3px rgba(255,138,53,0.35)"
-        : "none",
-      "&:hover": {
-        borderColor: hasError
-          ? "#ef4444"
-          : state.isFocused
-            ? "#FF8A35"
-            : "#e5e7eb",
-      },
-    }),
-    valueContainer: (base: any) => ({
-      ...base,
-      padding: "0 12px",
-    }),
-    indicatorsContainer: (base: any) => ({
-      ...base,
-      minHeight: 44,
-    }),
-    input: (base: any) => ({
-      ...base,
-      margin: 0,
-      padding: 0,
-    }),
-    multiValue: (base: any) => ({
-      ...base,
-      borderRadius: 9999,
-      paddingLeft: 4,
-      paddingRight: 4,
-    }),
+type ContractPartyBrand = {
+  legalName: string;
+  contactPersonName: string;
+  noticeEmail: string;
+  noticePhone: string;
+  billingAddress: string;
+};
+
+type ContractPartyInfluencer = {
+  legalName: string;
+  contactName: string;
+  postingHandleUrl: string;
+  contactEmail: string;
+  contactPhone: string;
+  whatsApp: string;
+  address: string;
+};
+
+type ContractCampaign = {
+  productsServicesCovered: string;
+  territoryTargetCountry: string;
+  effectiveDate: string;
+  campaignTitleOrId: string;
+};
+
+type ScheduleADeliverable = {
+  id: string;
+  srNo: number;
+  platformHandle: string;
+  deliverableFormat: string;
+  qty: string;
+  draftDue: string;
+  liveDate: string;
+};
+
+type UsageRightsRow = {
+  id: string;
+  usageRight: string;
+  selected: boolean;
+  duration: string;
+  territoryNotes: string;
+};
+
+type ContractFormState = {
+  brand: ContractPartyBrand;
+  influencer: ContractPartyInfluencer;
+  campaign: ContractCampaign;
+  scheduleA: {
+    minimumVideoSpecs: string;
+    preShootScriptRequired: boolean;
+    preShootScriptDue: string;
+    preShootScriptReviewBusinessDays: string;
+    mandatoryTagsMentionsLinksCodes: string;
+    review: {
+      includedRevisionRounds: string;
+      additionalRevisionFee: string;
+      reshootObligation: string;
+      reshootFee: string;
+      minimumLivePeriod: string;
+    };
+    commercial: {
+      totalCampaignFee: string;
+      currency: string;
+      platformMilestonePaymentStructure: string;
+      customSplit: string;
+      advancePaymentTrigger: string;
+      remainingPaymentTrigger: string;
+      paymentProcessorFeesBorneBy: string;
+      paymentProcessorFeesNotes: string;
+      laneAMarketplaceFeeNote: string;
+    };
+    rawFiles: {
+      rawSourceFileDelivery: string;
+      deliveryDue: string;
+      format: string;
+      analyticsReportingDeadline: string;
+      analyticsReportingItems: string;
+    };
+    shipping: {
+      productShippingApplicable: string;
+      shipToName: string;
+      shipToAddress: string;
+      shipToPhone: string;
+      productReceiptConfirmationDeadline: string;
+      productReturnable: string;
+      returnWindowMethod: string;
+      riskOfLossNotes: string;
+    };
+    usageRights: {
+      rows: UsageRightsRow[];
+      attributionRequirement: string;
+      attributionText: string;
+      editingRights: string;
+      musicStockAssetResponsibility: string;
+    };
+    compliance: {
+      creativeBriefMandatoryTalkingPoints: string;
+      restrictedStatements: string;
+    };
+    exclusivity: {
+      competitorBlackout: string;
+      categoryCompetitorList: string;
+      blackoutPeriod: string;
+      optionalMoralsClause: string;
+    };
+    cancellation: {
+      killFeeOrProrata: string;
+      refundOfUnearnedAdvance: string;
+    };
+    dispute: {
+      governingLaw: string;
+      disputeResolutionMethod: string;
+      disputeVenue: string;
+      arbitrationSeat: string;
+      attorneysFees: string;
+    };
   };
-};
-
-/* ===============================================================
-   Types
-   =============================================================== */
-
-type AppliedInfluencerRow = InfluencerRow & {
-  rawInfluencer: Influencer;
-  contractMeta: ContractMeta | null;
-  hasContract: boolean;
-  rejected: boolean;
-  typeLabel: string;
-  feeAmountValue: number;
-};
-
-const normalizePlatform = (platform?: string | null): PlatformType => {
-  switch ((platform || "").toLowerCase()) {
-    case "instagram":
-      return "instagram";
-    case "tiktok":
-      return "tiktok";
-    case "youtube":
-    default:
-      return "youtube";
-  }
-};
-
-const getEngagementValue = (inf: Influencer) => {
-  const raw = Number((inf as any)?.engagementRate ?? (inf as any)?.engagement ?? 0);
-  return Number.isFinite(raw) ? raw : 0;
-};
-
-const getFollowerTierBucket = (n: number) => {
-  if (n < 10_000) return "Nano";
-  if (n < 100_000) return "Micro";
-  if (n < 500_000) return "Mid";
-  if (n < 1_000_000) return "Macro";
-  return "Mega";
-};
-
-const matchesEngagementFilter = (value: number, filterValue: string) => {
-  if (!filterValue || filterValue === "All") return true;
-  if (filterValue === "0-2%") return value >= 0 && value < 2;
-  if (filterValue === "2-5%") return value >= 2 && value < 5;
-  if (filterValue === "5-8%") return value >= 5 && value < 8;
-  if (filterValue === "8-12%") return value >= 8 && value < 12;
-  if (filterValue === "12%+") return value >= 12;
-  return true;
-};
-
-const matchesDateFilter = (dateStr: string, filterValue: string) => {
-  if (!filterValue || filterValue === "All") return true;
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return false;
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-  if (filterValue === "Today") {
-    return date.toDateString() === now.toDateString();
-  }
-  if (filterValue === "Last 7 Days") {
-    return diffDays <= 7;
-  }
-  if (filterValue === "Last 30 Days") {
-    return diffDays <= 30;
-  }
-  return true;
-};
-
-const getAppliedTypeLabel = (
-  meta: ContractMeta | null,
-  hasContract: boolean
-) => {
-  if (isRejectedMeta(meta)) return "Rejected";
-
-  const status = String(meta?.status || "");
-
-  if (!hasContract) return "Applied";
-
-  if (
-    status === CONTRACT_STATUS.CONTRACT_SIGNED ||
-    status === CONTRACT_STATUS.MILESTONES_CREATED
-  ) {
-    return "Active";
-  }
-
-  if (
-    status === CONTRACT_STATUS.INFLUENCER_ACCEPTED ||
-    status === CONTRACT_STATUS.BRAND_ACCEPTED ||
-    status === CONTRACT_STATUS.READY_TO_SIGN
-  ) {
-    return "Selected";
-  }
-
-  return "Invited";
-};
-
-const matchesInfluencerType = (
-  typeLabel: string,
-  filterValue: string
-) => {
-  if (!filterValue || filterValue === "All") return true;
-  return typeLabel.toLowerCase() === filterValue.toLowerCase();
 };
 
 interface Influencer {
@@ -256,6 +221,7 @@ interface PartyConfirm {
   byUserId?: string;
   at?: string;
 }
+
 interface PartySign {
   signed?: boolean;
   byUserId?: string;
@@ -268,66 +234,298 @@ interface AuditEvent {
   byUserId?: string;
   role?: string;
   type: string;
-  details?: { reason?: string;[k: string]: any };
+  details?: { reason?: string; [k: string]: any };
   at?: string;
+}
+
+interface ContractContent {
+  brand?: Partial<ContractPartyBrand>;
+  influencer?: Partial<ContractPartyInfluencer>;
+  campaign?: Partial<ContractCampaign>;
+  scheduleA?: Partial<ContractFormState["scheduleA"]> & {
+    deliverables?: Array<Partial<ScheduleADeliverable>>;
+    usageRights?: Partial<ContractFormState["scheduleA"]["usageRights"]> & {
+      rows?: Array<Partial<UsageRightsRow>>;
+    };
+  };
 }
 
 interface ContractMeta {
   contractId: string;
   campaignId: string;
-
   status: ContractStatus | string;
-
   lastSentAt?: string;
   lockedAt?: string | null;
-
+  requestedEffectiveDate?: string | null;
+  requestedEffectiveDateTimezone?: string | null;
   confirmations?: { brand?: PartyConfirm; influencer?: PartyConfirm };
   signatures?: {
     brand?: PartySign;
     influencer?: PartySign;
+    collabglam?: PartySign;
   };
-
   resendIteration?: number;
   audit?: AuditEvent[];
   flags?: Record<string, any>;
   statusFlags?: Record<string, any>;
-  brand?: any;
+  content?: ContractContent;
 }
 
-type CurrencyOption = { value: string; label: string; meta?: any };
-type TzOption = { value: string; label: string; meta?: any };
+type AppliedInfluencerRow = InfluencerRow & {
+  rawInfluencer: Influencer;
+  contractMeta: ContractMeta | null;
+  hasContract: boolean;
+  rejected: boolean;
+  typeLabel: string;
+  feeAmountValue: number;
+};
 
-type PanelMode = "send" | "edit";
-type FormErrors = Record<string, string>;
+const MILESTONE_OPTIONS = [
+  { value: "50% advance / 50% balance", label: "50% advance / 50% balance" },
+  { value: "100% on completion", label: "100% on completion" },
+  { value: "50% upfront / 50% on completion", label: "50% upfront / 50% on completion" },
+  { value: "30% on signing / 70% on completion", label: "30% on signing / 70% on completion" },
+  { value: "Custom", label: "Custom" },
+] as const;
 
-// Per-row deliverable data
-interface DeliverableRow {
-  id: string;
-  type: string;
-  quantity: string;
-  format: string;
-  durationSec: string;
-  minLiveValue: string;
-  minLiveUnit: "hours" | "months";
+const SHIPPING_APPLICABLE_OPTIONS = [
+  { value: "No", label: "No" },
+  { value: "Yes", label: "Yes" },
+] as const;
 
-  // per-deliverable settings
-  draftRequired: boolean;
-  draftDue: string; // yyyy-mm-dd
-  captions: string;
-  disclosures: string;
-  tags: string[];
-  links: string[];
-  handles: string[];
+const RETURNABLE_OPTIONS = [
+  { value: "Gift / keep product", label: "Gift / keep product" },
+  { value: "Returnable loaner", label: "Returnable loaner" },
+] as const;
 
-  // NEW: per-deliverable usage toggles
-  whitelistingEnabled: boolean;
-  sparkAdsEnabled: boolean;
-  insightsReadOnly: boolean;
+const ATTRIBUTION_OPTIONS = [
+  { value: "No attribution required", label: "No attribution required" },
+  { value: "Brand tag required", label: "Brand tag required" },
+  { value: "Custom attribution", label: "Custom attribution" },
+] as const;
+
+const EDITING_RIGHTS_OPTIONS = [
+  { value: "Cropping / resizing only", label: "Cropping / resizing only" },
+  { value: "Cut-downs / captions allowed", label: "Cut-downs / captions allowed" },
+  { value: "Custom editing rights", label: "Custom editing rights" },
+] as const;
+
+const MORALS_OPTIONS = [
+  { value: "Not included", label: "Not included" },
+  { value: "Included", label: "Included" },
+] as const;
+
+const DISPUTE_OPTIONS = [
+  { value: "AAA arbitration", label: "AAA arbitration" },
+  { value: "Court litigation", label: "Court litigation" },
+  { value: "Mutual negotiation first", label: "Mutual negotiation first" },
+] as const;
+
+const defaultUsageRightsRows = (): UsageRightsRow[] => [
+  {
+    id: createRowId(),
+    usageRight: "Organic repost on Brand-owned social channels",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Brand website / blog / PDP / retailer listing",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Email / CRM / deck / internal presentation use",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Paid social / boosting / ads",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Whitelisting / Spark Ads / dark posting / creator handle",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Perpetual rights / buyout / work-made-for-hire",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+];
+
+const createDefaultScheduleDeliverable = (): ScheduleADeliverable => ({
+  id: createRowId(),
+  srNo: 1,
+  platformHandle: "",
+  deliverableFormat: "",
+  qty: "1",
+  draftDue: "",
+  liveDate: "",
+});
+
+const createDefaultContractForm = (): ContractFormState => ({
+  brand: {
+    legalName: "",
+    contactPersonName: "",
+    noticeEmail: "",
+    noticePhone: "",
+    billingAddress: "",
+  },
+  influencer: {
+    legalName: "",
+    contactName: "",
+    postingHandleUrl: "",
+    contactEmail: "",
+    contactPhone: "",
+    whatsApp: "",
+    address: "",
+  },
+  campaign: {
+    productsServicesCovered: "",
+    territoryTargetCountry: "Worldwide",
+    effectiveDate: "",
+    campaignTitleOrId: "",
+  },
+  scheduleA: {
+    minimumVideoSpecs: "",
+    preShootScriptRequired: false,
+    preShootScriptDue: "",
+    preShootScriptReviewBusinessDays: "2",
+    mandatoryTagsMentionsLinksCodes: "",
+    review: {
+      includedRevisionRounds: "1",
+      additionalRevisionFee: "",
+      reshootObligation:
+        "No reshoot required except for material failure to follow approved brief",
+      reshootFee: "",
+      minimumLivePeriod: "",
+    },
+    commercial: {
+      totalCampaignFee: "",
+      currency: "USD",
+      platformMilestonePaymentStructure: "50% advance / 50% balance",
+      customSplit: "",
+      advancePaymentTrigger: "",
+      remainingPaymentTrigger: "",
+      paymentProcessorFeesBorneBy: "",
+      paymentProcessorFeesNotes: "",
+      laneAMarketplaceFeeNote:
+        "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
+    },
+    rawFiles: {
+      rawSourceFileDelivery: "Not included",
+      deliveryDue: "",
+      format: "",
+      analyticsReportingDeadline: "",
+      analyticsReportingItems: "",
+    },
+    shipping: {
+      productShippingApplicable: "No",
+      shipToName: "",
+      shipToAddress: "",
+      shipToPhone: "",
+      productReceiptConfirmationDeadline: "",
+      productReturnable: "Gift / keep product",
+      returnWindowMethod: "",
+      riskOfLossNotes: "",
+    },
+    usageRights: {
+      rows: defaultUsageRightsRows(),
+      attributionRequirement: "No attribution required",
+      attributionText: "",
+      editingRights: "Cropping / resizing only",
+      musicStockAssetResponsibility:
+        "Brand responsible for separate commercial licensing",
+    },
+    compliance: {
+      creativeBriefMandatoryTalkingPoints: "",
+      restrictedStatements: "",
+    },
+    exclusivity: {
+      competitorBlackout: "None",
+      categoryCompetitorList: "",
+      blackoutPeriod: "",
+      optionalMoralsClause: "Not included",
+    },
+    cancellation: {
+      killFeeOrProrata: "None",
+      refundOfUnearnedAdvance:
+        "Yes — on material non-performance / uncured breach",
+    },
+    dispute: {
+      governingLaw: "Nevada, USA",
+      disputeResolutionMethod: "AAA arbitration",
+      disputeVenue: "",
+      arbitrationSeat: "Las Vegas, Nevada, USA",
+      attorneysFees: "Each Party bears own fees",
+    },
+  },
+});
+
+function createRowId() {
+  return Math.random().toString(36).slice(2);
 }
 
-/* ===============================================================
-   Utilities
-   =============================================================== */
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getAtPath(obj: any, path: string, fallback: any = "") {
+  const value = String(path)
+    .split(".")
+    .reduce((acc, key) => acc?.[key], obj);
+  return value === undefined || value === null ? fallback : value;
+}
+
+function setAtPath<T extends Record<string, any>>(obj: T, path: string, value: any): T {
+  const clone = deepClone(obj);
+  const keys = String(path).split(".");
+  let ref: any = clone;
+  while (keys.length > 1) {
+    const key = keys.shift()!;
+    if (!ref[key] || typeof ref[key] !== "object") ref[key] = {};
+    ref = ref[key];
+  }
+  ref[keys[0]] = value;
+  return clone;
+}
+
+function mergeDeep<T>(base: T, patch: any): T {
+  if (patch === undefined || patch === null) return base;
+  if (Array.isArray(patch)) return patch as T;
+  if (typeof patch !== "object") return patch;
+
+  const output: any = Array.isArray(base) ? [...base] : { ...(base as any) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      output[key] &&
+      typeof output[key] === "object" &&
+      !Array.isArray(output[key])
+    ) {
+      output[key] = mergeDeep(output[key], value);
+    } else {
+      output[key] = value;
+    }
+  }
+  return output;
+}
+
 const toast = (opts: {
   icon: "success" | "error" | "info";
   title: string;
@@ -336,14 +534,14 @@ const toast = (opts: {
   Swal.fire({
     ...opts,
     showConfirmButton: false,
-    timer: 1600,
+    timer: 1800,
     timerProgressBar: true,
     background: "white",
     customClass: { popup: "rounded-lg border border-gray-200" },
   });
 
 const askConfirm = async (title: string, text?: string) => {
-  const res = await Swal.fire({
+  const result = await Swal.fire({
     title,
     text,
     icon: "question",
@@ -353,17 +551,43 @@ const askConfirm = async (title: string, text?: string) => {
     reverseButtons: true,
     background: "white",
   });
-  return res.isConfirmed;
+  return result.isConfirmed;
 };
 
-const formatAudience = (n: number) => {
+function toInputDate(v?: string | Date | null) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatCompactAudience(n: number) {
   if (!n && n !== 0) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
-};
+}
 
-const buildHandleUrl = (platform?: string | null, handle?: string | null) => {
+function formatMoneyINR(n: number) {
+  return `₹${Number(n || 0).toLocaleString("en-IN")}`;
+}
+
+function normalizePlatform(platform?: string | null): PlatformType {
+  switch ((platform || "").toLowerCase()) {
+    case "instagram":
+      return "instagram";
+    case "tiktok":
+      return "tiktok";
+    case "youtube":
+    default:
+      return "youtube";
+  }
+}
+
+function buildHandleUrl(platform?: string | null, handle?: string | null) {
   if (!handle) return null;
   const raw = handle.startsWith("@") ? handle.slice(1) : handle;
   switch ((platform || "").toLowerCase()) {
@@ -375,117 +599,131 @@ const buildHandleUrl = (platform?: string | null, handle?: string | null) => {
     default:
       return `https://www.youtube.com/@${raw}`;
   }
-};
+}
 
-const isRejectedMeta = (meta?: any) => {
-  if (!meta) return false;
-  const s = String(meta.status || "").toUpperCase();
-  return (
-    s === CONTRACT_STATUS.REJECTED ||
-    meta.isRejected === 1 ||
-    meta.flags?.isRejected ||
-    meta.statusFlags?.isRejected
-  );
-};
+function sanitizeHandle(h: string) {
+  const t = (h || "").trim();
+  if (!t) return t;
+  return t.startsWith("@") ? t : `@${t}`;
+}
 
-const signingStatusLabel = (meta?: ContractMeta | null) => {
-  if (!meta) return null;
-  const s = String(meta.status || "");
-  if (s !== CONTRACT_STATUS.READY_TO_SIGN) return null;
-
-  const b = !!meta.signatures?.brand?.signed;
-  const i = !!meta.signatures?.influencer?.signed;
-
-  if (b && !i) return "Awaiting influencer signature";
-  if (!b && i) return "Awaiting brand signature";
-  if (!b && !i) return "Ready to sign";
-  if (b && i) return "Signed"; // ✅ fully signed now (no CollabGlam)
-  return null;
-};
-
-const getRejectReasonFromMeta = (meta: ContractMeta | null): string | null => {
-  if (!meta) return null;
-  const events: AuditEvent[] = Array.isArray(meta.audit) ? meta.audit : [];
-  const lastRejected = [...events]
-    .reverse()
-    .find((ev) => (ev.type || "").toUpperCase() === "REJECTED");
-  return lastRejected?.details?.reason
-    ? String(lastRejected.details.reason).trim()
-    : null;
-};
-
-const mapPlatformToApi = (p?: string | null) => {
-  switch ((p || "").toLowerCase()) {
-    case "instagram":
-      return "Instagram";
-    case "tiktok":
-      return "TikTok";
-    case "youtube":
-    default:
-      return "YouTube";
-  }
-};
-
-const getCategoryLabel = (inf: any) => {
+function getCategoryLabel(inf: any) {
   const pick = (...vals: any[]) =>
     vals.find((v) => typeof v === "string" && v.trim());
   const fromObj = (o?: any) =>
     o && typeof o.name === "string" && o.name.trim() ? o.name : "";
+
   const direct = pick(
     inf.category,
     inf.category_name,
+    inf.categoryName,
     inf.categoryTitle,
     inf.primaryCategory,
     inf.niche,
     inf.vertical
   );
   if (direct) return direct;
+
   const obj =
     fromObj(inf.category) ||
     fromObj(inf.primary_category) ||
     fromObj(inf.influencerCategory);
   if (obj) return obj;
+
   const arr =
     inf.categories || inf.category_list || inf.influencerCategories || [];
   if (Array.isArray(arr) && arr.length) {
     const names = arr.map(fromObj).filter(Boolean);
     if (names.length) return names.join(", ");
   }
+
   return "—";
-};
+}
 
-const sanitizeHandle = (h: string) => {
-  const t = (h || "").trim();
-  if (!t) return t;
-  return t.startsWith("@") ? t : `@${t}`;
-};
+function getEngagementValue(inf: Influencer) {
+  const raw = Number((inf as any)?.engagementRate ?? (inf as any)?.engagement ?? 0);
+  return Number.isFinite(raw) ? raw : 0;
+}
 
-const createRowId = () => Math.random().toString(36).slice(2);
+function getFollowerTierBucket(n: number) {
+  if (n < 10_000) return "Nano";
+  if (n < 100_000) return "Micro";
+  if (n < 500_000) return "Mid";
+  if (n < 1_000_000) return "Macro";
+  return "Mega";
+}
 
-const isLockedStatus = (status?: string | null) =>
-  status === CONTRACT_STATUS.CONTRACT_SIGNED ||
-  status === CONTRACT_STATUS.MILESTONES_CREATED;
+function matchesEngagementFilter(value: number, filterValue: string) {
+  if (!filterValue || filterValue === "All") return true;
+  if (filterValue === "0-2%") return value >= 0 && value < 2;
+  if (filterValue === "2-5%") return value >= 2 && value < 5;
+  if (filterValue === "5-8%") return value >= 5 && value < 8;
+  if (filterValue === "8-12%") return value >= 8 && value < 12;
+  if (filterValue === "12%+") return value >= 12;
+  return true;
+}
 
-const isEditableStatus = (status?: string | null) =>
-  status === CONTRACT_STATUS.BRAND_SENT_DRAFT ||
-  status === CONTRACT_STATUS.BRAND_EDITED ||
-  status === CONTRACT_STATUS.INFLUENCER_EDITED ||
-  status === CONTRACT_STATUS.INFLUENCER_ACCEPTED;
+function matchesDateFilter(dateStr: string, filterValue: string) {
+  if (!filterValue || filterValue === "All") return true;
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return false;
 
-const needsBrandAcceptance = (status?: string | null) =>
-  status === CONTRACT_STATUS.INFLUENCER_ACCEPTED;
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
-const canSignNow = (status?: string | null) =>
-  status === CONTRACT_STATUS.READY_TO_SIGN;
+  if (filterValue === "Today") {
+    return date.toDateString() === now.toDateString();
+  }
+  if (filterValue === "Last 7 Days") return diffDays <= 7;
+  if (filterValue === "Last 30 Days") return diffDays <= 30;
+  return true;
+}
 
-const statusLabel = (status?: string | null) => {
+function isRejectedMeta(meta?: ContractMeta | null) {
+  if (!meta) return false;
+  const s = String(meta.status || "").toUpperCase();
+  return (
+    s === CONTRACT_STATUS.REJECTED ||
+    (meta as any).isRejected === 1 ||
+    meta.flags?.isRejected ||
+    meta.statusFlags?.isRejected
+  );
+}
+
+function wasResent(meta?: ContractMeta | null) {
+  if (!meta) return false;
+  if ((meta as any).isResend || (meta as any).isresend) return true;
+  if (meta.flags?.isResend || meta.flags?.isResendChild) return true;
+  if (meta.statusFlags?.isResend || meta.statusFlags?.isResendChild) return true;
+  if (typeof meta.resendIteration === "number" && meta.resendIteration > 0) return true;
+  const audit = Array.isArray(meta.audit) ? meta.audit : [];
+  return audit.some((ev) => (ev.type || "").toUpperCase() === "RESENT");
+}
+
+function signingStatusLabel(meta?: ContractMeta | null) {
+  if (!meta) return null;
+  const s = String(meta.status || "");
+  if (s !== CONTRACT_STATUS.READY_TO_SIGN) return null;
+
+  const brandSigned = !!meta.signatures?.brand?.signed;
+  const influencerSigned = !!meta.signatures?.influencer?.signed;
+
+  if (brandSigned && !influencerSigned) return "Awaiting influencer signature";
+  if (!brandSigned && influencerSigned) return "Awaiting brand signature";
+  if (!brandSigned && !influencerSigned) return "Ready to sign";
+  if (brandSigned && influencerSigned) return "Signed";
+  return null;
+}
+
+function statusLabel(status?: string | null) {
   switch (status) {
     case CONTRACT_STATUS.BRAND_SENT_DRAFT:
       return "Draft sent to influencer";
     case CONTRACT_STATUS.BRAND_EDITED:
-      return "Brand edited (awaiting influencer)";
+      return "Brand edited";
     case CONTRACT_STATUS.INFLUENCER_EDITED:
-      return "Influencer requested changes";
+      return "Influencer edited";
     case CONTRACT_STATUS.INFLUENCER_ACCEPTED:
       return "Influencer accepted";
     case CONTRACT_STATUS.BRAND_ACCEPTED:
@@ -496,100 +734,143 @@ const statusLabel = (status?: string | null) => {
       return "Signed";
     case CONTRACT_STATUS.MILESTONES_CREATED:
       return "Milestones created";
+    case CONTRACT_STATUS.SUPERSEDED:
+      return "Superseded";
+    case CONTRACT_STATUS.REJECTED:
+      return "Rejected";
     default:
       return status ? String(status) : "—";
   }
-};
+}
 
-/* ===============================================================
-   FDD-driven helpers
-   =============================================================== */
-const VIDEO_TYPES = new Set([
-  "Video",
-  "Reel/Short/TikTok",
-  "UGC Video",
-  "YouTube Integration",
-  "YouTube Dedicated Video",
-  "Live Stream",
-]);
-const IMAGE_TYPES = new Set(["Static Post (Image)", "Carousel Post"]);
-const TEXT_ONLY_TYPES = new Set([
-  "Custom Deliverable (Text)",
-  "Text (caption only)",
-]);
+function prettyStatus(meta: ContractMeta | null, hasContract: boolean, fallbackApplied = false) {
+  if (!hasContract) return fallbackApplied ? "Applied" : "—";
+  if (isRejectedMeta(meta)) return "Rejected";
+  const signing = signingStatusLabel(meta);
+  if (signing) return signing;
+  return statusLabel(String(meta?.status || ""));
+}
 
-/* ===============================================================
-   Constants for Usage Bundle & Geographies
-   =============================================================== */
-const LICENSE_TYPES = [
-  { value: "Organic", label: "Organic Use" },
-  { value: "Paid Digital", label: "Paid Digital Use" },
-  { value: "Custom", label: "Custom (define in notes)" },
-];
+function getAppliedTypeLabel(meta: ContractMeta | null, hasContract: boolean) {
+  if (isRejectedMeta(meta)) return "Rejected";
+  const status = String(meta?.status || "");
 
-const GEO_OPTIONS = [
-  { value: "Worldwide", label: "Worldwide" },
-  { value: "United States", label: "United States" },
-  { value: "Canada", label: "Canada" },
-  { value: "United Kingdom", label: "United Kingdom" },
-  { value: "European Union", label: "European Union" },
-  { value: "Australia", label: "Australia" },
-  { value: "India", label: "India" },
-  { value: "Southeast Asia", label: "Southeast Asia" },
-  { value: "Middle East", label: "Middle East" },
-  { value: "Custom Territory", label: "Custom Territory" },
-];
+  if (!hasContract) return "Applied";
+  if (
+    status === CONTRACT_STATUS.CONTRACT_SIGNED ||
+    status === CONTRACT_STATUS.MILESTONES_CREATED
+  ) {
+    return "Active";
+  }
+  if (
+    status === CONTRACT_STATUS.INFLUENCER_ACCEPTED ||
+    status === CONTRACT_STATUS.BRAND_ACCEPTED ||
+    status === CONTRACT_STATUS.READY_TO_SIGN
+  ) {
+    return "Selected";
+  }
+  return "Invited";
+}
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+function matchesInfluencerType(typeLabel: string, filterValue: string) {
+  if (!filterValue || filterValue === "All") return true;
+  return typeLabel.toLowerCase() === filterValue.toLowerCase();
+}
 
-const DELIVERABLE_TYPE_OPTIONS = [
-  { value: "Video", label: "Video" },
-  { value: "Reel/Short/TikTok", label: "Reel / Short / TikTok" },
-  { value: "Static Post (Image)", label: "Static Post (Image)" },
-  { value: "Carousel Post", label: "Carousel Post" },
-  { value: "Story (Single)", label: "Story (Single)" },
-  { value: "Story Set", label: "Story Set (Multiple)" },
-  { value: "UGC Video", label: "UGC Video" },
-  { value: "YouTube Integration", label: "YouTube Integration" },
-  { value: "YouTube Dedicated Video", label: "YouTube Dedicated Video" },
-  { value: "Live Stream", label: "Live Stream" },
-  { value: "Text (caption only)", label: "Text (caption only)" },
-  { value: "Custom Deliverable", label: "Custom Deliverable" },
-];
+function isLockedStatus(status?: string | null) {
+  return (
+    status === CONTRACT_STATUS.CONTRACT_SIGNED ||
+    status === CONTRACT_STATUS.MILESTONES_CREATED
+  );
+}
 
-/* ===============================================================
-   Main Page Component
-   =============================================================== */
+function isEditableStatus(status?: string | null) {
+  return (
+    status === CONTRACT_STATUS.BRAND_SENT_DRAFT ||
+    status === CONTRACT_STATUS.BRAND_EDITED ||
+    status === CONTRACT_STATUS.INFLUENCER_EDITED ||
+    status === CONTRACT_STATUS.INFLUENCER_ACCEPTED
+  );
+}
+
+function needsBrandAcceptance(status?: string | null) {
+  return status === CONTRACT_STATUS.INFLUENCER_ACCEPTED;
+}
+
+function canSignNow(status?: string | null) {
+  return status === CONTRACT_STATUS.READY_TO_SIGN;
+}
+
+function getRejectReasonFromMeta(meta: ContractMeta | null): string | null {
+  if (!meta) return null;
+  const events = Array.isArray(meta.audit) ? meta.audit : [];
+  const rejected = [...events]
+    .reverse()
+    .find((ev) => (ev.type || "").toUpperCase() === "REJECTED");
+  return rejected?.details?.reason ? String(rejected.details.reason).trim() : null;
+}
+
+function buildReactSelectStyles(opts?: { hasError?: boolean }) {
+  const hasError = opts?.hasError;
+  return {
+    control: (base: any, state: any) => ({
+      ...base,
+      minHeight: 44,
+      borderRadius: 8,
+      borderWidth: 2,
+      borderColor: hasError
+        ? "#ef4444"
+        : state.isFocused
+          ? "#FF8A35"
+          : "#e5e7eb",
+      boxShadow: state.isFocused
+        ? "0 0 0 1px #FF8A35, 0 0 0 3px rgba(255,138,53,0.35)"
+        : "none",
+      "&:hover": {
+        borderColor: hasError
+          ? "#ef4444"
+          : state.isFocused
+            ? "#FF8A35"
+            : "#e5e7eb",
+      },
+    }),
+    valueContainer: (base: any) => ({ ...base, padding: "0 12px" }),
+    indicatorsContainer: (base: any) => ({ ...base, minHeight: 44 }),
+    input: (base: any) => ({ ...base, margin: 0, padding: 0 }),
+    multiValue: (base: any) => ({
+      ...base,
+      borderRadius: 9999,
+      paddingLeft: 4,
+      paddingRight: 4,
+    }),
+  };
+}
+
 export default function AppliedInfluencersPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
   const campaignId = searchParams.get("id");
   const influencerId = searchParams.get("infId");
   const createdPage = searchParams.get("createdPage") === "true";
 
-
+  const [serverCampaignTitle, setServerCampaignTitle] = useState("");
   const [serverBudget, setServerBudget] = useState<number | null>(null);
   const [serverTimeline, setServerTimeline] = useState<{
     startDate?: string | Date;
     endDate?: string | Date;
   } | null>(null);
 
-  const router = useRouter();
-  const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
-
-  // Data & Pagination
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
-  const [applicantCount, setApplicantCount] = useState(0);
   const [meta, setMeta] = useState<Meta>({
     total: 0,
     page: 1,
-    limit: PAGE_SIZE_OPTIONS[0],
+    limit: PAGE_SIZE,
     totalPages: 1,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [page, setPage] = useState(1);
-  const [limit] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const [filters, setFilters] = useState<FilterState>({
     "Influencer Type": "",
@@ -599,129 +880,45 @@ export default function AppliedInfluencersPage() {
     Platform: [],
     Date: "",
   });
-
   const [search, setSearch] = useState("");
-  const [sortValue, setSortValue] = useState("Priority");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sortValue, setSortValue] = useState("Priority");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // keep backend sort stable, do UI sort client-side
-  const sortField = "createdAt" as keyof Influencer;
-  const sortOrder = 0 as 1 | 0;
+  const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
 
-  // Right Panel (send/edit contract)
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>("send");
   const [selectedInf, setSelectedInf] = useState<Influencer | null>(null);
   const [selectedMeta, setSelectedMeta] = useState<ContractMeta | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string>("");
+  const [pdfUrl, setPdfUrl] = useState("");
 
-  // Cache of latest contract meta per influencer
-  const [metaCache, setMetaCache] = useState<Record<string, ContractMeta | null>>(
-    {}
-  );
+  const [metaCache, setMetaCache] = useState<Record<string, ContractMeta | null>>({});
   const [metaCacheLoading, setMetaCacheLoading] = useState(false);
 
-  // Form (brand)
-  const [campaignTitle, setCampaignTitle] = useState("");
-  const [platforms, setPlatforms] = useState<string[]>([]);
-  const [goLiveStart, setGoLiveStart] = useState("");
-  const [goLiveEnd, setGoLiveEnd] = useState("");
-  const [totalFee, setTotalFee] = useState<string>("");
-  const [currency, setCurrency] = useState("USD");
-  const [milestoneSplit, setMilestoneSplit] = useState("50/50");
-  const [revisionsIncluded, setRevisionsIncluded] = useState<string>("1");
-
-  const milestonePreset = useMemo(() => {
-    const match = MILESTONE_SPLIT_PRESETS.find(
-      (p) => p.value === milestoneSplit
-    );
-    return match ? match.value : "custom";
-  }, [milestoneSplit]);
-
-  // Deliverables list (per row)
-  const [deliverables, setDeliverables] = useState<DeliverableRow[]>([
-    {
-      id: createRowId(),
-      type: "Video",
-      quantity: "1",
-      format: "",
-      durationSec: "",
-      minLiveValue: "",
-      minLiveUnit: "hours",
-      draftRequired: false,
-      draftDue: "",
-      captions: "",
-      disclosures: "",
-      tags: [],
-      links: [],
-      handles: [],
-      whitelistingEnabled: false,
-      sparkAdsEnabled: false,
-      insightsReadOnly: false,
-    },
-  ]);
-
   const [brandId, setBrandId] = useState<string | null>(null);
-  const [brandPlanName, setBrandPlanName] = useState<string>("free");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const bid = localStorage.getItem("brandId");
-    setBrandId(bid);
-
-    // fast UI from cache
-    const cached = localStorage.getItem("brandPlanName");
-    if (cached) setBrandPlanName(String(cached).toLowerCase());
-  }, []);
-
-  useEffect(() => {
-    if (!brandId) return;
-
-    (async () => {
-      try {
-        const res: any = await api.get("/subscription/brand/current", {
-          params: { brandId },
-        });
-
-        const data = res?.data || res || {};
-        const latestName = (data?.brandPlanName || "free").toString().toLowerCase();
-        const latestId = data?.brandPlanId || null;
-
-        setBrandPlanName(latestName);
-
-        try {
-          localStorage.setItem("brandPlanName", latestName);
-          if (latestId) localStorage.setItem("brandPlanId", latestId);
-        } catch { }
-      } catch {
-      }
-    })();
-  }, [brandId]);
-
-  const isFullyManagedPlan = brandPlanName === "fully_managed";
-
-  // Usage Bundle
-  const [usageType, setUsageType] = useState<string>("Organic");
-  const [usageDurationMonths, setUsageDurationMonths] = useState<string>("12");
-  const [usageGeographies, setUsageGeographies] = useState<string[]>([
-    "Worldwide",
-  ]);
-  const [usageDerivativeEdits, setUsageDerivativeEdits] =
-    useState<boolean>(false);
-
-  // Requested Effective Date
-  const [requestedEffDate, setRequestedEffDate] = useState<string>("");
-  const [requestedEffTz, setRequestedEffTz] =
-    useState<string>("America/Los_Angeles");
-
-  // currency & timezone options
+  const [brandPlanName, setBrandPlanName] = useState("free");
   const [currencyOptions, setCurrencyOptions] = useState<CurrencyOption[]>([]);
   const [tzOptions, setTzOptions] = useState<TzOption[]>([]);
   const [listsLoading, setListsLoading] = useState(true);
 
-  // Brand signer identity
+  const [requestedEffDate, setRequestedEffDate] = useState("");
+  const [requestedEffTz, setRequestedEffTz] = useState(DEFAULT_TIMEZONE);
+  const [contractForm, setContractForm] = useState<ContractFormState>(
+    createDefaultContractForm()
+  );
+  const [deliverables, setDeliverables] = useState<ScheduleADeliverable[]>([
+    createDefaultScheduleDeliverable(),
+  ]);
+
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isSendLoading, setIsSendLoading] = useState(false);
+  const [isUpdateLoading, setIsUpdateLoading] = useState(false);
+
+  const [signOpen, setSignOpen] = useState(false);
+  const [signTargetMeta, setSignTargetMeta] = useState<ContractMeta | null>(null);
+
   const signerName =
     (typeof window !== "undefined" &&
       (localStorage.getItem("brandContactName") ||
@@ -729,92 +926,115 @@ export default function AppliedInfluencersPage() {
         "")) ||
     "";
   const signerEmail =
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("brandEmail") || "")) ||
-    "";
+    (typeof window !== "undefined" && localStorage.getItem("brandEmail")) || "";
 
-  // Signature modal
-  const [signOpen, setSignOpen] = useState(false);
-  const [signTargetMeta, setSignTargetMeta] = useState<ContractMeta | null>(
-    null
-  );
+  const isFullyManagedPlan = brandPlanName === "fully_managed";
+  const pageTitle = serverCampaignTitle || contractForm.campaign.campaignTitleOrId || "Unknown Campaign";
 
-  // Form errors
-  const [formErrors, setFormErrors] = useState<FormErrors>({});
-  const clearErrors = () => setFormErrors({});
-  const setErr = (key: string, msg: string) =>
-    setFormErrors((e) => ({ ...e, [key]: msg }));
+  const clearErrors = useCallback(() => setFormErrors({}), []);
+  const setErr = useCallback((key: string, msg: string) => {
+    setFormErrors((prev) => ({ ...prev, [key]: msg }));
+  }, []);
 
-  // Loading states for actions
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [isSendLoading, setIsSendLoading] = useState(false);
-  const [isUpdateLoading, setIsUpdateLoading] = useState(false);
+  const setContractField = useCallback((path: string, value: any) => {
+    setContractForm((prev) => setAtPath(prev, path, value));
+  }, []);
 
-  /* ---------------- Helpers: dates ---------------- */
-  const toInputDate = (v?: string | Date | null) => {
-    if (!v) return "";
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return "";
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedBrandId = localStorage.getItem("brandId");
+    setBrandId(storedBrandId);
+    const cachedPlan = localStorage.getItem("brandPlanName");
+    if (cachedPlan) setBrandPlanName(String(cachedPlan).toLowerCase());
+  }, []);
 
-  const parseDateOnly = (s?: string) => (s ? new Date(s + "T00:00:00") : null);
+  useEffect(() => {
+    if (!brandId) return;
+    (async () => {
+      try {
+        const res: any = await api.get("/subscription/brand/current", {
+          params: { brandId },
+        });
+        const data = res?.data || res || {};
+        const latestName = (data?.brandPlanName || "free").toString().toLowerCase();
+        const latestId = data?.brandPlanId || null;
+        setBrandPlanName(latestName);
+        localStorage.setItem("brandPlanName", latestName);
+        if (latestId) localStorage.setItem("brandPlanId", latestId);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [brandId]);
 
-  const formatDateLong = (s?: string) => {
-    if (!s) return "";
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
-  const todayStr = toInputDate(new Date());
-  const startMin = todayStr;
-  const endMin = goLiveStart || todayStr;
-  const startMax = goLiveEnd || "";
-  const effMin = todayStr;
-  const effMax = goLiveEnd || "";
-  const draftMin = todayStr;
-  const draftMax = goLiveStart || "";
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isEditable =
+        target?.isContentEditable ||
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT";
+      if (isEditable) return;
 
-  /* ---------------- Seed campaign summary ---------------- */
+      if (e.key === "/") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === "Escape" && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
+
   useEffect(() => {
     if (!campaignId) return;
-
     (async () => {
       try {
         const res: any = await api.get("/campaign/campaignSummary", {
           params: { id: campaignId },
         });
-        const d = res?.data || res || {};
-        const name = d.campaignName || "";
+        const data = res?.data || res || {};
+        const campaignName = data.campaignName || data.productOrServiceName || "";
         const budgetNum =
-          typeof d.budget === "number" ? d.budget : Number(d.budget ?? NaN);
+          typeof data.budget === "number" ? data.budget : Number(data.budget ?? NaN);
 
-        setCampaignTitle(name);
+        setServerCampaignTitle(campaignName);
+        setContractField("campaign.campaignTitleOrId", campaignName);
+        setContractField("campaign.productsServicesCovered", data.productOrServiceName || "");
 
         if (!Number.isNaN(budgetNum)) {
           setServerBudget(budgetNum);
-          setTotalFee(String(budgetNum));
+          setContractField("scheduleA.commercial.totalCampaignFee", String(budgetNum));
         }
 
-        if (d.timeline) {
-          const start = d.timeline.startDate
-            ? toInputDate(new Date(d.timeline.startDate))
+        if (data.timeline) {
+          const start = data.timeline.startDate
+            ? toInputDate(new Date(data.timeline.startDate))
             : "";
-          const end = d.timeline.endDate
-            ? toInputDate(new Date(d.timeline.endDate))
+          const end = data.timeline.endDate
+            ? toInputDate(new Date(data.timeline.endDate))
             : "";
-          setServerTimeline(d.timeline);
-          if (start) setGoLiveStart(start);
-          if (end) setGoLiveEnd(end);
-          if (!requestedEffDate && start) setRequestedEffDate(start);
+          setServerTimeline(data.timeline);
+          if (start) {
+            setRequestedEffDate(start);
+            setContractField("campaign.effectiveDate", start);
+          }
+          if (end) {
+            setContractField(
+              "scheduleA.review.minimumLivePeriod",
+              `Until ${new Date(end).toLocaleDateString()}`
+            );
+          }
         }
       } catch (e: any) {
         toast({
@@ -827,41 +1047,8 @@ export default function AppliedInfluencersPage() {
         });
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId]);
+  }, [campaignId, setContractField]);
 
-  /* ---------------- Debounce search ---------------- */
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(id);
-  }, [search]);
-
-  /* ---------------- Keyboard shortcuts ---------------- */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      const isEditable =
-        target?.isContentEditable ||
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT";
-
-      if (isEditable) return;
-
-      if (e.key === "/") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-
-      if (e.key === "Escape" && sidebarOpen) closeSidebar();
-    };
-
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sidebarOpen]);
-
-  /* ---------------- Currency & Timezone lists ---------------- */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -869,12 +1056,9 @@ export default function AppliedInfluencersPage() {
       try {
         const curRes: any = await api.get("/contract/currencies");
         const curArr: any[] =
-          (curRes?.data?.currencies ||
-            curRes?.currencies ||
-            curRes ||
-            []) as any[];
-        const curOpts: CurrencyOption[] = curArr.map((c) => {
-          const code = (c.code || c.symbol || "").toString();
+          curRes?.data?.currencies || curRes?.currencies || curRes || [];
+        const currencies = curArr.map((c) => {
+          const code = String(c.code || c.symbol || "");
           return {
             value: code,
             label: c.name ? `${code} — ${c.name}` : code,
@@ -883,23 +1067,24 @@ export default function AppliedInfluencersPage() {
         });
 
         const tzRes: any = await api.get("/contract/timezones");
-        const tzArr: any[] =
-          (tzRes?.data?.timezones || tzRes?.timezones || tzRes || []) as any[];
-        const tzOpts: TzOption[] = tzArr.map((t) => {
-          const canonical =
-            Array.isArray(t.utc) && t.utc.length ? t.utc[0] : t.value;
-          const label = t.text || t.value;
-          return { value: canonical, label, meta: t };
+        const tzArr: any[] = tzRes?.data?.timezones || tzRes?.timezones || tzRes || [];
+        const zones = tzArr.map((t) => {
+          const canonical = Array.isArray(t.utc) && t.utc.length ? t.utc[0] : t.value;
+          return {
+            value: canonical,
+            label: t.text || t.value,
+            meta: t,
+          };
         });
 
         if (!alive) return;
-        setCurrencyOptions(curOpts);
-        setTzOptions(tzOpts);
+        setCurrencyOptions(currencies);
+        setTzOptions(zones);
       } catch (e: any) {
         toast({
           icon: "error",
           title: "Lists failed",
-          text: e?.message || "Could not load currency/timezones.",
+          text: e?.message || "Could not load currency/timezone lists.",
         });
       } finally {
         if (alive) setListsLoading(false);
@@ -910,1083 +1095,226 @@ export default function AppliedInfluencersPage() {
     };
   }, []);
 
-  /* ---------------- Chat ---------------- */
-  const handleViewMessage = async (inf?: Influencer) => {
-    const target = inf || selectedInf;
-    if (!target) return;
-
-    const brandId =
-      typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
-    if (!brandId) {
-      return toast({
-        icon: "error",
-        title: "Not ready",
-        text: "Missing brandId. Please sign in as a brand.",
-      });
-    }
-
-    try {
-      const res: any = await post("/chat/create-room", {
-        brandId,
-        influencerId: target.influencerId,
-      });
-
-      const roomId = res?.roomId || res?.data?.roomId;
-      if (!roomId) throw new Error("Room could not be created");
-
-      router.push(`/brand/messages/${encodeURIComponent(roomId)}`);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Open chat failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not open messages.",
-      });
-    }
-  };
-
-  /* ---------------- Applicants load ---------------- */
   const fetchApplicants = useCallback(
-    async (search?: string) => {
+    async (searchTerm?: string) => {
       if (!campaignId) return;
       setLoading(true);
       setError(null);
       try {
-        const payload = {
+        const res: any = await post("/apply/list", {
           campaignId,
           page,
-          limit,
-          search: (search ?? "").trim(),
-          sortField,
-          sortOrder,
+          limit: PAGE_SIZE,
+          search: (searchTerm ?? "").trim(),
+          sortField: "createdAt",
+          sortOrder: 0,
           createdPage,
-        };
-        const res: any = await post("/apply/list", payload);
+        });
+
         const influencersList =
           res?.influencers || res?.data?.influencers || res?.data?.data || [];
-        const applicantCountVal =
-          res?.applicantCount ||
-          res?.data?.applicantCount ||
-          influencersList?.length ||
-          0;
-        const metaVal =
+        const incomingMeta =
           res?.meta ||
           res?.data?.meta || {
             total: 0,
             page: 1,
-            limit,
+            limit: PAGE_SIZE,
             totalPages: 1,
           };
+
         setInfluencers(influencersList || []);
-        setApplicantCount(applicantCountVal || 0);
-        setMeta(metaVal);
+        setMeta(incomingMeta);
       } catch (e: any) {
         setError(
-          e?.response?.data?.message ||
-          e?.message ||
-          "Failed to load applicants."
+          e?.response?.data?.message || e?.message || "Failed to load applicants."
         );
       } finally {
         setLoading(false);
       }
     },
-    [campaignId, page, limit]
+    [campaignId, page, createdPage]
   );
 
   useEffect(() => {
     fetchApplicants(debouncedSearch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, page, debouncedSearch, sortField, sortOrder]);
+  }, [fetchApplicants, debouncedSearch]);
 
-  /* ---------------- Highlight influencer from URL ---------------- */
+  const getLatestContractFor = useCallback(
+    async (inf: Influencer): Promise<ContractMeta | null> => {
+      const activeBrandId =
+        typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
+      if (!activeBrandId || !campaignId) return null;
+      try {
+        const res: any = await post("/contract/getContract", {
+          brandId: activeBrandId,
+          influencerId: inf.influencerId,
+          campaignId,
+        });
+        const list = res?.contracts || res?.data?.contracts || [];
+        const filtered = (list as ContractMeta[]).filter(
+          (c) => String(c.campaignId) === String(campaignId)
+        );
+        return filtered.length ? filtered[0] : list.length ? list[0] : null;
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Meta fetch failed",
+          text:
+            e?.response?.data?.message ||
+            e?.message ||
+            "Could not load contract state.",
+        });
+        return null;
+      }
+    },
+    [campaignId]
+  );
+
+  const loadMetaCache = useCallback(
+    async (list: Influencer[]) => {
+      if (!list.length) {
+        setMetaCache({});
+        return;
+      }
+      setMetaCacheLoading(true);
+      try {
+        const metas = await Promise.all(list.map((inf) => getLatestContractFor(inf)));
+        const next: Record<string, ContractMeta | null> = {};
+        list.forEach((inf, index) => {
+          next[inf.influencerId] = metas[index] || null;
+        });
+        setMetaCache(next);
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Meta cache failed",
+          text: e?.message || "Unable to build contract cache.",
+        });
+      } finally {
+        setMetaCacheLoading(false);
+      }
+    },
+    [getLatestContractFor]
+  );
+
   useEffect(() => {
-    if (!influencerId) return;
-    if (!influencers.length) return;
+    loadMetaCache(influencers);
+  }, [influencers, loadMetaCache]);
 
+  useEffect(() => {
+    if (!influencerId || !influencers.length) return;
     const exists = influencers.some(
       (inf) => String(inf.influencerId) === String(influencerId)
     );
     if (!exists) return;
 
     setHighlightInfId(influencerId);
-
     const el =
       document.getElementById(`inf-row-${influencerId}`) ||
       document.getElementById(`inf-card-${influencerId}`);
-
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 
     const timeout = setTimeout(() => setHighlightInfId(null), 4000);
     return () => clearTimeout(timeout);
   }, [influencerId, influencers]);
 
-  /* ---------------- Contract meta cache ---------------- */
-  const getLatestContractFor = async (
-    inf: Influencer
-  ): Promise<ContractMeta | null> => {
-    const brandId =
-      typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
-    if (!brandId) return null;
-    try {
-      const res = await post("/contract/getContract", {
-        brandId,
-        influencerId: inf.influencerId,
-        campaignId,
-      });
-      const list =
-        (res as any)?.contracts || (res as any)?.data?.contracts || [];
-      const filtered = (list as ContractMeta[]).filter(
-        (c) => String(c.campaignId) === String(campaignId)
+const clearPreview = useCallback(() => {
+  setPdfUrl((prev) => {
+    if (prev) URL.revokeObjectURL(prev);
+    return "";
+  });
+}, []);
+
+useEffect(() => {
+  clearPreview();
+}, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
+
+  const prefillFormFor = useCallback(
+    (inf: Influencer, meta?: ContractMeta | null) => {
+      clearErrors();
+
+      const base = createDefaultContractForm();
+      base.brand.legalName = localStorage.getItem("brandName") || "";
+      base.brand.contactPersonName = localStorage.getItem("brandContactName") || "";
+      base.brand.noticeEmail = localStorage.getItem("brandEmail") || "";
+      base.brand.noticePhone = localStorage.getItem("brandPhone") || "";
+      base.brand.billingAddress = localStorage.getItem("brandAddress") || "";
+
+      base.influencer.legalName = inf.name || "";
+      base.influencer.contactName = inf.name || "";
+      base.influencer.postingHandleUrl =
+        buildHandleUrl(inf.primaryPlatform, inf.handle) || "";
+      base.influencer.contactEmail = (inf as any)?.email || "";
+      base.influencer.contactPhone = (inf as any)?.phone || "";
+      base.influencer.whatsApp = (inf as any)?.whatsapp || "";
+      base.influencer.address = (inf as any)?.address || "";
+
+      base.campaign.campaignTitleOrId = serverCampaignTitle || "";
+      base.campaign.productsServicesCovered =
+        (inf as any)?.productOrServiceName || "";
+      base.campaign.territoryTargetCountry = "Worldwide";
+      base.campaign.effectiveDate = requestedEffDate || toInputDate(new Date());
+
+      base.scheduleA.commercial.totalCampaignFee = String(
+        serverBudget ?? inf.feeAmount ?? 0
       );
-      return filtered.length
-        ? filtered[0]
-        : (list as ContractMeta[]).length
-          ? (list as ContractMeta[])[0]
-          : null;
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Meta fetch failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not get contract meta.",
-      });
-      return null;
-    }
-  };
 
-  const loadMetaCache = async (list: Influencer[]) => {
-    if (!list.length) {
-      setMetaCache({});
-      return;
-    }
-    setMetaCacheLoading(true);
-    try {
-      const metas = await Promise.all(list.map((inf) => getLatestContractFor(inf)));
-      const next: Record<string, ContractMeta | null> = {};
-      list.forEach((inf, i) => {
-        next[inf.influencerId] = metas[i] || null;
-      });
-      setMetaCache(next);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Meta cache failed",
-        text: e?.message || "Unable to build contract cache.",
-      });
-    } finally {
-      setMetaCacheLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMetaCache(influencers);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [influencers]);
-
-  /* ---------------- Helpers ---------------- */
-  const clearPreview = () => {
-    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-    setPdfUrl("");
-  };
-
-  const prefillFormFor = (inf: Influencer, meta?: ContractMeta | null) => {
-    clearErrors();
-
-    setCampaignTitle((prev) => prev || "");
-    setPlatforms(
-      inf?.primaryPlatform ? [mapPlatformToApi(inf.primaryPlatform) as string] : []
-    );
-
-    if (serverTimeline?.startDate || serverTimeline?.endDate) {
-      const start = serverTimeline?.startDate
-        ? toInputDate(serverTimeline.startDate)
-        : "";
-      const end = serverTimeline?.endDate
-        ? toInputDate(serverTimeline.endDate)
-        : "";
-      setGoLiveStart(start);
-      setGoLiveEnd(end);
-    } else {
-      setGoLiveStart("");
-      setGoLiveEnd("");
-    }
-
-    const initialFee = String(serverBudget ?? inf.feeAmount ?? 5000);
-    setTotalFee(initialFee);
-    setCurrency("USD");
-
-    setMilestoneSplit("50/50");
-    setRevisionsIncluded("1");
-
-    // default single deliverable row
-    setDeliverables([
-      {
-        id: createRowId(),
-        type: "Video",
-        quantity: "1",
-        format: "",
-        durationSec: "",
-        minLiveValue: "",
-        minLiveUnit: "hours",
-        draftRequired: false,
-        draftDue: "",
-        captions: "",
-        disclosures: "",
-        tags: [],
-        links: [],
-        handles: inf.handle ? [sanitizeHandle(inf.handle)] : [],
-        whitelistingEnabled: false,
-        sparkAdsEnabled: false,
-        insightsReadOnly: false,
-      },
-    ]);
-
-    setUsageType("Organic");
-    setUsageDurationMonths("12");
-    setUsageGeographies(["Worldwide"]);
-    setUsageDerivativeEdits(false);
-
-    const start = serverTimeline?.startDate ? toInputDate(serverTimeline.startDate) : "";
-    const startDefault = start || toInputDate(new Date());
-    setRequestedEffDate(startDefault);
-    setRequestedEffTz("Europe/Amsterdam");
-
-    if (meta && meta.brand) {
-      const brand = meta.brand;
-
-      if (typeof brand.campaignTitle === "string")
-        setCampaignTitle(String(brand.campaignTitle));
-
-      if (Array.isArray(brand.platforms) && brand.platforms.length)
-        setPlatforms((brand.platforms as string[]).map((p) => String(p || "")));
-
-      if (brand.goLive) {
-        setGoLiveStart(toInputDate((brand.goLive as any).start));
-        setGoLiveEnd(toInputDate((brand.goLive as any).end));
+      if (serverTimeline?.startDate) {
+        const start = toInputDate(serverTimeline.startDate);
+        if (start) {
+          base.campaign.effectiveDate = start;
+          setRequestedEffDate(start);
+        }
       }
-
-      if (brand.totalFee !== undefined && brand.totalFee !== null)
-        setTotalFee(String(brand.totalFee));
-
-      if (brand.currency) setCurrency(String(brand.currency));
-      if (brand.milestoneSplit) setMilestoneSplit(String(brand.milestoneSplit));
-
-      if (
-        brand.revisionsIncluded !== undefined &&
-        brand.revisionsIncluded !== null
-      )
-        setRevisionsIncluded(String(brand.revisionsIncluded));
-
-      if (brand.requestedEffectiveDate)
-        setRequestedEffDate(toInputDate(brand.requestedEffectiveDate));
-      if (brand.requestedEffectiveDateTimezone)
-        setRequestedEffTz(String(brand.requestedEffectiveDateTimezone));
-
-      if (brand.usageBundle) {
-        const ub = brand.usageBundle;
-        if (ub.type) setUsageType(String(ub.type));
-        if (ub.durationMonths !== undefined && ub.durationMonths !== null)
-          setUsageDurationMonths(String(ub.durationMonths));
-        if (Array.isArray(ub.geographies))
-          setUsageGeographies(ub.geographies.map((g: any) => String(g)));
-        if (typeof ub.derivativeEditsAllowed === "boolean")
-          setUsageDerivativeEdits(Boolean(ub.derivativeEditsAllowed));
+      if (meta?.requestedEffectiveDate) {
+        setRequestedEffDate(toInputDate(meta.requestedEffectiveDate));
       }
-
-      const expanded = brand.deliverablesExpanded;
-      if (Array.isArray(expanded) && expanded.length) {
-        const mapped: DeliverableRow[] = expanded.map((d: any, index: number) => {
-          const minLiveHours: number =
-            typeof d.minLiveHours === "number" ? d.minLiveHours : 0;
-          let minLiveValue = "";
-          let minLiveUnit: "hours" | "months" = "hours";
-
-          if (minLiveHours > 0) {
-            if (minLiveHours % 720 === 0) {
-              minLiveUnit = "months";
-              minLiveValue = String(minLiveHours / 720);
-            } else {
-              minLiveUnit = "hours";
-              minLiveValue = String(minLiveHours);
-            }
-          }
-
-          return {
-            id: `${String(d.type || "row")}-${index}-${d.quantity ?? 1}`,
-            type: String(d.type || "Video"),
-            quantity:
-              d.quantity !== undefined && d.quantity !== null
-                ? String(d.quantity)
-                : "1",
-            format: d.format ? String(d.format) : "",
-            durationSec:
-              d.durationSec !== undefined && d.durationSec !== null
-                ? String(d.durationSec)
-                : "",
-            minLiveValue,
-            minLiveUnit,
-            draftRequired: Boolean(d.draftRequired),
-            draftDue: d.draftDueDate ? toInputDate(d.draftDueDate) : "",
-            captions: d.captions ? String(d.captions) : "",
-            disclosures:
-              typeof d.disclosures === "string" ? d.disclosures : "",
-            tags: Array.isArray(d.tags)
-              ? d.tags.map((t: any) => String(t))
-              : [],
-            links: Array.isArray(d.links)
-              ? d.links.map((l: any) => String(l))
-              : [],
-            handles: Array.isArray(d.handles)
-              ? d.handles.map((h: any) => sanitizeHandle(String(h)))
-              : inf.handle
-                ? [sanitizeHandle(inf.handle)]
-                : [],
-            whitelistingEnabled:
-              typeof d.whitelistingEnabled === "boolean"
-                ? d.whitelistingEnabled
-                : false,
-            sparkAdsEnabled:
-              typeof d.sparkAdsEnabled === "boolean"
-                ? d.sparkAdsEnabled
-                : false,
-            insightsReadOnly:
-              typeof d.insightsReadOnly === "boolean"
-                ? d.insightsReadOnly
-                : false,
-          };
-        });
-
-        setDeliverables(mapped);
-      }
-    }
-  };
-
-  // toggle-specific support by platform (row-level uses this as proxy)
-  const supportsSparkAds = platforms.includes("TikTok");
-  const supportsWhitelisting =
-    platforms.includes("Instagram") || platforms.includes("TikTok");
-
-  // If a platform no longer supports a toggle, force it off on all rows
-  useEffect(() => {
-    if (!supportsSparkAds || !supportsWhitelisting) {
-      setDeliverables((prev) =>
-        prev.map((row) => ({
-          ...row,
-          sparkAdsEnabled: supportsSparkAds ? row.sparkAdsEnabled : false,
-          whitelistingEnabled: supportsWhitelisting
-            ? row.whitelistingEnabled
-            : false,
-        }))
-      );
-    }
-  }, [supportsSparkAds, supportsWhitelisting]);
-
-  const updateBtnLabel =
-    selectedMeta && isRejectedMeta(selectedMeta)
-      ? "Resend Contract"
-      : "Update Contract";
-
-  const openSidebar = async (inf: Influencer, mode: PanelMode) => {
-    if (isFullyManagedPlan) {
-      toast({
-        icon: "info",
-        title: "Fully Managed Plan",
-        text: "Contract sending is handled by CollabGlam for Fully Managed brands.",
-      });
-      return;
-    }
-
-    setSelectedInf(inf);
-    setPanelMode(mode);
-    const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
-    setSelectedMeta(meta || null);
-    prefillFormFor(inf, meta || null);
-    clearPreview();
-    setSidebarOpen(true);
-  };
-
-  const closeSidebar = () => {
-    setSidebarOpen(false);
-    clearPreview();
-    setSelectedInf(null);
-    setSelectedMeta(null);
-    setIsPreviewLoading(false);
-    setIsSendLoading(false);
-    setIsUpdateLoading(false);
-  };
-
-  // Lock body scroll when sidebar is open
-  useEffect(() => {
-    if (sidebarOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
-    }
-  }, [sidebarOpen]);
-
-  /* ---------------- Build payload ---------------- */
-  const buildBrandPayload = () => {
-    const toLocalMidnight = (d: string) => new Date(d + "T00:00:00");
-
-    const goLive =
-      goLiveStart || goLiveEnd
-        ? {
-          start: goLiveStart ? toLocalMidnight(goLiveStart) : undefined,
-          end: goLiveEnd ? toLocalMidnight(goLiveEnd) : undefined,
-        }
-        : undefined;
-
-    const feeNum = Number(totalFee || "0");
-    const revisionsNum = Number(revisionsIncluded || "0");
-    const usageDurationNum = Number(usageDurationMonths || "0");
-
-    const isVideoRowType = (type: string, format: string) => {
-      const isTextOnly =
-        TEXT_ONLY_TYPES.has(type) ||
-        (format || "").toLowerCase().startsWith("text ");
-      return VIDEO_TYPES.has(type) && !isTextOnly;
-    };
-
-    const deliverablesExpanded =
-      deliverables.length > 0
-        ? deliverables.map((row) => {
-          const qtyNum = Number(row.quantity || "0");
-          const durNum = Number(row.durationSec || "0");
-          const isVideoRow = isVideoRowType(row.type, row.format);
-
-          const minLiveHoursNum =
-            row.minLiveUnit === "months"
-              ? (Number(row.minLiveValue || "0") || 0) * 720
-              : Number(row.minLiveValue || "0") || 0;
-
-          const rowTags = (row.tags || []).map((t) =>
-            t.startsWith("#") ? t : `#${t}`
-          );
-          const rowLinks = (row.links || []).filter((l) =>
-            /^https?:\/\/.+/i.test(l)
-          );
-          const rowHandles = (row.handles || [])
-            .map(sanitizeHandle)
-            .filter(Boolean);
-
-          return {
-            type: row.type || "Video",
-            quantity: Number.isFinite(qtyNum) ? qtyNum : 0,
-            format: row.format,
-            durationSec:
-              isVideoRow && Number.isFinite(durNum) ? durNum : 0,
-            postingWindow: goLive || { start: undefined, end: undefined },
-            draftRequired: Boolean(row.draftRequired),
-            draftDueDate: row.draftDue || undefined,
-            minLiveHours: minLiveHoursNum,
-            tags: rowTags,
-            handles: rowHandles,
-            captions: row.captions,
-            links: rowLinks,
-            disclosures: row.disclosures,
-            whitelistingEnabled: row.whitelistingEnabled,
-            sparkAdsEnabled: row.sparkAdsEnabled,
-            insightsReadOnly: row.insightsReadOnly,
-          };
-        })
-        : [];
-
-    return {
-      campaignTitle,
-      platforms,
-      ...(goLive ? { goLive } : {}),
-      totalFee: Number.isFinite(feeNum) ? feeNum : 0,
-      currency,
-      milestoneSplit,
-      revisionsIncluded: Number.isFinite(revisionsNum) ? revisionsNum : 0,
-      usageBundle: {
-        type: usageType,
-        durationMonths: Number.isFinite(usageDurationNum)
-          ? usageDurationNum
-          : 0,
-        geographies: usageGeographies,
-        derivativeEditsAllowed: Boolean(usageDerivativeEdits),
-      },
-      deliverablesPresetKey: "ui-manual",
-      deliverablesExpanded,
-      ...(requestedEffDate ? { requestedEffectiveDate: requestedEffDate } : {}),
-      ...(requestedEffTz
-        ? { requestedEffectiveDateTimezone: requestedEffTz }
-        : {}),
-    };
-  };
-
-  /* ---------------- Validation helpers ---------------- */
-  const parseMilestoneSplit = (s: string): number[] => {
-    if (!s) return [];
-    return s
-      .split("/")
-      .map((x) => x.replace(/%/g, "").trim())
-      .filter(Boolean)
-      .map((x) => Number(x))
-      .filter((n) => Number.isFinite(n));
-  };
-
-  const scrollFirstErrorIntoView = () => {
-    const first = document.querySelector(
-      "[data-field-error=true]"
-    ) as HTMLElement | null;
-    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
-
-  const validateForPreview = (): boolean => {
-    clearErrors();
-    let ok = true;
-    const add = (k: string, msg: string) => {
-      ok = false;
-      setErr(k, msg);
-    };
-
-    const today = parseDateOnly(todayStr)!;
-    const start = parseDateOnly(goLiveStart || undefined);
-    const end = parseDateOnly(goLiveEnd || undefined);
-
-    if (!campaignTitle.trim())
-      add("campaignTitle", "Campaign title is required.");
-    if (!platforms.length) add("platforms", "Select at least one platform.");
-
-    if (start && start < today)
-      add("goLiveStart", "Start date must be today or later.");
-    if (end && end < today)
-      add("goLiveEnd", "End date must be today or later.");
-    if (start && end && start > end)
-      add("goLiveEnd", "End must be on/after Start.");
-
-    if (requestedEffDate) {
-      const eff = parseDateOnly(requestedEffDate)!;
-      if (eff < today)
-        add("requestedEffDate", "Requested date cannot be before today.");
-      if (end && eff > end)
-        add(
-          "requestedEffDate",
-          "Requested date must be on/before Posting Window End."
-        );
-    }
-
-    const feeNum = Number(totalFee || "");
-    if (!totalFee.trim() || Number.isNaN(feeNum) || feeNum < 0)
-      add("totalFee", "Enter a valid non-negative fee.");
-    if (!currency) add("currency", "Choose a currency.");
-
-    const parts = parseMilestoneSplit(milestoneSplit);
-    if (!parts.length)
-      add("milestoneSplit", "Use a percentage split like 50/50 or 100.");
-    if (parts.some((p) => p < 0 || p > 100))
-      add("milestoneSplit", "Each percentage must be between 0 and 100.");
-    const sum = parts.reduce((a, b) => a + b, 0);
-    if (sum > 100) add("milestoneSplit", "Split total must be ≤ 100%.");
-
-    // Deliverables validation
-    if (!deliverables.length) {
-      add("deliverables", "Add at least one deliverable.");
-    } else {
-      const messages: string[] = [];
-      const isVideoRowType = (type: string, format: string) => {
-        const isTextOnly =
-          TEXT_ONLY_TYPES.has(type) ||
-          (format || "").toLowerCase().startsWith("text ");
-        return VIDEO_TYPES.has(type) && !isTextOnly;
-      };
-
-      deliverables.forEach((row, idx) => {
-        const idxLabel = `Deliverable #${idx + 1}`;
-
-        // Type
-        if (!row.type) {
-          messages.push(`${idxLabel}: Type is required.`);
-        }
-
-        // Quantity
-        const qtyNum = Number(row.quantity || "");
-        if (!row.quantity.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
-          messages.push(`${idxLabel}: Quantity must be at least 1.`);
-        }
-
-        // Duration (for video)
-        const isVideoRow = isVideoRowType(row.type, row.format);
-        if (isVideoRow) {
-          const durNum = Number(row.durationSec || "");
-          if (!row.durationSec.trim() || Number.isNaN(durNum) || durNum <= 0) {
-            messages.push(
-              `${idxLabel}: Duration (sec) must be > 0 for video type.`
-            );
-          }
-        }
-
-        // Minimum Live
-        if (row.minLiveValue) {
-          const liveNum = Number(row.minLiveValue);
-          if (Number.isNaN(liveNum) || liveNum < 0) {
-            messages.push(
-              `${idxLabel}: Minimum Live must be a non-negative number.`
-            );
-          }
-        }
-
-        // Draft per deliverable
-        if (row.draftRequired && !row.draftDue) {
-          messages.push(
-            `${idxLabel}: Draft due date is required when a draft is required.`
-          );
-        }
-        if (row.draftDue) {
-          const draft = parseDateOnly(row.draftDue)!;
-          if (draft < today) {
-            messages.push(
-              `${idxLabel}: Draft due cannot be before today.`
-            );
-          }
-          if (start && draft > start) {
-            messages.push(
-              `${idxLabel}: Draft due must be on/before Posting Window Start.`
-            );
-          }
-        }
-
-        // Links per deliverable
-        const badLink = (row.links || []).find(
-          (l) => !/^https?:\/\/.+/i.test(l)
-        );
-        if (badLink) {
-          messages.push(
-            `${idxLabel}: All links must be valid URLs (https://).`
-          );
-        }
-
-        // Handles per deliverable
-        const badHandle = (row.handles || []).find(
-          (h) => !/^@?\w[\w._-]*$/.test(h)
-        );
-        if (badHandle) {
-          messages.push(
-            `${idxLabel}: Handles should be like @username (letters, numbers, . _ -).`
-          );
-        }
-      });
-
-      if (messages.length) {
-        add("deliverables", messages.join(" "));
-      }
-    }
-
-    if (!usageType) add("usageType", "Choose a license type.");
-    const usageDurNum = Number(usageDurationMonths || "");
-    if (
-      !usageDurationMonths.trim() ||
-      Number.isNaN(usageDurNum) ||
-      usageDurNum < 0
-    )
-      add("usageDurationMonths", "Duration must be ≥ 0.");
-
-    const revNum = Number(revisionsIncluded || "");
-    if (Number.isNaN(revNum) || revNum < 0)
-      add("revisionsIncluded", "Revisions must be ≥ 0.");
-
-    if (!ok) {
-      toast({ icon: "error", title: "Please fix the highlighted fields" });
-      setTimeout(scrollFirstErrorIntoView, 50);
-    }
-    return ok;
-  };
-
-  /* ---------------- Preview ---------------- */
-  const handleGeneratePreview = async () => {
-    if (!selectedInf) return;
-    if (!validateForPreview()) return;
-
-    if (isFullyManagedPlan) {
-      return toast({
-        icon: "info",
-        title: "Not available on Fully Managed",
-        text: "Contract sending/preview is disabled for Fully Managed brands.",
-      });
-    }
-
-    setIsPreviewLoading(true);
-    try {
-      if (panelMode === "send") {
-        const brand = buildBrandPayload();
-        const payload: any = {
-          brandId: localStorage.getItem("brandId"),
-          campaignId,
-          influencerId: selectedInf.influencerId,
-          brand,
-          preview: true,
-          ...(requestedEffDate && { requestedEffectiveDate: requestedEffDate }),
-          ...(requestedEffTz && {
-            requestedEffectiveDateTimezone: requestedEffTz,
-          }),
-        };
-
-        const res = await api.post("/contract/initiate", payload, {
-          responseType: "blob",
-        });
-
-        clearPreview();
-        setPdfUrl(URL.createObjectURL(res.data));
+      if (meta?.requestedEffectiveDateTimezone) {
+        setRequestedEffTz(meta.requestedEffectiveDateTimezone || DEFAULT_TIMEZONE);
       } else {
-        if (!selectedMeta?.contractId) {
-          toast({
-            icon: "error",
-            title: "No Contract",
-            text: "Cannot edit before a contract exists.",
-          });
-          setIsPreviewLoading(false);
-          return;
-        }
-
-        if (panelMode === "edit" && isRejectedMeta(selectedMeta)) {
-          const brandUpdates = buildBrandPayload();
-
-          const res = await api.post(
-            "/contract/resend",
-            {
-              contractId: selectedMeta.contractId,
-              brandUpdates,
-              requestedEffectiveDate: requestedEffDate,
-              requestedEffectiveDateTimezone: requestedEffTz,
-              preview: true,
-            },
-            { responseType: "blob" }
-          );
-
-          clearPreview();
-          setPdfUrl(URL.createObjectURL(res.data));
-          return;
-        }
-
-        const brandUpdates = buildBrandPayload();
-
-        await post("/contract/brand/update", {
-          contractId: selectedMeta.contractId,
-          brandId: localStorage.getItem("brandId"),
-          type: 1,
-          brandUpdates,
-          ...(requestedEffDate && {
-            requestedEffectiveDate: requestedEffDate,
-          }),
-          ...(requestedEffTz && {
-            requestedEffectiveDateTimezone: requestedEffTz,
-          }),
-        });
-
-        const res = await api.get("/contract/preview", {
-          params: { contractId: selectedMeta.contractId },
-          responseType: "blob",
-        });
-
-        clearPreview();
-        setPdfUrl(URL.createObjectURL(res.data));
+        setRequestedEffTz(DEFAULT_TIMEZONE);
       }
 
-      toast({
-        icon: "success",
-        title: "Preview ready",
-        text: "Review the PDF on the left.",
-      });
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Preview failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not generate preview.",
-      });
-    } finally {
-      setIsPreviewLoading(false);
-    }
-  };
+      const seededDeliverable = createDefaultScheduleDeliverable();
+      seededDeliverable.platformHandle = inf.handle ? sanitizeHandle(inf.handle) : "";
+      seededDeliverable.srNo = 1;
 
-  const wasResent = (meta?: ContractMeta | null) => {
-    if (!meta) return false;
-    if ((meta as any).isResend || (meta as any).isresend) return true;
-    if (meta.flags?.isResend || meta.flags?.isResendChild) return true;
-    if (meta.statusFlags?.isResend || meta.statusFlags?.isResendChild)
-      return true;
-    if (typeof meta.resendIteration === "number" && meta.resendIteration > 0)
-      return true;
-    const audit = Array.isArray(meta.audit) ? meta.audit : [];
-    return audit.some((ev) => (ev.type || "").toUpperCase() === "RESENT");
-  };
+      const merged = mergeDeep(base, meta?.content || {});
+      const scheduleAFromMeta = meta?.content?.scheduleA;
+      const usageRows = scheduleAFromMeta?.usageRights?.rows;
+      const deliverablesFromMeta = scheduleAFromMeta?.deliverables;
 
-  /* ---------------- Row actions ---------------- */
-  const handleViewContract = async (inf?: Influencer) => {
-    const target = inf || selectedInf;
-    if (!target) return;
-    const meta =
-      metaCache[target.influencerId] ?? (await getLatestContractFor(target));
-    if (!meta?.contractId)
-      return toast({
-        icon: "error",
-        title: "No Contract",
-        text: "Please send the contract first.",
-      });
-    try {
-      const res = await api.post(
-        "/contract/viewPdf",
-        { contractId: meta.contractId },
-        { responseType: "blob" }
+      if (Array.isArray(usageRows) && usageRows.length) {
+        merged.scheduleA.usageRights.rows = usageRows.map((row) => ({
+          id: createRowId(),
+          usageRight: String(row?.usageRight || ""),
+          selected: Boolean(row?.selected),
+          duration: String(row?.duration || ""),
+          territoryNotes: String(row?.territoryNotes || ""),
+        }));
+      }
+
+      setDeliverables(
+        Array.isArray(deliverablesFromMeta) && deliverablesFromMeta.length
+          ? deliverablesFromMeta.map((row, index) => ({
+              id: createRowId(),
+              srNo: Number(row?.srNo ?? index + 1),
+              platformHandle: String(row?.platformHandle || ""),
+              deliverableFormat: String(row?.deliverableFormat || ""),
+              qty: String(row?.qty ?? "1"),
+              draftDue: String(row?.draftDue || ""),
+              liveDate: String(row?.liveDate || ""),
+            }))
+          : [seededDeliverable]
       );
-      const url = URL.createObjectURL(res.data);
-      window.open(url, "_blank");
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Open Failed",
-        text: e?.message || "Unable to open contract.",
-      });
-    }
-  };
 
-  const handleSendContract = async () => {
-    if (!selectedInf) return;
-    if (!pdfUrl) {
-      toast({
-        icon: "info",
-        title: "Preview required",
-        text: "Generate preview before sending.",
-      });
-      return;
-    }
-    if (!validateForPreview()) return;
+      setContractForm(merged);
+    },
+    [clearErrors, requestedEffDate, serverBudget, serverCampaignTitle, serverTimeline]
+  );
 
-    if (isFullyManagedPlan) {
-      return toast({
-        icon: "info",
-        title: "Not available on Fully Managed",
-        text: "Contract sending is disabled for Fully Managed brands.",
-      });
-    }
-
-    setIsSendLoading(true);
-    try {
-      const brand = buildBrandPayload();
-      const brandId = localStorage.getItem("brandId")!;
-      await post("/contract/initiate", {
-        brandId,
-        campaignId,
-        influencerId: selectedInf.influencerId,
-        brand,
-        ...(requestedEffDate
-          ? { requestedEffectiveDate: requestedEffDate }
-          : {}),
-        ...(requestedEffTz
-          ? { requestedEffectiveDateTimezone: requestedEffTz }
-          : {}),
-      });
-      toast({
-        icon: "success",
-        title: "Sent!",
-        text: "Contract sent to influencer.",
-      });
-      closeSidebar();
-      fetchApplicants();
-      loadMetaCache(influencers);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Send failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Failed to send.",
-      });
-    } finally {
-      setIsSendLoading(false);
-    }
-  };
-
-  const handleEditContract = async () => {
-    if (!selectedMeta?.contractId) return;
-    if (!pdfUrl) return toast({ icon: "info", title: "Preview required" });
-    if (!validateForPreview()) return;
-
-    if (isFullyManagedPlan) {
-      return toast({
-        icon: "info",
-        title: "Not available on Fully Managed",
-        text: "Contract editing/resending is disabled for Fully Managed brands.",
-      });
-    }
-
-    setIsUpdateLoading(true);
-    try {
-      const brandUpdates = buildBrandPayload();
-
-      if (isRejectedMeta(selectedMeta)) {
-        await post("/contract/resend", {
-          contractId: selectedMeta.contractId,
-          brandUpdates,
-          requestedEffectiveDate: requestedEffDate,
-          requestedEffectiveDateTimezone: requestedEffTz,
-        });
-
-        toast({ icon: "success", title: "Resent!", text: "New contract sent to influencer." });
-      } else {
-        await post("/contract/brand/update", {
-          contractId: selectedMeta.contractId,
-          brandId: localStorage.getItem("brandId"),
-          type: 0,
-          brandUpdates,
-          requestedEffectiveDate: requestedEffDate,
-          requestedEffectiveDateTimezone: requestedEffTz,
-        });
-
-        toast({ icon: "success", title: "Updated", text: "Contract updated (new version sent)." });
-      }
-
-      closeSidebar();
-      fetchApplicants();
-      loadMetaCache(influencers);
-    } catch (e: any) {
-      toast({ icon: "error", title: "Action failed", text: e?.response?.data?.message || e?.message || "Failed." });
-    } finally {
-      setIsUpdateLoading(false);
-    }
-  };
-
-  const handleBrandAccept = async (inf?: Influencer) => {
-    const target = inf || selectedInf;
-    if (!target) return;
-    const meta =
-      metaCache[target.influencerId] ?? (await getLatestContractFor(target));
-    if (!meta?.contractId)
-      return toast({
-        icon: "error",
-        title: "No Contract",
-        text: "Send contract first.",
-      });
-
-    const statusStr = meta?.status ? String(meta.status) : "";
-    const influencerAccepted =
-      statusStr === CONTRACT_STATUS.INFLUENCER_ACCEPTED ||
-      !!meta.confirmations?.influencer?.confirmed; // fallback if some old docs still use confirmations
-
-    if (!influencerAccepted) {
-      return toast({
-        icon: "info",
-        title: "Awaiting influencer",
-        text: "Influencer must accept before you can accept.",
-      });
-    }
-
-    const ok = await askConfirm(
-      "Confirm as Brand?",
-      "Once confirmed, your next step is to sign."
-    );
-    if (!ok) return;
-
-    try {
-      await post("/contract/brand/confirm", { contractId: meta.contractId });
-      toast({ icon: "success", title: "Brand Accepted" });
-      fetchApplicants();
-      loadMetaCache(influencers);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Confirm failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not confirm.",
-      });
-    }
-  };
-
-
-  const openSignModal = (meta: ContractMeta | null) => {
-    if (!meta?.contractId)
-      return toast({
-        icon: "error",
-        title: "No Contract",
-        text: "Send/accept contract first.",
-      });
-    setSignTargetMeta(meta);
-    setSignOpen(true);
-  };
-
-  /* ---------------- Invalidate preview when form changes ---------------- */
-  useEffect(() => {
-    clearPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    campaignTitle,
-    platforms,
-    goLiveStart,
-    goLiveEnd,
-    totalFee,
-    currency,
-    milestoneSplit,
-    revisionsIncluded,
-    requestedEffDate,
-    requestedEffTz,
-    usageType,
-    usageDurationMonths,
-    usageDerivativeEdits,
-    usageGeographies.length,
-    JSON.stringify(deliverables),
-  ]);
-
-  const prettyStatus = (
-    meta: ContractMeta | null,
-    hasContract: boolean,
-    fallbackApplied = false
-  ) => {
-    if (!hasContract) return fallbackApplied ? "Applied" : "—";
-    if (isRejectedMeta(meta)) return "Rejected";
-
-    const signingLabel = signingStatusLabel(meta);
-    if (signingLabel) return signingLabel;
-
-    const s = meta?.status ? String(meta.status) : "";
-    return statusLabel(s);
-  };
-
-  const StatusBadge = ({
-    meta,
-    hasContract,
-  }: {
-    meta: ContractMeta | null;
-    hasContract: boolean;
-  }) => {
-    const label = prettyStatus(meta, hasContract, true);
-    const rejected = isRejectedMeta(meta);
-    return (
-      <span
-        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${rejected
-          ? "bg-black text-white"
-          : "bg-gray-100 text-gray-800"
-          }`}
-      >
-        {label}
-      </span>
-    );
-  };
-
-  function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
-    const inf = row.rawInfluencer;
-    const meta = row.contractMeta;
-    const hasContract = row.hasContract;
-
-    const statusStr = meta?.status ? String(meta.status) : "";
-    const locked = isLockedStatus(statusStr);
-    const editable = isEditableStatus(statusStr) || row.rejected;
-
-    const handleSendContractClick = () => {
+  const openSidebar = useCallback(
+    async (inf: Influencer, mode: PanelMode) => {
       if (isFullyManagedPlan) {
         toast({
           icon: "info",
@@ -1996,85 +1324,420 @@ export default function AppliedInfluencersPage() {
         return;
       }
 
-      if (!hasContract) {
-        openSidebar(inf, "send");
-        return;
-      }
+      setSelectedInf(inf);
+      setPanelMode(mode);
+      const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
+      setSelectedMeta(meta || null);
+      prefillFormFor(inf, meta || null);
+      clearPreview();
+      setSidebarOpen(true);
+    },
+    [clearPreview, getLatestContractFor, isFullyManagedPlan, metaCache, prefillFormFor]
+  );
 
-      if (!locked && editable) {
-        openSidebar(inf, "edit");
-        return;
-      }
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+    clearPreview();
+    setSelectedInf(null);
+    setSelectedMeta(null);
+    setIsPreviewLoading(false);
+    setIsSendLoading(false);
+    setIsUpdateLoading(false);
+  }, [clearPreview]);
 
-      handleViewContract(inf);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sidebarOpen]);
+
+const buildContentPayload = useCallback(() => {
+  const content = deepClone(contractForm);
+
+  return {
+    ...content,
+    campaign: {
+      ...content.campaign,
+      effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
+    },
+    scheduleA: {
+      ...content.scheduleA,
+      deliverables: deliverables.map((row, index) => ({
+        srNo: index + 1,
+        platformHandle: row.platformHandle,
+        deliverableFormat: row.deliverableFormat,
+        qty: Number(row.qty || "0") || 0,
+        draftDue: row.draftDue,
+        liveDate: row.liveDate,
+      })),
+      review: {
+        ...content.scheduleA.review,
+        includedRevisionRounds:
+          Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+      },
+      commercial: {
+        ...content.scheduleA.commercial,
+        totalCampaignFee:
+          Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+      },
+      usageRights: {
+        ...content.scheduleA.usageRights,
+        rows: content.scheduleA.usageRights.rows.map((row) => ({
+          usageRight: row.usageRight,
+          selected: row.selected,
+          duration: row.duration,
+          territoryNotes: row.territoryNotes,
+        })),
+      },
+    },
+  };
+}, [contractForm, deliverables, requestedEffDate]);
+  const buildBrandUpdatesPayload = useCallback(() => {
+    return {
+      content: buildContentPayload(),
+    };
+  }, [buildContentPayload]);
+
+  const scrollFirstErrorIntoView = useCallback(() => {
+    const first = document.querySelector("[data-field-error=true]") as HTMLElement | null;
+    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const validateForPreview = useCallback(() => {
+    clearErrors();
+    let ok = true;
+    const add = (key: string, message: string) => {
+      ok = false;
+      setErr(key, message);
     };
 
-    const handleManageClick = () => {
-      router.push(`/brand/influencers?id=${inf.influencerId}`);
-    };
+    const feeValue = Number(contractForm.scheduleA.commercial.totalCampaignFee || "");
+    const revisionValue = Number(contractForm.scheduleA.review.includedRevisionRounds || "");
+    const reviewDays = Number(
+      contractForm.scheduleA.preShootScriptReviewBusinessDays || "2"
+    );
 
-    const handleMoreClick = () => {
-      if (hasContract) {
-        handleViewContract(inf);
-        return;
+    if (!contractForm.brand.legalName.trim()) add("brand.legalName", "Brand legal name is required.");
+    if (!contractForm.influencer.legalName.trim()) add("influencer.legalName", "Influencer legal name is required.");
+    if (!contractForm.campaign.campaignTitleOrId.trim()) add("campaign.campaignTitleOrId", "Campaign title / ID is required.");
+    if (!contractForm.scheduleA.commercial.currency) add("scheduleA.commercial.currency", "Currency is required.");
+    if (
+      !contractForm.scheduleA.commercial.totalCampaignFee.trim() ||
+      Number.isNaN(feeValue) ||
+      feeValue < 0
+    ) {
+      add("scheduleA.commercial.totalCampaignFee", "Enter a valid non-negative fee.");
+    }
+    if (Number.isNaN(revisionValue) || revisionValue < 0) {
+      add("scheduleA.review.includedRevisionRounds", "Revision rounds must be zero or more.");
+    }
+    if (Number.isNaN(reviewDays) || reviewDays < 0) {
+      add(
+        "scheduleA.preShootScriptReviewBusinessDays",
+        "Review business days must be zero or more."
+      );
+    }
+    if (!requestedEffDate) add("requestedEffDate", "Requested effective date is required.");
+
+    if (!deliverables.length) {
+      add("scheduleA.deliverables", "Add at least one deliverable.");
+    } else {
+      const messages: string[] = [];
+      deliverables.forEach((row, index) => {
+        const label = `Deliverable #${index + 1}`;
+        const qtyNum = Number(row.qty || "");
+        if (!row.deliverableFormat.trim()) {
+          messages.push(`${label}: deliverable format is required.`);
+        }
+        if (!row.platformHandle.trim()) {
+          messages.push(`${label}: platform / handle is required.`);
+        }
+        if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
+          messages.push(`${label}: quantity must be at least 1.`);
+        }
+      });
+      if (messages.length) add("scheduleA.deliverables", messages.join(" "));
+    }
+
+    if (!ok) {
+      toast({ icon: "error", title: "Please fix the highlighted fields" });
+      setTimeout(scrollFirstErrorIntoView, 50);
+    }
+    return ok;
+  }, [
+    clearErrors,
+    contractForm,
+    deliverables,
+    requestedEffDate,
+    scrollFirstErrorIntoView,
+    setErr,
+  ]);
+
+  const handleGeneratePreview = useCallback(async () => {
+    if (!selectedInf || !campaignId || !brandId) return;
+    if (!validateForPreview()) return;
+    if (isFullyManagedPlan) {
+      toast({
+        icon: "info",
+        title: "Not available on Fully Managed",
+        text: "Contract sending and preview are disabled for Fully Managed brands.",
+      });
+      return;
+    }
+
+    setIsPreviewLoading(true);
+    try {
+      const content = buildContentPayload();
+      let res: any;
+
+      if (panelMode === "send") {
+        res = await api.post(
+          "/contract/initiate",
+          {
+            brandId,
+            campaignId,
+            influencerId: selectedInf.influencerId,
+            content,
+            requestedEffectiveDate: requestedEffDate,
+            requestedEffectiveDateTimezone: requestedEffTz,
+            preview: true,
+          },
+          { responseType: "blob" }
+        );
+      } else {
+        if (!selectedMeta?.contractId) {
+          toast({ icon: "error", title: "No contract", text: "No contract found." });
+          return;
+        }
+        res = await api.post(
+          "/contract/resend",
+          {
+            contractId: selectedMeta.contractId,
+            content,
+            requestedEffectiveDate: requestedEffDate,
+            requestedEffectiveDateTimezone: requestedEffTz,
+            preview: true,
+          },
+          { responseType: "blob" }
+        );
       }
 
-      if (isFullyManagedPlan) {
+setPdfUrl((prev) => {
+  if (prev) URL.revokeObjectURL(prev);
+  return URL.createObjectURL(res.data);
+});
+      toast({ icon: "success", title: "Preview ready" });
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Preview failed",
+        text: e?.response?.data?.message || e?.message || "Could not generate preview.",
+      });
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }, [
+    brandId,
+    buildContentPayload,
+    campaignId,
+    clearPreview,
+    isFullyManagedPlan,
+    panelMode,
+    requestedEffDate,
+    requestedEffTz,
+    selectedInf,
+    selectedMeta?.contractId,
+    validateForPreview,
+  ]);
+
+  const handleSendContract = useCallback(async () => {
+    if (!selectedInf || !campaignId || !brandId) return;
+    if (!pdfUrl) {
+      toast({ icon: "info", title: "Preview required", text: "Generate preview before sending." });
+      return;
+    }
+    if (!validateForPreview()) return;
+
+    setIsSendLoading(true);
+    try {
+      await post("/contract/initiate", {
+        brandId,
+        campaignId,
+        influencerId: selectedInf.influencerId,
+        content: buildContentPayload(),
+        requestedEffectiveDate: requestedEffDate,
+        requestedEffectiveDateTimezone: requestedEffTz,
+      });
+
+      toast({ icon: "success", title: "Sent!", text: "Contract sent to influencer." });
+      closeSidebar();
+      fetchApplicants(debouncedSearch);
+      loadMetaCache(influencers);
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Send failed",
+        text: e?.response?.data?.message || e?.message || "Failed to send contract.",
+      });
+    } finally {
+      setIsSendLoading(false);
+    }
+  }, [
+    brandId,
+    buildContentPayload,
+    campaignId,
+    closeSidebar,
+    debouncedSearch,
+    fetchApplicants,
+    influencers,
+    loadMetaCache,
+    pdfUrl,
+    requestedEffDate,
+    requestedEffTz,
+    selectedInf,
+    validateForPreview,
+  ]);
+
+  const handleEditContract = useCallback(async () => {
+    if (!selectedMeta?.contractId || !brandId) return;
+    if (!pdfUrl) {
+      toast({ icon: "info", title: "Preview required" });
+      return;
+    }
+    if (!validateForPreview()) return;
+
+    setIsUpdateLoading(true);
+    try {
+      if (isRejectedMeta(selectedMeta)) {
+        await post("/contract/resend", {
+          contractId: selectedMeta.contractId,
+          content: buildContentPayload(),
+          requestedEffectiveDate: requestedEffDate,
+          requestedEffectiveDateTimezone: requestedEffTz,
+        });
+        toast({ icon: "success", title: "Resent!", text: "New contract sent to influencer." });
+      } else {
+        await post("/contract/brand/update", {
+          contractId: selectedMeta.contractId,
+          brandId,
+          type: 0,
+          brandUpdates: buildBrandUpdatesPayload(),
+        });
+        toast({ icon: "success", title: "Updated", text: "Contract updated and shared." });
+      }
+
+      closeSidebar();
+      fetchApplicants(debouncedSearch);
+      loadMetaCache(influencers);
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Action failed",
+        text: e?.response?.data?.message || e?.message || "Failed to update contract.",
+      });
+    } finally {
+      setIsUpdateLoading(false);
+    }
+  }, [
+    brandId,
+    buildBrandUpdatesPayload,
+    buildContentPayload,
+    closeSidebar,
+    debouncedSearch,
+    fetchApplicants,
+    influencers,
+    loadMetaCache,
+    pdfUrl,
+    requestedEffDate,
+    requestedEffTz,
+    selectedMeta,
+    validateForPreview,
+  ]);
+
+  const handleViewContract = useCallback(
+    async (inf?: Influencer) => {
+      const target = inf || selectedInf;
+      if (!target) return;
+      const activeMeta = metaCache[target.influencerId] ?? (await getLatestContractFor(target));
+      if (!activeMeta?.contractId) {
         toast({
-          icon: "info",
-          title: "No contract yet",
-          text: "This influencer does not have a contract yet.",
+          icon: "error",
+          title: "No contract",
+          text: "Please send the contract first.",
         });
         return;
       }
+      try {
+        const res = await api.post(
+          "/contract/viewPdf",
+          { contractId: activeMeta.contractId },
+          { responseType: "blob" }
+        );
+        const url = URL.createObjectURL(res.data);
+        window.open(url, "_blank");
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Open failed",
+          text: e?.message || "Unable to open contract.",
+        });
+      }
+    },
+    [getLatestContractFor, metaCache, selectedInf]
+  );
 
-      openSidebar(inf, "send");
-    };
+  const handleBrandAccept = useCallback(
+    async (inf?: Influencer) => {
+      const target = inf || selectedInf;
+      if (!target) return;
+      const activeMeta = metaCache[target.influencerId] ?? (await getLatestContractFor(target));
+      if (!activeMeta?.contractId) {
+        toast({ icon: "error", title: "No contract", text: "Send contract first." });
+        return;
+      }
 
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-2 max-w-full">
-        <button
-          type="button"
-          onClick={handleSendContractClick}
-          className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#D9D9D9] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
-        >
-          Send Contract
-        </button>
+      const ok = await askConfirm(
+        "Confirm as Brand?",
+        "Once confirmed, the contract can move to signing if the influencer already accepted."
+      );
+      if (!ok) return;
 
-        <button
-          type="button"
-          onClick={handleManageClick}
-          className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
-        >
-          Manage
-        </button>
+      try {
+        await post("/contract/brand/confirm", { contractId: activeMeta.contractId });
+        toast({ icon: "success", title: "Brand accepted" });
+        fetchApplicants(debouncedSearch);
+        loadMetaCache(influencers);
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Confirm failed",
+          text: e?.response?.data?.message || e?.message || "Could not confirm.",
+        });
+      }
+    },
+    [debouncedSearch, fetchApplicants, getLatestContractFor, influencers, loadMetaCache, metaCache, selectedInf]
+  );
 
-        <button
-          type="button"
-          onClick={() => handleViewMessage(inf)}
-          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
-        >
-          <EnvelopeOpen size={16} />
-          {hasContract ? (
-            <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
-          ) : null}
-        </button>
+  const openSignModal = useCallback((meta: ContractMeta | null) => {
+    if (!meta?.contractId) {
+      toast({ icon: "error", title: "No contract", text: "No contract found." });
+      return;
+    }
+    setSignTargetMeta(meta);
+    setSignOpen(true);
+  }, []);
 
-        <button
-          type="button"
-          onClick={handleMoreClick}
-          className="flex h-8 w-8 items-center shrink-0 justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
-        >
-          <DotsThree size={16} weight="bold" />
-        </button>
-      </div>
-    );
-  }
-  /* ---------------- Rows rendering ---------------- */
   const tableRows = useMemo<AppliedInfluencerRow[]>(() => {
     return influencers.map((inf) => {
       const contractMeta = metaCache[inf.influencerId] || null;
-      const hasContract = !!(contractMeta?.contractId || inf.contractId || inf.isAssigned);
+      const hasContract = !!(
+        contractMeta?.contractId ||
+        inf.contractId ||
+        inf.isAssigned
+      );
       const rejected = isRejectedMeta(contractMeta);
       const typeLabel = getAppliedTypeLabel(contractMeta, hasContract);
       const engagement = getEngagementValue(inf);
@@ -2093,18 +1756,10 @@ export default function AppliedInfluencersPage() {
         category,
         followers: audience,
         engagement,
-        platforms: [
-          {
-            platform,
-            followers: audience,
-            engagement,
-          },
-        ],
+        platforms: [{ platform, followers: audience, engagement }],
         appliedDate: inf.createdAt || "",
         status: prettyStatus(contractMeta, hasContract, true),
-        budget: feeAmountValue
-          ? `₹${feeAmountValue.toLocaleString("en-IN")}`
-          : "₹0",
+        budget: feeAmountValue ? formatMoneyINR(feeAmountValue) : "₹0",
         rawInfluencer: inf,
         contractMeta,
         hasContract,
@@ -2132,9 +1787,7 @@ export default function AppliedInfluencersPage() {
       const categoryOk =
         filters.Category.length === 0 ||
         filters.Category.includes("All") ||
-        filters.Category.some((c) =>
-          row.category.toLowerCase().includes(c.toLowerCase())
-        );
+        filters.Category.some((c) => row.category.toLowerCase().includes(c.toLowerCase()));
 
       const platformNames = (row.platforms || []).map((p) => p.platform.toLowerCase());
       const platformOk =
@@ -2143,7 +1796,6 @@ export default function AppliedInfluencersPage() {
         filters.Platform.some((p) => platformNames.includes(p.toLowerCase()));
 
       const dateOk = matchesDateFilter(row.appliedDate, filters.Date);
-
       const followerTierLabel = getFollowerTierBucket(row.followers ?? 0);
       const followerOk =
         !filters.Follower ||
@@ -2167,23 +1819,18 @@ export default function AppliedInfluencersPage() {
             new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
         );
         break;
-
       case "Highest engagement":
         list.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0));
         break;
-
       case "Highest follower":
         list.sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0));
         break;
-
       case "Price: Low to High":
         list.sort((a, b) => a.feeAmountValue - b.feeAmountValue);
         break;
-
       case "Price: HIgh to Low":
         list.sort((a, b) => b.feeAmountValue - a.feeAmountValue);
         break;
-
       case "Priority":
       default:
         list.sort(
@@ -2194,15 +1841,137 @@ export default function AppliedInfluencersPage() {
     }
 
     return list;
-  }, [tableRows, filters, sortValue]);
+  }, [filters, sortValue, tableRows]);
+
+  function StatusBadge({
+    meta,
+    hasContract,
+  }: {
+    meta: ContractMeta | null;
+    hasContract: boolean;
+  }) {
+    const label = prettyStatus(meta, hasContract, true);
+    const rejected = isRejectedMeta(meta);
+    return (
+      <span
+        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+          rejected ? "bg-black text-white" : "bg-[#F7F7F7] text-[#1A1A1A]"
+        }`}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
+    const inf = row.rawInfluencer;
+    const meta = row.contractMeta;
+    const hasContract = row.hasContract;
+    const statusStr = String(meta?.status || "");
+    const locked = isLockedStatus(statusStr);
+    const editable = isEditableStatus(statusStr) || row.rejected;
+    const needsAccept = needsBrandAcceptance(statusStr);
+    const readyToSign = canSignNow(statusStr) && !meta?.signatures?.brand?.signed;
+
+    const primaryLabel = !hasContract
+      ? "Send Contract"
+      : row.rejected
+        ? "Resend"
+        : editable && !locked
+          ? "Edit Contract"
+          : "View Contract";
+
+    const handlePrimary = () => {
+      if (!hasContract) {
+        openSidebar(inf, "send");
+        return;
+      }
+      if (editable && !locked) {
+        openSidebar(inf, "edit");
+        return;
+      }
+      handleViewContract(inf);
+    };
+
+    const handleManageClick = () => {
+      router.push(`/brand/influencers?id=${inf.influencerId}`);
+    };
+
+    const handleMoreClick = () => {
+      if (hasContract) {
+        handleViewContract(inf);
+        return;
+      }
+      openSidebar(inf, "send");
+    };
+
+    return (
+      <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={handlePrimary}
+          className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#D9D9D9] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
+        >
+          {primaryLabel}
+        </button>
+
+        {needsAccept ? (
+          <button
+            type="button"
+            onClick={() => handleBrandAccept(inf)}
+            className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#E6E6E6] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
+          >
+            <SealCheck className="mr-2 h-4 w-4" /> Accept
+          </button>
+        ) : null}
+
+        {readyToSign ? (
+          <button
+            type="button"
+            onClick={() => openSignModal(meta)}
+            className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#E6E6E6] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
+          >
+            <Signature className="mr-2 h-4 w-4" /> Sign
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={handleManageClick}
+          className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Manage
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push("/brand/inbox")}
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+        >
+          <EnvelopeOpen size={16} />
+          {hasContract ? (
+            <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
+          ) : null}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleMoreClick}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+        >
+          <DotsThree size={16} weight="bold" />
+        </button>
+      </div>
+    );
+  }
 
   const EmptyState = () => (
-    <div className="p-12 text-center space-y-3">
+    <div className="space-y-3 p-12 text-center">
       <div
-        className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center"
+        className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
         style={{ backgroundColor: "#000" }}
       >
-        <MagnifyingGlass className="text-white w-6 h-6" />
+        <MagnifyingGlass className="h-6 w-6 text-white" />
       </div>
       <h3 className="text-lg font-semibold">No applicants found</h3>
       <p className="text-sm text-gray-600">
@@ -2217,55 +1986,42 @@ export default function AppliedInfluencersPage() {
         const inf = row.rawInfluencer;
         const meta = row.contractMeta;
         const hasContract = row.hasContract;
-        const rejected = row.rejected;
-        const iConfirmed = !!meta?.confirmations?.influencer?.confirmed;
-        const bConfirmed = !!meta?.confirmations?.brand?.confirmed;
-        const bSigned = !!meta?.signatures?.brand?.signed;
-        const locked = isLockedStatus(meta?.status ? String(meta.status) : null);
         const href = buildHandleUrl(inf.primaryPlatform, inf.handle);
 
         return (
           <div
             key={inf.influencerId}
             id={`inf-card-${inf.influencerId}`}
-            className={`relative rounded-xl border p-4 bg-white transition-all duration-300 ${highlightInfId === inf.influencerId
-              ? "border-[#EA580C] bg-[#FFE4C4] shadow-[0_0_0_2px_rgba(234,88,12,0.9),0_18px_45px_rgba(0,0,0,0.35)] animate-pulse scale-[1.02]"
-              : "border-gray-200 hover:shadow-md hover:-translate-y-[1px]"
-              }`}
+            className={`relative rounded-xl border bg-white p-4 transition-all duration-300 ${
+              highlightInfId === inf.influencerId
+                ? "border-[#EA580C] bg-[#FFE4C4] shadow-[0_0_0_2px_rgba(234,88,12,0.9),0_18px_45px_rgba(0,0,0,0.35)] animate-pulse scale-[1.02]"
+                : "border-gray-200 hover:-translate-y-[1px] hover:shadow-md"
+            }`}
           >
-            {highlightInfId === inf.influencerId && (
+            {highlightInfId === inf.influencerId ? (
               <span className="absolute -top-2 right-3 rounded-full bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
                 From notification
               </span>
-            )}
+            ) : null}
 
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="font-semibold truncate" title={inf.name}>
+                <div className="truncate font-semibold" title={inf.name}>
                   {inf.name}
                 </div>
-
-                <div className="text-sm text-gray-600 truncate">
+                <div className="truncate text-sm text-gray-600">
                   {href ? (
-                    <a
-                      className="hover:underline text-black"
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a href={href} target="_blank" rel="noreferrer" className="text-black hover:underline">
                       {inf.handle}
                     </a>
                   ) : (
                     <span className="text-gray-500">—</span>
                   )}
                 </div>
-
                 <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
-                  <Badge className="bg-gray-200 text-gray-800">
-                    {row.category}
-                  </Badge>
+                  <Badge className="bg-gray-200 text-gray-800">{row.category}</Badge>
                   <span>•</span>
-                  <span>{formatAudience(inf.audienceSize)} audience</span>
+                  <span>{formatCompactAudience(inf.audienceSize)} audience</span>
                 </div>
               </div>
 
@@ -2281,23 +2037,17 @@ export default function AppliedInfluencersPage() {
     </div>
   );
 
-  /* ===============================================================
-     Render
-     =============================================================== */
+  const todayStr = toInputDate(new Date());
+  const updateBtnLabel =
+    selectedMeta && isRejectedMeta(selectedMeta) ? "Resend Contract" : "Update Contract";
+
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="min-h-screen p-4 md:p-8 space-y-6 md:space-y-8 max-w-full mx-auto">
-        <header className="flex items-center justify-between p-2 md:p-4 rounded-md sticky top-0 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-gray-100">
-          <h1 className="text-xl md:text-3xl font-bold truncate">
-            Campaign: {campaignTitle || "Unknown Campaign"}
-          </h1>
+      <div className="mx-auto min-h-screen max-w-full space-y-6 p-4 md:space-y-8 md:p-8">
+        <header className="sticky top-0 flex items-center justify-between rounded-md border-b border-gray-100 bg-white/90 p-2 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:p-4">
+          <h1 className="truncate text-xl font-bold md:text-3xl">Campaign: {pageTitle}</h1>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-gray-200 text-black"
-              onClick={() => router.back()}
-            >
+            <Button size="sm" variant="outline" className="bg-gray-200 text-black" onClick={() => router.back()}>
               Back
             </Button>
           </div>
@@ -2313,42 +2063,37 @@ export default function AppliedInfluencersPage() {
         />
 
         {loading ? (
-          <div className="bg-white rounded-md shadow-sm">
-            <LoadingSkeleton rows={limit} />
+          <div className="rounded-md bg-white shadow-sm">
+            <LoadingSkeleton rows={PAGE_SIZE} />
           </div>
         ) : error ? (
           <ErrorMessage>{error}</ErrorMessage>
         ) : filteredRows.length === 0 ? (
-          <div className="bg-white rounded-md shadow-sm">
+          <div className="rounded-md bg-white shadow-sm">
             <EmptyState />
           </div>
         ) : (
           <>
-            <div className="rounded-md overflow-x-auto hidden md:block">
+            <div className="hidden overflow-x-auto rounded-md md:block">
               <InfluencerTable
                 rows={filteredRows}
                 variant="shortlisted"
                 renderStatus={(baseRow) => {
                   const row = baseRow as AppliedInfluencerRow;
-
                   if (row.rejected) {
                     return (
                       <div className="space-y-1 text-center">
                         <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
                           Rejected
                         </span>
-                        <p className="max-w-[140px] break-words text-[11px] text-gray-500">
+                        <p className="max-w-[150px] break-words text-[11px] text-gray-500">
                           {getRejectReasonFromMeta(row.contractMeta) || "No reason provided"}
                         </p>
                       </div>
                     );
                   }
 
-                  return (
-                    <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-3 py-1 text-xs font-semibold text-[#1A1A1A]">
-                      {row.status || "Applied"}
-                    </span>
-                  );
+                  return <StatusBadge meta={row.contractMeta} hasContract={row.hasContract} />;
                 }}
                 renderShortlistedActions={(baseRow) => (
                   <AppliedCampaignActionCell row={baseRow as AppliedInfluencerRow} />
@@ -2360,8 +2105,8 @@ export default function AppliedInfluencersPage() {
           </>
         )}
 
-        {meta.totalPages > 1 && (
-          <div className="flex justify-center md:justify-end items-center gap-2">
+        {meta.totalPages > 1 ? (
+          <div className="flex items-center justify-center gap-2 md:justify-end">
             <Button
               variant="outline"
               size="icon"
@@ -2379,18 +2124,15 @@ export default function AppliedInfluencersPage() {
               variant="outline"
               size="icon"
               disabled={page === meta.totalPages}
-              onClick={() =>
-                setPage((p) => Math.min(p + 1, meta.totalPages))
-              }
+              onClick={() => setPage((p) => Math.min(p + 1, meta.totalPages))}
               className="text-black"
               aria-label="Next page"
             >
               <CaretRight />
             </Button>
           </div>
-        )}
+        ) : null}
 
-        {/* ================= Sidebar ================= */}
         <ContractSidebar
           isOpen={sidebarOpen && !isFullyManagedPlan}
           onClose={closeSidebar}
@@ -2402,836 +2144,919 @@ export default function AppliedInfluencersPage() {
                 : "Edit Contract"
           }
           subtitle={
-            selectedInf
-              ? `${campaignTitle || "Agreement"} • ${selectedInf.name}`
-              : campaignTitle || "Agreement"
+            selectedInf ? `${pageTitle || "Agreement"} • ${selectedInf.name}` : pageTitle || "Agreement"
           }
           previewUrl={pdfUrl}
           onClosePreview={clearPreview}
         >
-          {/* Campaign Details */}
-          <SidebarSection
-            title="Campaign Details"
-            icon={<FileText className="w-4 h-4" />}
-          >
-            <div className="space-y-4">
-              <FloatingLabelInput
-                id="campaignTitle"
-                label="Campaign Title"
-                info="The display name for this agreement (Schedule A, item 1)."
-                value={campaignTitle}
-                onChange={(e: any) => {
-                  setCampaignTitle(e.target.value);
-                  clearPreview();
-                }}
-                error={formErrors.campaignTitle}
-                data-field-error={!!formErrors.campaignTitle}
-              />
-
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <LabelWithInfo
-                    text="Platforms"
-                    info="Select the channels for this SOW (Schedule A, item 3)."
-                  />
-                  {formErrors.platforms && (
-                    <span
-                      className="text-xs text-red-600"
-                      data-field-error
-                    >
-                      {formErrors.platforms}
-                    </span>
-                  )}
-                </div>
-                <PlatformSelector
-                  platforms={platforms}
-                  onChange={(v: string[]) => {
-                    setPlatforms(v);
-                    clearPreview();
-                  }}
+          <SidebarSection title="Brand & Influencer" icon={<FileText className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Brand</div>
+                <FloatingLabelInput
+                  id="brand-legal-name"
+                  label="Brand Legal Name"
+                  value={getAtPath(contractForm, "brand.legalName")}
+                  onChange={(e: any) => setContractField("brand.legalName", e.target.value)}
+                  error={formErrors["brand.legalName"]}
+                />
+                <FloatingLabelInput
+                  id="brand-contact-person"
+                  label="Contact Person Name"
+                  value={getAtPath(contractForm, "brand.contactPersonName")}
+                  onChange={(e: any) =>
+                    setContractField("brand.contactPersonName", e.target.value)
+                  }
+                />
+                <FloatingLabelInput
+                  id="brand-notice-email"
+                  label="Notice Email"
+                  value={getAtPath(contractForm, "brand.noticeEmail")}
+                  onChange={(e: any) => setContractField("brand.noticeEmail", e.target.value)}
+                />
+                <FloatingLabelInput
+                  id="brand-notice-phone"
+                  label="Notice Phone"
+                  value={getAtPath(contractForm, "brand.noticePhone")}
+                  onChange={(e: any) => setContractField("brand.noticePhone", e.target.value)}
+                />
+                <TextArea
+                  id="brand-billing-address"
+                  label="Billing Address"
+                  value={getAtPath(contractForm, "brand.billingAddress")}
+                  onChange={(e: any) => setContractField("brand.billingAddress", e.target.value)}
+                  rows={3}
                 />
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Total Fee */}
-                <NumberInputTop
-                  id="totalFee"
-                  label="Total Fee"
-                  info="The full compensation for the campaign (Schedule A, 7a)."
-                  value={totalFee}
-                  onChange={(v: string) => {
-                    setTotalFee(v);
-                    clearPreview();
-                  }}
-                  error={formErrors.totalFee}
-                  data-field-error={!!formErrors.totalFee}
-                />
-
-                {/* Currency */}
-                <div
-                  className="space-y-1.5"
-                  data-field-error={!!formErrors.currency}
-                >
-                  <LabelWithInfo
-                    text="Currency"
-                    info="Payment currency (Schedule A, 7a)."
-                  />
-                  <ReactSelect
-                    instanceId="currency-select"
-                    inputId="currency-select-input"
-                    name="currency"
-                    isLoading={listsLoading}
-                    options={currencyOptions}
-                    value={
-                      currencyOptions.find((o) => o.value === currency) ||
-                      null
-                    }
-                    onChange={(opt: any) => {
-                      setCurrency(opt?.value || "");
-                      clearPreview();
-                    }}
-                    placeholder="Select currency"
-                    styles={buildReactSelectStyles({
-                      hasError: !!formErrors.currency,
-                    })}
-                  />
-                  {formErrors.currency && (
-                    <div
-                      className="text-xs text-red-600"
-                      data-field-error
-                    >
-                      {formErrors.currency}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Milestone Split with dropdown */}
-                <div
-                  className="space-y-1.5"
-                  data-field-error={!!formErrors.milestoneSplit}
-                >
-                  <LabelWithInfo
-                    text="Milestone Split (%)"
-                    info="Percentages like 50/50 or 40/30/30. Total must be ≤ 100%."
-                  />
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={milestonePreset}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setMilestoneSplit("");
-                          clearPreview();
-                          return;
-                        }
-                        setMilestoneSplit(val);
-                        clearPreview();
-                      }}
-                      className="w-full h-[44px] px-3 border-2 rounded-lg text-sm border-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white"
-                    >
-                      {MILESTONE_SPLIT_PRESETS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    {milestonePreset === "custom" && (
-                      <input
-                        id="milestoneSplitCustom"
-                        type="text"
-                        value={milestoneSplit}
-                        onChange={(e) => {
-                          setMilestoneSplit(e.target.value);
-                          clearPreview();
-                        }}
-                        placeholder="e.g. 50/50 or 40/30/30"
-                        className="w-full h-[44px] px-3 border-2 rounded-lg text-sm border-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white"
-                      />
-                    )}
-                  </div>
-                  {formErrors.milestoneSplit && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.milestoneSplit}
-                    </div>
-                  )}
-                </div>
-
-                {/* Revisions Included */}
-                <NumberInput
-                  id="revisionsIncluded"
-                  label="Revisions Included"
-                  info="Included rounds of edits (Schedule A, 5b)."
-                  value={revisionsIncluded}
-                  onChange={(v: string) => {
-                    setRevisionsIncluded(v);
-                    clearPreview();
-                  }}
-                  error={formErrors.revisionsIncluded}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <LabelWithInfo
-                    text="Requested Effective Date (display)"
-                    info="Shown in the PDF header; does not change locking rules."
-                  />
-                  <input
-                    id="requestedEffDate"
-                    type="date"
-                    value={requestedEffDate}
-                    min={effMin}
-                    max={effMax || undefined}
-                    onChange={(e) => {
-                      setRequestedEffDate(e.target.value);
-                      clearPreview();
-                    }}
-                    className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${formErrors.requestedEffDate
-                      ? "border-red-500"
-                      : "border-gray-200 focus:border-[#FF8A35]"
-                      }`}
-                    data-field-error={!!formErrors.requestedEffDate}
-                  />
-                  {formErrors.requestedEffDate && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.requestedEffDate}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <LabelWithInfo
-                    text="Timezone"
-                    info="Used for date formatting and review windows (Section 2c)."
-                  />
-                  <ReactSelect
-                    instanceId="timezone-select"
-                    inputId="timezone-select-input"
-                    name="timezone"
-                    isLoading={listsLoading}
-                    options={tzOptions}
-                    value={
-                      tzOptions.find((o) => o.value === requestedEffTz) ||
-                      null
-                    }
-                    onChange={(opt: any) => {
-                      setRequestedEffTz(opt?.value || "");
-                      clearPreview();
-                    }}
-                    placeholder="Select timezone"
-                    styles={buildReactSelectStyles()}
-                  />
-                </div>
-              </div>
-            </div>
-          </SidebarSection>
-
-          {/* Posting Window */}
-          <SidebarSection
-            title="Posting Window"
-            icon={<Info className="w-4 h-4" />}
-          >
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <LabelWithInfo
-                    text="Start"
-                    info="Earliest date content may go live."
-                  />
-                  <input
-                    id="goLiveStart"
-                    type="date"
-                    value={goLiveStart}
-                    min={startMin}
-                    max={startMax || undefined}
-                    onChange={(e) => {
-                      setGoLiveStart(e.target.value);
-                      clearPreview();
-                    }}
-                    className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${formErrors.goLiveStart
-                      ? "border-red-500"
-                      : "border-gray-200 focus:border-[#FF8A35]"
-                      }`}
-                    data-field-error={!!formErrors.goLiveStart}
-                  />
-                  {formErrors.goLiveStart && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.goLiveStart}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <LabelWithInfo
-                    text="End"
-                    info="Latest date content must be posted."
-                  />
-                  <input
-                    id="goLiveEnd"
-                    type="date"
-                    value={goLiveEnd}
-                    min={endMin}
-                    onChange={(e) => {
-                      setGoLiveEnd(e.target.value);
-                      clearPreview();
-                    }}
-                    className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${formErrors.goLiveEnd
-                      ? "border-red-500"
-                      : "border-gray-200 focus:border-[#FF8A35]"
-                      }`}
-                    data-field-error={!!formErrors.goLiveEnd}
-                  />
-                  {formErrors.goLiveEnd && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.goLiveEnd}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </SidebarSection>
-
-          {/* Deliverables (multi-row, everything per row) */}
-          <SidebarSection
-            title="Deliverables"
-            icon={<ClipboardText className="w-4 h-4" />}
-          >
-            <div className="space-y-4">
-              {formErrors.deliverables && (
-                <div
-                  className="text-xs text-red-600 mb-1"
-                  data-field-error={true}
-                >
-                  {formErrors.deliverables}
-                </div>
-              )}
 
               <div className="space-y-3">
-                {deliverables.map((row, index) => {
-                  const isVideoRow =
-                    VIDEO_TYPES.has(row.type) &&
-                    !TEXT_ONLY_TYPES.has(row.type);
-
-                  return (
-                    <div
-                      key={row.id}
-                      className="border border-gray-200 rounded-xl p-3 bg-white flex flex-col gap-3"
-                    >
-                      {/* Row header */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-gray-800">
-                          Deliverable #{index + 1}
-                        </div>
-                        {deliverables.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDeliverables((prev) =>
-                                prev.filter((d) => d.id !== row.id)
-                              )
-                            }
-                            className="text-xs text-gray-500 hover:text-red-600"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Type + Quantity + Duration (for video) */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <LabelWithInfo
-                            text="Type"
-                            info="Content category for this line item."
-                          />
-                          <ReactSelect
-                            instanceId={`dtype-${row.id}`}
-                            inputId={`dtype-${row.id}-input`}
-                            options={DELIVERABLE_TYPE_OPTIONS}
-                            value={
-                              DELIVERABLE_TYPE_OPTIONS.find(
-                                (o) => o.value === row.type
-                              ) || null
-                            }
-                            onChange={(opt: any) => {
-                              const nextType = opt?.value || "Video";
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, type: nextType }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                            styles={buildReactSelectStyles()}
-                            placeholder="Select type"
-                          />
-                        </div>
-
-                        <NumberInputTop
-                          id={`quantity-${row.id}`}
-                          label="Quantity"
-                          info="Number of pieces of this type."
-                          value={row.quantity}
-                          onChange={(v: string) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id
-                                  ? { ...d, quantity: v }
-                                  : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                        />
-
-                        {isVideoRow && (
-                          <NumberInputTop
-                            id={`duration-${row.id}`}
-                            label="Duration (sec)"
-                            info="Required for video deliverables."
-                            value={row.durationSec}
-                            onChange={(v: string) => {
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, durationSec: v }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                          />
-                        )}
-                      </div>
-
-                      {/* Format per deliverable */}
-                      <FloatingLabelInput
-                        id={`format-${row.id}`}
-                        label="Format (file • aspect • res)"
-                        info="Example: MP4 • 9:16 • 1080×1920"
-                        value={row.format}
-                        onChange={(e: any) => {
-                          const v = e.target.value;
-                          setDeliverables((prev) =>
-                            prev.map((d) =>
-                              d.id === row.id ? { ...d, format: v } : d
-                            )
-                          );
-                          clearPreview();
-                        }}
-                      />
-
-                      {/* Minimum Live + Units per deliverable */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <NumberInputTop
-                          id={`minlive-${row.id}`}
-                          label="Minimum Live"
-                          info="How long this piece must stay live."
-                          value={row.minLiveValue}
-                          onChange={(v: string) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id
-                                  ? { ...d, minLiveValue: v }
-                                  : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                        />
-                        <div className="space-y-1.5 md:col-span-2 md:max-w-xs">
-                          <label className="text-sm font-medium text-gray-700">
-                            Units
-                          </label>
-                          <select
-                            value={row.minLiveUnit}
-                            onChange={(e) => {
-                              const val = e.target.value as
-                                | "hours"
-                                | "months";
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, minLiveUnit: val }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                            className="w-full h-[44px] px-3 border-2 rounded-lg text-sm border-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white focus:border-[#FF8A35]"
-                          >
-                            <option value="hours">Hours</option>
-                            <option value="months">Months</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Draft Required + Draft Due per deliverable */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <Checkbox
-                          id={`draftRequired-${row.id}`}
-                          label={
-                            <>
-                              Draft Required{" "}
-                              <InfoTip text="If enabled, a draft must be submitted before posting (Section 4b)." />
-                            </>
-                          }
-                          checked={row.draftRequired}
-                          onChange={(v: boolean) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id
-                                  ? {
-                                    ...d,
-                                    draftRequired: v,
-                                    draftDue: v ? d.draftDue : "",
-                                  }
-                                  : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                        />
-                        <div>
-                          <LabelWithInfo
-                            text="Draft Due (if required)"
-                            info="Date the draft must be submitted for review."
-                          />
-                          <input
-                            id={`draftDue-${row.id}`}
-                            type="date"
-                            value={row.draftDue}
-                            min={draftMin}
-                            max={draftMax || undefined}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, draftDue: v }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                            disabled={!row.draftRequired}
-                            className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${row.draftRequired
-                              ? "border-gray-200 focus:border-[#FF8A35]"
-                              : "opacity-60 cursor-not-allowed border-gray-200"
-                              }`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Usage & Access per deliverable */}
-                      <div className="space-y-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-700">
-                            Usage &amp; Access for this deliverable
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                          {supportsWhitelisting && (
-                            <Checkbox
-                              id={`whitelist-${row.id}`}
-                              label={
-                                <>
-                                  Enable Whitelisting Access{" "}
-                                  <InfoTip text="Allow the brand to run ads from the creator handle for this deliverable." />
-                                </>
-                              }
-                              checked={row.whitelistingEnabled}
-                              onChange={(v: boolean) => {
-                                setDeliverables((prev) =>
-                                  prev.map((d) =>
-                                    d.id === row.id
-                                      ? { ...d, whitelistingEnabled: v }
-                                      : d
-                                  )
-                                );
-                                clearPreview();
-                              }}
-                            />
-                          )}
-                          {supportsSparkAds && (
-                            <Checkbox
-                              id={`sparkads-${row.id}`}
-                              label={
-                                <>
-                                  Enable Spark Ads / Boosting{" "}
-                                  <InfoTip text="Allow boosting or Spark Ads for this TikTok asset." />
-                                </>
-                              }
-                              checked={row.sparkAdsEnabled}
-                              onChange={(v: boolean) => {
-                                setDeliverables((prev) =>
-                                  prev.map((d) =>
-                                    d.id === row.id
-                                      ? { ...d, sparkAdsEnabled: v }
-                                      : d
-                                  )
-                                );
-                                clearPreview();
-                              }}
-                            />
-                          )}
-                          <Checkbox
-                            id={`insights-${row.id}`}
-                            label={
-                              <>
-                                Grant Read-only Insights{" "}
-                                <InfoTip text="Permit read-only analytics access for this specific deliverable." />
-                              </>
-                            }
-                            checked={row.insightsReadOnly}
-                            onChange={(v: boolean) => {
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, insightsReadOnly: v }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Captions / Disclosures per deliverable */}
-                      <TextArea
-                        id={`captions-${row.id}`}
-                        label={
-                          <LabelWithInfo
-                            text="Captions / Notes"
-                            info="Guidelines, messaging, and creative notes."
-                          />
-                        }
-                        value={row.captions}
-                        onChange={(e: any) => {
-                          const v = e.target.value;
-                          setDeliverables((prev) =>
-                            prev.map((d) =>
-                              d.id === row.id ? { ...d, captions: v } : d
-                            )
-                          );
-                          clearPreview();
-                        }}
-                        rows={3}
-                        placeholder="Hashtags, call-outs, shot list…"
-                      />
-
-                      <TextArea
-                        id={`disclosures-${row.id}`}
-                        label={
-                          <LabelWithInfo
-                            text="Disclosures (e.g., #ad)"
-                            info="Required compliance labels (Schedule B)."
-                          />
-                        }
-                        value={row.disclosures}
-                        onChange={(e: any) => {
-                          const v = e.target.value;
-                          setDeliverables((prev) =>
-                            prev.map((d) =>
-                              d.id === row.id
-                                ? { ...d, disclosures: v }
-                                : d
-                            )
-                          );
-                          clearPreview();
-                        }}
-                        rows={2}
-                        placeholder="Clear & conspicuous material-connection labels"
-                      />
-
-                      {/* Tags / Links / Handles per deliverable */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <ChipInput
-                          label={
-                            <LabelWithInfo
-                              text="Tags"
-                              info="Required hashtags to include."
-                            />
-                          }
-                          items={row.tags}
-                          setItems={(items: string[]) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id ? { ...d, tags: items } : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                          placeholder="#tag"
-                        />
-                        <ChipInput
-                          label={
-                            <LabelWithInfo
-                              text="Links"
-                              info="Campaign or tracking links (https://)."
-                            />
-                          }
-                          items={row.links}
-                          setItems={(items: string[]) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id ? { ...d, links: items } : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                          placeholder="https://"
-                          validator={(s: string) => /^https?:\/\/.+/i.test(s)}
-                        />
-                        <ChipInput
-                          label={
-                            <LabelWithInfo
-                              text="Handles"
-                              info="Brand or partner handles to tag."
-                            />
-                          }
-                          items={row.handles}
-                          setItems={(items: string[]) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id ? { ...d, handles: items } : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                          placeholder="@brand"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Influencer</div>
+                <FloatingLabelInput
+                  id="inf-legal-name"
+                  label="Influencer Legal Name"
+                  value={getAtPath(contractForm, "influencer.legalName")}
+                  onChange={(e: any) => setContractField("influencer.legalName", e.target.value)}
+                  error={formErrors["influencer.legalName"]}
+                />
+                <FloatingLabelInput
+                  id="inf-contact-name"
+                  label="Contact Name"
+                  value={getAtPath(contractForm, "influencer.contactName")}
+                  onChange={(e: any) => setContractField("influencer.contactName", e.target.value)}
+                />
+                <FloatingLabelInput
+                  id="inf-handle-url"
+                  label="Posting Handle URL"
+                  value={getAtPath(contractForm, "influencer.postingHandleUrl")}
+                  onChange={(e: any) =>
+                    setContractField("influencer.postingHandleUrl", e.target.value)
+                  }
+                />
+                <FloatingLabelInput
+                  id="inf-email"
+                  label="Contact Email"
+                  value={getAtPath(contractForm, "influencer.contactEmail")}
+                  onChange={(e: any) => setContractField("influencer.contactEmail", e.target.value)}
+                />
+                <FloatingLabelInput
+                  id="inf-phone"
+                  label="Contact Phone"
+                  value={getAtPath(contractForm, "influencer.contactPhone")}
+                  onChange={(e: any) => setContractField("influencer.contactPhone", e.target.value)}
+                />
+                <FloatingLabelInput
+                  id="inf-whatsapp"
+                  label="WhatsApp"
+                  value={getAtPath(contractForm, "influencer.whatsApp")}
+                  onChange={(e: any) => setContractField("influencer.whatsApp", e.target.value)}
+                />
+                <TextArea
+                  id="inf-address"
+                  label="Address"
+                  value={getAtPath(contractForm, "influencer.address")}
+                  onChange={(e: any) => setContractField("influencer.address", e.target.value)}
+                  rows={3}
+                />
               </div>
+            </div>
+          </SidebarSection>
 
-              {/* Add new row */}
+          <SidebarSection title="Campaign Overview" icon={<Info className="h-4 w-4" />}>
+            <div className="space-y-4">
+              <FloatingLabelInput
+                id="campaign-title"
+                label="Campaign Title / ID"
+                value={getAtPath(contractForm, "campaign.campaignTitleOrId")}
+                onChange={(e: any) => setContractField("campaign.campaignTitleOrId", e.target.value)}
+                error={formErrors["campaign.campaignTitleOrId"]}
+              />
+              <TextArea
+                id="campaign-products-services"
+                label="Products / Services Covered"
+                value={getAtPath(contractForm, "campaign.productsServicesCovered")}
+                onChange={(e: any) =>
+                  setContractField("campaign.productsServicesCovered", e.target.value)
+                }
+                rows={3}
+              />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingLabelInput
+                  id="campaign-territory"
+                  label="Territory / Target Country"
+                  value={getAtPath(contractForm, "campaign.territoryTargetCountry")}
+                  onChange={(e: any) =>
+                    setContractField("campaign.territoryTargetCountry", e.target.value)
+                  }
+                />
+                <div data-field-error={!!formErrors.requestedEffDate}>
+                  <LabelWithInfo text="Requested Effective Date" />
+                  <input
+                    type="date"
+                    value={requestedEffDate}
+                    min={todayStr}
+                    onChange={(e) => {
+                      setRequestedEffDate(e.target.value);
+                      setContractField("campaign.effectiveDate", e.target.value);
+                    }}
+                    className={`mt-1 h-[44px] w-full rounded-lg border-2 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] ${
+                      formErrors.requestedEffDate ? "border-red-500" : "border-gray-200"
+                    }`}
+                  />
+                  {formErrors.requestedEffDate ? (
+                    <div className="mt-1 text-xs text-red-600">{formErrors.requestedEffDate}</div>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <LabelWithInfo text="Timezone" />
+                <ReactSelect
+                  instanceId="timezone-select"
+                  inputId="timezone-select-input"
+                  isLoading={listsLoading}
+                  options={tzOptions}
+                  value={tzOptions.find((o) => o.value === requestedEffTz) || null}
+                  onChange={(opt: any) => setRequestedEffTz(opt?.value || DEFAULT_TIMEZONE)}
+                  placeholder="Select timezone"
+                  styles={buildReactSelectStyles()}
+                />
+              </div>
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Deliverables & Publication Timeline" icon={<ClipboardText className="h-4 w-4" />}>
+            <div className="space-y-4">
+              {formErrors["scheduleA.deliverables"] ? (
+                <div className="text-xs text-red-600">{formErrors["scheduleA.deliverables"]}</div>
+              ) : null}
+
+              {deliverables.map((row, index) => (
+                <div key={row.id} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-gray-800">
+                      Deliverable #{index + 1}
+                    </div>
+                    {deliverables.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDeliverables((prev) => prev.filter((item) => item.id !== row.id))
+                        }
+                        className="text-xs text-gray-500 hover:text-red-600"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <NumberInputTop
+                      id={`deliverable-sr-${row.id}`}
+                      label="Sr. No."
+                      value={String(index + 1)}
+                      onChange={() => undefined}
+                      disabled
+                    />
+                    <FloatingLabelInput
+                      id={`deliverable-platform-${row.id}`}
+                      label="Platform / Handle"
+                      value={row.platformHandle}
+                      onChange={(e: any) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id
+                              ? { ...item, platformHandle: e.target.value }
+                              : item
+                          )
+                        )
+                      }
+                    />
+                    <NumberInputTop
+                      id={`deliverable-qty-${row.id}`}
+                      label="Qty"
+                      value={row.qty}
+                      onChange={(value: string) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, qty: value } : item
+                          )
+                        )
+                      }
+                    />
+                  </div>
+
+                  <FloatingLabelInput
+                    id={`deliverable-format-${row.id}`}
+                    label="Deliverable Format"
+                    value={row.deliverableFormat}
+                    onChange={(e: any) =>
+                      setDeliverables((prev) =>
+                        prev.map((item) =>
+                          item.id === row.id
+                            ? { ...item, deliverableFormat: e.target.value }
+                            : item
+                        )
+                      )
+                    }
+                  />
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                      <LabelWithInfo text="Draft Due" />
+                      <input
+                        type="date"
+                        value={row.draftDue}
+                        min={todayStr}
+                        onChange={(e) =>
+                          setDeliverables((prev) =>
+                            prev.map((item) =>
+                              item.id === row.id ? { ...item, draftDue: e.target.value } : item
+                            )
+                          )
+                        }
+                        className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
+                      />
+                    </div>
+                    <div>
+                      <LabelWithInfo text="Live Date" />
+                      <input
+                        type="date"
+                        value={row.liveDate}
+                        min={todayStr}
+                        onChange={(e) =>
+                          setDeliverables((prev) =>
+                            prev.map((item) =>
+                              item.id === row.id ? { ...item, liveDate: e.target.value } : item
+                            )
+                          )
+                        }
+                        className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="border-dashed border-gray-300 text-gray-700"
-                onClick={() => {
+                onClick={() =>
                   setDeliverables((prev) => [
                     ...prev,
                     {
-                      id: createRowId(),
-                      type: "Video",
-                      quantity: "1",
-                      format: "",
-                      durationSec: "",
-                      minLiveValue: "",
-                      minLiveUnit: "hours",
-                      draftRequired: false,
-                      draftDue: "",
-                      captions: "",
-                      disclosures: "",
-                      tags: [],
-                      links: [],
-                      handles: [],
-                      whitelistingEnabled: false,
-                      sparkAdsEnabled: false,
-                      insightsReadOnly: false,
+                      ...createDefaultScheduleDeliverable(),
+                      srNo: prev.length + 1,
                     },
-                  ]);
-                  clearPreview();
-                }}
+                  ])
+                }
               >
                 + Add another deliverable
               </Button>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <TextArea
+                  id="minimum-video-specs"
+                  label="Minimum Video Specs"
+                  value={getAtPath(contractForm, "scheduleA.minimumVideoSpecs")}
+                  onChange={(e: any) =>
+                    setContractField("scheduleA.minimumVideoSpecs", e.target.value)
+                  }
+                  rows={3}
+                />
+                <TextArea
+                  id="mandatory-tags"
+                  label="Mandatory Tags / Mentions / Links / Codes"
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.mandatoryTagsMentionsLinksCodes"
+                  )}
+                  onChange={(e: any) =>
+                    setContractField(
+                      "scheduleA.mandatoryTagsMentionsLinksCodes",
+                      e.target.value
+                    )
+                  }
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+<Checkbox
+  id="pre-shoot-script-required"
+  label="Pre-Shoot Script Required"
+  checked={Boolean(
+    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+  )}
+  onChange={(checked: boolean) =>
+    setContractField("scheduleA.preShootScriptRequired", checked)
+  }
+/>
+                <div>
+                  <LabelWithInfo text="Pre-Shoot Script Due" />
+                  <input
+                    type="date"
+                    value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
+                    min={todayStr}
+                    onChange={(e) =>
+                      setContractField("scheduleA.preShootScriptDue", e.target.value)
+                    }
+                    className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
+                  />
+                </div>
+                <NumberInputTop
+                  id="pre-shoot-review-days"
+                  label="Script Review Business Days"
+                  value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
+                  onChange={(value: string) =>
+                    setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
+                  }
+                  error={formErrors["scheduleA.preShootScriptReviewBusinessDays"]}
+                />
+              </div>
             </div>
           </SidebarSection>
 
-          {/* Usage Bundle & Rights */}
-          <SidebarSection
-            title="Usage Bundle & Rights (Schedule)"
-            icon={<Info className="w-4 h-4" />}
-          >
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <SelectWithInfo
-                  id="usageType"
-                  label="License Type"
-                  info="Organic Use or Paid Digital Use."
-                  value={usageType}
-                  onChange={(e: any) => {
-                    setUsageType(e.target.value);
-                    clearPreview();
-                  }}
-                  options={LICENSE_TYPES}
-                  error={formErrors.usageType}
-                />
-                <NumberInputTop
-                  id="usageDuration"
-                  label="Duration (months)"
-                  info="Length of license from first go-live."
-                  value={usageDurationMonths}
-                  onChange={(v: string) => {
-                    setUsageDurationMonths(v);
-                    clearPreview();
-                  }}
-                  error={formErrors.usageDurationMonths}
-                  data-field-error={!!formErrors.usageDurationMonths}
-                />
-              </div>
-
-              <div>
-                <LabelWithInfo
-                  text="Geographies"
-                  info="Territories where the license applies."
-                />
-                <ReactSelect
-                  instanceId="geo-select"
-                  inputId="geo-select-input"
-                  isMulti
-                  options={GEO_OPTIONS}
-                  value={GEO_OPTIONS.filter((o) =>
-                    usageGeographies.includes(o.value)
-                  )}
-                  onChange={(vals: any) => {
-                    setUsageGeographies(
-                      (vals || []).map((v: any) => v.value)
-                    );
-                    clearPreview();
-                  }}
-                  placeholder="Select territories"
-                  styles={buildReactSelectStyles()}
-                />
-              </div>
-
-              <Checkbox
-                id="deriv-edits"
-                label={
-                  <>
-                    Allow Derivative Edits{" "}
-                    <InfoTip text="Permit cut-downs, captions, translations, thumbnails, metadata edits." />
-                  </>
+          <SidebarSection title="Review, Revisions & Reshoots" icon={<PenNib className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <NumberInputTop
+                id="included-revision-rounds"
+                label="Included Revision Rounds"
+                value={getAtPath(contractForm, "scheduleA.review.includedRevisionRounds")}
+                onChange={(value: string) =>
+                  setContractField("scheduleA.review.includedRevisionRounds", value)
                 }
-                checked={usageDerivativeEdits}
-                onChange={setUsageDerivativeEdits}
+                error={formErrors["scheduleA.review.includedRevisionRounds"]}
+              />
+              <FloatingLabelInput
+                id="additional-revision-fee"
+                label="Additional Revision Fee"
+                value={getAtPath(contractForm, "scheduleA.review.additionalRevisionFee")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.review.additionalRevisionFee", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="reshoot-obligation"
+                label="Reshoot Obligation"
+                value={getAtPath(contractForm, "scheduleA.review.reshootObligation")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.review.reshootObligation", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="reshoot-fee"
+                label="Reshoot Fee"
+                value={getAtPath(contractForm, "scheduleA.review.reshootFee")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.review.reshootFee", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="minimum-live-period"
+                label="Minimum Live Period"
+                value={getAtPath(contractForm, "scheduleA.review.minimumLivePeriod")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.review.minimumLivePeriod", e.target.value)
+                }
               />
             </div>
           </SidebarSection>
 
-          {/* Footer Buttons */}
-          <div className="sticky bottom-0 -mx-6 -mb-6 bg-white/95 backdrop-blur border-t border-gray-200 p-6 flex flex-wrap justify-end gap-3">
+          <SidebarSection title="Commercial Terms" icon={<FileText className="h-4 w-4" />}>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <NumberInputTop
+                  id="total-campaign-fee"
+                  label="Total Campaign Fee"
+                  value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
+                  onChange={(value: string) =>
+                    setContractField("scheduleA.commercial.totalCampaignFee", value)
+                  }
+                  error={formErrors["scheduleA.commercial.totalCampaignFee"]}
+                />
+                <div data-field-error={!!formErrors["scheduleA.commercial.currency"]}>
+                  <LabelWithInfo text="Currency" />
+                  <ReactSelect
+                    instanceId="currency-select"
+                    inputId="currency-select-input"
+                    isLoading={listsLoading}
+                    options={currencyOptions}
+                    value={
+                      currencyOptions.find(
+                        (o) => o.value === getAtPath(contractForm, "scheduleA.commercial.currency")
+                      ) || null
+                    }
+                    onChange={(opt: any) =>
+                      setContractField("scheduleA.commercial.currency", opt?.value || "")
+                    }
+                    placeholder="Select currency"
+                    styles={buildReactSelectStyles({
+                      hasError: !!formErrors["scheduleA.commercial.currency"],
+                    })}
+                  />
+                  {formErrors["scheduleA.commercial.currency"] ? (
+                    <div className="mt-1 text-xs text-red-600">
+                      {formErrors["scheduleA.commercial.currency"]}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <SelectWithInfo
+                id="milestone-structure"
+                label="Platform Milestone Payment Structure"
+                value={getAtPath(contractForm, "scheduleA.commercial.platformMilestonePaymentStructure")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.commercial.platformMilestonePaymentStructure",
+                    e.target.value
+                  )
+                }
+                options={MILESTONE_OPTIONS}
+              />
+
+              <FloatingLabelInput
+                id="commercial-custom-split"
+                label="Custom Split"
+                value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.commercial.customSplit", e.target.value)
+                }
+              />
+
+              <TextArea
+                id="advance-payment-trigger"
+                label="Advance Payment Trigger"
+                value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.commercial.advancePaymentTrigger",
+                    e.target.value
+                  )
+                }
+                rows={2}
+              />
+              <TextArea
+                id="remaining-payment-trigger"
+                label="Remaining Payment Trigger"
+                value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.commercial.remainingPaymentTrigger",
+                    e.target.value
+                  )
+                }
+                rows={2}
+              />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingLabelInput
+                  id="processor-fees-borne-by"
+                  label="Payment Processor Fees Borne By"
+                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}
+                  onChange={(e: any) =>
+                    setContractField(
+                      "scheduleA.commercial.paymentProcessorFeesBorneBy",
+                      e.target.value
+                    )
+                  }
+                />
+                <FloatingLabelInput
+                  id="processor-fees-notes"
+                  label="Payment Processor Fee Notes"
+                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesNotes")}
+                  onChange={(e: any) =>
+                    setContractField(
+                      "scheduleA.commercial.paymentProcessorFeesNotes",
+                      e.target.value
+                    )
+                  }
+                />
+              </div>
+              <TextArea
+                id="lane-a-marketplace-fee-note"
+                label="Lane A Marketplace Fee Note"
+                value={getAtPath(contractForm, "scheduleA.commercial.laneAMarketplaceFeeNote")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.commercial.laneAMarketplaceFeeNote",
+                    e.target.value
+                  )
+                }
+                rows={3}
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Raw Files & Reporting" icon={<ClipboardText className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingLabelInput
+                id="raw-source-file-delivery"
+                label="Raw / Source File Delivery"
+                value={getAtPath(contractForm, "scheduleA.rawFiles.rawSourceFileDelivery")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.rawFiles.rawSourceFileDelivery", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="raw-files-format"
+                label="Format"
+                value={getAtPath(contractForm, "scheduleA.rawFiles.format")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.rawFiles.format", e.target.value)
+                }
+              />
+              <div>
+                <LabelWithInfo text="Delivery Due" />
+                <input
+                  type="date"
+                  value={getAtPath(contractForm, "scheduleA.rawFiles.deliveryDue")}
+                  min={todayStr}
+                  onChange={(e) => setContractField("scheduleA.rawFiles.deliveryDue", e.target.value)}
+                  className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
+                />
+              </div>
+              <div>
+                <LabelWithInfo text="Analytics Reporting Deadline" />
+                <input
+                  type="date"
+                  value={getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingDeadline")}
+                  min={todayStr}
+                  onChange={(e) =>
+                    setContractField("scheduleA.rawFiles.analyticsReportingDeadline", e.target.value)
+                  }
+                  className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
+                />
+              </div>
+              <TextArea
+                id="analytics-reporting-items"
+                label="Analytics Reporting Items"
+                value={getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingItems")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.rawFiles.analyticsReportingItems", e.target.value)
+                }
+                rows={3}
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Shipping & Returns" icon={<Info className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <SelectWithInfo
+                id="shipping-applicable"
+                label="Product Shipping Applicable"
+                value={getAtPath(contractForm, "scheduleA.shipping.productShippingApplicable")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.shipping.productShippingApplicable", e.target.value)
+                }
+                options={SHIPPING_APPLICABLE_OPTIONS}
+              />
+              <SelectWithInfo
+                id="product-returnable"
+                label="Product Returnable"
+                value={getAtPath(contractForm, "scheduleA.shipping.productReturnable")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.shipping.productReturnable", e.target.value)
+                }
+                options={RETURNABLE_OPTIONS}
+              />
+              <FloatingLabelInput
+                id="ship-to-name"
+                label="Ship-To Name"
+                value={getAtPath(contractForm, "scheduleA.shipping.shipToName")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.shipping.shipToName", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="ship-to-phone"
+                label="Ship-To Phone"
+                value={getAtPath(contractForm, "scheduleA.shipping.shipToPhone")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.shipping.shipToPhone", e.target.value)
+                }
+              />
+              <TextArea
+                id="ship-to-address"
+                label="Ship-To Address"
+                value={getAtPath(contractForm, "scheduleA.shipping.shipToAddress")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.shipping.shipToAddress", e.target.value)
+                }
+                rows={3}
+              />
+              <div>
+                <LabelWithInfo text="Product Receipt Confirmation Deadline" />
+                <input
+                  type="date"
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.shipping.productReceiptConfirmationDeadline"
+                  )}
+                  min={todayStr}
+                  onChange={(e) =>
+                    setContractField(
+                      "scheduleA.shipping.productReceiptConfirmationDeadline",
+                      e.target.value
+                    )
+                  }
+                  className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
+                />
+              </div>
+              <FloatingLabelInput
+                id="return-window-method"
+                label="Return Window / Method"
+                value={getAtPath(contractForm, "scheduleA.shipping.returnWindowMethod")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.shipping.returnWindowMethod", e.target.value)
+                }
+              />
+              <TextArea
+                id="risk-of-loss-notes"
+                label="Risk of Loss Notes"
+                value={getAtPath(contractForm, "scheduleA.shipping.riskOfLossNotes")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.shipping.riskOfLossNotes", e.target.value)
+                }
+                rows={3}
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Usage Rights" icon={<SealCheck className="h-4 w-4" />}>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                {contractForm.scheduleA.usageRights.rows.map((row) => (
+                  <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-gray-800">{row.usageRight}</div>
+                      <input
+                        type="checkbox"
+                        checked={row.selected}
+                        onChange={(e) =>
+                          setContractField(
+                            "scheduleA.usageRights.rows",
+                            contractForm.scheduleA.usageRights.rows.map((item) =>
+                              item.id === row.id ? { ...item, selected: e.target.checked } : item
+                            )
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <FloatingLabelInput
+                        id={`usage-duration-${row.id}`}
+                        label="Duration"
+                        value={row.duration}
+                        onChange={(e: any) =>
+                          setContractField(
+                            "scheduleA.usageRights.rows",
+                            contractForm.scheduleA.usageRights.rows.map((item) =>
+                              item.id === row.id ? { ...item, duration: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                      <FloatingLabelInput
+                        id={`usage-territory-${row.id}`}
+                        label="Territory / Notes"
+                        value={row.territoryNotes}
+                        onChange={(e: any) =>
+                          setContractField(
+                            "scheduleA.usageRights.rows",
+                            contractForm.scheduleA.usageRights.rows.map((item) =>
+                              item.id === row.id
+                                ? { ...item, territoryNotes: e.target.value }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <SelectWithInfo
+                  id="attribution-requirement"
+                  label="Attribution Requirement"
+                  value={getAtPath(contractForm, "scheduleA.usageRights.attributionRequirement")}
+                  onChange={(e: any) =>
+                    setContractField("scheduleA.usageRights.attributionRequirement", e.target.value)
+                  }
+                  options={ATTRIBUTION_OPTIONS}
+                />
+                <SelectWithInfo
+                  id="editing-rights"
+                  label="Editing Rights"
+                  value={getAtPath(contractForm, "scheduleA.usageRights.editingRights")}
+                  onChange={(e: any) =>
+                    setContractField("scheduleA.usageRights.editingRights", e.target.value)
+                  }
+                  options={EDITING_RIGHTS_OPTIONS}
+                />
+              </div>
+              <FloatingLabelInput
+                id="attribution-text"
+                label="Attribution Text"
+                value={getAtPath(contractForm, "scheduleA.usageRights.attributionText")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.usageRights.attributionText", e.target.value)
+                }
+              />
+              <TextArea
+                id="music-stock-asset-responsibility"
+                label="Music / Stock Asset Responsibility"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.usageRights.musicStockAssetResponsibility"
+                )}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.usageRights.musicStockAssetResponsibility",
+                    e.target.value
+                  )
+                }
+                rows={3}
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Compliance & Brand Safety" icon={<Info className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <TextArea
+                id="creative-brief-mandatory-talking-points"
+                label="Creative Brief / Mandatory Talking Points"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.compliance.creativeBriefMandatoryTalkingPoints"
+                )}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.compliance.creativeBriefMandatoryTalkingPoints",
+                    e.target.value
+                  )
+                }
+                rows={4}
+              />
+              <TextArea
+                id="restricted-statements"
+                label="Restricted Statements"
+                value={getAtPath(contractForm, "scheduleA.compliance.restrictedStatements")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.compliance.restrictedStatements", e.target.value)
+                }
+                rows={4}
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Exclusivity & Morals" icon={<SealCheck className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingLabelInput
+                id="competitor-blackout"
+                label="Competitor Blackout"
+                value={getAtPath(contractForm, "scheduleA.exclusivity.competitorBlackout")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.exclusivity.competitorBlackout", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="category-competitor-list"
+                label="Category / Competitor List"
+                value={getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.exclusivity.categoryCompetitorList",
+                    e.target.value
+                  )
+                }
+              />
+              <FloatingLabelInput
+                id="blackout-period"
+                label="Blackout Period"
+                value={getAtPath(contractForm, "scheduleA.exclusivity.blackoutPeriod")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.exclusivity.blackoutPeriod", e.target.value)
+                }
+              />
+              <SelectWithInfo
+                id="optional-morals-clause"
+                label="Optional Morals Clause"
+                value={getAtPath(contractForm, "scheduleA.exclusivity.optionalMoralsClause")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.exclusivity.optionalMoralsClause",
+                    e.target.value
+                  )
+                }
+                options={MORALS_OPTIONS}
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Cancellation & Refunds" icon={<Info className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <TextArea
+                id="kill-fee-or-prorata"
+                label="Kill Fee / Pro-Rata"
+                value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
+                }
+                rows={3}
+              />
+              <TextArea
+                id="refund-of-unearned-advance"
+                label="Refund of Unearned Advance"
+                value={getAtPath(contractForm, "scheduleA.cancellation.refundOfUnearnedAdvance")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.cancellation.refundOfUnearnedAdvance",
+                    e.target.value
+                  )
+                }
+                rows={3}
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection title="Dispute & Notices" icon={<FileText className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingLabelInput
+                id="governing-law"
+                label="Governing Law"
+                value={getAtPath(contractForm, "scheduleA.dispute.governingLaw")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.dispute.governingLaw", e.target.value)
+                }
+              />
+              <SelectWithInfo
+                id="dispute-resolution-method"
+                label="Dispute Resolution Method"
+                value={getAtPath(contractForm, "scheduleA.dispute.disputeResolutionMethod")}
+                onChange={(e: any) =>
+                  setContractField(
+                    "scheduleA.dispute.disputeResolutionMethod",
+                    e.target.value
+                  )
+                }
+                options={DISPUTE_OPTIONS}
+              />
+              <FloatingLabelInput
+                id="dispute-venue"
+                label="Venue"
+                value={getAtPath(contractForm, "scheduleA.dispute.disputeVenue")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.dispute.disputeVenue", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="arbitration-seat"
+                label="Arbitration Seat"
+                value={getAtPath(contractForm, "scheduleA.dispute.arbitrationSeat")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.dispute.arbitrationSeat", e.target.value)
+                }
+              />
+              <FloatingLabelInput
+                id="attorneys-fees"
+                label="Attorneys’ Fees"
+                value={getAtPath(contractForm, "scheduleA.dispute.attorneysFees")}
+                onChange={(e: any) =>
+                  setContractField("scheduleA.dispute.attorneysFees", e.target.value)
+                }
+              />
+            </div>
+          </SidebarSection>
+
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 border-t border-gray-200 bg-white/95 p-6 backdrop-blur">
             <Button
               onClick={handleGeneratePreview}
-              className="px-6 border-2 border-black text-black bg-white hover:bg-gray-50 disabled:opacity-60"
-              title="Generate a PDF preview on the left"
-              disabled={
-                !platforms.length ||
-                !campaignTitle.trim() ||
-                isPreviewLoading ||
-                isSendLoading ||
-                isUpdateLoading
-              }
+              className="border-2 border-black bg-white px-6 text-black hover:bg-gray-50 disabled:opacity-60"
+              disabled={isPreviewLoading || isSendLoading || isUpdateLoading}
             >
               {isPreviewLoading ? (
                 <>
@@ -3239,25 +3064,16 @@ export default function AppliedInfluencersPage() {
                 </>
               ) : (
                 <>
-                  <Eye className="w-5 h-5 mr-2" /> Preview
+                  <Eye className="mr-2 h-5 w-5" /> Preview
                 </>
               )}
             </Button>
+
             {panelMode === "send" ? (
               <Button
                 onClick={handleSendContract}
-                className="px-6 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none disabled:opacity-60"
-                disabled={
-                  !platforms.length ||
-                  !campaignTitle.trim() ||
-                  !pdfUrl ||
-                  isSendLoading ||
-                  isPreviewLoading ||
-                  isUpdateLoading
-                }
-                title={
-                  !pdfUrl ? "Preview required first" : "Send contract"
-                }
+                className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-6 text-white hover:from-[#FF7236] hover:to-[#FFA135] disabled:opacity-60"
+                disabled={!pdfUrl || isSendLoading || isPreviewLoading || isUpdateLoading}
               >
                 {isSendLoading ? (
                   <>
@@ -3265,29 +3081,19 @@ export default function AppliedInfluencersPage() {
                   </>
                 ) : (
                   <>
-                    <PaperPlaneTilt className="w-5 h-5 mr-2" /> Send
-                    Contract
+                    <PaperPlaneTilt className="mr-2 h-5 w-5" /> Send Contract
                   </>
                 )}
               </Button>
             ) : (
               <Button
                 onClick={handleEditContract}
-                className="px-6 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none disabled:opacity-60"
-                disabled={
-                  !pdfUrl ||
-                  isUpdateLoading ||
-                  isPreviewLoading ||
-                  isSendLoading
-                }
-                title={
-                  !pdfUrl ? "Preview required first" : updateBtnLabel
-                }
+                className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-6 text-white hover:from-[#FF7236] hover:to-[#FFA135] disabled:opacity-60"
+                disabled={!pdfUrl || isUpdateLoading || isPreviewLoading || isSendLoading}
               >
                 {isUpdateLoading ? (
                   <>
-                    <span className="mr-2 animate-spin">⏳</span>{" "}
-                    Updating…
+                    <span className="mr-2 animate-spin">⏳</span> Updating…
                   </>
                 ) : (
                   updateBtnLabel
@@ -3297,7 +3103,6 @@ export default function AppliedInfluencersPage() {
           </div>
         </ContractSidebar>
 
-        {/* Signature Modal */}
         <SignatureModal
           isOpen={signOpen}
           onClose={() => {
@@ -3314,14 +3119,10 @@ export default function AppliedInfluencersPage() {
                 email: signerEmail,
                 signatureImageDataUrl: sigDataUrl,
               });
-              toast({
-                icon: "success",
-                title: "Signed",
-                text: "Signature recorded.",
-              });
+              toast({ icon: "success", title: "Signed", text: "Signature recorded." });
               setSignOpen(false);
               setSignTargetMeta(null);
-              fetchApplicants();
+              fetchApplicants(debouncedSearch);
               loadMetaCache(influencers);
             } catch (e: any) {
               toast({
