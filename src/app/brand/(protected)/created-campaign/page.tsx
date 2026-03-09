@@ -1,20 +1,10 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  MagnifyingGlass,
-  CaretDown,
   CaretLeft,
   CaretRight,
-  Check,
-  X,
   DotsThree,
   PencilSimple,
   Users,
@@ -27,28 +17,22 @@ import { Button } from "@/components/ui/buttonComp";
 import { get, post } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+  Combobox,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+} from "@/components/ui/combobox";
+import { toast } from "@/components/ui/toast";
+import CampaignFilter, {
+  DEFAULT_DATE_FILTER,
+  type DateFilterValue,
+  type SelectOption,
+} from "./CampaignFilter";
 
 const cx = (...c: Array<string | undefined | null | false>) =>
   c.filter(Boolean).join(" ");
 
-type CampaignStatus = "open" | "paused";
-
-type FilterOption = {
-  id: string;
-  name: string;
-};
+type CampaignStatus = "active" | "paused" | "draft" | "completed";
 
 type Campaign = {
   id: string;
@@ -72,6 +56,8 @@ type Campaign = {
   contractCount?: number | string;
   targetInfluencerCount?: number;
   emailCount?: number | string;
+  updatedAt?: string;
+  creatorStatus?: string;
 };
 
 type CampaignsResponse = {
@@ -94,36 +80,12 @@ const WRAP_GRID =
   "xl:grid-cols-[minmax(0,19rem)_minmax(0,1fr)_minmax(0,19rem)] " +
   "lg:items-center lg:gap-4";
 
-function useClickOutside(
-  ref: React.RefObject<HTMLElement | null>,
-  onClose: () => void
-) {
-  useEffect(() => {
-    const handle = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) onClose();
-    };
-
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [ref, onClose]);
-}
-
-function statusPillBg(status: CampaignStatus) {
-  return status === "open" ? "bg-[#EAF7EE]" : "bg-[#FFF3D9]";
-}
-
-function statusDotBg(status: CampaignStatus) {
-  return status === "open" ? "bg-[#2EAD4F]" : "bg-[#D69E2E]";
-}
-
-function statusLabel(status: CampaignStatus) {
-  return status === "open" ? "Active" : "Paused";
-}
-
 function normalizeMetric(value: string | number | undefined, prefix = "") {
   if (value === undefined || value === null || value === "") return "—";
   if (typeof value === "number") return `${prefix}${value}`;
-  return prefix && !String(value).startsWith(prefix) ? `${prefix}${value}` : value;
+  return prefix && !String(value).startsWith(prefix)
+    ? `${prefix}${value}`
+    : value;
 }
 
 function formatInfluencerMetric(current: number, target?: number) {
@@ -149,108 +111,206 @@ function getExpiryText(dateStr: string) {
   return `Expired ${Math.abs(diffDays)} days ago`;
 }
 
-function isExpired(dateStr: string) {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return false;
-  return d.getTime() < Date.now();
+function toValidDate(value?: string) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function isExpiringSoon(dateStr: string) {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return false;
-  const diffMs = d.getTime() - Date.now();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  return diffDays >= 0 && diffDays <= 7;
+function startOfDay(date: Date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-function isThisMonth(dateStr: string) {
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return false;
+function endOfDay(date: Date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
 
-  const now = new Date();
-  return (
-    d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+function getWeekRange(date = new Date()) {
+  const current = new Date(date);
+  const day = current.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+
+  const start = startOfDay(
+    new Date(
+      current.getFullYear(),
+      current.getMonth(),
+      current.getDate() + diff
+    )
   );
+  const end = endOfDay(
+    new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)
+  );
+
+  return { start, end };
 }
 
-function FilterPopover({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: FilterOption[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
+function getLastMonthRange(date = new Date()) {
+  const start = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  const end = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    0,
+    23,
+    59,
+    59,
+    999
+  );
 
-  const selectedOption =
-    options.find((option) => option.id === value) ?? options[0];
+  return { start: startOfDay(start), end };
+}
 
+function getLastQuarterRange(date = new Date()) {
+  const currentQuarter = Math.floor(date.getMonth() / 3);
+  const lastQuarterEndMonth = currentQuarter * 3 - 1;
+  const year = lastQuarterEndMonth < 0 ? date.getFullYear() - 1 : date.getFullYear();
+  const normalizedEndMonth = lastQuarterEndMonth < 0 ? 11 : lastQuarterEndMonth;
+  const startMonth = normalizedEndMonth - 2;
+
+  const start = new Date(year, startMonth, 1);
+  const end = new Date(year, normalizedEndMonth + 1, 0, 23, 59, 59, 999);
+
+  return { start: startOfDay(start), end };
+}
+
+function isWithinRange(date: Date, start: Date, end: Date) {
+  return date >= start && date <= end;
+}
+
+function matchesDateFilter(campaign: Campaign, filter: DateFilterValue) {
+  const now = new Date();
+  const campaignStart = toValidDate(campaign.timeline?.startDate);
+  const campaignEnd = toValidDate(campaign.timeline?.endDate);
+  const updatedAt = toValidDate(campaign.updatedAt);
+
+  if (filter.quickFilter) {
+    switch (filter.quickFilter) {
+      case "recently_edited": {
+        if (!updatedAt) return false;
+        const start = startOfDay(
+          new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
+        );
+        return isWithinRange(updatedAt, start, endOfDay(now));
+      }
+
+      case "launching_soon": {
+        if (!campaignStart) return false;
+        const start = startOfDay(now);
+        const end = endOfDay(
+          new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
+        );
+        return isWithinRange(campaignStart, start, end);
+      }
+
+      case "today": {
+        if (!campaignStart) return false;
+        return isWithinRange(campaignStart, startOfDay(now), endOfDay(now));
+      }
+
+      case "this_week": {
+        if (!campaignStart) return false;
+        const { start, end } = getWeekRange(now);
+        return isWithinRange(campaignStart, start, end);
+      }
+
+      case "this_month": {
+        if (!campaignStart) return false;
+        return (
+          campaignStart.getMonth() === now.getMonth() &&
+          campaignStart.getFullYear() === now.getFullYear()
+        );
+      }
+
+      default:
+        return true;
+    }
+  }
+
+  if (filter.allDatesOption && filter.allDatesOption !== "all") {
+    const target = campaignStart ?? campaignEnd;
+    if (!target) return false;
+
+    let start = startOfDay(now);
+    let end = endOfDay(now);
+
+    switch (filter.allDatesOption) {
+      case "last_7":
+        start = startOfDay(
+          new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
+        );
+        break;
+      case "last_15":
+        start = startOfDay(
+          new Date(now.getFullYear(), now.getMonth(), now.getDate() - 14)
+        );
+        break;
+      case "last_30":
+        start = startOfDay(
+          new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
+        );
+        break;
+      case "last_90":
+        start = startOfDay(
+          new Date(now.getFullYear(), now.getMonth(), now.getDate() - 89)
+        );
+        break;
+      case "last_365":
+        start = startOfDay(
+          new Date(now.getFullYear(), now.getMonth(), now.getDate() - 364)
+        );
+        break;
+      case "last_month": {
+        const range = getLastMonthRange(now);
+        start = range.start;
+        end = range.end;
+        break;
+      }
+      case "last_quarter": {
+        const range = getLastQuarterRange(now);
+        start = range.start;
+        end = range.end;
+        break;
+      }
+      default:
+        break;
+    }
+
+    return isWithinRange(target, start, end);
+  }
+
+  if (filter.startDate || filter.endDate) {
+    const target = campaignStart ?? campaignEnd;
+    if (!target) return false;
+
+    const start = filter.startDate
+      ? startOfDay(new Date(filter.startDate))
+      : null;
+    const end = filter.endDate ? endOfDay(new Date(filter.endDate)) : null;
+
+    if (start && target < start) return false;
+    if (end && target > end) return false;
+  }
+
+  return true;
+}
+
+const statuses = [
+  { label: "Active", dot: "bg-[#28A745]", ring: "bg-[#BCE4C5]" },
+  { label: "Paused", dot: "bg-[#DC3545]", ring: "bg-[#F5C6CB]" },
+  { label: "Draft", dot: "bg-[#9E9E9E]", ring: "bg-[#E0E0E0]" },
+  { label: "Completed", dot: "bg-[#F07B3F]", ring: "bg-[#FAD6C0]" },
+];
+
+function StatusDot({ dot, ring }: { dot: string; ring: string }) {
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex h-9 max-w-full items-center gap-1.5 rounded-[0.65rem] px-2.5 sm:px-3 transition-colors",
-            "text-[13px] sm:text-[14px] font-medium text-[#1A1A1A]",
-            "border border-transparent",
-            open ? "bg-[#ECEEF2]" : "bg-transparent hover:bg-[#F5F6F8]"
-          )}
-        >
-          <span className="shrink-0">{label}</span>
-          <span className="max-w-[6.25rem] truncate text-muted-foreground sm:max-w-[7.5rem]">
-            {selectedOption?.name}
-          </span>
-          <CaretDown size={14} className="shrink-0" />
-        </button>
-      </PopoverTrigger>
-
-      <PopoverContent
-        align="start"
-        className={cn(
-          "w-[min(18rem,calc(100vw-2rem))] rounded-[12px] border border-[#E6E6E6] bg-white p-2",
-          "shadow-[0_7px_20px_0_rgba(25,33,61,0.04)]"
-        )}
-      >
-        <Command>
-          <div className="relative">
-            <MagnifyingGlass
-              size={16}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <CommandInput
-              placeholder="Search..."
-              className="h-[40px] rounded-[10px] border border-[#E6E6E6] pl-9"
-            />
-          </div>
-
-          <CommandEmpty>No results found.</CommandEmpty>
-
-          <CommandGroup className="mt-2 max-h-64 overflow-auto">
-            {options.map((option) => (
-              <CommandItem
-                key={option.id}
-                value={option.name}
-                onSelect={() => {
-                  onChange(option.id);
-                  setOpen(false);
-                }}
-                className="rounded-[10px]"
-              >
-                <span className="flex-1 truncate">{option.name}</span>
-                {selectedOption?.id === option.id ? (
-                  <Check size={16} className="shrink-0" />
-                ) : null}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <span
+      className={`inline-flex items-center justify-center rounded-full p-[0.125rem] ${ring}`}
+    >
+      <span className={`h-[0.5rem] w-[0.5rem] rounded-full ${dot}`} />
+    </span>
   );
 }
 
@@ -263,77 +323,58 @@ function StatusDropdown({
   disabled?: boolean;
   onChange: (value: CampaignStatus) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useClickOutside(ref, () => setOpen(false));
-
-  const options: CampaignStatus[] = ["open", "paused"];
-
   return (
-    <div ref={ref} className="relative w-full sm:w-auto">
+    <Combobox
+      value={value}
+      onValueChange={(next) => {
+        if (!next || disabled || next === value) return;
+        onChange(next as CampaignStatus);
+      }}
+    >
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((prev) => !prev)}
         className={cx(
-          "inline-flex h-9 w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-sm text-[#707070] sm:w-auto",
-          disabled ? "cursor-wait opacity-60" : "hover:bg-[#F8F8F8]"
+          "inline-flex items-center gap-1.5 h-8 px-2 bg-transparent text-sm font-medium text-[#1A1A1A]",
+          disabled ? "cursor-wait opacity-60" : ""
         )}
       >
-        <span className="inline-flex items-center gap-2">
-          <span
-            className={cx(
-              "inline-flex items-center rounded-full p-0.5",
-              statusPillBg(value)
-            )}
-          >
-            <span className={cx("h-2 w-2 rounded-full", statusDotBg(value))} />
-          </span>
-
-          <span>{statusLabel(value)}</span>
-        </span>
-
-        <CaretDown size={14} className="shrink-0 text-[#9B9B9B]" />
+        {(() => {
+          const current = statuses.find((s) => s.label.toLowerCase() === value);
+          if (!current) return null;
+          return <StatusDot dot={current.dot} ring={current.ring} />;
+        })()}
+        <span className="capitalize">{value}</span>
       </button>
 
-      {open ? (
-        <div className="absolute right-0 top-[calc(100%+0.45rem)] z-20 min-w-[140px] rounded-xl border border-[#E8E8E8] bg-white p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
-          {options.map((option) => {
-            const active = option === value;
-
-            return (
-              <button
-                key={option}
-                type="button"
-                onClick={() => {
-                  onChange(option);
-                  setOpen(false);
-                }}
-                className={cx(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                  active
-                    ? "bg-[#F7F7F7] text-[#222]"
-                    : "text-[#333] hover:bg-[#F8F8F8]"
-                )}
-              >
-                <span className="flex items-center gap-2">
-                  <span
-                    className={cx(
-                      "inline-block h-2 w-2 rounded-full",
-                      option === "open" ? "bg-[#2EAD4F]" : "bg-[#D69E2E]"
-                    )}
-                  />
-                  {statusLabel(option)}
-                </span>
-
-                {active ? <Check size={16} /> : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+      <ComboboxContent
+        align="end"
+        className="
+          w-[13.6875rem]
+          max-h-[16.25rem]
+          rounded-[0.75rem]
+          bg-white
+          py-[1rem]
+          px-[0.75rem]
+        "
+      >
+        <ComboboxList>
+          {statuses.map((s) => (
+            <ComboboxItem
+              key={s.label}
+              value={s.label.toLowerCase()}
+              className="capitalize rounded-lg px-3 py-2"
+              showIndicator={false}
+            >
+              <div className="flex items-center gap-2 w-full text-sm leading-5 font-medium">
+                <StatusDot dot={s.dot} ring={s.ring} />
+                {s.label}
+              </div>
+            </ComboboxItem>
+          ))}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 
@@ -366,7 +407,9 @@ function MetricItem({
         <span
           className={cx(
             "min-w-0 truncate text-[0.95rem] font-medium leading-5",
-            clickable ? "text-[#2E2E2E] hover:underline cursor-pointer" : "text-[#2E2E2E]"
+            clickable
+              ? "text-[#2E2E2E] hover:underline cursor-pointer"
+              : "text-[#2E2E2E]"
           )}
           title={typeof value === "string" ? value : undefined}
         >
@@ -471,6 +514,7 @@ function CampaignCard({
   onEditCampaign,
   onViewContracts,
   onViewAppliedInfluencers,
+  onViewInbox,
 }: {
   campaign: Campaign;
   statusUpdating: Record<string, boolean>;
@@ -479,8 +523,9 @@ function CampaignCard({
   onEditCampaign: (campaignId: string) => void;
   onViewContracts: (campaignId: string) => void;
   onViewAppliedInfluencers: (campaignId: string) => void;
+  onViewInbox: (campaignId: string) => void;
 }) {
-  const status = (campaign.campaignStatus || "open") as CampaignStatus;
+  const status = (campaign.campaignStatus || "draft") as CampaignStatus;
   const isBusy = !!statusUpdating[campaign.id];
   const tag = campaign.category || campaign.campaignType || "";
   const expiryText = getExpiryText(campaign.timeline?.endDate);
@@ -501,7 +546,9 @@ function CampaignCard({
                 className="min-w-0 flex-1 break-words text-[clamp(0.95rem,0.9rem+0.22vw,1.04rem)] font-semibold leading-snug text-[#262626] hover:text-[#111]"
                 title={campaign.productOrServiceName}
               >
-                <span className="line-clamp-2">{campaign.productOrServiceName}</span>
+                <span className="line-clamp-2">
+                  {campaign.productOrServiceName}
+                </span>
               </Link>
 
               {tag ? (
@@ -521,11 +568,7 @@ function CampaignCard({
       </div>
 
       <div className="w-full lg:flex lg:justify-center">
-        <div
-          className={cx(
-            "grid w-full max-w-[32rem] grid-cols-2 gap-2 rounded-[0.95rem] border border-[#E7E7E7] px-3 py-3 sm:grid-cols-4 sm:px-4"
-          )}
-        >
+        <div className="grid w-full max-w-[32rem] grid-cols-2 gap-2 rounded-[0.95rem] border border-[#E7E7E7] px-3 py-3 sm:grid-cols-4 sm:px-4">
           <MetricItem
             label="Platform"
             value={normalizeMetric(campaign.platformCount, "+")}
@@ -553,6 +596,7 @@ function CampaignCard({
             label="Email"
             value={normalizeMetric(campaign.emailCount)}
             icon={<PaperPlaneTilt size={15} weight="regular" />}
+            onClick={() => onViewInbox(campaign.id)}
           />
         </div>
       </div>
@@ -590,7 +634,9 @@ function CampaignCard({
               className="truncate text-left text-[0.78rem] text-[#A0A0A0] lg:max-w-[16rem] lg:text-right"
               title={expiryText}
             >
-              {campaign.hasPendingUpdate ? "Pending update request" : expiryText}
+              {campaign.hasPendingUpdate
+                ? "Pending update request"
+                : expiryText}
             </div>
           </div>
         </div>
@@ -686,13 +732,16 @@ export default function BrandCreatedCampaignsPage() {
 
   const [campaignTypeFilter, setCampaignTypeFilter] = useState("all");
   const [creatorStatusFilter, setCreatorStatusFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] =
+    useState<DateFilterValue>(DEFAULT_DATE_FILTER);
   const [aiCreatedOnly, setAiCreatedOnly] = useState(false);
+  const [catLoading] = useState(false);
 
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>(
     {}
   );
+  const [viewMode, setViewMode] = useState("list");
 
   const applyPendingPatch = (campaign: any) => {
     const pending =
@@ -722,9 +771,15 @@ export default function BrandCreatedCampaignsPage() {
 
       try {
         const brandId =
-          typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
+          typeof window !== "undefined"
+            ? localStorage.getItem("brandId")
+            : null;
 
-        if (!brandId) throw new Error("No brandId found in localStorage.");
+        if (!brandId) {
+          const msg = "No brandId found in localStorage.";
+          toast({ icon: "error", title: msg });
+          throw new Error(msg);
+        }
 
         const res = await get<CampaignsResponse>("/campaign/active", {
           brandId,
@@ -739,12 +794,20 @@ export default function BrandCreatedCampaignsPage() {
         const normalized: Campaign[] = active.map((campaign: any) => {
           const merged = applyPendingPatch(campaign);
 
-          const rawStatus = String(merged.campaignStatus || "open")
+          const rawStatus = String(
+            merged.campaignStatus ?? merged.status ?? "draft"
+          )
             .toLowerCase()
             .trim();
 
           const safeStatus: CampaignStatus =
-            rawStatus === "paused" || rawStatus === "closed" ? "paused" : "open";
+            rawStatus === "active" || rawStatus === "open"
+              ? "active"
+              : rawStatus === "paused" || rawStatus === "closed"
+              ? "paused"
+              : rawStatus === "completed"
+              ? "completed"
+              : "draft";
 
           const hasPendingUpdate =
             campaign?.pendingUpdate?.status === "pending" &&
@@ -792,13 +855,33 @@ export default function BrandCreatedCampaignsPage() {
               merged.emailCount ??
               merged.emailsCount ??
               merged.totalEmails,
+            updatedAt:
+              merged.updatedAt ??
+              merged.updated_at ??
+              merged.modifiedAt ??
+              merged.lastEditedAt ??
+              "",
+            creatorStatus: String(
+              merged.creatorStatus ??
+                merged.influencerStatus ??
+                merged.applicationStatus ??
+                ""
+            ).toLowerCase(),
           };
         });
 
         setCampaigns(normalized);
-        setTotalPages(res?.pagination?.totalPages ?? res?.pagination?.pages ?? 1);
+        setTotalPages(
+          res?.pagination?.totalPages ?? res?.pagination?.pages ?? 1
+        );
       } catch (err: any) {
-        setError(err.message || "Failed to load campaigns.");
+        const msg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to load campaigns.";
+
+        setError(msg);
+        toast({ icon: "error", title: msg });
       } finally {
         setLoading(false);
       }
@@ -811,28 +894,34 @@ export default function BrandCreatedCampaignsPage() {
   }, [fetchCampaigns, currentPage, appliedSearch]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      setAppliedSearch(searchInput.trim());
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
     setCurrentPage(1);
   }, [
     campaignTypeFilter,
     creatorStatusFilter,
-    categoryFilter,
+    categoryIds,
     dateFilter,
     aiCreatedOnly,
   ]);
-
-  const applySearch = () => {
-    setCurrentPage(1);
-    setAppliedSearch(searchInput.trim());
-  };
 
   const updateStatus = async (campaignId: string, next: CampaignStatus) => {
     const brandId =
       typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
 
-    if (!brandId) throw new Error("No brandId found in localStorage.");
+    if (!brandId) {
+      throw new Error("No brandId found in localStorage.");
+    }
 
     try {
-      const res = await post("/campaign/status", {
+      const res = await post("/campaign/update-status", {
         brandId,
         campaignId,
         status: next,
@@ -850,64 +939,65 @@ export default function BrandCreatedCampaignsPage() {
 
   const onChangeStatus = async (campaign: Campaign, next: CampaignStatus) => {
     const id = campaign.id;
-    const previous = (campaign.campaignStatus || "open") as CampaignStatus;
+    const previous = (campaign.campaignStatus || "draft") as CampaignStatus;
 
     setCampaigns((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, campaignStatus: next } : item))
+      prev.map((item) =>
+        item.id === id ? { ...item, campaignStatus: next } : item
+      )
     );
 
     setStatusUpdating((prev) => ({ ...prev, [id]: true }));
     setError(null);
 
     try {
-      await updateStatus(id, next);
+      const res: any = await updateStatus(id, next);
+
+      const msg =
+        res?.message ??
+        res?.data?.message ??
+        "Campaign status updated successfully.";
+
+      toast({ icon: "success", title: msg });
     } catch (err: any) {
       setCampaigns((prev) =>
         prev.map((item) =>
           item.id === id ? { ...item, campaignStatus: previous } : item
         )
       );
-      setError(err?.message || "Failed to update status.");
+
+      const msg = err?.message || "Failed to update status.";
+      setError(msg);
+      toast({ icon: "error", title: msg });
     } finally {
       setStatusUpdating((prev) => ({ ...prev, [id]: false }));
     }
   };
 
-  const campaignTypeOptions = useMemo<FilterOption[]>(() => {
+  const campaignTypeOptions = useMemo<SelectOption[]>(() => {
     const set = new Set(
       campaigns.map((item) => item.campaignType).filter((v): v is string => !!v)
     );
 
     return [
-      { id: "all", name: "All" },
-      ...Array.from(set).map((value) => ({ id: value, name: value })),
+      { value: "all", label: "All" },
+      ...Array.from(set).map((value) => ({
+        value,
+        label: value,
+      })),
     ];
   }, [campaigns]);
 
-  const categoryOptions = useMemo<FilterOption[]>(() => {
+  const categoryOptions = useMemo<SelectOption[]>(() => {
     const set = new Set(
       campaigns.map((item) => item.category).filter((v): v is string => !!v)
     );
 
-    return [
-      { id: "all", name: "All" },
-      ...Array.from(set).map((value) => ({ id: value, name: value })),
-    ];
+    return Array.from(set).map((value) => ({
+      value,
+      label: value,
+    }));
   }, [campaigns]);
-
-  const creatorStatusOptions: FilterOption[] = [
-    { id: "all", name: "All" },
-    { id: "invited", name: "Invited" },
-    { id: "working", name: "Working" },
-    { id: "no-applicants", name: "No Applicants" },
-  ];
-
-  const dateOptions: FilterOption[] = [
-    { id: "all", name: "All" },
-    { id: "expiring-soon", name: "Expiring Soon" },
-    { id: "this-month", name: "This Month" },
-    { id: "expired", name: "Expired" },
-  ];
 
   const filteredCampaigns = useMemo(() => {
     return campaigns.filter((campaign) => {
@@ -918,23 +1008,20 @@ export default function BrandCreatedCampaignsPage() {
       const matchesCreatorStatus =
         creatorStatusFilter === "all"
           ? true
-          : creatorStatusFilter === "invited"
-            ? (campaign.applicantCount ?? 0) > 0
-            : creatorStatusFilter === "working"
-              ? !!campaign.influencerWorking
-              : (campaign.applicantCount ?? 0) === 0;
+          : campaign.creatorStatus
+          ? campaign.creatorStatus === creatorStatusFilter
+          : creatorStatusFilter === "approved"
+          ? !!campaign.influencerWorking
+          : creatorStatusFilter === "invited" ||
+            creatorStatusFilter === "applied"
+          ? (campaign.applicantCount ?? 0) > 0
+          : true;
 
       const matchesCategory =
-        categoryFilter === "all" || campaign.category === categoryFilter;
+        categoryIds.length === 0 ||
+        categoryIds.includes(campaign.category || "");
 
-      const matchesDate =
-        dateFilter === "all"
-          ? true
-          : dateFilter === "expiring-soon"
-            ? isExpiringSoon(campaign.timeline?.endDate)
-            : dateFilter === "this-month"
-              ? isThisMonth(campaign.timeline?.endDate)
-              : isExpired(campaign.timeline?.endDate);
+      const matchesDate = matchesDateFilter(campaign, dateFilter);
 
       const matchesAi = !aiCreatedOnly || !!campaign.aiCreated;
 
@@ -950,7 +1037,7 @@ export default function BrandCreatedCampaignsPage() {
     campaigns,
     campaignTypeFilter,
     creatorStatusFilter,
-    categoryFilter,
+    categoryIds,
     dateFilter,
     aiCreatedOnly,
   ]);
@@ -958,101 +1045,40 @@ export default function BrandCreatedCampaignsPage() {
   const clearFilters = () => {
     setCampaignTypeFilter("all");
     setCreatorStatusFilter("all");
-    setCategoryFilter("all");
-    setDateFilter("all");
+    setCategoryIds([]);
+    setDateFilter(DEFAULT_DATE_FILTER);
     setAiCreatedOnly(false);
+    setSearchInput("");
+    setAppliedSearch("");
+    setCurrentPage(1);
   };
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
       <div className="mb-5 rounded-[1rem] border border-[#ECECEC] bg-white p-3 sm:p-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <FilterPopover
-              label="Campaign Type"
-              value={campaignTypeFilter}
-              options={campaignTypeOptions}
-              onChange={setCampaignTypeFilter}
-            />
+        <CampaignFilter
+          campaignType={campaignTypeFilter}
+          setCampaignType={setCampaignTypeFilter}
+          creatorStatus={creatorStatusFilter}
+          setCreatorStatus={setCreatorStatusFilter}
+          categoryIds={categoryIds}
+          setCategoryIds={setCategoryIds}
+          dateFilter={dateFilter}
+          setDateFilter={setDateFilter}
+          aiCreated={aiCreatedOnly}
+          setAiCreated={setAiCreatedOnly}
+          searchInput={searchInput}
+          setSearchInput={setSearchInput}
+        />
 
-            <FilterPopover
-              label="Creator Status"
-              value={creatorStatusFilter}
-              options={creatorStatusOptions}
-              onChange={setCreatorStatusFilter}
-            />
-
-            <FilterPopover
-              label="Category"
-              value={categoryFilter}
-              options={categoryOptions}
-              onChange={setCategoryFilter}
-            />
-
-            <FilterPopover
-              label="Date"
-              value={dateFilter}
-              options={dateOptions}
-              onChange={setDateFilter}
-            />
-
-            <label className="inline-flex h-9 items-center gap-2 rounded-[0.65rem] px-2.5 hover:bg-[#F5F6F8]">
-              <button
-                type="button"
-                onClick={() => setAiCreatedOnly((prev) => !prev)}
-                className={cx(
-                  "relative inline-flex h-6 w-10 items-center rounded-full transition-colors",
-                  aiCreatedOnly ? "bg-[#1F1F1F]" : "bg-[#E3E3E3]"
-                )}
-                aria-pressed={aiCreatedOnly}
-              >
-                <span
-                  className={cx(
-                    "inline-block h-5 w-5 rounded-full bg-white transition-transform",
-                    aiCreatedOnly ? "translate-x-[18px]" : "translate-x-0.5"
-                  )}
-                />
-              </button>
-
-              <span className="text-sm text-[#3B3B3B]">AI Created</span>
-            </label>
-
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="inline-flex h-9 items-center gap-1 rounded-lg bg-[#F3F3F3] px-3 text-sm text-[#333] hover:bg-[#ECECEC]"
-            >
-              <span>Clear</span>
-              <X size={14} weight="bold" />
-            </button>
-          </div>
-
-          <div className="flex w-full overflow-hidden rounded-xl border border-[#E5E5E5] bg-white sm:max-w-[22rem] lg:ml-auto lg:max-w-[18rem] xl:max-w-[20rem]">
-            <div className="relative flex-1">
-              <MagnifyingGlass
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8D8D8D]"
-              />
-              <input
-                type="text"
-                placeholder="Search"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") applySearch();
-                }}
-                className="h-10 w-full border-0 bg-transparent pl-10 pr-3 text-sm text-[#222] outline-none placeholder:text-[#9A9A9A]"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={applySearch}
-              className="border-l border-[#E5E5E5] bg-white px-4 text-sm font-semibold text-[#1F1F1F] hover:bg-[#F8F8F8]"
-            >
-              Search
-            </button>
-          </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex h-9 items-center rounded-lg bg-[#F3F3F3] px-3 text-sm text-[#333] hover:bg-[#ECECEC]"
+          >
+            Clear Filters
+          </button>
         </div>
       </div>
 
@@ -1075,7 +1101,9 @@ export default function BrandCreatedCampaignsPage() {
               statusUpdating={statusUpdating}
               onChangeStatus={onChangeStatus}
               onViewCampaign={(campaignId) =>
-                router.push(`/brand/created-campaign/view-campaign?id=${campaignId}`)
+                router.push(
+                  `/brand/created-campaign/view-campaign?id=${campaignId}`
+                )
               }
               onEditCampaign={(campaignId) =>
                 router.push(`/brand/edit-campaign?id=${campaignId}`)
@@ -1086,6 +1114,9 @@ export default function BrandCreatedCampaignsPage() {
               onViewAppliedInfluencers={(campaignId) =>
                 router.push(`/brand/created-campaign/applied-inf?id=${campaignId}`)
               }
+              onViewInbox={(campaignId) =>
+                router.push(`/brand/inbox?id=${campaignId}`)
+              }
             />
           ))}
         </div>
@@ -1095,7 +1126,9 @@ export default function BrandCreatedCampaignsPage() {
         currentPage={currentPage}
         totalPages={totalPages}
         onPrev={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-        onNext={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+        onNext={() =>
+          setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+        }
       />
     </div>
   );

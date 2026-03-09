@@ -2032,11 +2032,11 @@ export default function AppliedInfluencersPage() {
     };
 
     return (
-      <div className="flex items-center gap-2 whitespace-nowrap">
+      <div className="flex flex-wrap items-center justify-end gap-2 max-w-full">
         <button
           type="button"
           onClick={handleSendContractClick}
-          className="inline-flex h-9 items-center rounded-full border border-[#D9D9D9] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
+          className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#D9D9D9] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
         >
           Send Contract
         </button>
@@ -2044,7 +2044,7 @@ export default function AppliedInfluencersPage() {
         <button
           type="button"
           onClick={handleManageClick}
-          className="inline-flex h-9 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
+          className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
         >
           Manage
         </button>
@@ -2052,7 +2052,7 @@ export default function AppliedInfluencersPage() {
         <button
           type="button"
           onClick={() => handleViewMessage(inf)}
-          className="relative flex h-8 w-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
         >
           <EnvelopeOpen size={16} />
           {hasContract ? (
@@ -2063,7 +2063,7 @@ export default function AppliedInfluencersPage() {
         <button
           type="button"
           onClick={handleMoreClick}
-          className="flex h-8 w-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+          className="flex h-8 w-8 items-center shrink-0 justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
         >
           <DotsThree size={16} weight="bold" />
         </button>
@@ -2326,10 +2326,10 @@ export default function AppliedInfluencersPage() {
           </div>
         ) : (
           <>
-            <div className="bg-white rounded-md shadow-sm overflow-hidden hidden md:block">
+            <div className="rounded-md overflow-x-auto hidden md:block">
               <InfluencerTable
                 rows={filteredRows}
-                variant="default"
+                variant="shortlisted"
                 renderStatus={(baseRow) => {
                   const row = baseRow as AppliedInfluencerRow;
 
@@ -2352,6 +2352,9 @@ export default function AppliedInfluencersPage() {
                     </span>
                   );
                 }}
+                renderShortlistedActions={(baseRow) => (
+                  <AppliedCampaignActionCell row={baseRow as AppliedInfluencerRow} />
+                )}
               />
             </div>
 
@@ -3343,9 +3346,27 @@ export default function AppliedInfluencersPage() {
    Support UI components
    =============================================================== */
 const LoadingSkeleton = ({ rows }: { rows: number }) => (
-  <div className="p-6 space-y-2">
+  <div className="p-6 space-y-4">
     {Array.from({ length: rows }).map((_, i) => (
-      <Skeleton key={i} className="h-12 w-full rounded-md" />
+      <div
+        key={i}
+        className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4"
+      >
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-12 w-12 rounded-full bg-gray-200" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-40 rounded bg-gray-200" />
+            <Skeleton className="h-3 w-28 rounded bg-gray-200" />
+          </div>
+        </div>
+
+        <div className="hidden md:flex items-center gap-3">
+          <Skeleton className="h-8 w-24 rounded-full bg-gray-200" />
+          <Skeleton className="h-8 w-20 rounded-full bg-gray-200" />
+          <Skeleton className="h-8 w-8 rounded-md bg-gray-200" />
+          <Skeleton className="h-8 w-8 rounded-md bg-gray-200" />
+        </div>
+      </div>
     ))}
   </div>
 );
@@ -4229,9 +4250,8 @@ function SidebarSection({ title, children, icon }: any) {
   );
 }
 
-/* ======================
-   Tiny helpers: labels + tooltips
-   ====================== */
+
+
 function LabelWithInfo({
   text,
   info,

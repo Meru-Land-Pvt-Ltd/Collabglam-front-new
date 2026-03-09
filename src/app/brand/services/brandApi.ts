@@ -330,7 +330,7 @@ export async function apiGetSubcategoriesByCategoryId(categoryId: string) {
 /** ✅ CATEGORY GET-ALL (your custom endpoint) */
 export async function apiGetAllCategories() {
   // endpoint: /category/get-all
-  return apiPost<CategoryDoc[]>(`/category/get-all`);
+  return apiPost<CategoryDoc[]>(`/category/categories`);
 }
 
 /** -------------------------

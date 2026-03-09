@@ -1,868 +1,376 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React from "react";
 import Link from "next/link";
 import {
-  HiSearch,
-  HiChevronDown,
-  HiChevronUp,
-  HiAdjustments,
-  HiOutlineUsers,
-  HiChevronRight,
-} from "react-icons/hi";
-import { get, post } from "@/lib/api";
+  Users,
+  CurrencyDollar,
+  FileText,
+} from "@phosphor-icons/react";
 
-/* ✅ FULLY MANAGED plan gate (use plan name + plan id) */
-const FULLY_MANAGED_PLAN_ID = "1f46c6f6-63ae-4c4f-943d-798d644257f9";
-const FULLY_MANAGED_PLAN_NAME = "fully_managed";
+const cx = (...c: Array<string | undefined | null | false>) =>
+  c.filter(Boolean).join(" ");
 
-// ---- Types ----
-type SortBy =
-  | "createdAt"
-  | "budget"
-  | "campaignStatus"
-  | "statusUpdatedAt"
-  | "productOrServiceName"
-  | "isActive";
-type SortOrder = "asc" | "desc";
-type TimelineState = "none" | "running" | "expired";
-type Goal = "Brand Awareness" | "Sales" | "Engagement";
-type CampaignStatus = "open" | "paused";
+const WRAP_BASE =
+  "w-full rounded-[1.25rem] border border-[#E8E8E8] bg-white p-3 sm:p-4 lg:p-5";
 
-interface RawCampaign {
-  campaignsId?: string;
-  _id?: string;
-  productOrServiceName: string;
-  description?: string;
-  timeline?: { startDate?: string; endDate?: string };
-  budget: number;
-  applicantCount?: number;
+const WRAP_GRID =
+  "grid grid-cols-1 gap-4 " +
+  "lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,16rem)] " +
+  "xl:grid-cols-[minmax(0,19rem)_minmax(0,1fr)_minmax(0,17rem)] " +
+  "lg:items-center lg:gap-4";
 
-  isActive?: number;
-  campaignStatus?: string;
-  createdAt?: string;
-  statusUpdatedAt?: string;
-  goal?: string;
+export type TimelineState = "none" | "running" | "expired";
 
-  computedIsActive?: number;
-  timelineState?: TimelineState;
-  influencerWorking?: boolean;
-}
-
-interface Campaign {
+export interface CampaignHistoryItem {
   id: string;
   productOrServiceName: string;
-  description: string;
-  timeline: { startDate?: string; endDate?: string };
   budget: number;
   applicantCount: number;
-
   isActive: number;
   campaignStatus: string;
   createdAt?: string;
   statusUpdatedAt?: string;
-  goal?: string;
-
   timelineState: TimelineState;
-  influencerWorking: boolean;
 }
 
-interface CampaignsApiResponse {
-  data?: RawCampaign[];
-}
-
-type FilterState = {
-  timelineState: "" | TimelineState;
-  campaignStatus: "" | CampaignStatus;
-  goal: "" | Goal;
-  minBudget: string;
-  maxBudget: string;
-};
-
-const DEFAULT_FILTERS: FilterState = {
-  timelineState: "",
-  campaignStatus: "",
-  goal: "",
-  minBudget: "",
-  maxBudget: "",
-};
-
-const HISTORY_ENDPOINT = "/campaign/history";
-
-// Theme helpers
-const TABLE_GRADIENT_FROM = "#FFA135";
-const TABLE_GRADIENT_TO = "#FF7236";
-
-function sliceText(text: string, max = 40) {
-  const t = String(text || "");
-  if (t.length <= max) return t;
-  return t.slice(0, max - 1) + "…";
-}
+const HISTORY_INFLUENCER_ROUTE = "/brand/campaign-history/applied-inf";
 
 function formatCurrency(n: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
-    Number(n || 0)
-  );
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number(n || 0));
 }
 
-function gradientStyle() {
+function formatDateTime(dateStr?: string) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+function statusPillBg(status: "open" | "paused") {
+  return status === "open" ? "bg-[#EAF7EE]" : "bg-[#FFF3D9]";
+}
+
+function statusDotBg(status: "open" | "paused") {
+  return status === "open" ? "bg-[#2EAD4F]" : "bg-[#D69E2E]";
+}
+
+function statusLabel(status: "open" | "paused") {
+  return status === "open" ? "Open" : "Paused";
+}
+
+function activeStatusStyles(isActive: number) {
+  if (isActive === 1) {
+    return {
+      wrap: "bg-[#EAF7EE]",
+      dot: "bg-[#2EAD4F]",
+      label: "Active",
+    };
+  }
+
   return {
-    backgroundImage: `linear-gradient(to right, ${TABLE_GRADIENT_FROM}, ${TABLE_GRADIENT_TO})`,
+    wrap: "bg-[#F1F3F5]",
+    dot: "bg-[#7B7B7B]",
+    label: "Completed",
   };
 }
 
-function SortIcon({ active, order }: { active: boolean; order: SortOrder }) {
-  if (!active) return <span className="text-white/70">↕</span>;
-  return <span className="text-white font-extrabold">{order === "asc" ? "↑" : "↓"}</span>;
-}
-
-function Th({
-  children,
-  onClick,
-  className = "",
+function StatusPill({
+  label,
+  wrapClass,
+  dotClass,
 }: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  className?: string;
+  label: string;
+  wrapClass: string;
+  dotClass: string;
 }) {
   return (
-    <th
-      onClick={onClick}
-      className={[
-        "px-6 py-3 font-semibold whitespace-nowrap",
-        onClick ? "cursor-pointer select-none hover:opacity-95" : "",
-        className,
-      ].join(" ")}
+    <span className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-medium text-[#333]">
+      <span className={cx("inline-flex items-center rounded-full p-0.5", wrapClass)}>
+        <span className={cx("h-2 w-2 rounded-full", dotClass)} />
+      </span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function CampaignStatusPill({ status }: { status: string }) {
+  const safeStatus: "open" | "paused" =
+    String(status || "").toLowerCase() === "paused" ? "paused" : "open";
+
+  return (
+    <StatusPill
+      label={statusLabel(safeStatus)}
+      wrapClass={statusPillBg(safeStatus)}
+      dotClass={statusDotBg(safeStatus)}
+    />
+  );
+}
+
+function ActiveStatusPill({ isActive }: { isActive: number }) {
+  const styles = activeStatusStyles(isActive);
+
+  return (
+    <StatusPill
+      label={styles.label}
+      wrapClass={styles.wrap}
+      dotClass={styles.dot}
+    />
+  );
+}
+
+function MetricBox({
+  label,
+  value,
+  icon,
+  href,
+  disabled,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon?: React.ReactNode;
+  href?: string;
+  disabled?: boolean;
+}) {
+  const content = (
+    <>
+      <div className="w-full truncate text-[0.82rem] leading-5 text-[#9A9A9A]">
+        {label}
+      </div>
+
+      <div className="mt-0.5 flex min-w-0 items-center justify-center gap-1.5">
+        {icon ? (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#9A9A9A]">
+            {icon}
+          </span>
+        ) : null}
+
+        <span className="min-w-0 truncate text-[0.95rem] font-medium leading-5 text-[#2E2E2E]">
+          {value}
+        </span>
+      </div>
+    </>
+  );
+
+  if (href && !disabled) {
+    return (
+      <Link
+        href={href}
+        className="min-w-0 rounded-[0.8rem] border border-[#E7E7E7] bg-white px-3 py-3 text-center transition hover:bg-[#F8F8F8] hover:border-[#DCDCDC]"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div
+      className={cx(
+        "min-w-0 rounded-[0.8rem] border border-[#E7E7E7] bg-white px-3 py-3 text-center",
+        disabled ? "opacity-60" : ""
+      )}
     >
-      <span className="inline-flex items-center gap-2">{children}</span>
-    </th>
-  );
-}
-
-function StatusBadge({ isActive }: { isActive: number }) {
-  const active = isActive === 1;
-  return (
-    <span
-      className={[
-        "inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-full",
-        active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800",
-      ].join(" ")}
-    >
-      {active ? "Active" : "Completed"}
-    </span>
-  );
-}
-
-function TimelineBadge({ state }: { state: TimelineState }) {
-  const cls =
-    state === "running"
-      ? "bg-green-100 text-green-800"
-      : state === "expired"
-        ? "bg-gray-100 text-gray-800"
-        : "bg-slate-100 text-slate-800";
-
-  const label = state === "running" ? "Running" : state === "expired" ? "Expired" : "No Timeline";
-
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-full ${cls}`}>
-      {label}
-    </span>
-  );
-}
-
-function CampaignStatusBadge({ status }: { status: string }) {
-  const s = (status || "").toLowerCase();
-  const cls =
-    s === "open"
-      ? "bg-blue-100 text-blue-800"
-      : s === "paused"
-        ? "bg-orange-100 text-orange-800"
-        : "bg-gray-100 text-gray-800";
-
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-full ${cls}`}>
-      {status || "—"}
-    </span>
-  );
-}
-
-function useDebouncedValue<T>(value: T, delay = 400) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return debounced;
-}
-
-function countActiveFilters(f: FilterState) {
-  let n = 0;
-  if (f.timelineState !== "") n++;
-  if (f.campaignStatus !== "") n++;
-  if (f.goal !== "") n++;
-  if (f.minBudget || f.maxBudget) n++;
-  return n;
-}
-
-function parseOptionalNumber(v: string) {
-  const s = String(v ?? "").trim();
-  if (!s) return undefined;
-  const n = Number(s);
-  if (!Number.isFinite(n)) return undefined;
-  return n;
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs font-semibold text-gray-700 mb-1">{label}</div>
-      {children}
+      {content}
     </div>
   );
 }
 
-// ------------------- Page -------------------
-export default function BrandCampaignHistoryPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 400);
-
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [draft, setDraft] = useState<FilterState>(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState<FilterState>(DEFAULT_FILTERS);
-
-  const activeFilterCount = useMemo(() => countActiveFilters(applied), [applied]);
-
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [counts, setCounts] = useState<Record<string, number>>({});
-
-  const lastFetchKeyRef = useRef<string>("");
-
-  // ✅ plan gate
-  const [isFullyManaged, setIsFullyManaged] = useState(false);
-
-  useEffect(() => {
-    try {
-      const storedPlanId = window.localStorage.getItem("brandPlanId");
-      const storedPlanName = window.localStorage.getItem("brandPlanName");
-
-      const fullyManaged =
-        (storedPlanId || "").trim() === FULLY_MANAGED_PLAN_ID ||
-        (storedPlanName || "").trim().toLowerCase() === FULLY_MANAGED_PLAN_NAME;
-
-      setIsFullyManaged(fullyManaged);
-    } catch {
-      setIsFullyManaged(false);
-    }
-  }, []);
-
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "—";
-    return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d);
-  };
-
-  const formatDateTime = (dateStr?: string) => {
-    if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "—";
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(d);
-  };
-
-  const buildPayload = useCallback(
-    (brandId: string) => {
-      const f = applied;
-      const payload: any = {
-        brandId,
-        page: 1,
-        limit: 500,
-        search: String(debouncedSearch || "").trim(),
-        sortBy,
-        sortOrder,
-
-        includeDescription: 1,
-        includeDrafts: 1,
-
-        timelineState: f.timelineState || undefined,
-        campaignStatus: f.campaignStatus || undefined,
-        goal: f.goal || undefined,
-      };
-
-      const minB = parseOptionalNumber(f.minBudget);
-      const maxB = parseOptionalNumber(f.maxBudget);
-      if (minB !== undefined) payload.minBudget = minB;
-      if (maxB !== undefined) payload.maxBudget = maxB;
-
-      Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
-      return payload;
-    },
-    [applied, debouncedSearch, sortBy, sortOrder]
-  );
-
-  const fetchHistory = useCallback(
-    async (opts?: { force?: boolean }) => {
-      const brandId = typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
-      if (!brandId) throw new Error("No brandId found in localStorage.");
-
-      const payload = buildPayload(brandId);
-      const fetchKey = JSON.stringify(payload);
-
-      if (!opts?.force && fetchKey === lastFetchKeyRef.current) return;
-      lastFetchKeyRef.current = fetchKey;
-
-      setError(null);
-      setUpdating(true);
-
-      try {
-        const res = await post<CampaignsApiResponse>(HISTORY_ENDPOINT, payload);
-        const list = Array.isArray(res?.data) ? res.data! : [];
-
-        const normalized: Campaign[] = list.map((c, idx) => {
-          const id = String(c.campaignsId ?? c._id ?? `row-${idx}`);
-          const tl = c.timeline || {};
-          return {
-            id,
-            productOrServiceName: c.productOrServiceName,
-            description: c.description ?? "",
-            timeline: { startDate: tl.startDate, endDate: tl.endDate },
-            budget: c.budget ?? 0,
-            applicantCount: c.applicantCount ?? 0,
-            isActive: Number(c.computedIsActive ?? c.isActive ?? 0),
-            campaignStatus: c.campaignStatus ?? "",
-            createdAt: c.createdAt,
-            statusUpdatedAt: c.statusUpdatedAt,
-            goal: c.goal,
-            timelineState: (c.timelineState ?? "none") as TimelineState,
-            influencerWorking: Boolean(c.influencerWorking),
-          };
-        });
-
-        setCampaigns(normalized);
-      } finally {
-        setUpdating(false);
-        setLoading(false);
-      }
-    },
-    [buildPayload]
-  );
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        await fetchHistory();
-      } catch (e: any) {
-        if (!alive) return;
-        setUpdating(false);
-        setLoading(false);
-        setError(e?.message || "Failed to load campaign history.");
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [fetchHistory]);
-
-  const onHeaderSort = (field: SortBy) => {
-    if (sortBy === field) setSortOrder((p) => (p === "asc" ? "desc" : "asc"));
-    else {
-      setSortBy(field);
-      setSortOrder("desc");
-    }
-  };
-
-  const openFilters = () => {
-    setDraft(applied);
-    setFiltersOpen(true);
-  };
-
-  const applyFilters = () => {
-    setApplied(draft);
-    setFiltersOpen(false);
-  };
-
-  const clearFilters = () => setDraft(DEFAULT_FILTERS);
-
-  const toggleExpand = async (campaign: Campaign) => {
-    const id = campaign.id;
-
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-    // ✅ FULLY MANAGED: don’t fetch influencer counts (and UI is hidden anyway)
-    if (isFullyManaged) return;
-
-    if (!(id in counts)) {
-      try {
-        const res = await get<{ count: number }>("/campaign/influencers", { campaignId: id });
-        setCounts((p) => ({ ...p, [id]: res.count }));
-      } catch {
-        setCounts((p) => ({ ...p, [id]: 0 }));
-      }
-    }
-  };
-
-  const rows = useMemo(() => campaigns, [campaigns]);
+function CampaignThumb({ name }: { name: string }) {
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 
   return (
-    <div className="p-6 min-h-screen">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Campaign History</h1>
-        </div>
-
-        {updating && (
-          <div className="text-xs font-semibold px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 shadow-sm">
-            Updating…
-          </div>
-        )}
+    <div className="h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.9rem] bg-[#F3F3F3] sm:h-[4.35rem] sm:w-[4.35rem]">
+      <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-[#6E6E6E]">
+        {initials || <FileText size={24} />}
       </div>
+    </div>
+  );
+}
 
-      {/* Search + Filters */}
-      <div className="bg-white rounded-2xl shadow p-5 mb-4 border border-gray-100">
-        <div className="flex flex-col lg:flex-row lg:items-end gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <HiSearch className="absolute inset-y-0 left-3 my-auto text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Search campaigns..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#FFA135] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF7236] focus:border-[#FF7236] text-sm"
-              />
+function CampaignHistoryRow({
+  campaign,
+  isFullyManaged,
+}: {
+  campaign: CampaignHistoryItem;
+  isFullyManaged: boolean;
+}) {
+  const influencerCount = Number(campaign.applicantCount || 0);
+
+  const influencerHref = `${HISTORY_INFLUENCER_ROUTE}?id=${campaign.id}&name=${encodeURIComponent(
+    campaign.productOrServiceName
+  )}`;
+
+  return (
+    <div className={cx(WRAP_BASE, WRAP_GRID)}>
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-3">
+          <CampaignThumb name={campaign.productOrServiceName} />
+
+          <div className="min-w-0 flex-1">
+            <Link
+              href={`/brand/campaign-history/view-campaign?id=${campaign.id}`}
+              className="min-w-0 block break-words text-[clamp(0.95rem,0.9rem+0.22vw,1.04rem)] font-semibold leading-snug text-[#262626] hover:text-[#111]"
+              title={campaign.productOrServiceName}
+            >
+              <span className="line-clamp-2">{campaign.productOrServiceName}</span>
+            </Link>
+
+            <div className="mt-1 text-[0.78rem] text-[#A0A0A0]">
+              Created {formatDateTime(campaign.createdAt)}
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => (filtersOpen ? setFiltersOpen(false) : openFilters())}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 hover:bg-gray-50 bg-white"
-            >
-              <HiAdjustments />
-              Filters
-              {activeFilterCount ? (
-                <span className="ml-1 inline-flex items-center justify-center min-w-[22px] h-[22px] px-2 text-[11px] font-extrabold rounded-full bg-gray-900 text-white">
-                  {activeFilterCount}
-                </span>
-              ) : null}
-            </button>
-          </div>
         </div>
+      </div>
 
-        {/* Filters panel */}
+      <div className="w-full lg:flex lg:justify-center">
         <div
-          className={[
-            "mt-4 overflow-hidden transition-all duration-200",
-            filtersOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0",
-          ].join(" ")}
+          className={cx(
+            "grid w-full max-w-[28rem] gap-2 rounded-[0.95rem] border border-[#E7E7E7] bg-[#FCFCFC] px-3 py-3 sm:px-4",
+            isFullyManaged ? "grid-cols-1" : "grid-cols-2"
+          )}
         >
-          <div className="mt-2 rounded-2xl border border-gray-100 bg-gray-50 p-5">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Field label="Timeline State">
-                <select
-                  value={draft.timelineState}
-                  onChange={(e) => setDraft((p) => ({ ...p, timelineState: e.target.value as any }))}
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white"
-                >
-                  <option value="">All</option>
-                  <option value="none">None</option>
-                  <option value="running">Running</option>
-                  <option value="expired">Expired</option>
-                </select>
-              </Field>
+          <MetricBox
+            label="Budget"
+            value={formatCurrency(campaign.budget)}
+            icon={<CurrencyDollar size={15} weight="regular" />}
+          />
 
-              <Field label="Campaign Status">
-                <select
-                  value={draft.campaignStatus}
-                  onChange={(e) => setDraft((p) => ({ ...p, campaignStatus: e.target.value as any }))}
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white"
-                >
-                  <option value="">All</option>
-                  <option value="open">Open</option>
-                  <option value="paused">Paused</option>
-                </select>
-              </Field>
-
-              <Field label="Goals">
-                <select
-                  value={draft.goal}
-                  onChange={(e) => setDraft((p) => ({ ...p, goal: e.target.value as any }))}
-                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white"
-                >
-                  <option value="">All</option>
-                  <option value="Brand Awareness">Brand Awareness</option>
-                  <option value="Sales">Sales</option>
-                  <option value="Engagement">Engagement</option>
-                </select>
-              </Field>
-            </div>
-
-            <div className="mt-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Field label="Min Budget">
-                  <input
-                    value={draft.minBudget}
-                    onChange={(e) => setDraft((p) => ({ ...p, minBudget: e.target.value }))}
-                    type="number"
-                    placeholder="e.g. 1000"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white"
-                  />
-                </Field>
-
-                <Field label="Max Budget">
-                  <input
-                    value={draft.maxBudget}
-                    onChange={(e) => setDraft((p) => ({ ...p, maxBudget: e.target.value }))}
-                    type="number"
-                    placeholder="e.g. 5000"
-                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white"
-                  />
-                </Field>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 hover:bg-white bg-transparent"
-              >
-                Clear
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft(applied);
-                  setFiltersOpen(false);
-                }}
-                className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 hover:bg-white bg-transparent"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                disabled={updating}
-                onClick={applyFilters}
-                className="ml-auto px-5 py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                style={gradientStyle()}
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
+          {!isFullyManaged ? (
+            <MetricBox
+              label="Influencer"
+              value={String(influencerCount)}
+              icon={<Users size={15} weight="regular" />}
+              href={influencerCount > 0 ? influencerHref : undefined}
+              disabled={influencerCount <= 0}
+            />
+          ) : null}
         </div>
       </div>
 
-      {/* Results */}
-      {loading ? (
-        <div className="bg-white rounded-2xl shadow p-6 animate-pulse border border-gray-100">
-          <div className="h-4 bg-gray-200 rounded w-1/3 mb-4" />
-          <div className="h-4 bg-gray-200 rounded w-full mb-2" />
-          <div className="h-4 bg-gray-200 rounded w-5/6" />
+      <div className="min-w-0 lg:justify-self-end">
+        <div className="flex min-w-0 flex-col gap-3 lg:items-end">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+            <CampaignStatusPill status={campaign.campaignStatus} />
+            <ActiveStatusPill isActive={campaign.isActive} />
+          </div>
+
+          <Link
+            href={`/brand/campaign-history/view-campaign?id=${campaign.id}`}
+            className="inline-flex h-10 items-center justify-center rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8]"
+          >
+            View Campaign
+          </Link>
         </div>
-      ) : error ? (
-        <div className="bg-white rounded-2xl shadow p-6 border border-red-200">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold text-red-700">Couldn’t load campaign history</div>
-              <div className="text-sm text-gray-600 mt-1">{error}</div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonList({ isFullyManaged }: { isFullyManaged: boolean }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className={cx(WRAP_BASE, WRAP_GRID, "animate-pulse")}>
+          <div className="flex items-center gap-3">
+            <div className="h-[4rem] w-[4rem] rounded-[0.9rem] bg-[#EFEFEF] sm:h-[4.35rem] sm:w-[4.35rem]" />
+            <div className="flex-1">
+              <div className="mb-2 h-4 w-44 rounded bg-[#EFEFEF]" />
+              <div className="h-3 w-32 rounded bg-[#F4F4F4]" />
             </div>
+          </div>
 
-            <button
-              type="button"
-              onClick={async () => {
-                setLoading(true);
-                setError(null);
-                lastFetchKeyRef.current = "";
-                try {
-                  await fetchHistory({ force: true });
-                } catch (e: any) {
-                  setError(e?.message || "Failed to load campaign history.");
-                  setLoading(false);
-                  setUpdating(false);
-                }
-              }}
-              className="px-4 py-2 rounded-xl text-sm font-semibold border border-gray-900 bg-white hover:bg-gray-50"
-            >
-              Retry
-            </button>
+          <div
+            className={cx(
+              "grid gap-2 rounded-[0.95rem] border border-[#E7E7E7] bg-[#FCFCFC] px-3 py-3 sm:px-4",
+              isFullyManaged ? "grid-cols-1" : "grid-cols-2"
+            )}
+          >
+            <div className="h-14 rounded-[0.8rem] bg-[#F4F4F4]" />
+            {!isFullyManaged ? <div className="h-14 rounded-[0.8rem] bg-[#F4F4F4]" /> : null}
+          </div>
+
+          <div className="flex flex-col gap-2 lg:items-end">
+            <div className="h-8 w-28 rounded bg-[#F2F2F2]" />
+            <div className="h-10 w-32 rounded bg-[#F2F2F2]" />
           </div>
         </div>
-      ) : rows.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow p-8 text-center border border-gray-100">
-          <p className="text-gray-900 font-semibold">No campaign history found</p>
-          <p className="text-gray-600 text-sm mt-1">Try different keywords or change filters.</p>
-        </div>
-      ) : (
-        <div className="p-[1.5px] rounded-2xl shadow" style={gradientStyle()}>
-          <div className="overflow-x-auto bg-white rounded-[0.95rem]">
-            <table className="w-full text-sm text-gray-700">
-              <thead className="text-left text-white" style={gradientStyle()}>
-                <tr>
-                  <Th onClick={() => onHeaderSort("productOrServiceName")} className="text-left">
-                    Campaign <SortIcon active={sortBy === "productOrServiceName"} order={sortOrder} />
-                  </Th>
+      ))}
+    </div>
+  );
+}
 
-                  <Th onClick={() => onHeaderSort("budget")} className="text-center">
-                    Budget <SortIcon active={sortBy === "budget"} order={sortOrder} />
-                  </Th>
+export default function CampaignHistoryList({
+  campaigns,
+  loading,
+  error,
+  isFullyManaged,
+  onRetry,
+}: {
+  campaigns: CampaignHistoryItem[];
+  loading: boolean;
+  error: string | null;
+  isFullyManaged: boolean;
+  onRetry: () => void;
+}) {
+  if (loading) {
+    return <SkeletonList isFullyManaged={isFullyManaged} />;
+  }
 
-                  <Th onClick={() => onHeaderSort("isActive")} className="text-center">
-                    Status <SortIcon active={sortBy === "isActive"} order={sortOrder} />
-                  </Th>
-
-                  <Th className="text-center">Timeline</Th>
-
-                  {/* ✅ Hide Total Influencers column for FULLY MANAGED */}
-                  {!isFullyManaged && <Th className="text-center">Total Influencers</Th>}
-
-                  <Th onClick={() => onHeaderSort("createdAt")} className="text-center">
-                    Created <SortIcon active={sortBy === "createdAt"} order={sortOrder} />
-                  </Th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {rows.map((c, idx) => {
-                  const isExpanded = expandedIds.has(c.id);
-
-                  const lazyCount = counts[c.id];
-                  const appliedCount =
-                    typeof c.applicantCount === "number"
-                      ? c.applicantCount
-                      : typeof lazyCount === "number"
-                        ? lazyCount
-                        : 0;
-
-                  return (
-                    <React.Fragment key={c.id}>
-                      <tr
-                        onClick={() => toggleExpand(c)}
-                        className={[
-                          "border-b last:border-b-0",
-                          idx % 2 === 0 ? "bg-white" : "bg-gray-50",
-                          "transition-all duration-200",
-                          "hover:bg-gradient-to-r hover:from-[#FFA135]/10 hover:to-[#FF7236]/10",
-                          "cursor-pointer",
-                        ].join(" ")}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleExpand(c);
-                          }
-                        }}
-                      >
-                        {/* Campaign (LEFT aligned) */}
-                        <td className="px-6 py-4 align-middle text-left">
-                          <div className="flex items-start gap-3">
-                            <div className="min-w-0 inline-flex items-center gap-2">
-                              <Link
-                                href={`/brand/campaign-history/view-campaign?id=${c.id}`}
-                                onClick={(e) => e.stopPropagation()}
-                                title={c.productOrServiceName}
-                              >
-                                <span className="font-bold text-gray-900 hover:text-[#FF7236] hover:underline underline-offset-4">
-                                  {sliceText(c.productOrServiceName, 48)}
-                                </span>
-                              </Link>
-
-                              <span className="text-gray-400 hover:text-[#FF7236] cursor-pointer">
-                                {isExpanded ? <HiChevronUp size={18} /> : <HiChevronDown size={18} />}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Budget (CENTER) */}
-                        <td className="px-6 py-4 whitespace-nowrap align-middle text-center font-medium text-gray-900">
-                          {formatCurrency(c.budget)}
-                        </td>
-
-                        {/* Status (CENTER) */}
-                        <td className="px-6 py-4 whitespace-nowrap align-middle text-center">
-                          <StatusBadge isActive={c.isActive} />
-                        </td>
-
-                        {/* Timeline (CENTER) */}
-                        <td className="px-6 py-4 whitespace-nowrap align-middle text-center">
-                          {formatDate(c.timeline.startDate)} – {formatDate(c.timeline.endDate)}
-                        </td>
-
-                        {/* ✅ Influencers column + button hidden for FULLY MANAGED */}
-                        {!isFullyManaged && (
-                          <td className="px-6 py-4 align-middle text-center">
-                            {appliedCount > 0 ? (
-                              <Link
-                                href={`/brand/campaign-history/view-inf?id=${c.id}&name=${encodeURIComponent(
-                                  c.productOrServiceName
-                                )}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="group inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-900
-                 hover:border-[#FF7236] hover:bg-white hover:shadow-sm transition
-                 focus:outline-none focus:ring-2 focus:ring-[#FF7236]/40 focus:ring-offset-2"
-                                title="View influencers"
-                                aria-label={`View influencers (${appliedCount})`}
-                              >
-                                <HiOutlineUsers size={18} className="opacity-70 group-hover:text-[#FF7236]" />
-                                <span className="group-hover:underline underline-offset-2">Influencers</span>
-
-                                <span className="ml-1 inline-flex min-w-[2rem] justify-center rounded-full bg-gray-900 px-2 py-0.5 text-xs font-bold text-white group-hover:bg-[#FF7236]">
-                                  {appliedCount}
-                                </span>
-
-                                <HiChevronRight size={18} className="opacity-60 group-hover:opacity-100" />
-                              </Link>
-                            ) : (
-                              <span
-                                className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-400"
-                                title="No influencers yet"
-                                aria-label="No influencers yet"
-                              >
-                                <HiOutlineUsers size={18} className="opacity-60" />
-                                <span>Influencers</span>
-                                <span className="ml-1 inline-flex min-w-[2rem] justify-center rounded-full bg-gray-300 px-2 py-0.5 text-xs font-bold text-white">
-                                  0
-                                </span>
-                              </span>
-                            )}
-                          </td>
-                        )}
-
-                        {/* Created (CENTER) */}
-                        <td className="px-6 py-4 whitespace-nowrap align-middle text-center">
-                          {formatDateTime(c.createdAt)}
-                        </td>
-                      </tr>
-
-                      {/* Expanded */}
-                      {isExpanded && (
-                        <tr className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="px-6 pb-6 pt-2" colSpan={isFullyManaged ? 5 : 6}>
-                            <div className="border-t border-gray-100 pt-5">
-                              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                                <div>
-                                  <div className="text-sm font-semibold text-gray-900">Campaign Details</div>
-                                </div>
-
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-semibold text-gray-500">Campaign Status:</span>
-                                    <CampaignStatusBadge status={c.campaignStatus} />
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-semibold text-gray-500">Timeline State:</span>
-                                    <TimelineBadge state={c.timelineState} />
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-semibold text-gray-500">Status:</span>
-                                    <StatusBadge isActive={c.isActive} />
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="md:col-span-2 rounded-xl border border-gray-100 bg-white p-4">
-                                  <div className="text-xs font-semibold text-gray-700 mb-1">Description</div>
-                                  <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                    {c.description?.trim() ? c.description : "No description provided."}
-                                  </div>
-                                </div>
-
-                                <div className="rounded-xl border border-gray-100 bg-white p-4">
-                                  <div className="text-xs font-semibold text-gray-700 mb-3">Quick Info</div>
-
-                                  <div className="space-y-2 text-sm">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <span className="text-gray-500">Budget</span>
-                                      <span className="font-semibold text-gray-900">{formatCurrency(c.budget)}</span>
-                                    </div>
-
-                                    <div className="flex items-center justify-between gap-3">
-                                      <span className="text-gray-500">Timeline</span>
-                                      <span className="text-gray-900 text-xs text-right">
-                                        {formatDate(c.timeline.startDate)} – {formatDate(c.timeline.endDate)}
-                                      </span>
-                                    </div>
-
-                                    <div className="flex items-center justify-between gap-3">
-                                      <span className="text-gray-500">Created</span>
-                                      <span className="text-gray-900 text-xs text-right">
-                                        {formatDateTime(c.createdAt)}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="mt-4 w-full flex items-center justify-end gap-2">
-                                    <div className="w-[200px]">
-                                      <Link
-                                        href={`/brand/campaign-history/view-campaign?id=${c.id}`}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="w-full inline-flex items-center justify-center px-4 py-2 rounded-xl text-sm font-semibold bg-white text-black border border-gray-900 hover:bg-gray-50"
-                                      >
-                                        View Campaign
-                                      </Link>
-                                    </div>
-
-                                    {/* ✅ Hide View Influencers button for FULLY MANAGED */}
-                                    {!isFullyManaged && (
-                                      <div className="w-[200px]">
-                                        <Link
-                                          href={`/brand/campaign-history/view-inf?id=${c.id}&name=${encodeURIComponent(
-                                            c.productOrServiceName
-                                          )}`}
-                                          onClick={(e) => e.stopPropagation()}
-                                          className={[
-                                            "relative w-full inline-flex items-center justify-center px-4 py-2 rounded-xl text-sm font-semibold text-white",
-                                            "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90",
-                                          ].join(" ")}
-                                        >
-                                          View Influencers
-                                          <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-2 text-[11px] font-extrabold bg-white/20 rounded-full">
-                                            {appliedCount}
-                                          </span>
-                                        </Link>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+  if (error) {
+    return (
+      <div className="rounded-[1rem] border border-red-200 bg-red-50 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-red-700">
+              Couldn’t load campaign history
+            </p>
+            <p className="mt-1 text-sm text-red-600">{error}</p>
           </div>
+
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex h-10 items-center justify-center rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8]"
+          >
+            Retry
+          </button>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  if (campaigns.length === 0) {
+    return (
+      <div className="rounded-[1rem] border border-dashed border-[#D9D9D9] bg-white p-5 text-sm text-[#777]">
+        No campaign history found.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {campaigns.map((campaign) => (
+        <CampaignHistoryRow
+          key={campaign.id}
+          campaign={campaign}
+          isFullyManaged={isFullyManaged}
+        />
+      ))}
     </div>
   );
 }
