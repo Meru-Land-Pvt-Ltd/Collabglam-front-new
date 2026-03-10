@@ -451,3 +451,7 @@ export async function apiResolveModashProfile(
     }
   );
 }
+
+export async function apiGetAllCampaigns(influencerId: string) {
+  return apiPost<any[]>(`/influencer/get-campaign`, { influencerId });
+}
