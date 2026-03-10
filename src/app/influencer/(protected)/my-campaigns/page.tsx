@@ -22,6 +22,7 @@ import CampaignFilter, {
   DEFAULT_DATE_FILTER,
   type DateFilterValue,
 } from "@/components/ui/brand/CampaignFilter";
+import { apiGetAllCampaigns } from "../../services/influencerApi";
 /* ─────────────────────────── Toast & Confirm helpers ───────────────────────── */
 const toast = (opts: {
   icon: "success" | "error" | "info";
@@ -284,38 +285,58 @@ function mapApiCampaign(c: any): CampaignData {
   const platforms: string[] = Array.isArray(c.platformSelection) ? c.platformSelection : [];
   const normPlatform = (p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
 
+  // NEW: campaignName/name fallback, old: campaignTitle/productOrServiceName
+  const title = c.campaignTitle || c.campaignName || c.name || c.productOrServiceName || "";
+
+  // NEW: categories[] array, old: campaignCategory string
+  const category =
+    c.campaignCategory ||
+    (Array.isArray(c.categories) && c.categories.length > 0
+      ? c.categories[0].subcategoryName || c.categories[0].categoryName
+      : "");
+
+  // NEW: timeline.startDate/endDate, old: startAt/endAt
+  const startDate = c.startAt || c.timeline?.startDate || "";
+  const endDate = c.endAt || c.timeline?.endDate || "";
+
+  // NEW: images[].dataUrl, old: productImages[].url
+  const images: CampaignImage[] = Array.isArray(c.productImages)
+    ? c.productImages
+    : Array.isArray(c.images)
+      ? c.images
+      : [];
+
+  // NEW: id or campaignId, old: _id
+  const id = c._id || c.id || c.campaignId || "";
+
   return {
-    id: c._id,
+    id,
     brandId: c.brandId || "",
     brandName: c.brandName || "",
-    title: c.campaignTitle || c.productOrServiceName || "",
-    productOrServiceName: c.productOrServiceName || c.campaignTitle || "",
+    title,
+    productOrServiceName: title,
     description: c.description || "",
     budgetMin: c.influencerBudget || 0,
     budgetMax: c.campaignBudget || c.budget || 0,
     budget: c.budget || c.campaignBudget || 0,
     influencerBudget: c.influencerBudget ?? 0,
-    daysLeft: computeDaysLeft(c.endAt),
+    daysLeft: computeDaysLeft(endDate),
     match: c.match ?? 0,
-    category: c.campaignCategory || "",
-    platform: platforms.length > 0 ? normPlatform(platforms[0]) : "",
+    category,
+    // NEW: fall back to campaignType if no platformSelection
+    platform:
+      platforms.length > 0 ? normPlatform(platforms[0]) : (c.campaignType || ""),
     location: c.targetCountry || "Remote",
     status: c.status || "",
     campaignStatus: c.campaignStatus || c.status || "",
     contractId: c.contractId || "",
     isContracted: c.isContracted ?? 0,
     isAccepted: c.isAccepted ?? 0,
-    hasApplied: c.hasApplied ?? 0,
+    // NEW: default 1 — items returned by this endpoint are already applied
+    hasApplied: c.hasApplied ?? 1,
     hasMilestone: c.hasMilestone ?? 0,
-    productImages: Array.isArray(c.productImages)
-      ? c.productImages
-      : Array.isArray(c.images)
-        ? c.images
-        : [],
-    timeline: {
-      startDate: c.startAt || c.timeline?.startDate || "",
-      endDate: c.endAt || c.timeline?.endDate || "",
-    },
+    productImages: images,
+    timeline: { startDate, endDate },
     isActive: c.isActive ?? 1,
     isApproved: c.isApproved ?? 1,
   };
@@ -326,11 +347,11 @@ function mapApiCampaign(c: any): CampaignData {
 /* -------------------------------------------------------------------------- */
 
 const tabs = [
-  { value: "all",        label: "All" },
-  { value: "applied",    label: "Applied Campaigns" },
-  { value: "active",     label: "Active Campaigns" },
+  { value: "all", label: "All" },
+  { value: "applied", label: "Applied Campaigns" },
+  { value: "active", label: "Active Campaigns" },
   { value: "Contracted", label: "Contracted" },
-  { value: "Rejected",   label: "Rejected" },
+  { value: "Rejected", label: "Rejected" },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -385,9 +406,8 @@ function FloatingInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${
-          disabled ? "border-gray-200 opacity-60 cursor-not-allowed" : "border-gray-200 focus:border-[#FFBF00]"
-        }`}
+        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled ? "border-gray-200 opacity-60 cursor-not-allowed" : "border-gray-200 focus:border-[#FFBF00]"
+          }`}
         placeholder=" "
       />
       <label htmlFor={id} className="absolute left-4 top-2 text-xs text-[#FFBF00] font-medium pointer-events-none">
@@ -420,9 +440,8 @@ function FloatingTextarea({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${
-          disabled ? "border-gray-200 opacity-60 cursor-not-allowed" : "border-gray-200 focus:border-[#FFBF00]"
-        }`}
+        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled ? "border-gray-200 opacity-60 cursor-not-allowed" : "border-gray-200 focus:border-[#FFBF00]"
+          }`}
         placeholder=" "
       />
       <label htmlFor={id} className="absolute left-4 top-2 text-xs text-[#FFBF00] font-medium pointer-events-none">
@@ -489,10 +508,10 @@ function SignatureModal({
     if (!open) return;
     const el = dropRef.current;
     if (!el) return;
-    const onDragOver  = (e: DragEvent) => { if (isSubmitting) return; e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
+    const onDragOver = (e: DragEvent) => { if (isSubmitting) return; e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
     const onDragEnter = (e: DragEvent) => { if (isSubmitting) return; e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
     const onDragLeave = (e: DragEvent) => { if (isSubmitting) return; e.preventDefault(); e.stopPropagation(); if (e.target === el) setIsDragging(false); };
-    const onDrop      = (e: DragEvent) => { if (isSubmitting) return; e.preventDefault(); e.stopPropagation(); setIsDragging(false); onFile(e.dataTransfer?.files?.[0] as any); };
+    const onDrop = (e: DragEvent) => { if (isSubmitting) return; e.preventDefault(); e.stopPropagation(); setIsDragging(false); onFile(e.dataTransfer?.files?.[0] as any); };
     el.addEventListener("dragover", onDragOver);
     el.addEventListener("dragenter", onDragEnter);
     el.addEventListener("dragleave", onDragLeave);
@@ -542,11 +561,10 @@ function SignatureModal({
           </div>
           <div
             ref={dropRef}
-            className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all select-none ${
-              isSubmitting ? "opacity-60 cursor-not-allowed border-gray-300 bg-gray-50"
+            className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all select-none ${isSubmitting ? "opacity-60 cursor-not-allowed border-gray-300 bg-gray-50"
               : isDragging ? "cursor-pointer border-amber-400 bg-amber-50 shadow-sm"
-              : "cursor-pointer border-gray-300 bg-gray-50 hover:bg-gray-100/80"
-            }`}
+                : "cursor-pointer border-gray-300 bg-gray-50 hover:bg-gray-100/80"
+              }`}
           >
             <div className="flex flex-col items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm"><span className="text-lg">📁</span></div>
@@ -698,7 +716,7 @@ function InfluencerContractModal({
 
   useEffect(() => { if (!open) return; if (initialMode === "edit" && !readOnly) setMode("edit"); else setMode("view"); }, [open, initialMode, readOnly]);
   useEffect(() => { if (!canEdit && mode === "edit") setMode("view"); }, [canEdit, mode]);
-  useEffect(() => { if (!open) return; if ((mode === "view" || mode === "edit") && !previewUrl) { generatePreview(true).catch(() => {}); } }, [mode, open]);
+  useEffect(() => { if (!open) return; if ((mode === "view" || mode === "edit") && !previewUrl) { generatePreview(true).catch(() => { }); } }, [mode, open]);
 
   const generatePreview = async (silent = false) => {
     setIsWorking(true);
@@ -1001,15 +1019,15 @@ function ContractActionBar({
   const signLabel = signingStatusLabel(meta);
   const statusText = signLabel ?? (
     st === CONTRACT_STATUS.BRAND_SENT_DRAFT ? "Awaiting Your Acceptance" :
-    st === CONTRACT_STATUS.BRAND_EDITED ? "Updated by Brand" :
-    st === CONTRACT_STATUS.INFLUENCER_ACCEPTED ? "Awaiting Brand Acceptance" :
-    st === CONTRACT_STATUS.INFLUENCER_EDITED ? "Sent to Brand" :
-    st === CONTRACT_STATUS.READY_TO_SIGN ? "Ready to Sign" :
-    st === CONTRACT_STATUS.CONTRACT_SIGNED ? "Awaiting Milestones" :
-    st === CONTRACT_STATUS.MILESTONES_CREATED ? "Milestone Added" :
-    st === CONTRACT_STATUS.REJECTED ? "Rejected" :
-    st === CONTRACT_STATUS.SUPERSEDED ? "Superseded" :
-    meta?.status ? String(meta.status) : "Contract"
+      st === CONTRACT_STATUS.BRAND_EDITED ? "Updated by Brand" :
+        st === CONTRACT_STATUS.INFLUENCER_ACCEPTED ? "Awaiting Brand Acceptance" :
+          st === CONTRACT_STATUS.INFLUENCER_EDITED ? "Sent to Brand" :
+            st === CONTRACT_STATUS.READY_TO_SIGN ? "Ready to Sign" :
+              st === CONTRACT_STATUS.CONTRACT_SIGNED ? "Awaiting Milestones" :
+                st === CONTRACT_STATUS.MILESTONES_CREATED ? "Milestone Added" :
+                  st === CONTRACT_STATUS.REJECTED ? "Rejected" :
+                    st === CONTRACT_STATUS.SUPERSEDED ? "Superseded" :
+                      meta?.status ? String(meta.status) : "Contract"
   );
 
   return (
@@ -1069,7 +1087,7 @@ export default function MyCampaignsPage() {
   const [aiCreated, setAiCreated] = useState(false);
   const [sortBy] = useState("match");
   const router = useRouter();
-
+  const influencerId = localStorage.getItem("influencerId");
   // ── Contract state ────────────────────────────────────────────────────────
   const [metaCache, setMetaCache] = useState<Record<string, ContractMeta | null>>({});
 
@@ -1091,8 +1109,10 @@ export default function MyCampaignsPage() {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const raw = await apiGetAllCampaigns();
-      const mapped = raw.map(mapApiCampaign);
+      const id = influencerId || (typeof window !== "undefined" ? localStorage.getItem("influencerId") : "") || "";
+      const res = await apiGetAllCampaigns(id);
+      // response shape: { total, page, pages, influencer, campaigns[] }
+      const mapped = (res?.campaigns || []).map(mapApiCampaign);
       setCampaigns(mapped);
     } catch (e: any) {
       setFetchError(e?.response?.data?.message || e?.message || "Failed to load campaigns.");
@@ -1100,7 +1120,7 @@ export default function MyCampaignsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [influencerId]);
 
   useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
 
@@ -1185,9 +1205,9 @@ export default function MyCampaignsPage() {
 
       const matchesCreatorStatus = (() => {
         if (creatorStatus === "all") return true;
-        if (creatorStatus === "applied")  return campaign.hasApplied === 1;
+        if (creatorStatus === "applied") return campaign.hasApplied === 1;
         if (creatorStatus === "approved") return campaign.isApproved === 1;
-        if (creatorStatus === "invited")  return campaign.hasApplied === 0 && campaign.isApproved === 0;
+        if (creatorStatus === "invited") return campaign.hasApplied === 0 && campaign.isApproved === 0;
         return true;
       })();
 
@@ -1205,9 +1225,9 @@ export default function MyCampaignsPage() {
         if (days && start) return (Date.now() - start.getTime()) / 86_400_000 <= days;
         if ((dateFilter.startDate || dateFilter.endDate) && start) {
           const from = dateFilter.startDate ? new Date(dateFilter.startDate) : null;
-          const to   = dateFilter.endDate   ? new Date(dateFilter.endDate)   : null;
+          const to = dateFilter.endDate ? new Date(dateFilter.endDate) : null;
           if (from && start < from) return false;
-          if (to   && start > to)   return false;
+          if (to && start > to) return false;
         }
         return true;
       })();
@@ -1217,15 +1237,15 @@ export default function MyCampaignsPage() {
 
     switch (sortBy) {
       case "budget-high": filtered.sort((a, b) => b.budgetMax - a.budgetMax); break;
-      case "budget-low":  filtered.sort((a, b) => a.budgetMin - b.budgetMin); break;
-      case "ending":      filtered.sort((a, b) => a.daysLeft  - b.daysLeft);  break;
-      default:            filtered.sort((a, b) => b.match     - a.match);
+      case "budget-low": filtered.sort((a, b) => a.budgetMin - b.budgetMin); break;
+      case "ending": filtered.sort((a, b) => a.daysLeft - b.daysLeft); break;
+      default: filtered.sort((a, b) => b.match - a.match);
     }
     return filtered;
   }, [campaigns, activeTab, searchInput, campaignType, creatorStatus, categoryIds, dateFilter, sortBy]);
 
   const hasActiveFilters = searchInput || campaignType !== "all" || creatorStatus !== "all" || categoryIds.length > 0 || aiCreated;
-
+  console.log("filtercampa", filteredCampaigns)
   /* ─────────────────────────────── RENDER ────────────────────────────────── */
   return (
     <TooltipProvider>
@@ -1331,18 +1351,18 @@ export default function MyCampaignsPage() {
                 const contractProp =
                   campaign.isContracted === 1 && campaign.contractId
                     ? {
-                        contractId: effectiveContractId,
-                        meta: contractMeta,
-                        onReviewAccept: () => openEditor({ ...campaign, contractId: effectiveContractId }, false, "edit"),
-                        onView: () => openEditor({ ...campaign, contractId: effectiveContractId }, true, "view"),
-                        onSign: () => {
-                          const st = normStatus(contractMeta?.status);
-                          const isReadyToSign = st === "READY_TO_SIGN" || !!contractMeta?.editsLockedAt;
-                          const isLocked = !!contractMeta?.lockedAt || st === "CONTRACT_SIGNED" || st === "MILESTONES_CREATED";
-                          openSignDirect({ contractId: effectiveContractId, influencerConfirmed: !!contractMeta?.confirmations?.influencer?.confirmed, brandConfirmed: !!contractMeta?.confirmations?.brand?.confirmed, isLocked, isReadyToSign });
-                        },
-                        onReject: () => setPendingRejectId(effectiveContractId),
-                      }
+                      contractId: effectiveContractId,
+                      meta: contractMeta,
+                      onReviewAccept: () => openEditor({ ...campaign, contractId: effectiveContractId }, false, "edit"),
+                      onView: () => openEditor({ ...campaign, contractId: effectiveContractId }, true, "view"),
+                      onSign: () => {
+                        const st = normStatus(contractMeta?.status);
+                        const isReadyToSign = st === "READY_TO_SIGN" || !!contractMeta?.editsLockedAt;
+                        const isLocked = !!contractMeta?.lockedAt || st === "CONTRACT_SIGNED" || st === "MILESTONES_CREATED";
+                        openSignDirect({ contractId: effectiveContractId, influencerConfirmed: !!contractMeta?.confirmations?.influencer?.confirmed, brandConfirmed: !!contractMeta?.confirmations?.brand?.confirmed, isLocked, isReadyToSign });
+                      },
+                      onReject: () => setPendingRejectId(effectiveContractId),
+                    }
                     : undefined;
 
                 return (
