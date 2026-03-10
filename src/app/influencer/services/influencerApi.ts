@@ -271,7 +271,7 @@ export type InfluencerSignInResponse = {
 };
 
 export async function apiSignInInfluencer(email: string, password: string) {
-  return apiPost<InfluencerSignInResponse>(`${INFLUENCER_BASE}/signin`, {
+  return apiPost<InfluencerSignInResponse>(`${INFLUENCER_BASE}/login`, {
     email: email?.trim(),
     password,
   });
