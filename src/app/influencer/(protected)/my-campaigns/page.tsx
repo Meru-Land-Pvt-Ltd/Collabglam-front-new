@@ -17,12 +17,11 @@ import { ManualPreviewCard } from "@/components/ui/cardPreview";
 import Swal from "sweetalert2";
 import api, { post } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { apiGetAllCampaigns } from "../../services/influencerApi";
+import { apiGetAllActiveCampaigns } from "@/services/influencerApi";
 import CampaignFilter, {
   DEFAULT_DATE_FILTER,
   type DateFilterValue,
-} from "@/app/brand/(protected)/created-campaign/CampaignFilter";
-
+} from "@/components/ui/brand/CampaignFilter";
 /* ─────────────────────────── Toast & Confirm helpers ───────────────────────── */
 const toast = (opts: {
   icon: "success" | "error" | "info";
