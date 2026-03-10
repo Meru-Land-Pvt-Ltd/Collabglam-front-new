@@ -692,7 +692,7 @@ export default function InvitesPage() {
                                                 onAccept: () => handleAccept(inv.id),
                                                 onDecline: () => handleDecline(inv.id),
                                                 onViewDetails: () => {
-                                                    router.push("/influencer/discover-campaigns/abc")
+                                                    router.push("/influencer/my-campaigns/abc")
                                                 },
                                             }}
                                         />
