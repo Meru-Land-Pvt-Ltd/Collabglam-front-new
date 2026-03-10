@@ -813,7 +813,7 @@ export default function InfluencerOnboardingPage() {
 
       const msg = getBackendMessage(resp);
       setRedirectToast({ icon: "success", title: "Success", text: msg });
-      router.push("/influencer/campaign");
+      router.push("/influencer/dashboards");
     } catch (e) {
       const msg = getApiErrorMessage(e, "Failed to save onboarding step");
       setFormError(msg);

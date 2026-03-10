@@ -193,7 +193,7 @@ function routeToPath(route?: string) {
       return "/influencer/onboarding?step=page2";
     case "page3":
       return "/influencer/onboarding?step=page3";
-    case "homepage":
+    case "campaign":
     default:
       return "/influencer/campaign";
   }
@@ -261,7 +261,14 @@ export default function InfluencerLoginPage() {
       });
 
       // ✅ UPDATED: go onboarding first if incomplete
-      router.replace(routeToPath(res.route));
+      const onboardingDone =
+        res?.onboarding?.page1Done &&
+        res?.onboarding?.page2Done &&
+        res?.onboarding?.page3Done;
+
+      router.replace(
+        onboardingDone ? "/influencer/dashboards" : routeToPath(res.route)
+      );
     } catch (err) {
       const fallback = getApiErrorMessage(err, "Login failed");
       const details = getApiErrorDetails(err, fallback);
