@@ -2,16 +2,29 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CaretLeft, InstagramLogo, YoutubeLogo, TiktokLogo } from "@phosphor-icons/react";
+import {
+  CaretLeft,
+  InstagramLogo,
+  YoutubeLogo,
+  TiktokLogo,
+  CheckCircle,
+} from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";
-import { FloatingMultiSelect, FloatingSelect, SelectItem } from "@/components/ui/selectComp";
+import {
+  FloatingMultiSelect,
+  FloatingSelect,
+  SelectItem,
+} from "@/components/ui/selectComp";
 
-// ✅ Toast
 import { toast, ToastStyles } from "@/components/ui/toast";
 
-import { apiSaveInfluencerOnboarding, getApiErrorMessage } from "../../services/influencerApi";
+import {
+  apiResolveModashProfile,
+  apiSaveInfluencerOnboarding,
+  getApiErrorMessage,
+} from "../../services/influencerApi";
 
 type Chip = { label: string; value: string };
 type QA = { question: string; answers: string[] };
@@ -33,6 +46,15 @@ type InfluencerOnboardingData = {
   deliveryPreference: string[];
 };
 
+type PlatformState = {
+  handle: string;
+  username?: string;
+  resolvedData?: any;
+  loading: boolean;
+  resolved: boolean;
+  error?: string;
+};
+
 const REDIRECT_TOAST_KEY = "cg_redirect_toast_v1";
 
 type RedirectToastPayload = {
@@ -43,14 +65,23 @@ type RedirectToastPayload = {
 
 function setRedirectToast(payload: RedirectToastPayload) {
   try {
-    sessionStorage.setItem(REDIRECT_TOAST_KEY, JSON.stringify({ ...payload, _ts: Date.now() }));
+    sessionStorage.setItem(
+      REDIRECT_TOAST_KEY,
+      JSON.stringify({ ...payload, _ts: Date.now() })
+    );
   } catch {
     // ignore
   }
 }
 
 function normalizeApiPayload(resp: any) {
-  if (resp && typeof resp === "object" && "data" in resp && resp.data && resp.data.success !== undefined) {
+  if (
+    resp &&
+    typeof resp === "object" &&
+    "data" in resp &&
+    resp.data &&
+    resp.data.success !== undefined
+  ) {
     return resp.data;
   }
   return resp;
@@ -58,15 +89,63 @@ function normalizeApiPayload(resp: any) {
 
 function getBackendMessage(resp: any) {
   const payload = normalizeApiPayload(resp);
-  const message = payload?.data?.message || payload?.message || "Saved successfully";
+  const message =
+    payload?.data?.message || payload?.message || "Saved successfully";
   const influencerId = payload?.data?.influencerId;
   return influencerId ? `${message} (ID: ${influencerId})` : message;
 }
 
+function stripAt(value: string) {
+  return String(value || "").trim().replace(/^@+/, "");
+}
+
+function withAt(value: string) {
+  const v = stripAt(value);
+  return v ? `@${v}` : "";
+}
+
+function normalizeResolvedProfile(raw: any, typedHandle: string) {
+  const source = raw?.profile ?? raw?.data?.profile ?? raw?.data ?? raw ?? {};
+  const profile = source?.profile ?? source;
+
+  const username = String(
+    profile?.username ||
+    source?.username ||
+    stripAt(profile?.handle || source?.handle || typedHandle)
+  ).trim();
+
+  const handle = String(
+    profile?.handle || source?.handle || withAt(username || typedHandle)
+  ).trim();
+
+  return {
+    username: stripAt(username),
+    handle: handle.startsWith("@") ? handle : withAt(handle),
+  };
+}
+
 const PLATFORM_LIST = [
-  { key: "Instagram", label: "Continue With Instagram", Icon: InstagramLogo },
-  { key: "YouTube", label: "Continue With Youtube", Icon: YoutubeLogo },
-  { key: "TikTok", label: "Continue With TikTok", Icon: TiktokLogo },
+  {
+    key: "instagram",
+    label: "Continue With Instagram",
+    inputLabel: "Instagram handle",
+    placeholder: "@yourinstagram",
+    Icon: InstagramLogo,
+  },
+  {
+    key: "youtube",
+    label: "Continue With Youtube",
+    inputLabel: "YouTube handle",
+    placeholder: "@youryoutube",
+    Icon: YoutubeLogo,
+  },
+  {
+    key: "tiktok",
+    label: "Continue With TikTok",
+    inputLabel: "TikTok handle",
+    placeholder: "@yourtiktok",
+    Icon: TiktokLogo,
+  },
 ] as const;
 
 const FORMAT_CHIPS: Chip[] = [
@@ -169,21 +248,31 @@ function remove(arr: string[], v: string) {
 function PlatformRow({
   platformKey,
   label,
+  inputLabel,
+  placeholder,
   Icon,
   selected,
   primary,
   showRadios,
+  handleValue,
+  status,
   onToggle,
   onMakePrimary,
+  onHandleChange,
 }: {
   platformKey: string;
   label: string;
+  inputLabel: string;
+  placeholder: string;
   Icon: React.ComponentType<any>;
   selected: boolean;
   primary: boolean;
   showRadios: boolean;
+  handleValue: string;
+  status?: PlatformState;
   onToggle: () => void;
   onMakePrimary: () => void;
+  onHandleChange: (value: string) => void;
 }) {
   const radioId = `primary-${platformKey}`;
 
@@ -192,7 +281,10 @@ function PlatformRow({
       <div className="flex items-center gap-3 w-full max-w-[520px] justify-center">
         {showRadios ? (
           <div
-            className={cn("shrink-0", !selected ? "opacity-50 cursor-not-allowed" : "cursor-pointer")}
+            className={cn(
+              "shrink-0",
+              !selected ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+            )}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -214,13 +306,20 @@ function PlatformRow({
               className={cn(
                 "h-6 w-6 rounded-full flex items-center justify-center",
                 selected ? "cursor-pointer" : "cursor-not-allowed",
-                selected ? "bg-neutral-900" : "bg-white border border-neutral-300"
+                selected
+                  ? "bg-neutral-900"
+                  : "bg-white border border-neutral-300"
               )}
               aria-label="Set as primary"
               title={selected ? "Set as primary" : "Select the platform first"}
             >
               {selected ? (
-                <span className={cn("h-3 w-3 rounded-full", primary ? "bg-[#FFBF00]" : "bg-white")} />
+                <span
+                  className={cn(
+                    "h-3 w-3 rounded-full",
+                    primary ? "bg-[#FFBF00]" : "bg-white"
+                  )}
+                />
               ) : null}
             </label>
           </div>
@@ -247,7 +346,9 @@ function PlatformRow({
         >
           <div className="flex items-center gap-3 flex-1">
             <Icon size={20} weight="regular" className="text-neutral-900" />
-            <span className="text-[14px] font-medium text-neutral-900">{label}</span>
+            <span className="text-[14px] font-medium text-neutral-900">
+              {label}
+            </span>
           </div>
 
           {selected ? (
@@ -256,10 +357,14 @@ function PlatformRow({
                 Selected
               </span>
             ) : (
-              <span className="text-[12px] font-semibold text-neutral-700">Selected</span>
+              <span className="text-[12px] font-semibold text-neutral-700">
+                Selected
+              </span>
             )
           ) : (
-            <span className="text-[12px] font-semibold text-neutral-700">Continue</span>
+            <span className="text-[12px] font-semibold text-neutral-700">
+              Continue
+            </span>
           )}
         </div>
       </div>
@@ -278,6 +383,44 @@ function PlatformRow({
           Selected as primary
         </div>
       ) : null}
+
+      {selected ? (
+        <div className="mt-3 w-full max-w-[520px]">
+          <label className="block text-[12px] font-medium text-neutral-600 mb-2">
+            {inputLabel}
+          </label>
+
+          <input
+            value={handleValue}
+            onChange={(e) => onHandleChange(e.target.value)}
+            placeholder={placeholder}
+            className={cn(
+              "h-[46px] w-full rounded-[12px] border bg-white px-3",
+              "text-[14px] text-neutral-900",
+              "outline-none focus:outline-none",
+              status?.error ? "border-red-300" : "border-neutral-200"
+            )}
+          />
+
+          <div className="mt-2 min-h-[20px] text-[12px]">
+            {status?.loading ? (
+              <span className="text-neutral-500">Checking handle...</span>
+            ) : status?.resolved ? (
+              <span className="inline-flex items-center gap-1 text-green-600">
+                <CheckCircle size={14} weight="fill" />
+                Resolved successfully
+                {status.username ? ` as @${status.username}` : ""}
+              </span>
+            ) : status?.error ? (
+              <span className="text-red-500">{status.error}</span>
+            ) : (
+              <span className="text-neutral-400">
+                Enter a handle to continue
+              </span>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -285,14 +428,19 @@ function PlatformRow({
 export default function InfluencerOnboardingPage() {
   const router = useRouter();
 
-  // ✅ token helper (supports both keys)
   const getToken = React.useCallback(() => {
-    return localStorage.getItem("influencerToken") || localStorage.getItem("token") || "";
+    return (
+      localStorage.getItem("influencerToken") ||
+      localStorage.getItem("token") ||
+      ""
+    );
   }, []);
 
   const [onboardStep, setOnboardStep] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | undefined>(undefined);
+  const [formError, setFormError] = React.useState<string | undefined>(
+    undefined
+  );
 
   const [data, setData] = React.useState<InfluencerOnboardingData>({
     selectedPlatforms: [],
@@ -311,6 +459,15 @@ export default function InfluencerOnboardingPage() {
     deliveryPreference: [],
   });
 
+  const [platformStates, setPlatformStates] = React.useState<
+    Record<string, PlatformState>
+  >({});
+
+  const resolveTimersRef = React.useRef<
+    Record<string, ReturnType<typeof setTimeout> | undefined>
+  >({});
+  const resolveSeqRef = React.useRef<Record<string, number>>({});
+
   React.useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -319,104 +476,329 @@ export default function InfluencerOnboardingPage() {
     }
   }, [router, getToken]);
 
+  React.useEffect(() => {
+    return () => {
+      Object.values(resolveTimersRef.current).forEach((timer) => {
+        if (timer) clearTimeout(timer);
+      });
+    };
+  }, []);
+
   const TOTAL_STEPS = 3;
   const progressPct = ((onboardStep + 1) / TOTAL_STEPS) * 100;
 
+  const page1Resolving = React.useMemo(() => {
+    return data.selectedPlatforms.some((p) => platformStates[p]?.loading);
+  }, [data.selectedPlatforms, platformStates]);
+
   const currentIsValid = React.useMemo(() => {
     if (onboardStep === 0) {
-      return data.selectedPlatforms.length >= 1 && includes(data.selectedPlatforms, data.primaryPlatform);
+      if (
+        data.selectedPlatforms.length < 1 ||
+        !includes(data.selectedPlatforms, data.primaryPlatform)
+      ) {
+        return false;
+      }
+
+      return data.selectedPlatforms.every((platform) => {
+        const state = platformStates[platform];
+        return Boolean(
+          state &&
+          stripAt(state.handle) &&
+          state.resolved &&
+          !state.loading &&
+          !state.error
+        );
+      });
     }
+
     if (onboardStep === 1) {
-      return data.formats.length >= 1 && data.compensationTypes.length >= 1;
+      return data.formats.length >= 1;
     }
+
     if (onboardStep === 2) {
       return data.industries.length >= 1;
     }
+
     return false;
-  }, [onboardStep, data]);
+  }, [onboardStep, data, platformStates]);
 
   const onboardPrev = () => {
     if (isLoading) return;
     setOnboardStep((s) => Math.max(0, s - 1));
   };
 
-  const togglePlatform = (p: string) => {
+  const togglePlatform = (platform: string) => {
     setData((prev) => {
-      const selected = includes(prev.selectedPlatforms, p);
+      const selected = includes(prev.selectedPlatforms, platform);
+
       if (!selected) {
-        const nextSelected = [...prev.selectedPlatforms, p];
-        const nextPrimary = prev.primaryPlatform || p;
-        return { ...prev, selectedPlatforms: nextSelected, primaryPlatform: nextPrimary };
+        const nextSelected = [...prev.selectedPlatforms, platform];
+        const nextPrimary = prev.primaryPlatform || platform;
+        return {
+          ...prev,
+          selectedPlatforms: nextSelected,
+          primaryPlatform: nextPrimary,
+        };
       }
 
-      const nextSelected = remove(prev.selectedPlatforms, p);
+      const nextSelected = remove(prev.selectedPlatforms, platform);
       let nextPrimary = prev.primaryPlatform;
 
-      if (prev.primaryPlatform === p) {
+      if (prev.primaryPlatform === platform) {
         nextPrimary = nextSelected[0] || "";
       }
 
-      return { ...prev, selectedPlatforms: nextSelected, primaryPlatform: nextPrimary };
+      return {
+        ...prev,
+        selectedPlatforms: nextSelected,
+        primaryPlatform: nextPrimary,
+      };
+    });
+
+    setPlatformStates((prev) => {
+      if (prev[platform]) return prev;
+      return {
+        ...prev,
+        [platform]: {
+          handle: "",
+          loading: false,
+          resolved: false,
+        },
+      };
     });
   };
 
-  const makePrimary = (p: string) => {
+  const makePrimary = (platform: string) => {
     setData((prev) => {
-      if (!includes(prev.selectedPlatforms, p)) return prev;
-      return { ...prev, primaryPlatform: p };
+      if (!includes(prev.selectedPlatforms, platform)) return prev;
+      return { ...prev, primaryPlatform: platform };
     });
+  };
+
+  const resolvePlatformHandle = React.useCallback(
+    async (platform: string, rawHandle: string) => {
+      const token = getToken();
+      const cleanHandle = stripAt(rawHandle);
+
+      if (!cleanHandle) {
+        setPlatformStates((prev) => ({
+          ...prev,
+          [platform]: {
+            ...prev[platform],
+            handle: rawHandle,
+            username: "",
+            resolvedData: undefined,
+            loading: false,
+            resolved: false,
+            error: undefined,
+          },
+        }));
+        return;
+      }
+
+      const seq = (resolveSeqRef.current[platform] || 0) + 1;
+      resolveSeqRef.current[platform] = seq;
+
+      setPlatformStates((prev) => ({
+        ...prev,
+        [platform]: {
+          ...prev[platform],
+          handle: rawHandle,
+          username: "",
+          resolvedData: undefined,
+          loading: true,
+          resolved: false,
+          error: undefined,
+        },
+      }));
+
+      try {
+        const resp = await apiResolveModashProfile(
+          {
+            platform,
+            handle: cleanHandle,
+          },
+          token
+        );
+
+        if (resolveSeqRef.current[platform] !== seq) return;
+
+        const normalized = normalizeResolvedProfile(resp, rawHandle);
+
+        setPlatformStates((prev) => ({
+          ...prev,
+          [platform]: {
+            ...prev[platform],
+            handle: normalized.handle,
+            username: normalized.username,
+            resolvedData: resp,
+            loading: false,
+            resolved: true,
+            error: undefined,
+          },
+        }));
+      } catch (e) {
+        if (resolveSeqRef.current[platform] !== seq) return;
+
+        const msg = getApiErrorMessage(e, `Unable to resolve ${platform} handle`);
+
+        setPlatformStates((prev) => ({
+          ...prev,
+          [platform]: {
+            ...prev[platform],
+            handle: rawHandle,
+            username: "",
+            resolvedData: undefined,
+            loading: false,
+            resolved: false,
+            error: msg,
+          },
+        }));
+      }
+    },
+    [getToken]
+  );
+
+  const onHandleChange = (provider: string, value: string) => {
+    setPlatformStates((prev) => ({
+      ...prev,
+      [provider]: {
+        ...prev[provider],
+        handle: value,
+        username: "",
+        resolvedData: undefined,
+        loading: !!stripAt(value),
+        resolved: false,
+        error: undefined,
+      },
+    }));
+
+    if (resolveTimersRef.current[provider]) {
+      clearTimeout(resolveTimersRef.current[provider]);
+    }
+
+    if (!stripAt(value)) {
+      setPlatformStates((prev) => ({
+        ...prev,
+        [provider]: {
+          ...prev[provider],
+          handle: value,
+          username: "",
+          resolvedData: undefined,
+          loading: false,
+          resolved: false,
+          error: undefined,
+        },
+      }));
+      return;
+    }
+
+    resolveTimersRef.current[provider] = setTimeout(() => {
+      resolvePlatformHandle(provider, value);
+    }, 500);
   };
 
   async function saveCurrentStep(stepIndex: number) {
     const token = getToken();
 
     if (stepIndex === 0) {
-      const page1: QA[] = [
-        { question: "Selected platforms", answers: data.selectedPlatforms },
-        { question: "Primary platform", answers: [data.primaryPlatform] },
-      ];
-      return await apiSaveInfluencerOnboarding({ page1 }, token);
+      const page1 = data.selectedPlatforms.map((platform) => {
+        const state = platformStates[platform];
+        return {
+          platform,
+          handle: state?.handle || "",
+          username: state?.username || stripAt(state?.handle || ""),
+          data: state?.resolvedData,
+          isPrimary: data.primaryPlatform === platform,
+        };
+      });
+
+      return await apiSaveInfluencerOnboarding(
+        {
+          page1,
+          preferredProvider: data.primaryPlatform,
+        },
+        token
+      );
     }
 
     if (stepIndex === 1) {
       const page2: QA[] = [
         { question: "Which formats do you create?", answers: data.formats },
-        ...(data.budgetRange ? [{ question: "Typical budget range", answers: [data.budgetRange] }] : []),
-        ...(data.projectLength ? [{ question: "Preferred project length", answers: [data.projectLength] }] : []),
-        { question: "Choose compensation types you want", answers: data.compensationTypes },
+        ...(data.budgetRange
+          ? [{ question: "Typical budget range", answers: [data.budgetRange] }]
+          : []),
+        ...(data.projectLength
+          ? [
+            {
+              question: "Preferred project length",
+              answers: [data.projectLength],
+            },
+          ]
+          : []),
+        ...(data.compensationTypes.length
+          ? [
+            {
+              question: "Choose compensation types you want",
+              answers: data.compensationTypes,
+            },
+          ]
+          : []),
       ];
+
       return await apiSaveInfluencerOnboarding({ page2 }, token);
     }
 
     if (stepIndex === 2) {
       const customGoals = includes(data.campaignGoals, "Others")
         ? data.otherCampaignGoal
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
         : [];
 
       const goalAnswers = [
         ...data.campaignGoals.filter((g) => g !== "Others"),
-        ...(includes(data.campaignGoals, "Others") ? (customGoals.length ? customGoals : ["Others"]) : []),
+        ...(includes(data.campaignGoals, "Others")
+          ? customGoals.length
+            ? customGoals
+            : ["Others"]
+          : []),
       ];
 
       const page3: QA[] = [
-        ...(goalAnswers.length ? [{ question: "Campaign goals you like", answers: goalAnswers }] : []),
-        { question: "Industries you want to work with", answers: data.industries },
+        ...(goalAnswers.length
+          ? [{ question: "Campaign goals you like", answers: goalAnswers }]
+          : []),
+        {
+          question: "Industries you want to work with",
+          answers: data.industries,
+        },
         ...(data.preferredProjectType.length
-          ? [{ question: "Preferred project type", answers: data.preferredProjectType }]
+          ? [
+            {
+              question: "Preferred project type",
+              answers: data.preferredProjectType,
+            },
+          ]
           : []),
         ...(data.deliveryPreference.length
-          ? [{ question: "Which type of delivery you prefer", answers: data.deliveryPreference }]
+          ? [
+            {
+              question: "Which type of delivery you prefer",
+              answers: data.deliveryPreference,
+            },
+          ]
           : []),
       ];
+
       return await apiSaveInfluencerOnboarding({ page3 }, token);
     }
   }
 
   const onboardNext = async () => {
-    if (!currentIsValid || isLoading) return;
+    if (!currentIsValid || isLoading || page1Resolving) return;
 
     setFormError(undefined);
     setIsLoading(true);
@@ -431,8 +813,7 @@ export default function InfluencerOnboardingPage() {
 
       const msg = getBackendMessage(resp);
       setRedirectToast({ icon: "success", title: "Success", text: msg });
-
-      router.push("/influencer/campaign");
+      router.push("/influencer/dashboards");
     } catch (e) {
       const msg = getApiErrorMessage(e, "Failed to save onboarding step");
       setFormError(msg);
@@ -452,8 +833,13 @@ export default function InfluencerOnboardingPage() {
       const token = getToken();
       let resp: any;
 
-      if (onboardStep === 1) resp = await apiSaveInfluencerOnboarding({ ispage2Skip: true }, token);
-      if (onboardStep === 2) resp = await apiSaveInfluencerOnboarding({ ispage3Skip: true }, token);
+      if (onboardStep === 1) {
+        resp = await apiSaveInfluencerOnboarding({ ispage2Skip: true }, token);
+      }
+
+      if (onboardStep === 2) {
+        resp = await apiSaveInfluencerOnboarding({ ispage3Skip: true }, token);
+      }
 
       if (onboardStep < TOTAL_STEPS - 1) {
         setOnboardStep((s) => s + 1);
@@ -462,7 +848,6 @@ export default function InfluencerOnboardingPage() {
 
       const msg = resp ? getBackendMessage(resp) : "Onboarding skipped";
       setRedirectToast({ icon: "success", title: "Done", text: msg });
-
       router.push("/influencer/campaign");
     } catch (e) {
       const msg = getApiErrorMessage(e, "Failed to skip step");
@@ -474,14 +859,18 @@ export default function InfluencerOnboardingPage() {
   };
 
   const title =
-    onboardStep === 0 ? "Choose your platforms" : onboardStep === 1 ? "How do you like to work?" : "Your collaboration preferences";
+    onboardStep === 0
+      ? "Choose your platforms"
+      : onboardStep === 1
+        ? "How do you like to work?"
+        : "Your collaboration preferences";
 
   const subtitle =
     onboardStep === 0
-      ? "Select the platforms you create on and set your primary platform."
+      ? "Select platforms, enter handles, and wait for verification before continuing."
       : onboardStep === 1
-      ? "Tell us what you create and how you prefer to get paid."
-      : "Pick your industries, project types, and delivery preferences.";
+        ? "Tell us what you create and how you prefer to get paid."
+        : "Pick your industries, project types, and delivery preferences.";
 
   return (
     <div className="min-h-[100svh] bg-background text-foreground flex flex-col overflow-x-hidden">
@@ -497,10 +886,21 @@ export default function InfluencerOnboardingPage() {
           )}
         >
           <Link href="/" className="flex items-center gap-s">
-            <img src="/logo.png" alt="CollabGlam Logo" width={40} height={40} className="object-contain" loading="eager" />
+            <img
+              src="/logo.png"
+              alt="CollabGlam Logo"
+              width={40}
+              height={40}
+              className="object-contain"
+              loading="eager"
+            />
             <span className="leading-tight">
-              <span className="block text-[20px] font-bold text-tx-primary">CollabGlam</span>
-              <span className="block text-[10px] leading-[12px] text-tx-tertiary -mt-[2px]">For Influencers</span>
+              <span className="block text-[20px] font-bold text-tx-primary">
+                CollabGlam
+              </span>
+              <span className="block text-[10px] leading-[12px] text-tx-tertiary -mt-[2px]">
+                For Influencers
+              </span>
             </span>
           </Link>
 
@@ -521,7 +921,10 @@ export default function InfluencerOnboardingPage() {
           <div className="w-full max-w-[720px]">
             <div className="px-6 pt-4">
               <div className="h-[3px] w-full rounded-full bg-neutral-100 overflow-hidden">
-                <div className="h-full bg-[#28A745] transition-all duration-300" style={{ width: `${progressPct}%` }} />
+                <div
+                  className="h-full bg-[#28A745] transition-all duration-300"
+                  style={{ width: `${progressPct}%` }}
+                />
               </div>
             </div>
 
@@ -535,11 +938,18 @@ export default function InfluencerOnboardingPage() {
                     aria-label="Back"
                     disabled={onboardStep === 0}
                   >
-                    <CaretLeft size={18} weight="bold" style={{ color: "var(--Light-Icon-Primary, #1A1A1A)" }} />
+                    <CaretLeft
+                      size={18}
+                      weight="bold"
+                      style={{
+                        color: "var(--Light-Icon-Primary, #1A1A1A)",
+                      }}
+                    />
                   </button>
 
                   <div className="cg-black-description">
-                    <span style={{ fontWeight: 500 }}>{onboardStep + 1}</span> of {TOTAL_STEPS} steps
+                    <span style={{ fontWeight: 500 }}>{onboardStep + 1}</span> of{" "}
+                    {TOTAL_STEPS} steps
                   </div>
                 </div>
 
@@ -554,17 +964,24 @@ export default function InfluencerOnboardingPage() {
                       {PLATFORM_LIST.map((p) => {
                         const selected = includes(data.selectedPlatforms, p.key);
                         const primary = data.primaryPlatform === p.key;
+                        const state = platformStates[p.key];
+
                         return (
                           <PlatformRow
                             key={p.key}
                             platformKey={p.key}
                             label={p.label}
+                            inputLabel={p.inputLabel}
+                            placeholder={p.placeholder}
                             Icon={p.Icon}
                             selected={selected}
                             primary={primary}
-                            showRadios={!!data.primaryPlatform}
+                            showRadios={data.selectedPlatforms.length > 0}
+                            handleValue={state?.handle || ""}
+                            status={state}
                             onToggle={() => togglePlatform(p.key)}
                             onMakePrimary={() => makePrimary(p.key)}
+                            onHandleChange={(value) => onHandleChange(p.key, value)}
                           />
                         );
                       })}
@@ -578,7 +995,9 @@ export default function InfluencerOnboardingPage() {
                         size="small"
                         options={FORMAT_CHIPS}
                         value={data.formats}
-                        onValueChange={(v) => setData((p) => ({ ...p, formats: v }))}
+                        onValueChange={(v) =>
+                          setData((p) => ({ ...p, formats: v }))
+                        }
                         icon
                         includeAll={false}
                       />
@@ -587,7 +1006,9 @@ export default function InfluencerOnboardingPage() {
                         label="Preferred project length? (optional)"
                         size="small"
                         value={data.projectLength}
-                        onValueChange={(v) => setData((p) => ({ ...p, projectLength: v }))}
+                        onValueChange={(v) =>
+                          setData((p) => ({ ...p, projectLength: v }))
+                        }
                         icon
                       >
                         {PROJECT_LENGTHS.map((opt) => (
@@ -601,7 +1022,9 @@ export default function InfluencerOnboardingPage() {
                         label="What is your typical budget range?"
                         size="small"
                         value={data.budgetRange}
-                        onValueChange={(v) => setData((p) => ({ ...p, budgetRange: v }))}
+                        onValueChange={(v) =>
+                          setData((p) => ({ ...p, budgetRange: v }))
+                        }
                         icon
                       >
                         {BUDGET_RANGES.map((opt) => (
@@ -616,7 +1039,9 @@ export default function InfluencerOnboardingPage() {
                         size="small"
                         options={COMP_TYPES}
                         value={data.compensationTypes}
-                        onValueChange={(v) => setData((p) => ({ ...p, compensationTypes: v }))}
+                        onValueChange={(v) =>
+                          setData((p) => ({ ...p, compensationTypes: v }))
+                        }
                         icon
                         includeAll={false}
                       />
@@ -634,7 +1059,9 @@ export default function InfluencerOnboardingPage() {
                           setData((p) => ({
                             ...p,
                             campaignGoals: v,
-                            otherCampaignGoal: v.includes("Others") ? p.otherCampaignGoal : "",
+                            otherCampaignGoal: v.includes("Others")
+                              ? p.otherCampaignGoal
+                              : "",
                           }))
                         }
                         icon
@@ -649,7 +1076,12 @@ export default function InfluencerOnboardingPage() {
 
                           <input
                             value={data.otherCampaignGoal}
-                            onChange={(e) => setData((p) => ({ ...p, otherCampaignGoal: e.target.value }))}
+                            onChange={(e) =>
+                              setData((p) => ({
+                                ...p,
+                                otherCampaignGoal: e.target.value,
+                              }))
+                            }
                             placeholder="e.g. Brand recall, Newsletter signups"
                             className={cn(
                               "h-[44px] w-full rounded-[12px] border border-neutral-200 bg-white px-3",
@@ -658,7 +1090,9 @@ export default function InfluencerOnboardingPage() {
                             )}
                           />
 
-                          <p className="text-[12px] text-neutral-400">We’ll save this along with your selected goals.</p>
+                          <p className="text-[12px] text-neutral-400">
+                            We’ll save this along with your selected goals.
+                          </p>
                         </div>
                       ) : null}
 
@@ -667,7 +1101,12 @@ export default function InfluencerOnboardingPage() {
                         size="small"
                         options={PROJECT_TYPES}
                         value={data.preferredProjectType}
-                        onValueChange={(v) => setData((p) => ({ ...p, preferredProjectType: v }))}
+                        onValueChange={(v) =>
+                          setData((p) => ({
+                            ...p,
+                            preferredProjectType: v,
+                          }))
+                        }
                         icon
                         includeAll={false}
                       />
@@ -677,7 +1116,9 @@ export default function InfluencerOnboardingPage() {
                         size="small"
                         options={INDUSTRY_CHIPS}
                         value={data.industries}
-                        onValueChange={(v) => setData((p) => ({ ...p, industries: v }))}
+                        onValueChange={(v) =>
+                          setData((p) => ({ ...p, industries: v }))
+                        }
                         icon
                         includeAll={false}
                       />
@@ -687,7 +1128,12 @@ export default function InfluencerOnboardingPage() {
                         size="small"
                         options={DELIVERY_PREFS}
                         value={data.deliveryPreference}
-                        onValueChange={(v) => setData((p) => ({ ...p, deliveryPreference: v }))}
+                        onValueChange={(v) =>
+                          setData((p) => ({
+                            ...p,
+                            deliveryPreference: v,
+                          }))
+                        }
                         icon
                         includeAll={false}
                       />
@@ -697,7 +1143,11 @@ export default function InfluencerOnboardingPage() {
               </div>
 
               <div className="sticky bottom-0 shrink-0 bg-white px-6 pt-6 pb-10">
-                {formError ? <p className="mb-3 text-[12px] leading-[16px] text-error-500">{formError}</p> : null}
+                {formError ? (
+                  <p className="mb-3 text-[12px] leading-[16px] text-error-500">
+                    {formError}
+                  </p>
+                ) : null}
 
                 <Button
                   variant="solid"
@@ -707,9 +1157,13 @@ export default function InfluencerOnboardingPage() {
                     "disabled:opacity-100 disabled:bg-neutral-200 disabled:text-neutral-400"
                   )}
                   onClick={onboardNext}
-                  disabled={!currentIsValid || isLoading}
+                  disabled={!currentIsValid || isLoading || page1Resolving}
                 >
-                  {isLoading ? "Saving..." : "Continue"}
+                  {isLoading
+                    ? "Saving..."
+                    : onboardStep === 0 && page1Resolving
+                      ? "Resolving handle..."
+                      : "Continue"}
                 </Button>
 
                 {onboardStep !== 0 ? (

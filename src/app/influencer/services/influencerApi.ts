@@ -6,6 +6,7 @@ import { post as libPost } from "@/lib/api";
 const INFLUENCER_BASE = "/influencer";
 const CATEGORY_BASE = "/category";
 const CAMPAIGN_BASE = "/campaign";
+const MODASH_BASE = "/modash";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -281,14 +282,24 @@ export async function apiSignInInfluencer(email: string, password: string) {
  *  ------------------------*/
 export type QA = { question: string; answers: string[] };
 
+export type OnboardingPage1Item = {
+  platform: string;
+  handle?: string;
+  username?: string;
+  data?: any;
+  categories?: any[];
+  isPrimary?: boolean;
+};
+
 export async function apiSaveInfluencerOnboarding(
   payload: {
-    page1?: QA[];
+    page1?: OnboardingPage1Item[];
     page2?: QA[];
     page3?: QA[];
     ispage1Skip?: boolean;
     ispage2Skip?: boolean;
     ispage3Skip?: boolean;
+    preferredPlatform?: string;
 
     profilePic?: string;
     isProfilePicSkip?: boolean;
@@ -413,4 +424,30 @@ export async function apiGetAllActiveCampaigns(body: GetAllActiveCampaignsBody, 
       ...authHeader(token),
     },
   });
+}
+
+export type ModashResolveProfileInput = {
+  platform: "instagram" | "youtube" | "tiktok" | string;
+  handle: string;
+};
+
+export async function apiResolveModashProfile(
+  input: ModashResolveProfileInput,
+  token?: string
+) {
+  const normalizedHandle = String(input.handle || "").trim().replace(/^@+/, "");
+
+  return apiPost<any>(
+    `${MODASH_BASE}/resolve-profile`,
+    {
+      platform: String(input.platform || "").toLowerCase(),
+      handle: normalizedHandle,
+      username: normalizedHandle,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
 }

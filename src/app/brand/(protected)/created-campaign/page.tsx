@@ -29,7 +29,7 @@ import { toast } from "@/components/ui/toast";
 import CampaignFilter, {
   DEFAULT_DATE_FILTER,
   type DateFilterValue,
-} from "./CampaignFilter";
+} from "../../../../components/ui/brand/CampaignFilter";
 
 const cx = (...c: Array<string | undefined | null | false>) =>
   c.filter(Boolean).join(" ");
@@ -80,10 +80,8 @@ const WRAP_BASE =
   "w-full rounded-[1.25rem] border border-[#E8E8E8] bg-white p-3 sm:p-4 lg:p-5";
 
 const WRAP_GRID =
-  "grid grid-cols-1 gap-4 " +
-  "lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)_minmax(0,18rem)] " +
-  "xl:grid-cols-[minmax(0,19rem)_minmax(0,1fr)_minmax(0,19rem)] " +
-  "lg:items-center lg:gap-4";
+  "grid grid-cols-1 gap-4 lg:items-center lg:gap-6 " +
+  "lg:grid-cols-[minmax(0,1fr)_minmax(28rem,32rem)_auto]";
 
 function normalizeMetric(value: string | number | undefined, prefix = "") {
   if (value === undefined || value === null || value === "") return "—";
@@ -541,20 +539,23 @@ function CampaignCard({
           />
 
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-4">
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2">
               <Link
                 href={`/brand/created-campaign/view-campaign?id=${campaign.id}`}
-                className="min-w-0 flex-1 break-words text-[clamp(0.95rem,0.9rem+0.22vw,1.04rem)] font-semibold leading-snug text-[#262626] hover:text-[#111]"
+                className="min-w-0 max-w-full text-[0.98rem] font-semibold leading-snug text-[#262626] hover:text-[#111] xl:text-[1.04rem]"
                 title={campaign.productOrServiceName}
               >
-                <span className="line-clamp-2">
+                <span className="block max-w-full truncate lg:max-w-[18rem] xl:max-w-none xl:whitespace-normal">
                   {campaign.productOrServiceName}
                 </span>
               </Link>
 
               {tag ? (
-                <span className="inline-flex max-w-full items-center truncate rounded-full bg-[#F4ECD9] px-3 py-1 text-[0.72rem] text-[#7A6A42] sm:h-7">
-                    {tag}
+                <span
+                  className="shrink-0 rounded-full bg-[#F4ECD9] px-3 py-1 text-[0.72rem] text-[#7A6A42]"
+                  title={tag}
+                >
+                  {tag}
                 </span>
               ) : null}
             </div>
@@ -1053,19 +1054,8 @@ export default function BrandCreatedCampaignsPage() {
     aiCreatedOnly,
   ]);
 
-  const clearFilters = () => {
-    setCampaignTypeFilter("all");
-    setCreatorStatusFilter("all");
-    setCategoryIds([]);
-    setDateFilter(DEFAULT_DATE_FILTER);
-    setAiCreatedOnly(false);
-    setSearchInput("");
-    setAppliedSearch("");
-    setCurrentPage(1);
-  };
-
   return (
-    <div className="min-h-screen bg-[#FAFAFA] px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
+    <div className="min-h-screen px-3 py-4 sm:px-4 sm:py-5 lg:px-5">
       <div className="mb-6 rounded-[1rem] p-3 sm:p-4">
         <CampaignFilter
           campaignType={campaignTypeFilter}

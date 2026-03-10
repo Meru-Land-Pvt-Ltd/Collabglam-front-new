@@ -778,7 +778,8 @@ export default function InfluencerFilter({
                     })}
 
                     {/* Clear */}
-                    <button
+                    {hasAnyApplied && (
+                        <button
                         type="button"
                         onClick={clearAll}
                         disabled={!hasAnyApplied}
@@ -794,10 +795,11 @@ export default function InfluencerFilter({
                             "disabled:opacity-50 disabled:cursor-not-allowed",
                             "cursor-pointer",
                         ].join(" ")}
-                    >
+                        >
                         <span>Clear</span>
                         <X className="h-3 w-3" />
                     </button>
+                    )}
                 </div>
 
                 {/* RIGHT: Search + Sort */}
