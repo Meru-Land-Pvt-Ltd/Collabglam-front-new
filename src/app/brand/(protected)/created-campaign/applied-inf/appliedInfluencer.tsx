@@ -2333,44 +2333,6 @@ function getRejectReasonFromMeta(meta: ContractMeta | null): string | null {
   return rejected?.details?.reason ? String(rejected.details.reason).trim() : null;
 }
 
-function buildReactSelectStyles(opts?: { hasError?: boolean }) {
-  const hasError = opts?.hasError;
-
-  return {
-    control: (base: any, state: any) => ({
-      ...base,
-      minHeight: 44,
-      borderRadius: 8,
-      borderWidth: 2,
-      borderColor: hasError
-        ? "#ef4444"
-        : state.isFocused
-          ? BRAND_PRIMARY
-          : "#e5e7eb",
-      boxShadow: state.isFocused
-        ? `0 0 0 1px ${BRAND_PRIMARY}, 0 0 0 3px ${BRAND_PRIMARY_RING}`
-        : "none",
-      "&:hover": {
-        borderColor: hasError
-          ? "#ef4444"
-          : state.isFocused
-            ? BRAND_PRIMARY
-            : "#d4d4d4",
-      },
-    }),
-    valueContainer: (base: any) => ({ ...base, padding: "0 12px" }),
-    indicatorsContainer: (base: any) => ({ ...base, minHeight: 44 }),
-    input: (base: any) => ({ ...base, margin: 0, padding: 0 }),
-    multiValue: (base: any) => ({
-      ...base,
-      borderRadius: 9999,
-      paddingLeft: 4,
-      paddingRight: 4,
-      backgroundColor: "#f3f4f6",
-    }),
-  };
-}
-
 export default function AppliedInfluencersPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
