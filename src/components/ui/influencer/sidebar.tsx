@@ -500,7 +500,7 @@ export default function Sidebar({
         label: "Support",
         icon: Question,
         section: "footer",
-        href: "/influencer/support-center",
+        href: "/influencer/support-centre",
       },
     ],
     [campaignBadge, appliedBadge, messagesBadge]
