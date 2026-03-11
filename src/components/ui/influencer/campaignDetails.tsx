@@ -21,6 +21,7 @@ import {
   DotsThreeIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/buttonComp";
+import { apiGetfetchCampaignbyId } from "@/app/influencer/services/influencerApi";
 
 interface CampaignDetailsProps {
   id: string | string[];
@@ -94,18 +95,6 @@ const PAGE_WRAP =
 
 type CampaignDoc = any;
 
-async function fetchCampaign(id: string): Promise<CampaignDoc> {
-  const res = await fetch(`http://192.168.1.34:8000/campaign/id?id=${id}`, {
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch campaign (${res.status})`);
-  }
-
-  const data = await res.json();
-  return data?.campaign ?? data;
-}
 
 function Metric({
   label,
@@ -281,11 +270,7 @@ export default function CampaignDetails({ id }: CampaignDetailsProps) {
     };
   }, []);
   useEffect(() => {
-    if (!campaignId) {
-      setErr("Campaign id not found.");
-      setLoading(false);
-      return;
-    }
+   
 
     let cancelled = false;
 
@@ -294,7 +279,9 @@ export default function CampaignDetails({ id }: CampaignDetailsProps) {
       setErr("");
 
       try {
-        const res = await fetchCampaign(campaignId);
+        const influencerId = localStorage.getItem("influencerId") || "";
+        const token = localStorage.getItem("token") || "";
+        const res = await apiGetfetchCampaignbyId(influencerId, campaignId, token);
         if (!cancelled) setDoc(res ?? null);
       } catch (e: any) {
         if (!cancelled) setErr(e?.message || "Failed to load campaign");
@@ -599,18 +586,22 @@ export default function CampaignDetails({ id }: CampaignDetailsProps) {
     doc?.campaignType,
   ]);
 
-  const rawGoalValues = asArray(doc?.campaignGoals);
+  // Prefer expanded objects from details; fall back to raw IDs on doc root
+  const rawGoalValues = asArray(
+    doc?.details?.campaignGoals?.length
+      ? doc.details.campaignGoals
+      : doc?.campaignGoals
+  );
 
   // Your sample has only Mongo IDs for campaignGoals, not names.
   // So show count unless your API later returns expanded names.
   const campaignGoalValues = uniqueStrings(
     rawGoalValues
       .map((item: any) => {
-        if (typeof item === "string") {
-          return isMongoIdLike(item) ? "" : item;
-        }
+        if (typeof item === "string") return isMongoIdLike(item) ? "" : item;
         if (item && typeof item === "object") {
-          return item?.name || item?.label || item?.goalName || "";
+          // details.campaignGoals shape: { id, goal, sortOrder, isActive }
+          return item?.goal || item?.name || item?.label || item?.goalName || "";
         }
         return "";
       })

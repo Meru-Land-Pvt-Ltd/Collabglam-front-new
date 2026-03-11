@@ -235,8 +235,8 @@ export async function apiSendInfluencerSignupOtp(input: {
     Array.isArray(input.categoryIds) && input.categoryIds.length > 0
       ? input.categoryIds
       : input.categoryId
-      ? [input.categoryId]
-      : [];
+        ? [input.categoryId]
+        : [];
 
   const payload: AnyObj = {
     email: input.email?.trim(),
@@ -410,8 +410,8 @@ export async function apiGetAllActiveCampaigns(body: GetAllActiveCampaignsBody, 
     Array.isArray(body.categoryIds) && body.categoryIds.length > 0
       ? body.categoryIds
       : body.categoryId
-      ? [body.categoryId]
-      : [];
+        ? [body.categoryId]
+        : [];
 
   const payload: AnyObj = {
     ...body,
@@ -455,3 +455,35 @@ export async function apiResolveModashProfile(
 export async function apiGetAllCampaigns(influencerId: string) {
   return apiPost<any[]>(`/influencer/get-campaign`, { influencerId });
 }
+
+export const apiGetAppliedCampaigns = (influencerId: string, token?: string) => {
+  return apiPost<any[]>(`/campaign/applied`, {
+    influencerId,
+    limit: 10,
+    pagination: 1,
+    search: ""
+  }, {
+    headers: {
+      ...authHeader(token),
+    },
+  });
+}
+
+export const apiGetfetchCampaignbyId = (
+  influencerId: string,
+  campaignId: string,
+  token?: string
+) => {
+  return apiPost<any>(
+    `/campaign/view-campaign-by-influencer`,
+    {
+      influencerId,
+      campaignId,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+};
