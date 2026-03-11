@@ -16,7 +16,7 @@ function Inner({ children }: { children: React.ReactNode }) {
         <BrandSidebar drawerOpen={drawerOpen} setDrawerOpen={(open) => setDrawerOpen(open)} />
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative z-0">
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
         <div className="shrink-0 overflow-hidden">
           <BrandTopbar actionsOverride={actions} onMenuToggle={() => setDrawerOpen((v) => !v)} />
         </div>
