@@ -1,1113 +1,824 @@
 "use client";
+
 import React, { useEffect, useMemo, useState } from "react";
-import { post } from "@/lib/api";
 import {
-  User,
-  Mail,
-  Phone,
-  Globe,
-  Instagram,
-  Youtube,
-  FileText,
-  DollarSign,
-  Link as LinkIcon,
-  Languages,
-  Heart,
-  MessageCircle,
-  Eye,
-  TrendingUp,
-  Users,
-  CheckCircle2,
-  ExternalLink,
-  Award,
-  Zap,
-  Target,
-  Activity,
+    CheckCircle2,
+    CirclePlus,
+    Download,
+    Globe,
+    Instagram,
+    Mail,
+    MapPin,
+    Phone,
+    Play,
+    Star,
+    TrendingUp,
+    Users,
+    Youtube,
 } from "lucide-react";
+import { SparkLineChart } from "@mui/x-charts/SparkLineChart";
+import { apiGetfetchMediaKit } from "../../services/influencerApi";
+import { CopyIcon, TiktokLogoIcon } from "@phosphor-icons/react";
 
-/* -------------------------- Theme helpers -------------------------- */
-const activeClass = (isActive: boolean) =>
-  isActive
-    ? "bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] text-gray-900 font-semibold shadow-lg"
-    : "text-gray-700 hover:bg-gradient-to-r hover:from-[#FFBF00]/10 hover:to-[#FFDB58]/10 hover:text-gray-900";
-
-/* ------------------------------ Types ------------------------------ */
-type AudienceItem = { name?: string; code?: string; weight?: number };
-type Audience = {
-  genders?: AudienceItem[];
-  ages?: AudienceItem[];
-  geoCountries?: AudienceItem[];
-  geoCities?: { name: string; weight: number }[];
-  languages?: AudienceItem[];
-  interests?: { name: string; weight?: number }[];
-  [k: string]: any;
-};
-
-type PostT = {
-  image?: string;
-  thumbnail?: string;
-  text?: string;
-  likes?: number;
-  comments?: number;
-  views?: number;
-  url?: string;
-};
-
-type CategoryLink = {
-  categoryId: number;
-  categoryName: string;
-  subcategoryId: string;
-  subcategoryName: string;
-};
-
-type HashTag = string | { tag: string; weight?: number };
-type Mention = string | { tag: string; weight?: number };
-type Affinity = string | { id?: number; name: string };
-
-type SocialProfile = {
-  provider: "instagram" | "youtube" | "tiktok" | string;
-  userId?: string;
-  username?: string;
-  fullname?: string;
-  url?: string;
-  picture?: string;
-  followers?: number;
-  engagements?: number;
-  engagementRate?: number;
-  averageViews?: number;
-  isPrivate?: boolean;
-  isVerified?: boolean;
-  accountType?: string;
-  statsByContentType?: any;
-  stats?: any;
-  recentPosts?: PostT[];
-  popularPosts?: PostT[];
-  postsCount?: number;
-  avgLikes?: number;
-  avgComments?: number;
-  avgViews?: number;
-  totalLikes?: number;
-  totalViews?: number;
-  bio?: string;
-  categories?: CategoryLink[];
-  hashtags?: HashTag[];
-  mentions?: Mention[];
-  brandAffinity?: Affinity[];
-  audience?: Audience;
-  audienceExtra?: any;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-type MediaKit = {
-  mediaKitId: string;
-  influencerId: string;
-  name?: string;
-  email?: string;
-  phone?: string;
-  callingcode?: string;
-  primaryPlatform?: string;
-  socialProfiles?: SocialProfile[];
-  country?: string;
-  city?: string;
-  dateOfBirth?: string;
-  gender?: string;
-  languages?: { languageId: string; code: string; name: string }[];
-  onboarding?: {
-    formats?: string[];
-    budgets?: { format: string; range: string }[];
-    projectLength?: string;
-    capacity?: string;
-    categoryId?: number;
-    categoryName?: string;
-    subcategories?: { subcategoryId: string; subcategoryName: string }[];
-    collabTypes?: string[];
-    allowlisting?: boolean;
-    cadences?: string[];
-  };
-  rateCard?: string | null;
-  additionalNotes?: string | null;
-  mediaKitPdf?: string;
-  website?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  [k: string]: any;
-};
-
-type LoadResponse = { mediaKit: MediaKit };
-
-/* --------------------------- Utilities ---------------------------- */
-const fmtShort = (n?: number) =>
-  n == null
-    ? "0"
-    : n >= 1e6
-    ? `${(n / 1e6).toFixed(1)}M`
-    : n >= 1e3
-    ? `${(n / 1e3).toFixed(1)}K`
-    : `${n}`;
-
-const fmtDate = (d?: string | Date) => {
-  if (!d) return "";
-  const dt = typeof d === "string" ? new Date(d) : d;
-  return isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString();
-};
-
-const parseMaybe = (s: string | null) => {
-  try {
-    return s ? JSON.parse(s) : null;
-  } catch {
-    return null;
-  }
-};
-
-const pickInfluencerId = (o: any): string | null => {
-  if (!o || typeof o !== "object") return null;
-  // Only look for influencerId (and a very small fallback set if needed)
-  for (const k of ["influencerId", "id", "_id"]) {
-    const v = (o as any)[k];
-    if (typeof v === "string" || typeof v === "number") return String(v);
-  }
-  return null;
-};
-
-/** Read ONLY 'influencerId' from localStorage (string or JSON containing influencerId) */
-const getInfluencerIdFromLS = (): string | null => {
-  if (typeof window === "undefined") return null;
-
-  const raw = window.localStorage.getItem("influencerId");
-  if (!raw) return null;
-
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-
-  // If it's JSON, parse and pick influencerId
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    const parsed = parseMaybe(trimmed);
-    return pickInfluencerId(parsed);
-  }
-
-  // Otherwise, treat as plain string (strip any accidental quotes)
-  return trimmed.replaceAll('"', "");
-};
-
-/** Normalize arrays that can be objects or strings */
-const toHashtagStrings = (arr?: HashTag[]) =>
-  Array.isArray(arr) ? (arr.map(h => (typeof h === "string" ? h : h?.tag)).filter(Boolean) as string[]) : [];
-
-const toMentionStrings = (arr?: Mention[]) =>
-  Array.isArray(arr) ? (arr.map(m => (typeof m === "string" ? m : m?.tag)).filter(Boolean) as string[]) : [];
-
-const toAffinityStrings = (arr?: Affinity[]) =>
-  Array.isArray(arr) ? (arr.map(a => (typeof a === "string" ? a : a?.name)).filter(Boolean) as string[]) : [];
-
-const toCategoryStrings = (arr?: CategoryLink[]) =>
-  Array.isArray(arr)
-    ? (arr.map(c => c?.subcategoryName || c?.categoryName).filter(Boolean) as string[])
-    : [];
-
-/* --------------------------- Component ---------------------------- */
-export default function MediaKitPage() {
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "social" | "audience" | "collaboration" | "rates" | "contact"
-  >("overview");
-
-  const [resolvedId, setResolvedId] = useState<string | null>(null);
-  const [mediaKit, setMediaKit] = useState<MediaKit | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-
-  /* Resolve influencerId from localStorage ONLY */
-  useEffect(() => {
-    const id = getInfluencerIdFromLS();
-    if (id) {
-      setResolvedId(id);
-    } else {
-      setResolvedId(null);
-      setLoading(false);
-      setError("No influencer ID found in localStorage. Please log in first.");
-    }
-  }, []);
-
-  /* Fetch MediaKit once we have an ID */
-  useEffect(() => {
-    if (!resolvedId) return;
-
-    let cancelled = false;
-
-    const fetchMediaKit = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = (await post("/media-kit/influencer", {
-          influencerId: resolvedId,
-        })) as LoadResponse;
-
-        if (cancelled) return;
-
-        setMediaKit(res.mediaKit);
-        setSelectedPlatform(
-          res.mediaKit.primaryPlatform ??
-            res.mediaKit.socialProfiles?.[0]?.provider ??
-            null
-        );
-      } catch (err) {
-        if (!cancelled) {
-          setError("Failed to load media kit. Please try again.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchMediaKit();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [resolvedId]);
-
-  // Honor selectedPlatform when computing the primary view
-  const primary = useMemo<SocialProfile | undefined>(() => {
-    if (!mediaKit?.socialProfiles?.length) return undefined;
-    const pref = selectedPlatform ?? mediaKit.primaryPlatform;
-    return (
-      mediaKit.socialProfiles.find(p => p.provider === pref) ??
-      mediaKit.socialProfiles[0]
-    );
-  }, [mediaKit, selectedPlatform]);
-
-  const hashtags = useMemo(
-    () => toHashtagStrings(primary?.hashtags),
-    [primary]
-  );
-  const mentions = useMemo(
-    () => toMentionStrings(primary?.mentions),
-    [primary]
-  );
-  const categories = useMemo(
-    () => toCategoryStrings(primary?.categories),
-    [primary]
-  );
-  const affinities = useMemo(
-    () => toAffinityStrings(primary?.brandAffinity),
-    [primary]
-  );
-
-  const handleRetry = () => {
-    // Re-check influencerId in localStorage & refetch
-    const id = getInfluencerIdFromLS();
-    if (!id) {
-      setError("Still no influencer ID found in localStorage.");
-      return;
-    }
-    setResolvedId(id);
-    setError(null);
-    setMediaKit(null);
-    setLoading(true);
-  };
-
-  /* --------------------------- Frames ---------------------------- */
-  if (loading && !mediaKit) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#FFBF00] mx-auto"></div>
-          <p className="mt-4 text-lg text-gray-600">
-            Loading your MediaKit...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && !mediaKit) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-white">
-        <div className="max-w-md w-full bg-white rounded-2xl border shadow-sm p-6 space-y-4 text-center">
-          <p className="text-red-600 font-medium">{error}</p>
-          <button
-            onClick={handleRetry}
-            className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] text-gray-900 font-semibold"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!mediaKit || !primary) {
-    // Very defensive fallback (should rarely happen)
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-white">
-        <div className="max-w-md w-full bg-white rounded-2xl border shadow-sm p-6 space-y-4 text-center">
-          <p className="text-gray-700 font-medium">
-            MediaKit data is not available.
-          </p>
-          <button
-            onClick={handleRetry}
-            className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] text-gray-900 font-semibold"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ---------------------------- UI ------------------------------ */
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      {/* Hero Section */}
-      <div className="relative bg-white border-b shadow-sm">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#FFBF00]/5 to-[#FFDB58]/5" />
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-[#FFBF00] to-[#FFDB58]" />
-        <div className="relative max-w-7xl mx-auto px-6 py-12">
-          <div className="flex flex-col lg:flex-row items-center gap-8">
-            {primary.picture && (
-              <div className="relative group">
-                <div className="absolute -inset-1 bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] rounded-3xl blur opacity-25 group-hover:opacity-40 transition" />
-                <div className="relative w-32 h-32 rounded-3xl overflow-hidden bg-white shadow-xl ring-4 ring-white">
-                  <img
-                    src={primary.picture}
-                    alt={mediaKit.name ?? "Influencer"}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                {primary.isVerified && (
-                  <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-gradient-to-br from-[#FFBF00] to-[#FFDB58] rounded-full flex items-center justify-center shadow-lg ring-4 ring-white">
-                    <CheckCircle2 className="w-6 h-6 text-white" />
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex-1 text-center lg:text-left space-y-4">
-              <div>
-                <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-gray-900 mb-2">
-                  {mediaKit.name || "Influencer"}
-                </h1>
-                {primary.username && (
-                  <p className="text-xl text-gray-600 flex items-center gap-2 justify-center lg:justify-start">
-                    {primary.username}
-                  </p>
-                )}
-                {primary.bio && (
-                  <p className="text-gray-600 mt-3 max-w-2xl">
-                    {primary.bio}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
-                {selectedPlatform && (
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full border-2 border-[#FFBF00]/30 shadow-sm">
-                    {getPlatformIcon(selectedPlatform)}
-                    <span className="font-semibold capitalize text-gray-900">
-                      {selectedPlatform}
-                    </span>
-                  </div>
-                )}
-                {primary.accountType && (
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] rounded-full shadow-sm">
-                    <Award className="w-4 h-4 text-gray-900" />
-                    <span className="font-semibold text-gray-900">
-                      {primary.accountType}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* RIGHT: Platform selector */}
-            <div className="w-full lg:w-auto flex items-center justify-center lg:justify-end">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Select Platform
-                </label>
-                <select
-                  value={selectedPlatform ?? ""}
-                  onChange={e => setSelectedPlatform(e.target.value)}
-                  className="px-4 py-3 rounded-xl border text-sm font-medium transition-all duration-200 bg-white hover:bg-gradient-to-r hover:from-[#FFBF00]/10 hover:to-[#FFDB58]/10"
-                >
-                  {(mediaKit.socialProfiles ?? []).map((p, i) => (
-                    <option
-                      key={`${p.provider}-${i}`}
-                      value={p.provider}
-                    >
-                      {p.provider.charAt(0).toUpperCase() +
-                        p.provider.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Bar */}
-      {primary && (
-        <div className="bg-white border-b">
-          <div className="max-w-7xl mx-auto px-6 py-6">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <StatCard
-                icon={<Users className="w-5 h-5" />}
-                label="Followers"
-                value={fmtShort(primary.followers)}
-              />
-              <StatCard
-                icon={<Activity className="w-5 h-5" />}
-                label="Engagements"
-                value={fmtShort(primary.engagements)}
-              />
-              <StatCard
-                icon={<Zap className="w-5 h-5" />}
-                label="Eng. Rate"
-                value={
-                  primary.engagementRate != null
-                    ? `${(primary.engagementRate * 100).toFixed(1)}%`
-                    : "N/A"
-                }
-              />
-              <StatCard
-                icon={<Eye className="w-5 h-5" />}
-                label="Avg Views"
-                value={fmtShort(primary.averageViews)}
-              />
-              <StatCard
-                icon={<Heart className="w-5 h-5" />}
-                label="Avg Likes"
-                value={fmtShort(primary.avgLikes)}
-              />
-              <StatCard
-                icon={<MessageCircle className="w-5 h-5" />}
-                label="Avg Comments"
-                value={fmtShort(primary.avgComments)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-sm border p-2 mb-8">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                "overview",
-                "social",
-                "audience",
-                "collaboration",
-                "rates",
-                "contact",
-              ] as const
-            ).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`${activeClass(
-                  activeTab === tab
-                )} px-6 py-3 rounded-xl text-sm font-medium transition-all duration-200 capitalize`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* OVERVIEW */}
-        {activeTab === "overview" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <InfoCard
-                icon={<User className="w-6 h-6" />}
-                title="Profile Information"
-                items={[
-                  { label: "Full Name", value: mediaKit.name },
-                  { label: "Gender", value: mediaKit.gender },
-                  {
-                    label: "Location",
-                    value:
-                      [mediaKit.city, mediaKit.country]
-                        .filter(Boolean)
-                        .join(", ") || "-",
-                  },
-                  {
-                    label: "Primary Platform",
-                    value: mediaKit.primaryPlatform?.toUpperCase(),
-                  },
-                ]}
-              />
-
-              <InfoCard
-                icon={<Languages className="w-6 h-6" />}
-                title="Languages & Reach"
-                items={[
-                  {
-                    label: "Languages",
-                    value: mediaKit.languages
-                      ?.map(l => l.name)
-                      .join(", "),
-                  },
-                  {
-                    label: "Total Reach",
-                    value: fmtShort(primary.followers),
-                  },
-                  {
-                    label: "Account Created",
-                    value: fmtDate(mediaKit.createdAt),
-                  },
-                ]}
-              />
-            </div>
-
-            {mediaKit.languages && mediaKit.languages.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-[#FFBF00]" />
-                  Languages Spoken
-                </h3>
-                <div className="flex flex-wrap gap-3">
-                  {mediaKit.languages.map((l, i) => (
-                    <span
-                      key={i}
-                      className="px-4 py-2 bg-gradient-to-r from-[#FFBF00]/10 to-[#FFDB58]/10 rounded-full text-sm font-medium text-gray-900 border border-[#FFBF00]/20"
-                    >
-                      {l.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* SOCIAL */}
-        {activeTab === "social" && (
-          <div className="space-y-6">
-            {/* Recent Posts */}
-            {primary.recentPosts && primary.recentPosts.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-                <div className="p-6 border-b bg-gradient-to-r from-[#FFBF00]/5 to-[#FFDB58]/5">
-                  <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <TrendingUp className="w-6 h-6 text-[#FFBF00]" />
-                    Recent Content
-                  </h3>
-                  <p className="text-gray-600 mt-1">
-                    Latest posts from {primary.username}
-                  </p>
-                </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {primary.recentPosts.map((post, i) => (
-                      <PostCard key={i} post={post} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tags & Affinities */}
-            {(hashtags.length ||
-              mentions.length ||
-              categories.length ||
-              affinities.length) && (
-              <div className="bg-white rounded-2xl shadow-sm border p-6 space-y-6">
-                {hashtags.length > 0 && (
-                  <ChipSection
-                    title="Popular Hashtags"
-                    chips={hashtags.map(h =>
-                      h.startsWith("#") ? h : `#${h}`
-                    )}
-                    tone="soft"
-                  />
-                )}
-                {mentions.length > 0 && (
-                  <ChipSection
-                    title="Mentions"
-                    chips={mentions.map(m =>
-                      m.startsWith("@") ? m : `@${m}`
-                    )}
-                    tone="outline"
-                  />
-                )}
-                {categories.length > 0 && (
-                  <ChipSection
-                    title="Categories"
-                    chips={categories}
-                    tone="outline"
-                  />
-                )}
-                {affinities.length > 0 && (
-                  <ChipSection
-                    title="Brand Affinity"
-                    chips={affinities}
-                    tone="soft"
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* AUDIENCE */}
-        {activeTab === "audience" && primary.audience && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AudienceCard
-                title="Gender Distribution"
-                data={primary.audience.genders ?? []}
-              />
-              <AudienceCard
-                title="Age Distribution"
-                data={primary.audience.ages ?? []}
-              />
-              <AudienceCard
-                title="Top Countries"
-                data={primary.audience.geoCountries ?? []}
-              />
-              <AudienceCard
-                title="Audience Interests"
-                data={primary.audience.interests ?? []}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* COLLABORATION */}
-        {activeTab === "collaboration" && mediaKit.onboarding && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-              <div className="p-6 border-b bg-gradient-to-r from-[#FFBF00]/5 to-[#FFDB58]/5">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <Target className="w-6 h-6 text-[#FFBF00]" />
-                  Collaboration Preferences
-                </h3>
-                <p className="text-gray-600 mt-1">
-                  How I like to work with brands
-                </p>
-              </div>
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <KV
-                    label="Category"
-                    value={mediaKit.onboarding.categoryName}
-                  />
-                  <KV
-                    label="Project Length"
-                    value={mediaKit.onboarding.projectLength}
-                  />
-                  <KV
-                    label="Monthly Capacity"
-                    value={mediaKit.onboarding.capacity}
-                  />
-                  <KV
-                    label="Allowlisting"
-                    value={
-                      mediaKit.onboarding.allowlisting ? "Yes" : "No"
-                    }
-                  />
-                </div>
-
-                {mediaKit.onboarding.formats &&
-                  mediaKit.onboarding.formats.length > 0 && (
-                    <ChipSection
-                      title="Content Formats"
-                      chips={mediaKit.onboarding.formats}
-                      tone="soft"
-                    />
-                  )}
-
-                {mediaKit.onboarding.collabTypes &&
-                  mediaKit.onboarding.collabTypes.length > 0 && (
-                    <ChipSection
-                      title="Collaboration Types"
-                      chips={mediaKit.onboarding.collabTypes}
-                      tone="outline"
-                    />
-                  )}
-
-                {mediaKit.onboarding.cadences &&
-                  mediaKit.onboarding.cadences.length > 0 && (
-                    <ChipSection
-                      title="Cadences"
-                      chips={mediaKit.onboarding.cadences}
-                      tone="outline"
-                    />
-                  )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* RATES */}
-        {activeTab === "rates" && (
-          <div className="space-y-6">
-            {mediaKit.onboarding?.budgets &&
-              mediaKit.onboarding.budgets.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-                  <div className="p-6 border-b bg-gradient-to-r from-[#FFBF00]/5 to-[#FFDB58]/5">
-                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                      <DollarSign className="w-6 h-6 text-[#FFBF00]" />
-                      Rate Card
-                    </h3>
-                    <p className="text-gray-600 mt-1">
-                      Typical brand budget ranges
-                    </p>
-                  </div>
-                  <div className="p-6 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-600">
-                          <th className="py-2">Format</th>
-                          <th className="py-2">Range</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mediaKit.onboarding.budgets.map((b, i) => (
-                          <tr key={i} className="border-t">
-                            <td className="py-2">{b.format}</td>
-                            <td className="py-2">{b.range}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-            {mediaKit.additionalNotes && (
-              <div className="bg-white rounded-2xl shadow-sm border p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-[#FFBF00]" />
-                  Additional Notes
-                </h3>
-                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {mediaKit.additionalNotes}
-                </p>
-              </div>
-            )}
-
-            {mediaKit.mediaKitPdf && (
-              <div className="bg-white rounded-2xl shadow-sm border p-6">
-                <a
-                  href={mediaKit.mediaKitPdf}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 font-semibold text-gray-900 underline"
-                >
-                  <FileText className="w-5 h-5" /> View MediaKit PDF{" "}
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* CONTACT */}
-        {activeTab === "contact" && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-              <div className="p-6 border-b bg-gradient-to-r from-[#FFBF00]/5 to-[#FFDB58]/5">
-                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <Mail className="w-6 h-6 text-[#FFBF00]" />
-                  Get in Touch
-                </h3>
-                <p className="text-gray-600 mt-1">
-                  Let's collaborate on something amazing
-                </p>
-              </div>
-              <div className="p-6 space-y-4">
-                {mediaKit.email && (
-                  <ContactItem
-                    icon={<Mail className="w-5 h-5" />}
-                    label="Email"
-                    value={mediaKit.email}
-                    href={`mailto:${mediaKit.email}`}
-                  />
-                )}
-                {mediaKit.phone && (
-                  <ContactItem
-                    icon={<Phone className="w-5 h-5" />}
-                    label="Phone"
-                    value={`${mediaKit.callingcode ?? ""} ${
-                      mediaKit.phone
-                    }`}
-                    href={`tel:${mediaKit.phone}`}
-                  />
-                )}
-                {mediaKit.website && (
-                  <ContactItem
-                    icon={<LinkIcon className="w-5 h-5" />}
-                    label="Website"
-                    value={mediaKit.website}
-                    href={mediaKit.website}
-                    external
-                  />
-                )}
-                {primary.url && (
-                  <ContactItem
-                    icon={getPlatformIcon(primary.provider)}
-                    label={`${
-                      primary.provider.charAt(0).toUpperCase() +
-                      primary.provider.slice(1)
-                    } Profile`}
-                    value={`${primary.username}`}
-                    href={primary.url}
-                    external
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------ UI building blocks ------------------------ */
-function StatCard({
-  icon,
-  label,
-  value,
-  trend,
+function ProgressBar({
+    label,
+    value,
+    max = 100,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  value?: string;
-  trend?: string;
+    label: string;
+    value: number;
+    max?: number;
 }) {
-  return (
-    <div className="group">
-      <div className="flex items-start gap-3 p-4 rounded-xl hover:bg-gradient-to-r hover:from-[#FFBF00]/5 hover:to-[#FFDB58]/5 transition-colors">
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#FFBF00] to-[#FFDB58] flex items-center justify-center text-white flex-shrink-0">
-          {icon}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-            {label}
-          </p>
-          <p className="text-xl font-bold text-gray-900 mt-0.5">
-            {value ?? "-"}
-          </p>
-          {trend && (
-            <p className="text-xs text-green-600 font-medium mt-0.5">
-              {trend}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoCard({
-  icon,
-  title,
-  items,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  items: { label: string; value?: string }[];
-}) {
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-      <div className="p-6 border-b bg-gradient-to-r from-[#FFBF00]/5 to-[#FFDB58]/5">
-        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-          <span className="text-[#FFBF00]">{icon}</span>
-          {title}
-        </h3>
-      </div>
-      <div className="p-6 space-y-4">
-        {items.map((item, i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between py-2 border-b last:border-0"
-          >
-            <span className="text-sm font-medium text-gray-500">
-              {item.label}
-            </span>
-            <span className="text-sm font-semibold text-gray-900">
-              {item.value || "-"}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PostCard({ post }: { post: PostT }) {
-  return (
-    <div className="group relative rounded-2xl overflow-hidden bg-white border shadow-sm hover:shadow-xl transition-all duration-300">
-      <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 relative overflow-hidden">
-        {(post.image || post.thumbnail) && (
-          <img
-            src={post.image || post.thumbnail}
-            alt="Post"
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-            <div className="flex items-center gap-4 text-sm">
-              {post.likes != null && (
-                <span className="flex items-center gap-1">
-                  <Heart className="w-4 h-4" fill="white" />
-                  {fmtShort(post.likes)}
-                </span>
-              )}
-              {post.comments != null && (
-                <span className="flex items-center gap-1">
-                  <MessageCircle className="w-4 h-4" />
-                  {fmtShort(post.comments)}
-                </span>
-              )}
-              {post.views != null && (
-                <span className="flex items-center gap-1">
-                  <Eye className="w-4 h-4" />
-                  {fmtShort(post.views)}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AudienceCard({ title, data }: { title: string; data: AudienceItem[] }) {
-  if (!data || data.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border p-6 text-gray-500">
-        No data
-      </div>
-    );
-  }
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-      <div className="p-6 border-b bg-gradient-to-r from-[#FFBF00]/5 to-[#FFDB58]/5">
-        <h3 className="text-lg font-bold text-gray-900">{title}</h3>
-      </div>
-      <div className="p-6 space-y-4">
-        {data.slice(0, 6).map((item, idx) => (
-          <div key={idx} className="space-y-2">
+        <div className="space-y-1.5">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-gray-900">
-                {item.name ?? item.code}
-              </span>
-              <span className="font-bold text-[#FFBF00]">
-                {item.weight != null
-                  ? `${(item.weight * 100).toFixed(1)}%`
-                  : "-"}
-              </span>
+                <span className="text-zinc-600">{label}</span>
+                <span className="font-semibold text-zinc-900">{value}%</span>
             </div>
-            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] rounded-full transition-all duration-500"
-                style={{ width: `${(item.weight ?? 0) * 100}%` }}
-              />
+            <div className="h-2 rounded-full bg-zinc-100">
+                <div
+                    className="h-2 rounded-full bg-gradient-to-r from-black to-zinc-500"
+                    style={{ width: `${Math.min((value / max) * 100, 100)}%` }}
+                />
             </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+        </div>
+    );
 }
 
-function ContactItem({
-  icon,
-  label,
-  value,
-  href,
-  external,
+function Tag({ children }: { children: React.ReactNode }) {
+    return (
+        <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600">
+            {children}
+        </span>
+    );
+}
+
+function SectionTitle({
+    title,
+    action,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  href: string;
-  external?: boolean;
+    title: string;
+    action?: string;
 }) {
-  return (
-    <a
-      href={href}
-      target={external ? "_blank" : undefined}
-      rel={external ? "noopener noreferrer" : undefined}
-      className="flex items-center gap-4 p-4 rounded-xl border hover:border-[#FFBF00]/50 hover:bg-gradient-to-r hover:from-[#FFBF00]/5 hover:to-[#FFDB58]/5 transition-all group"
-    >
-      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#FFBF00] to-[#FFDB58] flex items-center justify-center text-white flex-shrink-0">
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-          {label}
-        </p>
-        <p className="text-sm font-semibold text-gray-900 mt-0.5 truncate group-hover:text-[#FFBF00] transition-colors">
-          {value}
-        </p>
-      </div>
-      {external && (
-        <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-[#FFBF00] transition-colors" />
-      )}
-    </a>
-  );
+    return (
+        <div className="mb-4 flex items-center justify-between border-b">
+            <div className="flex items-center gap-2">
+                <span className="text-zinc-900">✦</span>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-zinc-800">
+                    {title}
+                </h2>
+            </div>
+            {action ? <button className="text-sm font-semibold text-zinc-900">{action}</button> : null}
+        </div>
+    );
 }
 
-function KV({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="space-y-2">
-      <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-        {label}
-      </span>
-      <p className="text-lg text-gray-900">{value ?? "-"}</p>
-    </div>
-  );
-}
-
-function ChipSection({
-  title,
-  chips,
-  tone = "soft",
+function ReviewCard({
+    name,
+    role,
+    text,
 }: {
-  title: string;
-  chips: string[];
-  tone?: "soft" | "outline";
+    name?: string;
+    role?: string;
+    text?: string;
 }) {
-  if (!chips?.length) return null;
-  const base =
-    tone === "soft"
-      ? "px-4 py-2 bg-gradient-to-r from-[#FFBF00]/10 to-[#FFDB58]/10 rounded-full text-sm font-medium text-gray-900 border border-[#FFBF00]/20"
-      : "px-4 py-2 bg-white rounded-full text-sm font-medium text-gray-900 border-2 border-[#FFBF00]/30";
-  return (
-    <div>
-      <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-        {title}
-      </h4>
-      <div className="flex flex-wrap gap-2">
-        {chips.map((c, i) => (
-          <span key={`${c}-${i}`} className={base}>
-            {c}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+    const initials =
+        name
+            ?.split(" ")
+            .map((part) => part[0])
+            .join("") || "NA";
+
+    return (
+        <div className="rounded-[22px] border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-zinc-300 via-zinc-700 to-black text-sm font-bold text-white">
+                    {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-zinc-900">{name ?? "—"}</h3>
+                        <div className="flex items-center gap-1 text-zinc-900">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <Star key={i} className="h-3.5 w-3.5 fill-current" />
+                            ))}
+                        </div>
+                    </div>
+                    <p className="text-sm text-zinc-500">{role ?? "—"}</p>
+                    <p className="mt-3 text-sm leading-6 text-zinc-600">{text ?? "—"}</p>
+                </div>
+            </div>
+        </div>
+    );
 }
 
-/* ----------------------------- Icons ------------------------------ */
-function getPlatformIcon(platform: string) {
-  const icons: Record<string, React.ReactNode> = {
-    instagram: <Instagram className="w-5 h-5 text-pink-600" />,
-    youtube: <Youtube className="w-5 h-5 text-red-600" />,
-    tiktok: <Globe className="w-5 h-5 text-gray-700" />,
-  };
-  return icons[platform] || <Globe className="w-5 h-5 text-gray-700" />;
+function SocialTrendChart({
+    data,
+    gradientId,
+}: {
+    data: number[];
+    gradientId: string;
+}) {
+    const safeData = data.length ? data : [0, 0, 0, 0, 0, 0];
+
+    return (
+        <div className="mt-4 h-20 w-full overflow-hidden rounded-xl bg-gradient-to-b from-zinc-50 to-white">
+            <SparkLineChart
+                data={safeData}
+                height={80}
+                showHighlight={false}
+                showTooltip={false}
+                curve="natural"
+                area
+                colors={["#18181b"]}
+                sx={{
+                    ".MuiAreaElement-root": {
+                        fill: `url(#${gradientId})`,
+                    },
+                    ".MuiLineElement-root": {
+                        strokeWidth: 2,
+                    },
+                }}
+            >
+                <defs>
+                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#18181b" stopOpacity="0.2" />
+                        <stop offset="100%" stopColor="#18181b" stopOpacity="0.02" />
+                    </linearGradient>
+                </defs>
+            </SparkLineChart>
+        </div>
+    );
+}
+
+const formatCompactNumber = (value: any) => {
+    if (value === undefined || value === null || value === "") return "—";
+    if (typeof value === "string") return value;
+
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "—";
+
+    if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)}B`;
+    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+    return `${num}`;
+};
+
+const formatPercent = (value: any, multiplyBy100 = false) => {
+    if (value === undefined || value === null || value === "") return "—";
+    const num = Number(value);
+    if (!Number.isFinite(num)) return typeof value === "string" ? value : "—";
+    const finalValue = multiplyBy100 ? num * 100 : num;
+    return `${finalValue.toFixed(2)}%`;
+};
+
+const truncateText = (text?: string, max = 36) => {
+    if (!text) return "—";
+    return text.length > max ? `${text.slice(0, max)}...` : text;
+};
+
+export default function CreatorProfileDashboard() {
+    const [mediaKit, setMediaKit] = useState<any>(null);
+
+    useEffect(() => {
+        const fetchMediaKit = async () => {
+            try {
+                const influencerId = localStorage.getItem("influencerId") || "";
+                const response = await apiGetfetchMediaKit(influencerId);
+                setMediaKit(response?.mediaKit ?? response?.data?.mediaKit ?? null);
+            } catch (error) {
+                console.error("Failed to fetch media kit:", error);
+            }
+        };
+
+        fetchMediaKit();
+    }, []);
+
+    const socialProfiles = mediaKit?.socialProfiles ?? [];
+
+    const instagramProfile = socialProfiles.find(
+        (item: any) => item?.provider?.toLowerCase() === "instagram"
+    );
+    const youtubeProfile = socialProfiles.find(
+        (item: any) => item?.provider?.toLowerCase() === "youtube"
+    );
+    const tiktokProfile = socialProfiles.find(
+        (item: any) => item?.provider?.toLowerCase() === "tiktok"
+    );
+
+    const primaryProfile = instagramProfile || youtubeProfile || tiktokProfile || socialProfiles[0];
+
+    const totalReach =
+        socialProfiles.reduce((sum: number, profile: any) => {
+            return sum + Number(profile?.followers || 0);
+        }, 0) || 0;
+
+    const avgEngagement =
+        socialProfiles.length > 0
+            ? socialProfiles.reduce((sum: number, profile: any) => {
+                return sum + Number(profile?.engagementRate || 0);
+            }, 0) / socialProfiles.length
+            : 0;
+
+    const brandCollabs = primaryProfile?.sponsoredPosts?.length ?? 0;
+    const deliverables = primaryProfile?.recentPosts?.length ?? 0;
+
+    const socialCards = [
+        {
+            label: "Instagram",
+            value: formatCompactNumber(instagramProfile?.followers),
+            sub: "Followers Growth",
+            statOneLabel: "AVG LIKES",
+            statOneValue: formatCompactNumber(instagramProfile?.stats?.avgLikes?.value),
+            statTwoLabel: "ENG. RATE",
+            statTwoValue: formatPercent(instagramProfile?.engagementRate, true),
+            icon: Instagram,
+            trend:
+                instagramProfile?.recentPosts
+                    ?.slice(0, 10)
+                    ?.reverse()
+                    ?.map((post: any) => Number(post?.likes || 0)) ?? [],
+        },
+        {
+            label: "YouTube",
+            value: formatCompactNumber(youtubeProfile?.followers || youtubeProfile?.subscribers),
+            sub: "Followers Growth",
+            statOneLabel: "AVG LIKES",
+            statOneValue: formatCompactNumber(youtubeProfile?.stats?.avgLikes?.value),
+            statTwoLabel: "ENG. RATE",
+            statTwoValue: formatPercent(youtubeProfile?.engagementRate, true),
+            icon: Youtube,
+            trend:
+                youtubeProfile?.recentPosts
+                    ?.slice(0, 10)
+                    ?.reverse()
+                    ?.map((post: any) => Number(post?.likes || 0)) ?? [],
+        },
+        {
+            label: "TikTok",
+            value: formatCompactNumber(tiktokProfile?.followers),
+            sub: "Followers Growth",
+            statOneLabel: "AVG LIKES",
+            statOneValue: formatCompactNumber(tiktokProfile?.stats?.avgLikes?.value),
+            statTwoLabel: "ENG. RATE",
+            statTwoValue: formatPercent(tiktokProfile?.engagementRate, true),
+            icon: TiktokLogoIcon,
+            trend:
+                tiktokProfile?.recentPosts
+                    ?.slice(0, 10)
+                    ?.reverse()
+                    ?.map((post: any) => Number(post?.likes || 0)) ?? [],
+        },
+    ];
+
+    const statCards = [
+        {
+            label: "Total Reach",
+            value: formatCompactNumber(totalReach),
+            delta: null,
+            icon: Users,
+        },
+        {
+            label: "Avg. Engagement",
+            value: formatPercent(avgEngagement, true),
+            delta: null,
+            icon: TrendingUp,
+        },
+        {
+            label: "Brand Collabs",
+            value: brandCollabs ? String(brandCollabs) : "—",
+            delta: null,
+            icon: Star,
+        },
+        {
+            label: "Acceptance Rate",
+            value: "—",
+            delta: null,
+            icon: CheckCircle2,
+        },
+        {
+            label: "Deliverables",
+            value: deliverables ? String(deliverables) : "—",
+            delta: null,
+            icon: CirclePlus,
+        },
+    ];
+
+    const countryData = mediaKit?.country
+        ? [{ name: mediaKit.country, value: 100 }]
+        : [];
+
+    const categoryTags =
+        primaryProfile?.hashtags?.slice(0, 8)?.map((item: any) => `#${item.tag}`) ?? [];
+
+    const galleryItems =
+        primaryProfile?.popularPosts?.slice(0, 4)?.map((post: any, index: number) => ({
+            title: truncateText(post?.text, 28),
+            subtitle: post?.type ? post.type.toUpperCase() : "Post",
+            image: post?.image || post?.thumbnail,
+            bg:
+                [
+                    "from-zinc-300 via-zinc-100 to-white",
+                    "from-zinc-900 via-zinc-700 to-zinc-400",
+                    "from-black via-zinc-800 to-zinc-500",
+                    "from-zinc-950 via-zinc-700 to-zinc-300",
+                ][index % 4],
+        })) ?? [];
+
+    const campaigns =
+        primaryProfile?.sponsoredPosts?.slice(0, 10)?.map((post: any) => ({
+            company: post?.sponsors?.[0]?.name ?? "Sponsored Campaign",
+            brief: truncateText(post?.text, 42),
+            rate: "—",
+            status: "Sponsored",
+            payout: "—",
+        })) ?? [];
+
+    const reviews =
+        mediaKit?.reviews?.length > 0
+            ? mediaKit.reviews
+            : [
+                {
+                    name: "Sarah Jenkins",
+                    role: "Brand Manager, LuxeBeauty",
+                    text: `"Incredibly professional and hit all our KPIs. The engagement on the Reels was 40% higher than our average."`,
+                    image:
+                        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face",
+                    rating: 5,
+                },
+                {
+                    name: "Marcus Thorne",
+                    role: "Head of Marketing, NextGen",
+                    text: `"Great content quality. Communication was a bit slow initially but the final output was worth the wait."`,
+                    image:
+                        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face",
+                    rating: 4,
+                },
+            ];
+
+    const creatorRating =
+        primaryProfile?.stats?.paidPostPerformance !== undefined &&
+            primaryProfile?.stats?.paidPostPerformance !== null
+            ? (Number(primaryProfile.stats.paidPostPerformance) * 10).toFixed(1)
+            : "—";
+
+    const galleryFallbackBg = [
+        "from-zinc-300 via-zinc-100 to-white",
+        "from-zinc-900 via-zinc-700 to-zinc-400",
+        "from-black via-zinc-800 to-zinc-500",
+        "from-zinc-950 via-zinc-700 to-zinc-300",
+    ];
+
+    return (
+        <div className="min-h-screen w-full text-zinc-900">
+            <div className="w-full px-5 py-4 lg:px-6 xl:px-8">
+                <header className="mb-6 flex flex-wrap items-center justify-between gap-4 bg-white">
+                    <div className="flex items-center gap-8">
+                        <nav className="hidden items-center gap-6 md:flex">
+                            {[["Influencer Profile", true] as const].map(([item, active]) => (
+                                <button
+                                    key={item}
+                                    className={`relative py-2 text-sm font-medium transition ${active ? "text-black" : "text-zinc-500 hover:text-zinc-900"
+                                        }`}
+                                >
+                                    {item}
+                                    {active ? (
+                                        <span className="absolute -bottom-1 left-0 h-0.5 w-full rounded-full bg-black" />
+                                    ) : null}
+                                </button>
+                            ))}
+                        </nav>
+                    </div>
+                </header>
+
+                <div className="space-y-6">
+                    <section className="rounded-[28px] bg-white p-6">
+                        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="flex min-w-0 flex-1 gap-4 sm:gap-5">
+                                <div className="relative shrink-0">
+                                    <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-zinc-200 via-zinc-500 to-black shadow-inner sm:h-28 sm:w-28" />
+                                    <div className="absolute top-20 -right-1 flex h-8 w-8 items-center justify-center rounded-2xl bg-white text-black shadow-sm">
+                                        <CheckCircle2 className="h-6 w-6" />
+                                    </div>
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <h1 className="text-2xl font-bold tracking-tight text-zinc-950 sm:text-3xl">
+                                            {mediaKit?.name ?? "—"}
+                                        </h1>
+                                        <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700">
+                                            Verified Creator
+                                        </span>
+                                    </div>
+
+                                    <p className="max-w-3xl text-sm leading-6 text-zinc-600 sm:text-[15px]">
+                                        {mediaKit?.additionalNotes ?? "No additional notes available."}
+                                    </p>
+
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        {categoryTags.length ? (
+                                            categoryTags.map((tag: string) => <Tag key={tag}>{tag}</Tag>)
+                                        ) : (
+                                            <Tag>—</Tag>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:max-w-3xl xl:grid-cols-3">
+                                        {[
+                                            {
+                                                label: "Instagram",
+                                                handle: instagramProfile?.username ?? "—",
+                                                icon: Instagram,
+                                            },
+                                            {
+                                                label: "YouTube",
+                                                handle: youtubeProfile?.username ?? "—",
+                                                icon: Youtube,
+                                            },
+                                            {
+                                                label: "TikTok",
+                                                handle: tiktokProfile?.username ?? "—",
+                                                icon: Play,
+                                            },
+                                        ].map((item) => {
+                                            const Icon = item.icon;
+
+                                            return (
+                                                <div
+                                                    key={item.label}
+                                                    className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3"
+                                                >
+                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-700">
+                                                        <Icon className="h-4 w-4" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                                                            {item.label}
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="truncate text-sm text-zinc-500">
+                                                                {item.handle}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="w-full max-w-[420px] rounded-xl border border-zinc-200 bg-zinc-50 p-4 xl:shrink-0">
+                                <div className="space-y-3">
+                                    {[
+                                        {
+                                            label: "Location",
+                                            value: mediaKit?.country ?? "—",
+                                            icon: MapPin,
+                                        },
+                                        {
+                                            label: "Language",
+                                            value:
+                                                mediaKit?.languages?.map((item: any) => item?.name).filter(Boolean).join(", ") ||
+                                                "—",
+                                            icon: Globe,
+                                        },
+                                        {
+                                            label: "Email",
+                                            value: mediaKit?.email ?? "—",
+                                            icon: Mail,
+                                        },
+                                        {
+                                            label: "Phone",
+                                            value: mediaKit?.phone ?? "—",
+                                            icon: Phone,
+                                        },
+                                    ].map((item) => {
+                                        const Icon = item.icon;
+
+                                        return (
+                                            <div
+                                                key={item.label}
+                                                className="flex items-center justify-between gap-4 rounded-2xl"
+                                            >
+                                                <div className="flex min-w-0 items-center gap-3">
+                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center text-zinc-700">
+                                                        <Icon className="h-6 w-6" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                                                            {item.label}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="truncate text-right text-sm font-semibold text-zinc-950 sm:text-base">
+                                                    {item.value}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800">
+                                        <CopyIcon className="h-4 w-4"/>
+                                       Copy link
+                                    </button>
+                                    <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-100">
+                                        <Download className="h-4 w-4" />
+                                        Download PDF
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                            {statCards.map((item) => {
+                                const Icon = item.icon;
+
+                                return (
+                                    <div
+                                        key={item.label}
+                                        className="rounded-[22px] border border-zinc-200 bg-white p-4"
+                                    >
+                                        <div className="mb-3 flex items-start justify-between gap-3">
+                                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
+                                                <Icon className="h-4 w-4" />
+                                            </div>
+
+                                            {item.delta ? (
+                                                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
+                                                    {item.delta}
+                                                </span>
+                                            ) : null}
+                                        </div>
+
+                                        <div className="text-sm text-zinc-500">{item.label}</div>
+                                        <div className="mt-1 text-[32px] font-bold leading-none tracking-tight text-zinc-950">
+                                            {item.value}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+
+                    <section className="rounded-[28px] bg-white p-6">
+                        <SectionTitle title="Social Breakdown" />
+                        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                            {socialCards.map((item) => {
+                                const Icon = item.icon;
+                                const gradientId = `social-breakdown-gradient-${item.label.toLowerCase()}`;
+
+                                return (
+                                    <div
+                                        key={item.label}
+                                        className="rounded-[22px] bg-white p-4"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="text-sm font-semibold text-zinc-900">{item.label}</div>
+
+                                            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-200 text-zinc-500">
+                                                <Icon className="h-3.5 w-3.5" />
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-2 text-[36px] font-bold leading-none tracking-tight text-zinc-950">
+                                            {item.value}
+                                        </div>
+                                        <div className="mt-1 text-sm text-zinc-500">{item.sub}</div>
+
+                                        <SocialTrendChart data={item.trend} gradientId={gradientId} />
+
+                                        <div className="mt-4 grid grid-cols-2 border-t border-zinc-200 pt-3">
+                                            <div>
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                                                    {item.statOneLabel}
+                                                </div>
+                                                <div className="mt-1 text-sm font-semibold text-zinc-900">
+                                                    {item.statOneValue}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                                                    {item.statTwoLabel}
+                                                </div>
+                                                <div className="mt-1 text-sm font-semibold text-zinc-900">
+                                                    {item.statTwoValue}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+
+                    <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
+                        <section className="rounded-[28px] bg-white p-6">
+                            <SectionTitle title="Audience Demographics" />
+                            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)]">
+                                <div className="rounded-3xl p-6">
+                                    <div className="mx-auto flex h-52 w-52 items-center justify-center rounded-full bg-[conic-gradient(#18181b_0_38%,#52525b_38%_66%,#a1a1aa_66%_82%,#d4d4d8_82%_100%)] p-6 shadow-inner">
+                                        <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center shadow-sm">
+                                            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                                                Core Segment
+                                            </div>
+                                            <div className="mt-2 text-3xl font-bold text-zinc-950">—</div>
+                                            <div className="text-sm text-zinc-500">—</div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-zinc-600">
+                                        <div className="flex items-center gap-2">
+                                            <span className="h-3 w-3 rounded-full bg-black" /> 18–24
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="h-3 w-3 rounded-full bg-zinc-600" /> 25–34
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="h-3 w-3 rounded-full bg-zinc-400" /> 35–44
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="h-3 w-3 rounded-full bg-zinc-300" /> 45+
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 rounded-3xl border border-zinc-200 p-6">
+                                    <div>
+                                        <div className="mb-4 text-sm font-semibold text-zinc-900">
+                                            Top Locations
+                                        </div>
+                                        <div className="space-y-4">
+                                            {countryData.length ? (
+                                                countryData.map((item: any, index: number) => (
+                                                    <ProgressBar
+                                                        key={`${item.name}-${index}`}
+                                                        label={item.name}
+                                                        value={Number(item.value) || 0}
+                                                    />
+                                                ))
+                                            ) : (
+                                                <ProgressBar label="—" value={0} />
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section className="grid gap-6 md:grid-cols-2 2xl:grid-cols-1">
+                            <div className="rounded-[28px] border border-zinc-200 bg-white p-6 shadow-sm">
+                                <SectionTitle title="Category Tags" />
+                                <div className="flex flex-wrap gap-2">
+                                    {categoryTags.length ? (
+                                        categoryTags.map((tag: string) => <Tag key={tag}>{tag}</Tag>)
+                                    ) : (
+                                        <Tag>—</Tag>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-[28px] border border-zinc-200 bg-white p-6 shadow-sm">
+                                <SectionTitle title="Creator Rating" />
+                                <div className="rounded-3xl bg-zinc-50 p-5">
+                                    <div className="flex items-end gap-3">
+                                        <div className="text-5xl font-bold tracking-tight text-black">
+                                            {creatorRating}
+                                        </div>
+                                        <div className="pb-2 text-sm text-zinc-500">
+                                            overall brand review
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 flex items-center gap-1 text-zinc-900">
+                                        {Array.from({ length: 5 }).map((_, i) => (
+                                            <Star key={i} className="h-4 w-4 fill-current" />
+                                        ))}
+                                        <span className="ml-2 text-sm font-medium text-zinc-600">
+                                            Top performer
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <section className="rounded-[28px] bg-white p-6">
+                        <SectionTitle title="Content Gallery" />
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            {galleryItems.length
+                                ? galleryItems.map((item: any, index: number) => (
+                                    <div
+                                        key={`${item.title}-${index}`}
+                                        className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${item.bg ?? galleryFallbackBg[index % galleryFallbackBg.length]
+                                            } p-4 shadow-sm`}
+                                        style={
+                                            item.image
+                                                ? {
+                                                    backgroundImage: `url(${item.image})`,
+                                                    backgroundSize: "cover",
+                                                    backgroundPosition: "center",
+                                                }
+                                                : undefined
+                                        }
+                                    >
+                                        <div className="absolute inset-0  transition " />
+                                        <div className="relative z-10 flex h-52 items-end rounded-[1.4rem] ">
+                                            <div>
+                                                <div className="text-lg font-semibold text-white drop-shadow-sm">
+                                                    {item.title ?? "—"}
+                                                </div>
+                                                <div className="text-sm text-white/85">
+                                                    {item.subtitle ?? "—"}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                                : [0, 1, 2, 3].map((index) => (
+                                    <div
+                                        key={index}
+                                        className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${galleryFallbackBg[index]
+                                            } p-4 shadow-sm`}
+                                    >
+                                        <div className="absolute inset-0 bg-black/10 opacity-0 transition group-hover:opacity-100" />
+                                        <div className="flex h-52 items-end rounded-[1.4rem] border border-white/20 bg-white/10 p-4 backdrop-blur-sm">
+                                            <div>
+                                                <div className="text-lg font-semibold text-white drop-shadow-sm">—</div>
+                                                <div className="text-sm text-white/85">—</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                        </div>
+                    </section>
+
+                    <section className="rounded-[28px] bg-white p-6 ">
+                        <SectionTitle title="Campaign History" />
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full border-separate border-spacing-y-3 text-left">
+                                <thead>
+                                    <tr className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                                        <th className="px-4">Company</th>
+                                        <th className="px-4">Brief</th>
+                                        <th className="px-4">Rate</th>
+                                        <th className="px-4">Status</th>
+                                        <th className="px-4">Payout</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {campaigns.length ? (
+                                        campaigns.map((row: any, index: number) => (
+                                            <tr
+                                                key={`${row.company}-${index}`}
+                                                className="rounded-2xl bg-zinc-50 text-sm text-zinc-600"
+                                            >
+                                                <td className="rounded-l-2xl px-4 py-4 font-semibold text-zinc-900">
+                                                    {row.company ?? "—"}
+                                                </td>
+                                                <td className="px-4 py-4">{row.brief ?? "—"}</td>
+                                                <td className="px-4 py-4 font-semibold text-zinc-900">
+                                                    {row.rate ?? "—"}
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700">
+                                                        {row.status ?? "—"}
+                                                    </span>
+                                                </td>
+                                                <td className="rounded-r-2xl px-4 py-4 font-medium text-zinc-900">
+                                                    {row.payout ?? "—"}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr className="rounded-2xl bg-zinc-50 text-sm text-zinc-600">
+                                            <td className="rounded-l-2xl px-4 py-4 font-semibold text-zinc-900">—</td>
+                                            <td className="px-4 py-4">—</td>
+                                            <td className="px-4 py-4 font-semibold text-zinc-900">—</td>
+                                            <td className="px-4 py-4">
+                                                <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700">
+                                                    —
+                                                </span>
+                                            </td>
+                                            <td className="rounded-r-2xl px-4 py-4 font-medium text-zinc-900">—</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section className="rounded-[28px] bg-white p-6">
+                        <SectionTitle title="Ratings & Reviews" />
+                        <div className="grid gap-4 lg:grid-cols-2">
+                            {reviews.map((review: any, index: number) => (
+                                <ReviewCard key={`${review?.name ?? "review"}-${index}`} {...review} />
+                            ))}
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    );
 }

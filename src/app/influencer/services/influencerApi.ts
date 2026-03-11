@@ -487,3 +487,9 @@ export const apiGetfetchCampaignbyId = (
     }
   );
 };
+
+export const apiGetfetchMediaKit = (influencerId: string) => {
+  return apiPost<any>(`/media-kit/influencer`,{
+    influencerId
+  });
+}
