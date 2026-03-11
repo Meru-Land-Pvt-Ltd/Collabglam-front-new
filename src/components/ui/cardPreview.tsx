@@ -48,7 +48,157 @@ export type PreviewMeta = {
   campaignBudget?: number;
 };
 
-/** Skeletons stay pill-type */
+/* ─────────────────────── Contract action types ─────────────────────── */
+
+export type ContractStatus =
+  | "DRAFT"
+  | "BRAND_SENT_DRAFT"
+  | "BRAND_EDITED"
+  | "INFLUENCER_EDITED"
+  | "BRAND_ACCEPTED"
+  | "INFLUENCER_ACCEPTED"
+  | "READY_TO_SIGN"
+  | "CONTRACT_SIGNED"
+  | "MILESTONES_CREATED"
+  | "REJECTED"
+  | "SUPERSEDED"
+  | string;
+
+export type ContractCardMeta = {
+  status?: ContractStatus;
+  confirmations?: {
+    brand?: { confirmed?: boolean };
+    influencer?: { confirmed?: boolean };
+  };
+  signatures?: {
+    brand?: { signed?: boolean };
+    influencer?: { signed?: boolean };
+  };
+  lockedAt?: string | null;
+  editsLockedAt?: string | null;
+  awaitingRole?: string | null;
+  contractId?: string;
+  supersededBy?: string | null;
+  resendOf?: string | null;
+  resendIteration?: number;
+};
+
+export type ContractCardProps = {
+  /** The effective contract id to act on */
+  contractId: string;
+  /** Live contract metadata (fetched async; null = not loaded yet) */
+  meta: ContractCardMeta | null;
+  onReviewAccept: () => void;
+  onView: () => void;
+  onSign: () => void;
+  onReject: () => void;
+};
+
+/* ─────────────────────── Internal helpers ─────────────────────── */
+
+const normSt = (s?: string) => String(s || "").trim().toUpperCase();
+
+function getProductImageSrc(img?: ProductImage) {
+  if (!img) return "";
+  if (typeof img === "string") return img;
+  return img.dataUrl || img.url || "";
+}
+function resolveContractStatus(meta: ContractCardMeta | null): {
+  statusText: string;
+  isLocked: boolean;
+  isRejected: boolean;
+  isSuperseded: boolean;
+  isReadyToSign: boolean;
+  influencerConfirmed: boolean;
+  brandConfirmed: boolean;
+  influencerSigned: boolean;
+  brandSigned: boolean;
+  needsAccept: boolean;
+  canEdit: boolean;
+  canSign: boolean;
+  canReject: boolean;
+} {
+  const st = normSt(meta?.status);
+
+  const isLocked =
+    !!meta?.lockedAt ||
+    st === "CONTRACT_SIGNED" ||
+    st === "MILESTONES_CREATED";
+  const isRejected = st === "REJECTED";
+  const isSuperseded = st === "SUPERSEDED";
+  const isReadyToSign = st === "READY_TO_SIGN" || !!meta?.editsLockedAt;
+
+  const influencerConfirmed = !!meta?.confirmations?.influencer?.confirmed;
+  const brandConfirmed = !!meta?.confirmations?.brand?.confirmed;
+  const influencerSigned = !!meta?.signatures?.influencer?.signed;
+  const brandSigned = !!meta?.signatures?.brand?.signed;
+  const anyoneSigned = influencerSigned || brandSigned;
+
+  const canEdit =
+    !isLocked && !isReadyToSign && !isRejected && !isSuperseded && !anyoneSigned;
+  const needsAccept = !influencerConfirmed && canEdit;
+  const canSign =
+    !isLocked &&
+    isReadyToSign &&
+    influencerConfirmed &&
+    brandConfirmed &&
+    !influencerSigned;
+  const canReject = !isLocked && !isRejected && !isSuperseded;
+
+  // Human-readable status label
+  const sigLabel = (() => {
+    if (st === "MILESTONES_CREATED") return "Milestone Added";
+    if (st === "CONTRACT_SIGNED") return "Awaiting Milestone Creation";
+    if (!isReadyToSign) return null;
+    if (influencerSigned && brandSigned) return "Signed";
+    const aw = String(meta?.awaitingRole || "").toLowerCase();
+    if (aw === "brand") return "Awaiting brand signature";
+    if (aw === "influencer") return "Awaiting influencer signature";
+    if (!influencerSigned && !brandSigned) return "Ready to sign";
+    if (brandSigned && !influencerSigned) return "Awaiting your signature";
+    if (!brandSigned && influencerSigned) return "Awaiting brand signature";
+    return null;
+  })();
+
+  const statusText =
+    sigLabel ??
+    (st === "BRAND_SENT_DRAFT"
+      ? "Awaiting Your Acceptance"
+      : st === "BRAND_EDITED"
+        ? "Updated by Brand"
+        : st === "INFLUENCER_ACCEPTED"
+          ? "Awaiting Brand Acceptance"
+          : st === "INFLUENCER_EDITED"
+            ? "Sent to Brand"
+            : st === "READY_TO_SIGN"
+              ? "Ready to Sign"
+              : st === "REJECTED"
+                ? "Rejected"
+                : st === "SUPERSEDED"
+                  ? "Superseded"
+                  : meta?.status
+                    ? String(meta.status)
+                    : "Contract");
+
+  return {
+    statusText,
+    isLocked,
+    isRejected,
+    isSuperseded,
+    isReadyToSign,
+    influencerConfirmed,
+    brandConfirmed,
+    influencerSigned,
+    brandSigned,
+    needsAccept,
+    canEdit,
+    canSign,
+    canReject,
+  };
+}
+
+/* ─────────────────────── Shared card sub-components ─────────────────────── */
+
 function SkeletonLine({ className = "" }: { className?: string }) {
   return <div className={`h-3 rounded-full bg-neutral-100 ${className}`} />;
 }
@@ -88,6 +238,7 @@ function InlinePlus({
   className?: string;
 }) {
   if (!first) return null;
+
   return (
     <span className={["text-[12px] text-primary", className].join(" ")}>
       <span className="truncate">{first}</span>
@@ -119,6 +270,7 @@ function OutlinedPill({
         "border border-[#1A1A1A] bg-white",
         "px-3 py-1 text-[12px] text-neutral-900",
         "min-w-0",
+        "min-w-0",
         className,
       ].join(" ")}
     >
@@ -144,6 +296,138 @@ function CampaignGlobalBadge({ value }: { value: string }) {
   );
 }
 
+/* ─────────────────────── Invite action types ─────────────────────── */
+
+export type InviteCardProps = {
+  status?: "pending" | "accepted" | "declined";
+  respondBy?: string;
+  onAccept: () => void;
+  onDecline: () => void;
+  onViewDetails: () => void;
+};
+
+/* ─────────────────────── Invite actions (inline, replaces Save/View) ─────────────────────── */
+
+function InviteActions({ invite }: { invite: InviteCardProps }) {
+  const isPending = !invite.status || invite.status === "pending";
+  const isAccepted = invite.status === "accepted";
+  const isDeclined = invite.status === "declined";
+
+  if (isAccepted) {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-[11px] font-semibold text-emerald-700">
+          ✓ Accepted
+        </span>
+        <button
+          onClick={invite.onViewDetails}
+          className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
+        >
+          <Eye className="h-3 w-3" />
+          Details
+        </button>
+      </div>
+    );
+  }
+
+  if (isDeclined) {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1.5 text-[11px] font-semibold text-red-600">
+          Declined
+        </span>
+        <button
+          onClick={invite.onViewDetails}
+          className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
+        >
+          <Eye className="h-3 w-3" />
+          Details
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <button
+        onClick={invite.onAccept}
+        className="rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+      >
+        Accept Invite
+      </button>
+      <button
+        onClick={invite.onDecline}
+        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
+      >
+        Decline
+      </button>
+      <button
+        onClick={invite.onViewDetails}
+        className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98] whitespace-nowrap"
+      >
+        <Eye className="h-3 w-3" />
+        Details
+      </button>
+    </div>
+  );
+}
+
+/* ─────────────────────── Contract actions (inline, replaces Save/View) ─────────────────────── */
+
+function ContractActions({ contract }: { contract: ContractCardProps }) {
+  const {
+    needsAccept,
+    canEdit,
+    canSign,
+    canReject,
+  } = resolveContractStatus(contract.meta);
+  const router = useRouter()
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {/* Primary CTA */}
+      {(needsAccept || canEdit) && (
+        <Button
+          onClick={contract.onReviewAccept}
+          className="rounded-lg bg-black px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+        >
+          {needsAccept ? "Review & Accept" : "Edit Details"}
+        </Button>
+      )}
+
+      {canSign && (
+        <Button
+          onClick={contract.onSign}
+          className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98]"
+        >
+          <PenLine className="h-3 w-3" />
+          Sign
+        </Button>
+      )}
+
+      {/* View */}
+      <Button
+        onClick={() => router.push(`/influencer/my-campaigns/1`)}
+        className="flex items-center gap-1 rounded-lg border border-neutral-200 px-3 py-2 text-[12px] bg-black text-white font-medium text-neutral-700 transition "
+      >
+        <Eye className="h-3 w-3" />
+        View
+      </Button>
+
+      {/* Reject */}
+      {canReject && (
+        <Button
+          onClick={contract.onReject}
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
+        >
+          Reject
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────── ManualPreviewCard ─────────────────────── */
+
 export function ManualPreviewCard({
   form,
   meta,
@@ -155,7 +439,6 @@ export function ManualPreviewCard({
   form: ManualForm;
   meta?: PreviewMeta;
   contract?: ContractCardProps;
-  /** Pass this prop to render Accept Invite / Decline / View Details buttons */
   invite?: InviteCardProps;
   className?: string;
   onViewClick?: () => void;
@@ -217,10 +500,25 @@ export function ManualPreviewCard({
       </div>
 
       {/* center image icon */}
-      <div className="mt-8 flex justify-center [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-6">
-        <Images
-          className="h-[4.625rem] w-[4.625rem] text-[#EDEDED] [@media_(max-width:80rem)_and_(max-height:48.75rem)]:scale-[0.92]"
-        />
+      <div className="mt-6 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5">
+        {heroImage ? (
+          <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-neutral-100">
+            <img
+              src={heroImage}
+              alt={title || "Campaign product"}
+              className="h-full w-full object-cover"
+            />
+            {imageCount > 1 && (
+              <div className="absolute right-3 top-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white">
+                +{imageCount - 1} more
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex justify-center">
+            <Images className="h-[4.625rem] w-[4.625rem] text-[#EDEDED] [@media_(max-width:80rem)_and_(max-height:48.75rem)]:scale-[0.92]" />
+          </div>
+        )}
       </div>
 
       {/* AD badge */}
@@ -270,8 +568,6 @@ export function ManualPreviewCard({
           <SkeletonLine className="w-[58%] h-4" />
         )}
       </div>
-
-      {/* description */}
       <div className="mt-3 space-y-3">
         {hasDesc ? (
           <div className="text-[0.75rem] leading-5 text-neutral-700 line-clamp-2">
@@ -285,6 +581,7 @@ export function ManualPreviewCard({
         )}
       </div>
 
+      {/* countries line */}
       {/* countries line */}
       <div className="mt-3">
         {country.first ? (
@@ -307,25 +604,52 @@ export function ManualPreviewCard({
       <div className="mt-6 h-px w-full bg-neutral-100 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5" />
 
       {/* bottom row: Budget + actions */}
+      {/* bottom row: Budget + actions */}
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
         {/* Budget */}
-        <div className="min-w-0 flex-1">
-          {budget > 0 ? (
-            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
-              ${formatBudget(budget)}
-            </span>
+        {/* Budget */}
+        <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
+          <div className="min-w-0 flex-1">
+            {budget > 0 ? (
+              <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
+                ${formatBudget(budget)}
+              </span>
+            ) : (
+              <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            )}
+          </div>
+
+          {invite ? (
+            <InviteActions invite={invite} />
+          ) : contract ? (
+            <ContractActions contract={contract} />
           ) : (
-            <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            <div className="flex items-center gap-3 shrink-0 cursor-pointer">
+              <Button variant="ghost" className="shadow-none hover:bg-white">
+                <BookmarkSimpleIcon />
+                <span>Save</span>
+              </Button>
+              <Button variant="default" onClick={onViewClick}>
+                View
+              </Button>
+            </div>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3 shrink-0 cursor-pointer">
-          <Button variant="ghost" className="shadow-none ">
-            Save
-          </Button>
-          <Button variant="default">View</Button>
-        </div>
+        {/* Actions: invite > contract > default Save/View */}
+        {invite ? (
+          <InviteActions invite={invite} />
+        ) : contract ? (
+          <ContractActions contract={contract} />
+        ) : (
+          <div className="flex items-center gap-3 shrink-0 cursor-pointer">
+            <Button variant="ghost" className="shadow-none hover:bg-white" >
+              <BookmarkSimpleIcon />
+              <span>Save</span>
+            </Button>
+            <Button variant="default" onClick={onViewClick}>View</Button>
+          </div>
+        )}
       </div>
     </div>
   );
