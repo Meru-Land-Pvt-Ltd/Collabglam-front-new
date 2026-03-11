@@ -635,21 +635,6 @@ export function ManualPreviewCard({
             </div>
           )}
         </div>
-
-        {/* Actions: invite > contract > default Save/View */}
-        {invite ? (
-          <InviteActions invite={invite} />
-        ) : contract ? (
-          <ContractActions contract={contract} />
-        ) : (
-          <div className="flex items-center gap-3 shrink-0 cursor-pointer">
-            <Button variant="ghost" className="shadow-none hover:bg-white" >
-              <BookmarkSimpleIcon />
-              <span>Save</span>
-            </Button>
-            <Button variant="default" onClick={onViewClick}>View</Button>
-          </div>
-        )}
       </div>
     </div>
   );
