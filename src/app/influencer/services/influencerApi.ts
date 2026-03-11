@@ -504,3 +504,9 @@ export const apiGetContractedCampaigns = (influencerId: string, token?: string) 
     }
   );
 };
+
+export const apiGetfetchMediaKit = (influencerId: string) => {
+  return apiPost<any>(`/media-kit/influencer`,{
+    influencerId
+  });
+}

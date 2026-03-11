@@ -484,7 +484,7 @@ export function ManualPreviewCard({
   return (
     <div
       className={[
-        "w-full max-w-[26.25rem] rounded-[1.625rem] bg-white p-5",
+        "w-full max-w-[26.25rem] rounded-[1.625rem] bg-white p-5 border border-[#D6D6D6]",
         "[@media_(max-width:80rem)_and_(max-height:48.75rem)]:max-w-[23.75rem]",
         "[@media_(max-width:80rem)_and_(max-height:48.75rem)]:p-4",
         className,
@@ -648,7 +648,7 @@ export function ManualPreviewCardStack({
   meta?: PreviewMeta;
 }) {
   return (
-    <div className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-contain">
+    <div className="h-full min-h-0 w-full  overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="min-h-full flex items-center justify-center px-6 py-10 [@media_(max-height:50rem)]:items-start [@media_(max-height:50rem)]:py-6">
         <div
           className="
