@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HiAdjustments, HiSearch } from "react-icons/hi";
 import { useRouter } from "next/navigation";
 import { post } from "@/lib/api";
 import { Button } from "@/components/ui/buttonComp";
@@ -11,8 +10,12 @@ import ListCardView, {
   StatusVariant,
 } from "@/components/ui/brand/list";
 
+import CampaignFilter, {
+  DEFAULT_DATE_FILTER,
+  type DateFilterValue,
+} from "../../../../components/ui/brand/CampaignFilter";
+
 type Goal = "Brand Awareness" | "Sales" | "Engagement";
-type CampaignStatus = "open" | "paused";
 type SortBy = "createdAt" | "budget" | "applicantCount";
 type SortOrder = "asc" | "desc";
 
@@ -78,20 +81,6 @@ interface CampaignHistoryItem {
   brandName?: string;
 }
 
-type FilterState = {
-  campaignStatus: "" | CampaignStatus;
-  goal: "" | Goal;
-  minBudget: string;
-  maxBudget: string;
-};
-
-const DEFAULT_FILTERS: FilterState = {
-  campaignStatus: "",
-  goal: "",
-  minBudget: "",
-  maxBudget: "",
-};
-
 const HISTORY_ENDPOINT = "/campaign/history";
 
 function useDebouncedValue<T>(value: T, delay = 400) {
@@ -103,22 +92,6 @@ function useDebouncedValue<T>(value: T, delay = 400) {
   }, [value, delay]);
 
   return debounced;
-}
-
-function countActiveFilters(f: FilterState) {
-  let n = 0;
-  if (f.campaignStatus !== "") n++;
-  if (f.goal !== "") n++;
-  if (f.minBudget || f.maxBudget) n++;
-  return n;
-}
-
-function parseOptionalNumber(v: string) {
-  const s = String(v ?? "").trim();
-  if (!s) return undefined;
-  const n = Number(s);
-  if (!Number.isFinite(n)) return undefined;
-  return n;
 }
 
 function formatCurrency(value: number) {
@@ -174,19 +147,28 @@ function getCampaignName(c: RawCampaign) {
   return c.campaignTitle || c.productOrServiceName || "Untitled Campaign";
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function isDefaultDateFilter(value: DateFilterValue) {
   return (
-    <div>
-      <div className="mb-1 text-xs font-semibold text-gray-700">{label}</div>
-      {children}
-    </div>
+    value.quickFilter === DEFAULT_DATE_FILTER.quickFilter &&
+    value.allDatesOption === DEFAULT_DATE_FILTER.allDatesOption &&
+    value.startDate === DEFAULT_DATE_FILTER.startDate &&
+    value.endDate === DEFAULT_DATE_FILTER.endDate
   );
+}
+
+function getDateFilterPayload(value: DateFilterValue) {
+  const payload: Record<string, any> = {};
+
+  if (isDefaultDateFilter(value)) return payload;
+
+  if (value.quickFilter) payload.quickFilter = value.quickFilter;
+  if (value.allDatesOption && value.allDatesOption !== "all") {
+    payload.allDatesOption = value.allDatesOption;
+  }
+  if (value.startDate) payload.startDate = value.startDate;
+  if (value.endDate) payload.endDate = value.endDate;
+
+  return payload;
 }
 
 export default function BrandCampaignHistoryPage() {
@@ -203,17 +185,16 @@ export default function BrandCampaignHistoryPage() {
   const [sortBy, setSortBy] = useState<SortBy>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [draft, setDraft] = useState<FilterState>(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState<FilterState>(DEFAULT_FILTERS);
+  const [campaignType, setCampaignType] = useState("all");
+  const [creatorStatus, setCreatorStatus] = useState("all");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(DEFAULT_DATE_FILTER);
+  const [aiCreated, setAiCreated] = useState(false);
 
-  const activeFilterCount = useMemo(() => countActiveFilters(applied), [applied]);
   const lastFetchKeyRef = useRef<string>("");
 
   const buildPayload = useCallback(
     (brandId: string) => {
-      const f = applied;
-
       const payload: Record<string, any> = {
         brandId,
         page: 1,
@@ -222,24 +203,28 @@ export default function BrandCampaignHistoryPage() {
         sortBy,
         sortOrder,
         includeDescription: 1,
-        includeDrafts: 1,
-        campaignStatus: f.campaignStatus || undefined,
-        goal: f.goal || undefined,
+
+        campaignType: campaignType !== "all" ? campaignType : undefined,
+        creatorStatus: creatorStatus !== "all" ? creatorStatus : undefined,
+        categoryIds: categoryIds.length ? categoryIds : undefined,
+        aiCreated: aiCreated ? true : undefined,
+
+        ...getDateFilterPayload(dateFilter),
       };
 
-      const minB = parseOptionalNumber(f.minBudget);
-      const maxB = parseOptionalNumber(f.maxBudget);
-
-      if (minB !== undefined) payload.minBudget = minB;
-      if (maxB !== undefined) payload.maxBudget = maxB;
-
       Object.keys(payload).forEach((k) => {
-        if (payload[k] === undefined) delete payload[k];
+        if (
+          payload[k] === undefined ||
+          payload[k] === "" ||
+          (Array.isArray(payload[k]) && payload[k].length === 0)
+        ) {
+          delete payload[k];
+        }
       });
 
       return payload;
     },
-    [applied, debouncedSearch, sortBy, sortOrder]
+    [aiCreated, campaignType, categoryIds, creatorStatus, dateFilter, debouncedSearch, sortBy, sortOrder]
   );
 
   const fetchHistory = useCallback(
@@ -306,20 +291,6 @@ export default function BrandCampaignHistoryPage() {
     };
   }, [fetchHistory]);
 
-  const openFilters = () => {
-    setDraft(applied);
-    setFiltersOpen(true);
-  };
-
-  const applyFilters = () => {
-    setApplied(draft);
-    setFiltersOpen(false);
-  };
-
-  const clearFilters = () => {
-    setDraft(DEFAULT_FILTERS);
-  };
-
   const cardItems = useMemo<ListCardViewItem[]>(
     () =>
       campaigns.map((campaign) => ({
@@ -335,7 +306,7 @@ export default function BrandCampaignHistoryPage() {
           <Button
             variant="outline"
             type="button"
-            onClick={() => router.push(`/brand/campaign/${campaign.id}`)}
+            onClick={() => router.push(`/brand/campaign-history/${campaign.id}`)}
             className="h-10 flex-1 rounded-[0.8rem] border border-[#DBDBDB] bg-white px-4 text-sm font-semibold text-[#2B2B2B] hover:bg-[#F8F8F8] sm:flex-none"
           >
             View Campaign
@@ -349,11 +320,25 @@ export default function BrandCampaignHistoryPage() {
           },
           {
             id: "applicants",
-            label: "Applicants",
-            value: campaign.applicantCount,
+            label: "",
+            value: (
+              <div className="w-full rounded-[0.5rem] px-2 py-2 text-center transition-colors hover:bg-[#EDEDED]">
+                <div className="text-sm text-[#6F6F6F]">Applicants</div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/brand/created-campaign/applied-inf?id=${campaign.id}`);
+                  }}
+                  className="mt-1 w-full cursor-pointer text-center font-semibold text-[#2B2B2B] hover:text-black"
+                >
+                  {campaign.applicantCount}
+                </button>
+              </div>
+            ),
           },
           {
-            id: "goal",
+            id: "campaign",
             label: "Campaign",
             value: campaign.campaignStatus || "—",
           },
@@ -366,10 +351,9 @@ export default function BrandCampaignHistoryPage() {
       })),
     [campaigns, router]
   );
-
   return (
     <div className="min-h-screen p-6">
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-gray-900">Campaign History</h1>
         </div>
@@ -381,160 +365,26 @@ export default function BrandCampaignHistoryPage() {
         )}
       </div>
 
-      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
-          <div className="flex-1">
-            <div className="relative">
-              <HiSearch className="absolute inset-y-0 left-3 my-auto text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Search campaigns..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-xl border border-[#FFA135] bg-white py-2.5 pl-10 pr-4 text-sm focus:border-[#FF7236] focus:outline-none focus:ring-2 focus:ring-[#FF7236]"
-              />
-            </div>
-          </div>
+      <div className="mb-6 rounded-2xl  p-5 ">
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortBy)}
-              className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700"
-            >
-              <option value="createdAt">Sort: Created Date</option>
-              <option value="budget">Sort: Budget</option>
-              <option value="applicantCount">Sort: Applicants</option>
-            </select>
-
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-              className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700"
-            >
-              <option value="desc">Order: Desc</option>
-              <option value="asc">Order: Asc</option>
-            </select>
-
-            <button
-              type="button"
-              onClick={() => (filtersOpen ? setFiltersOpen(false) : openFilters())}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold hover:bg-gray-50"
-            >
-              <HiAdjustments />
-              Filters
-              {activeFilterCount ? (
-                <span className="ml-1 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-gray-900 px-2 text-[11px] font-extrabold text-white">
-                  {activeFilterCount}
-                </span>
-              ) : null}
-            </button>
-          </div>
-        </div>
-
-        <div
-          className={[
-            "mt-4 overflow-hidden transition-all duration-200",
-            filtersOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0",
-          ].join(" ")}
-        >
-          <div className="mt-2 rounded-2xl border border-gray-100 bg-gray-50 p-5">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Field label="Campaign Status">
-                <select
-                  value={draft.campaignStatus}
-                  onChange={(e) =>
-                    setDraft((p) => ({
-                      ...p,
-                      campaignStatus: e.target.value as FilterState["campaignStatus"],
-                    }))
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm"
-                >
-                  <option value="">All</option>
-                  <option value="open">Open</option>
-                  <option value="paused">Paused</option>
-                </select>
-              </Field>
-
-              <Field label="Goals">
-                <select
-                  value={draft.goal}
-                  onChange={(e) =>
-                    setDraft((p) => ({
-                      ...p,
-                      goal: e.target.value as FilterState["goal"],
-                    }))
-                  }
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm"
-                >
-                  <option value="">All</option>
-                  <option value="Brand Awareness">Brand Awareness</option>
-                  <option value="Sales">Sales</option>
-                  <option value="Engagement">Engagement</option>
-                </select>
-              </Field>
-            </div>
-
-            <div className="mt-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Field label="Min Budget">
-                  <input
-                    value={draft.minBudget}
-                    onChange={(e) => setDraft((p) => ({ ...p, minBudget: e.target.value }))}
-                    type="number"
-                    placeholder="e.g. 1000"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm"
-                  />
-                </Field>
-
-                <Field label="Max Budget">
-                  <input
-                    value={draft.maxBudget}
-                    onChange={(e) => setDraft((p) => ({ ...p, maxBudget: e.target.value }))}
-                    type="number"
-                    placeholder="e.g. 5000"
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm"
-                  />
-                </Field>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-xl border border-gray-200 bg-transparent px-4 py-2.5 text-sm font-semibold hover:bg-white"
-              >
-                Clear
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft(applied);
-                  setFiltersOpen(false);
-                }}
-                className="rounded-xl border border-gray-200 bg-transparent px-4 py-2.5 text-sm font-semibold hover:bg-white"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                disabled={updating}
-                onClick={applyFilters}
-                className="ml-auto rounded-xl bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
-        </div>
+        <CampaignFilter
+          campaignType={campaignType}
+          setCampaignType={setCampaignType}
+          creatorStatus={creatorStatus}
+          setCreatorStatus={setCreatorStatus}
+          categoryIds={categoryIds}
+          setCategoryIds={setCategoryIds}
+          dateFilter={dateFilter}
+          setDateFilter={setDateFilter}
+          aiCreated={aiCreated}
+          setAiCreated={setAiCreated}
+          searchInput={search}
+          setSearchInput={setSearch}
+        />
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm animate-pulse">
+        <div className="animate-pulse rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
           <div className="mb-4 h-4 w-1/3 rounded bg-gray-200" />
           <div className="mb-2 h-4 w-full rounded bg-gray-200" />
           <div className="h-4 w-5/6 rounded bg-gray-200" />

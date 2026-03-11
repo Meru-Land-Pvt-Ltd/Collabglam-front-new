@@ -1,19 +1,22 @@
 "use client";
 
 import React, {
+  useCallback,
   useEffect,
   useMemo,
-  useState,
   useRef,
-  useCallback,
+  useState,
 } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import api, { post } from "@/lib/api";
+import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import Swal from "sweetalert2";
+import api, { post } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import InfluencerFilter, { FilterState } from "@/components/ui/brand/InfluencerFilter";
+import InfluencerFilter, {
+  type FilterState,
+} from "@/components/ui/brand/InfluencerFilter";
 import {
   InfluencerTable,
   type InfluencerRow,
@@ -22,41 +25,1576 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipTrigger,
   TooltipProvider,
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
-import dynamic from "next/dynamic";
 import {
-  DotsThree,
-  EnvelopeSimple,
-  Check,
-  PaperPlaneTilt,
-  Eye,
-  MagnifyingGlass,
   CaretLeft,
   CaretRight,
+  ClipboardText,
+  DotsThree,
+  EnvelopeOpen,
+  Eye,
+  EyeSlash,
   FileText,
   Info,
-  ClipboardText,
-  EnvelopeOpen,
+  LockSimple,
+  MagnifyingGlass,
+  PaperPlaneTilt,
+  PenNib,
+  SealCheck,
+  Signature,
+  WarningCircle,
 } from "@phosphor-icons/react";
-/* ===============================================================
-   THEME
-   =============================================================== */
-const GRADIENT_FROM = "#FFA135";
-const GRADIENT_TO = "#FF7236";
+import { FloatingInput } from "@/components/ui/floatingInput";
+import {
+  FloatingMultiSelect,
+  FloatingSelect,
+  SelectItem,
+} from "@/components/ui/selectComp";
+import { LabeledTextarea } from "@/components/ui/textAreaComp";
+import { FloatingDateInput } from "@/components/ui/date";
+import { FloatingTagInput } from "@/components/ui/tagInput";
 
-const MILESTONE_SPLIT_PRESETS = [
-  { value: "100", label: "100% on completion" },
-  { value: "50/50", label: "50% upfront / 50% on completion" },
-  { value: "30/70", label: "30% on signing / 70% on completion" },
-  { value: "40/30/30", label: "40% / 30% / 30%" },
-  { value: "custom", label: "Custom split…" },
-] as const;
+export type Party = "brand" | "influencer";
+export type CampaignType = "fixed_payment" | "milestone_based" | "product_gifting";
+
+type FieldKind = "text" | "textarea" | "date" | "number" | "select" | "radio" | "multi";
+type Option = { value: string; label: string };
+type RequiredRule = boolean | ((values: LaneAContractValues) => boolean);
+
+type ObjectionEntry = {
+  by: Party;
+  text: string;
+  updatedAt?: string;
+};
+
+export type MilestoneRow = {
+  id: string;
+  milestoneName: string;
+  paymentAmount: string;
+  triggerEvent: string;
+  dueDate: string;
+};
+
+export type LaneAContractValues = {
+  campaignType: CampaignType;
+
+  brandLegalName: string;
+  campaignTitleId: string;
+  brandContactNameTitle: string;
+  brandNoticeEmailPhone: string;
+  brandBillingAddress: string;
+  productsServicesCovered: string;
+  territoryTargetCountry: string;
+  effectiveDate: string;
+
+  influencerLegalName: string;
+  postingHandleUrl: string;
+  influencerContactEmailPhone: string;
+  influencerMailingAddress: string;
+
+  platforms: string[];
+  deliverableFormat: string;
+  numberOfDeliverables: string;
+  draftDueDate: string;
+  livePostingDate: string;
+  minimumLivePeriod: string;
+  videoLengthFormatSpecs: string;
+  includedRevisionRounds: string;
+  brandReviewSlaBusinessDays: string;
+  mandatoryTagsLinks: string;
+  additionalRevisionFee: string;
+  preShootScriptRequired: string;
+  scriptDueDate: string;
+  reshootObligation: string;
+
+  fixedTotalCampaignFee: string;
+  paymentStructure: string;
+  customSplitDetails: string;
+  advancePaymentTrigger: string;
+  balancePaymentTrigger: string;
+  fixedProcessorFeesBorneBy: string;
+  fixedKillFee: string;
+  fixedPayoutMethod: string;
+  fixedPayoutAccountId: string;
+  fixedTaxId: string;
+
+  milestoneTotalCampaignFee: string;
+  milestoneProcessorFeesBorneBy: string;
+  milestoneKillFee: string;
+  milestones: MilestoneRow[];
+  milestonePayoutMethod: string;
+  milestonePayoutAccountId: string;
+
+  estimatedRetailValue: string;
+  receiptConfirmationDeadline: string;
+  productDisposition: string;
+  returnWindow: string;
+  returnShippingMethod: string;
+  returnPackagingInstructions: string;
+  itemsToKeepReturn: string;
+  shipToName: string;
+  shippingAddress: string;
+  shippingPhoneNumber: string;
+  deliveryInstructions: string;
+
+  cashCompensationModel: string;
+  cashFeeAmount: string;
+  cashPaymentTrigger: string;
+  cashProcessorFeesBorneBy: string;
+  affiliateCommissionRate: string;
+  affiliateLinkCode: string;
+  commissionReportingPeriod: string;
+  giftingCashPayoutMethod: string;
+  giftingCashPayoutAccountId: string;
+
+  grantedUsageRights: string[];
+  usageRightsDuration: string;
+  editingRights: string;
+  musicAssetResponsibility: string;
+  attributionRequirement: string;
+  rawSourceFileDelivery: string;
+
+  analyticsReportingDeadline: string;
+  requiredAnalyticsItems: string[];
+
+  competitorExclusivity: string;
+  competitorCategoryList: string;
+  exclusivityPeriod: string;
+  creativeBrief: string;
+  prohibitedStatements: string;
+  moralsClause: string;
+  ftcAcknowledgement: string;
+
+  governingLaw: string;
+  disputeResolutionMethod: string;
+  venueSeat: string;
+  attorneysFees: string;
+  noBypassPeriod: string;
+
+  objections: Record<string, ObjectionEntry>;
+};
+
+type FieldDef = {
+  key: keyof LaneAContractValues;
+  label: string;
+  owner: Party;
+  kind: FieldKind;
+  placeholder?: string;
+  tooltip?: string;
+  required?: RequiredRule;
+  options?: Option[];
+  private?: boolean;
+  showWhen?: (values: LaneAContractValues) => boolean;
+  sectionHint?: string;
+};
+
+export type LaneAContractEditorProps = {
+  value: LaneAContractValues;
+  onChange: React.Dispatch<React.SetStateAction<LaneAContractValues>>;
+  viewerParty: Party;
+  onViewerPartyChange: (party: Party) => void;
+  fieldErrors?: Record<string, string>;
+  className?: string;
+};
+
+const BRAND_PRIMARY = "#1A1A1A";
+const BRAND_PRIMARY_HOVER = "#2A2A2A";
+const BRAND_PRIMARY_SOFT = "#F5F5F5";
+const BRAND_PRIMARY_SOFT_ALT = "#EEEEEE";
+const BRAND_PRIMARY_BORDER = "#D4D4D4";
+const BRAND_PRIMARY_RING = "rgba(26,26,26,0.16)";
+const BRAND_PRIMARY_MUTED = "#525252";
+
+const GRADIENT_FROM = BRAND_PRIMARY;
+const GRADIENT_TO = BRAND_PRIMARY_HOVER;
+
+const DEFAULT_TIMEZONE = "America/Los_Angeles";
+const PAGE_SIZE = 10;
+
+const TAG_STYLE_FIELDS = new Set<keyof LaneAContractValues>([
+  "mandatoryTagsLinks",
+  "competitorCategoryList",
+]);
+
+function toControlState(error?: string) {
+  return error ? ("error" as const) : undefined;
+}
+
+function csvToTags(raw: string) {
+  return String(raw || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function tagsToCsv(tags: string[]) {
+  return tags.join(", ");
+}
+
+const PLATFORM_OPTIONS: Option[] = [
+  { value: "Instagram", label: "Instagram" },
+  { value: "TikTok", label: "TikTok" },
+  { value: "YouTube", label: "YouTube" },
+];
+
+const CAMPAIGN_TYPE_OPTIONS: Option[] = [
+  { value: "fixed_payment", label: "Fixed Payment" },
+  { value: "milestone_based", label: "Milestone-Based" },
+  { value: "product_gifting", label: "Product Gifting" },
+];
+
+const DELIVERABLE_FORMAT_OPTIONS: Option[] = [
+  { value: "Dedicated Video", label: "Dedicated Video" },
+  { value: "Integrated Video", label: "Integrated Video" },
+  { value: "Reel", label: "Reel" },
+  { value: "Story Set", label: "Story Set" },
+  { value: "Static Post", label: "Static Post" },
+  { value: "UGC (Raw Files Only)", label: "UGC (Raw Files Only)" },
+  { value: "Live Stream", label: "Live Stream" },
+];
+
+const YES_NO_SCRIPT_OPTIONS: Option[] = [
+  { value: "No", label: "No" },
+  { value: "Yes", label: "Yes — Script Must Be Submitted First" },
+];
+
+const RESHOOT_OPTIONS: Option[] = [
+  { value: "No reshoot required", label: "No reshoot required" },
+  { value: "Only if brief not followed", label: "Only if brief not followed" },
+  { value: "One reshoot included", label: "One reshoot included" },
+];
+
+const PAYMENT_STRUCTURE_OPTIONS: Option[] = [
+  { value: "50% Advance / 50% Balance", label: "50% Advance / 50% Balance" },
+  { value: "100% Upfront", label: "100% Upfront" },
+  { value: "100% on Completion", label: "100% on Completion" },
+  { value: "Custom Split", label: "Custom Split" },
+];
+
+const ADVANCE_PAYMENT_TRIGGER_OPTIONS: Option[] = [
+  { value: "On Signing", label: "On Signing" },
+  { value: "On Product Receipt", label: "On Product Receipt" },
+  { value: "On Receipt of Invoice", label: "On Receipt of Invoice" },
+  { value: "On Draft Submitted", label: "On Draft Submitted" },
+  { value: "Other", label: "Other" },
+];
+
+const BALANCE_PAYMENT_TRIGGER_OPTIONS: Option[] = [
+  { value: "After Final Draft Approved", label: "After Final Draft Approved" },
+  { value: "After Posting Goes Live", label: "After Posting Goes Live" },
+  { value: "After Analytics Delivered", label: "After Analytics Delivered" },
+  { value: "Other", label: "Other" },
+];
+
+const PROCESSOR_FEE_OPTIONS: Option[] = [
+  { value: "Brand", label: "Brand" },
+  { value: "Influencer", label: "Influencer" },
+  { value: "Split Between Both", label: "Split Between Both" },
+];
+
+const PAYOUT_METHOD_OPTIONS: Option[] = [
+  { value: "PayPal", label: "PayPal" },
+  { value: "Bank Transfer / ACH", label: "Bank Transfer / ACH" },
+  { value: "Wise", label: "Wise" },
+  { value: "Payoneer", label: "Payoneer" },
+  { value: "CollabGlam Wallet", label: "CollabGlam Wallet" },
+];
+
+const PRODUCT_DISPOSITION_OPTIONS: Option[] = [
+  { value: "Keep", label: "Keep — Influencer keeps as a gift" },
+  { value: "Return", label: "Return — Returnable loaner" },
+  { value: "Partial", label: "Partial — Keep some, return others" },
+];
+
+const RETURN_SHIPPING_OPTIONS: Option[] = [
+  { value: "Brand Provides Prepaid Label", label: "Brand Provides Prepaid Label" },
+  { value: "Influencer Ships Back", label: "Influencer Ships Back" },
+  { value: "Brand Schedules Courier Pickup", label: "Brand Schedules Courier Pickup" },
+];
+
+const CASH_COMP_OPTIONS: Option[] = [
+  { value: "Gifting Only", label: "Gifting Only — No cash" },
+  { value: "Gifting + Fixed Cash Fee", label: "Gifting + Fixed Cash Fee" },
+  { value: "Gifting + Affiliate / Commission", label: "Gifting + Affiliate / Commission" },
+];
+
+const CASH_TRIGGER_OPTIONS: Option[] = [
+  { value: "On Signing", label: "On Signing" },
+  { value: "On Product Receipt", label: "On Product Receipt" },
+  { value: "After Draft Approved", label: "After Draft Approved" },
+  { value: "After Posting Goes Live", label: "After Posting Goes Live" },
+];
+
+const COMPETITOR_EXCLUSIVITY_OPTIONS: Option[] = [
+  { value: "None", label: "None" },
+  { value: "Applies", label: "Applies" },
+];
+
+const MORALS_OPTIONS: Option[] = [
+  { value: "Not Included", label: "Not Included" },
+  { value: "Included", label: "Included" },
+];
+
+const EDITING_RIGHTS_OPTIONS: Option[] = [
+  { value: "Cropping / Resizing Only", label: "Cropping / Resizing Only" },
+  { value: "Brand May Create Cutdowns / Clips", label: "Brand May Create Cutdowns / Clips" },
+  { value: "No Edits Without Approval", label: "No Edits Without Approval" },
+];
+
+const MUSIC_RESPONSIBILITY_OPTIONS: Option[] = [
+  { value: "Brand Responsible", label: "Brand Responsible" },
+  { value: "Influencer Responsible", label: "Influencer Responsible" },
+  { value: "Custom Arrangement", label: "Custom Arrangement" },
+];
+
+const ATTRIBUTION_OPTIONS: Option[] = [
+  { value: "Credit Required", label: "Credit Required" },
+  { value: "No Attribution Required", label: "No Attribution Required" },
+];
+
+const RAW_FILE_OPTIONS: Option[] = [
+  { value: "Not Included", label: "Not Included" },
+  { value: "Included", label: "Included" },
+];
+
+const DISPUTE_OPTIONS: Option[] = [
+  { value: "State / Federal Courts", label: "State / Federal Courts" },
+  { value: "AAA Arbitration", label: "AAA Arbitration" },
+  { value: "Other", label: "Other" },
+];
+
+const ATTORNEYS_FEES_OPTIONS: Option[] = [
+  { value: "Prevailing Party Recovers Fees", label: "Prevailing Party Recovers Fees" },
+  { value: "Each Party Bears Own Fees", label: "Each Party Bears Own Fees" },
+  { value: "Other", label: "Other" },
+];
+
+const USAGE_RIGHTS_OPTIONS: Option[] = [
+  { value: "Organic Repost on Brand Social", label: "Organic Repost on Brand Social" },
+  { value: "Website / Product Listing", label: "Website / Product Listing" },
+  { value: "Email / CRM / Internal Decks", label: "Email / CRM / Internal Decks" },
+  { value: "Paid Social / Ads / Boosting", label: "Paid Social / Ads / Boosting" },
+  { value: "Whitelisting / Spark Ads", label: "Whitelisting / Spark Ads" },
+  { value: "Perpetual Rights / Buyout", label: "Perpetual Rights / Buyout" },
+];
+
+const ANALYTICS_ITEMS_OPTIONS: Option[] = [
+  { value: "Live Link", label: "Live Link" },
+  { value: "Screenshots", label: "Screenshots" },
+  { value: "Reach / Views", label: "Reach / Views" },
+  { value: "Watch Time", label: "Watch Time" },
+  { value: "Clicks", label: "Clicks" },
+  { value: "Saves / Shares", label: "Saves / Shares" },
+  { value: "Native Insights Access", label: "Native Insights Access" },
+];
+
+const ALL_FIELD_DEFS: FieldDef[] = [
+  {
+    key: "campaignType",
+    label: "Campaign Type",
+    owner: "brand",
+    kind: "radio",
+    options: CAMPAIGN_TYPE_OPTIONS,
+    required: true,
+    tooltip: "Select the payment model for this contract. This controls which payment sections appear.",
+  },
+
+  { key: "brandLegalName", label: "Brand Legal Name", owner: "brand", kind: "text", placeholder: "e.g. Glow Beauty Inc.", tooltip: "Full registered legal name — must match official documents.", required: true },
+  { key: "campaignTitleId", label: "Campaign Title / ID", owner: "brand", kind: "text", placeholder: "e.g. Summer Glow 2025 / CG-0012", tooltip: "Unique campaign name or CollabGlam platform campaign ID.", required: true },
+  { key: "brandContactNameTitle", label: "Brand Contact Name & Title", owner: "brand", kind: "text", placeholder: "e.g. Jane Smith, Marketing Manager", tooltip: "Brand's main person managing this campaign.", required: true },
+  { key: "brandNoticeEmailPhone", label: "Brand Notice Email / Phone", owner: "brand", kind: "text", placeholder: "e.g. campaigns@brand.com", tooltip: "Primary channel for legal notices and campaign updates.", required: true },
+  { key: "brandBillingAddress", label: "Brand Billing Address", owner: "brand", kind: "textarea", placeholder: "e.g. Street, City, State, ZIP", tooltip: "Brand's full billing address for invoicing and records.", required: true },
+  { key: "productsServicesCovered", label: "Products / Services Covered", owner: "brand", kind: "text", placeholder: "e.g. Vitamin C Serum SKU#123", tooltip: "Product names, SKUs, or service descriptions in this campaign.", required: true },
+  { key: "territoryTargetCountry", label: "Territory / Target Country", owner: "brand", kind: "text", placeholder: "e.g. United States, or Worldwide", tooltip: "Geographic region where content will be targeted or distributed.", required: true },
+  { key: "effectiveDate", label: "Effective Date", owner: "brand", kind: "date", tooltip: "Date this agreement takes legal effect.", required: true },
+  { key: "influencerLegalName", label: "Influencer Legal Name / Entity", owner: "influencer", kind: "text", placeholder: "e.g. Jane Doe or Jane Doe LLC", tooltip: "Full legal name or registered business entity name.", required: true },
+  { key: "postingHandleUrl", label: "Posting Handle / Profile URL", owner: "influencer", kind: "text", placeholder: "e.g. @janeglow / instagram.com/j", tooltip: "Main public social handle and profile URL.", required: true },
+  { key: "influencerContactEmailPhone", label: "Influencer Contact Email / Phone", owner: "influencer", kind: "text", placeholder: "e.g. jane@janeglow.com", tooltip: "Primary contact for all campaign communications.", required: true },
+  { key: "influencerMailingAddress", label: "Influencer Mailing Address", owner: "influencer", kind: "textarea", placeholder: "e.g. Street, City, State, ZIP", tooltip: "Address for legal notices.", required: true },
+
+  { key: "platforms", label: "Platform(s)", owner: "brand", kind: "multi", options: PLATFORM_OPTIONS, tooltip: "Social media platform where content will be published.", required: true },
+  { key: "deliverableFormat", label: "Deliverable Format", owner: "brand", kind: "select", options: DELIVERABLE_FORMAT_OPTIONS, tooltip: "Type of content the influencer must create.", required: true },
+  { key: "numberOfDeliverables", label: "Number of Deliverables", owner: "brand", kind: "number", placeholder: "e.g. 2", tooltip: "Total count of content pieces required.", required: true },
+  { key: "draftDueDate", label: "Draft Due Date", owner: "brand", kind: "date", tooltip: "Deadline for the influencer to submit the first draft for review.", required: true },
+  { key: "livePostingDate", label: "Live / Posting Date", owner: "brand", kind: "date", tooltip: "Date content must be published on the influencer's channel.", required: true },
+  { key: "minimumLivePeriod", label: "Minimum Live Period", owner: "brand", kind: "text", placeholder: "e.g. 12 months", tooltip: "How long the content must remain live and undeleted.", required: true },
+  { key: "videoLengthFormatSpecs", label: "Video Length / Format Specs", owner: "brand", kind: "text", placeholder: "e.g. Min 60s, 9:16 vertical", tooltip: "Technical requirements: duration, aspect ratio, resolution." },
+  { key: "includedRevisionRounds", label: "Included Revision Rounds", owner: "brand", kind: "number", placeholder: "e.g. 1", tooltip: "Free revision cycles included per deliverable.", required: true },
+  { key: "brandReviewSlaBusinessDays", label: "Brand Review SLA (Business Days)", owner: "brand", kind: "number", placeholder: "e.g. 3", tooltip: "Days the brand has to review and respond to submitted drafts.", required: true },
+  { key: "mandatoryTagsLinks", label: "Mandatory Tags / Mentions / Links", owner: "brand", kind: "text", placeholder: "e.g. @BrandHandle, #Ad", tooltip: "Required handles, hashtags, UTM links, or discount codes to include in post." },
+  { key: "additionalRevisionFee", label: "Additional Revision Fee", owner: "brand", kind: "text", placeholder: "e.g. $150 per extra round", tooltip: "Fee charged per revision round beyond the included number." },
+  { key: "preShootScriptRequired", label: "Pre-Shoot Script Required?", owner: "brand", kind: "radio", options: YES_NO_SCRIPT_OPTIONS, tooltip: "Must the influencer submit a script for brand approval before shooting?", required: true },
+  { key: "scriptDueDate", label: "Script Due Date", owner: "brand", kind: "date", tooltip: "Deadline for the influencer to submit the pre-approved script.", required: (v) => v.preShootScriptRequired === "Yes", showWhen: (v) => v.preShootScriptRequired === "Yes" },
+  { key: "reshootObligation", label: "Reshoot Obligation?", owner: "brand", kind: "radio", options: RESHOOT_OPTIONS, tooltip: "Under what circumstances must the influencer reshoot content?" },
+
+  { key: "fixedTotalCampaignFee", label: "Total Campaign Fee", owner: "brand", kind: "text", placeholder: "e.g. $2,500 USD", tooltip: "Total fixed amount the brand will pay for all deliverables.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "paymentStructure", label: "Payment Structure", owner: "brand", kind: "select", options: PAYMENT_STRUCTURE_OPTIONS, tooltip: "How payment is split between advance and balance.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "customSplitDetails", label: "Custom Split Details", owner: "brand", kind: "text", placeholder: "e.g. 30% on signing, 70% on post", tooltip: "Exact payment split percentages and triggers.", required: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom Split", showWhen: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom Split" },
+  { key: "advancePaymentTrigger", label: "Advance Payment Trigger", owner: "brand", kind: "select", options: ADVANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the advance payment released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "balancePaymentTrigger", label: "Balance Payment Trigger", owner: "brand", kind: "select", options: BALANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the remaining balance released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. $500 if cancelled after shoot", tooltip: "Compensation owed to influencer if brand cancels without cause.", showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedPayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive payment. PRIVATE — brand cannot see.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedPayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for the influencer's payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedTaxId", label: "Tax ID (if applicable)", owner: "influencer", kind: "text", placeholder: "e.g. EIN / SSN last 4 / VAT", tooltip: "May be required for processing above IRS thresholds. PRIVATE.", private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+
+  { key: "milestoneTotalCampaignFee", label: "Total Campaign Fee (All Milestones)", owner: "brand", kind: "text", placeholder: "e.g. $5,000 USD", tooltip: "Total gross amount across all milestones combined.", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges per milestone?", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. Completed milestones non-refundable", tooltip: "Compensation if brand cancels mid-campaign.", showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestonePayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive each milestone payment. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestonePayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
+
+  { key: "estimatedRetailValue", label: "Estimated Retail Value (ERV)", owner: "brand", kind: "text", placeholder: "e.g. $150 USD", tooltip: "Market retail value of gifted products — may have tax implications for influencer.", showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "receiptConfirmationDeadline", label: "Product Receipt Confirmation Deadline", owner: "brand", kind: "text", placeholder: "e.g. Within 3 business days", tooltip: "How quickly the influencer must confirm receipt after delivery.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "productDisposition", label: "Product Disposition — Keep or Return?", owner: "brand", kind: "radio", options: PRODUCT_DISPOSITION_OPTIONS, tooltip: "Determines whether the influencer keeps or returns the product after campaign.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "returnWindow", label: "Return Window", owner: "brand", kind: "text", placeholder: "e.g. Within 7 days after shoot", tooltip: "Timeframe for the influencer to return the product.", required: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition), showWhen: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition) },
+  { key: "returnShippingMethod", label: "Return Shipping Method", owner: "brand", kind: "select", options: RETURN_SHIPPING_OPTIONS, tooltip: "Who arranges and pays for return shipping?", required: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition), showWhen: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition) },
+  { key: "returnPackagingInstructions", label: "Return Packaging Instructions", owner: "brand", kind: "text", placeholder: "e.g. Use original packaging", tooltip: "Packaging and handling requirements for the return.", showWhen: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition) },
+  { key: "itemsToKeepReturn", label: "Items to Keep / Items to Return", owner: "brand", kind: "text", placeholder: "e.g. Serum (keep), Camera (return)", tooltip: "Specify which items stay vs. which must be returned.", required: (v) => v.campaignType === "product_gifting" && v.productDisposition === "Partial", showWhen: (v) => v.campaignType === "product_gifting" && v.productDisposition === "Partial" },
+  { key: "shipToName", label: "Ship-To Name", owner: "influencer", kind: "text", placeholder: "e.g. Name on the package", tooltip: "Name on the shipping label — can differ from legal name.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "shippingAddress", label: "Shipping Address", owner: "influencer", kind: "textarea", placeholder: "e.g. Street, City, State, ZIP", tooltip: "Full delivery address for the gifted products.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "shippingPhoneNumber", label: "Shipping Phone Number", owner: "influencer", kind: "text", placeholder: "e.g. +1 555 000 0000", tooltip: "Contact number for the carrier in case of delivery issues.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "deliveryInstructions", label: "Delivery Instructions", owner: "influencer", kind: "text", placeholder: "e.g. Leave at door, code 1234", tooltip: "Special instructions to ensure successful delivery.", showWhen: (v) => v.campaignType === "product_gifting" },
+
+  { key: "cashCompensationModel", label: "Cash Compensation Model", owner: "brand", kind: "radio", options: CASH_COMP_OPTIONS, tooltip: "Will the influencer receive cash in addition to gifted products?", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "cashFeeAmount", label: "Cash Fee Amount", owner: "brand", kind: "text", placeholder: "e.g. $500 USD", tooltip: "Fixed cash payment in addition to the gifted product.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "cashPaymentTrigger", label: "Cash Payment Trigger", owner: "brand", kind: "select", options: CASH_TRIGGER_OPTIONS, tooltip: "When does the cash payment get released?", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "cashProcessorFeesBorneBy", label: "Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges for the cash payment?", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "affiliateCommissionRate", label: "Affiliate / Commission Rate", owner: "brand", kind: "text", placeholder: "e.g. 15% of net sales", tooltip: "Commission earned per sale tracked via the influencer's affiliate link.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission" },
+  { key: "affiliateLinkCode", label: "Affiliate Link / Code", owner: "brand", kind: "text", placeholder: "e.g. GLAM15 or bit.ly/link", tooltip: "The unique tracking link or discount code assigned to this influencer.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission" },
+  { key: "commissionReportingPeriod", label: "Commission Reporting Period", owner: "brand", kind: "text", placeholder: "e.g. Monthly", tooltip: "When and how often commission earnings will be reported and paid.", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission" },
+  { key: "giftingCashPayoutMethod", label: "Payout Method", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive the cash payment. PRIVATE.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", private: true, showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "giftingCashPayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for the payout method. PRIVATE.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", private: true, showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+
+  { key: "grantedUsageRights", label: "Granted Usage Rights", owner: "brand", kind: "multi", options: USAGE_RIGHTS_OPTIONS, tooltip: "All ways the brand is permitted to use the influencer's content." },
+  { key: "usageRightsDuration", label: "Usage Rights Duration", owner: "brand", kind: "text", placeholder: "e.g. 12 months / Perpetual", tooltip: "How long the brand may use the content under the selected rights." },
+  { key: "editingRights", label: "Editing Rights", owner: "brand", kind: "select", options: EDITING_RIGHTS_OPTIONS, tooltip: "Modifications the brand may make to the influencer's content." },
+  { key: "musicAssetResponsibility", label: "Music / Stock Asset Responsibility", owner: "brand", kind: "select", options: MUSIC_RESPONSIBILITY_OPTIONS, tooltip: "Who obtains commercial licensing for music or stock assets." },
+  { key: "attributionRequirement", label: "Attribution Requirement", owner: "brand", kind: "select", options: ATTRIBUTION_OPTIONS, tooltip: "Must the influencer be credited when the brand uses the content?" },
+  { key: "rawSourceFileDelivery", label: "Raw / Source File Delivery?", owner: "brand", kind: "radio", options: RAW_FILE_OPTIONS, tooltip: "Must the influencer hand over unedited raw footage or source files?" },
+
+  { key: "analyticsReportingDeadline", label: "Analytics Reporting Deadline", owner: "brand", kind: "text", placeholder: "e.g. 7 days after posting", tooltip: "How many days after posting the influencer must submit performance data." },
+  { key: "requiredAnalyticsItems", label: "Required Analytics Items", owner: "brand", kind: "multi", options: ANALYTICS_ITEMS_OPTIONS, tooltip: "Performance metrics the influencer must report back to the brand." },
+
+  { key: "competitorExclusivity", label: "Competitor Exclusivity / Blackout?", owner: "brand", kind: "radio", options: COMPETITOR_EXCLUSIVITY_OPTIONS, tooltip: "Should the influencer avoid promoting competitor brands during a set period?" },
+  { key: "competitorCategoryList", label: "Competitor / Category List", owner: "brand", kind: "text", placeholder: "e.g. L'Oreal, all skincare", tooltip: "Brands or product categories the influencer must avoid.", required: (v) => v.competitorExclusivity === "Applies", showWhen: (v) => v.competitorExclusivity === "Applies" },
+  { key: "exclusivityPeriod", label: "Exclusivity / Blackout Period", owner: "brand", kind: "text", placeholder: "e.g. 30 days before/after posting", tooltip: "Duration of the exclusivity restriction.", required: (v) => v.competitorExclusivity === "Applies", showWhen: (v) => v.competitorExclusivity === "Applies" },
+  { key: "creativeBrief", label: "Creative Brief / Mandatory Talking Points", owner: "brand", kind: "textarea", placeholder: "e.g. Key messages, approved claims", tooltip: "Exact product claims and key messages the influencer must include." },
+  { key: "prohibitedStatements", label: "Prohibited Statements / Brand Safety", owner: "brand", kind: "textarea", placeholder: "e.g. No competitor mentions…", tooltip: "Content the influencer must never include." },
+  { key: "moralsClause", label: "Optional Morals / Reputation Clause?", owner: "brand", kind: "radio", options: MORALS_OPTIONS, tooltip: "Allows either party to terminate if serious misconduct occurs." },
+  { key: "ftcAcknowledgement", label: "FTC / Disclosure Acknowledgement", owner: "influencer", kind: "textarea", placeholder: "e.g. I will disclose #ad, #sponsored…", tooltip: "Influencer's commitment to FTC and platform disclosure requirements.", required: true },
+
+  { key: "governingLaw", label: "Governing Law (State / Country)", owner: "brand", kind: "text", placeholder: "e.g. Nevada, USA", tooltip: "Jurisdiction whose laws govern this agreement.", required: true },
+  { key: "disputeResolutionMethod", label: "Dispute Resolution Method", owner: "brand", kind: "select", options: DISPUTE_OPTIONS, tooltip: "How disputes will be resolved if they cannot be settled directly.", required: true },
+  { key: "venueSeat", label: "Venue / Seat", owner: "brand", kind: "text", placeholder: "e.g. Las Vegas, Nevada", tooltip: "City and state where disputes will be heard or arbitration seated." },
+  { key: "attorneysFees", label: "Attorneys' Fees", owner: "brand", kind: "select", options: ATTORNEYS_FEES_OPTIONS, tooltip: "Who pays legal fees if a dispute escalates?" },
+  { key: "noBypassPeriod", label: "No-Bypass Period", owner: "brand", kind: "text", placeholder: "e.g. 12 months after campaign end", tooltip: "Period during which neither party may bypass CollabGlam platform fees." },
+];
+
+const FIELD_LABEL_MAP = ALL_FIELD_DEFS.reduce<Record<string, string>>((acc, field) => {
+  acc[String(field.key)] = field.label;
+  return acc;
+}, {});
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+export function createLaneAContractDefaults(): LaneAContractValues {
+  return {
+    campaignType: "fixed_payment",
+
+    brandLegalName: "",
+    campaignTitleId: "",
+    brandContactNameTitle: "",
+    brandNoticeEmailPhone: "",
+    brandBillingAddress: "",
+    productsServicesCovered: "",
+    territoryTargetCountry: "",
+    effectiveDate: "",
+
+    influencerLegalName: "",
+    postingHandleUrl: "",
+    influencerContactEmailPhone: "",
+    influencerMailingAddress: "",
+
+    platforms: [],
+    deliverableFormat: "",
+    numberOfDeliverables: "",
+    draftDueDate: "",
+    livePostingDate: "",
+    minimumLivePeriod: "",
+    videoLengthFormatSpecs: "",
+    includedRevisionRounds: "",
+    brandReviewSlaBusinessDays: "",
+    mandatoryTagsLinks: "",
+    additionalRevisionFee: "",
+    preShootScriptRequired: "No",
+    scriptDueDate: "",
+    reshootObligation: "",
+
+    fixedTotalCampaignFee: "",
+    paymentStructure: "",
+    customSplitDetails: "",
+    advancePaymentTrigger: "",
+    balancePaymentTrigger: "",
+    fixedProcessorFeesBorneBy: "",
+    fixedKillFee: "",
+    fixedPayoutMethod: "",
+    fixedPayoutAccountId: "",
+    fixedTaxId: "",
+
+    milestoneTotalCampaignFee: "",
+    milestoneProcessorFeesBorneBy: "",
+    milestoneKillFee: "",
+    milestones: [createMilestoneRow()],
+    milestonePayoutMethod: "",
+    milestonePayoutAccountId: "",
+
+    estimatedRetailValue: "",
+    receiptConfirmationDeadline: "",
+    productDisposition: "Keep",
+    returnWindow: "",
+    returnShippingMethod: "",
+    returnPackagingInstructions: "",
+    itemsToKeepReturn: "",
+    shipToName: "",
+    shippingAddress: "",
+    shippingPhoneNumber: "",
+    deliveryInstructions: "",
+
+    cashCompensationModel: "Gifting Only",
+    cashFeeAmount: "",
+    cashPaymentTrigger: "",
+    cashProcessorFeesBorneBy: "",
+    affiliateCommissionRate: "",
+    affiliateLinkCode: "",
+    commissionReportingPeriod: "",
+    giftingCashPayoutMethod: "",
+    giftingCashPayoutAccountId: "",
+
+    grantedUsageRights: [],
+    usageRightsDuration: "",
+    editingRights: "",
+    musicAssetResponsibility: "",
+    attributionRequirement: "",
+    rawSourceFileDelivery: "",
+
+    analyticsReportingDeadline: "",
+    requiredAnalyticsItems: [],
+
+    competitorExclusivity: "None",
+    competitorCategoryList: "",
+    exclusivityPeriod: "",
+    creativeBrief: "",
+    prohibitedStatements: "",
+    moralsClause: "Not Included",
+    ftcAcknowledgement: "",
+
+    governingLaw: "",
+    disputeResolutionMethod: "",
+    venueSeat: "",
+    attorneysFees: "",
+    noBypassPeriod: "",
+
+    objections: {},
+  };
+}
+
+export function createMilestoneRow(): MilestoneRow {
+  return {
+    id: uid(),
+    milestoneName: "",
+    paymentAmount: "",
+    triggerEvent: "",
+    dueDate: "",
+  };
+}
+
+function isVisible(field: FieldDef, values: LaneAContractValues) {
+  return field.showWhen ? field.showWhen(values) : true;
+}
+
+function isRequired(field: FieldDef, values: LaneAContractValues) {
+  if (typeof field.required === "function") return field.required(values);
+  return Boolean(field.required);
+}
+
+function isFilled(value: unknown) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
+  return value !== undefined && value !== null && value !== "";
+}
+
+function fieldState(field: FieldDef, values: LaneAContractValues, viewerParty: Party) {
+  if (!isVisible(field, values)) return "hidden" as const;
+  if (field.private && field.owner !== viewerParty) return "hidden" as const;
+  if (field.owner === viewerParty) return field.private ? ("private" as const) : ("editable" as const);
+  return isFilled(values[field.key]) ? ("locked" as const) : ("waiting" as const);
+}
+
+function waitingText(owner: Party) {
+  return owner === "brand" ? "Waiting for Brand to fill this…" : "Waiting for Influencer to fill this…";
+}
+
+function getMilestoneCellValue(row: MilestoneRow, key: keyof Omit<MilestoneRow, "id">) {
+  return row[key];
+}
+
+function milestoneCellLabel(key: keyof Omit<MilestoneRow, "id">) {
+  switch (key) {
+    case "milestoneName":
+      return "Milestone Name";
+    case "paymentAmount":
+      return "Payment Amount";
+    case "triggerEvent":
+      return "Trigger / Completion Event";
+    case "dueDate":
+      return "Due Date";
+    default:
+      return key;
+  }
+}
+
+export function validateLaneAContract(values: LaneAContractValues, scope: Party): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+  ALL_FIELD_DEFS.forEach((field) => {
+    if (field.owner !== scope) return;
+    if (!isVisible(field, values)) return;
+    if (!isRequired(field, values)) return;
+    if (!isFilled(values[field.key])) {
+      errors[String(field.key)] = `${field.label} is required.`;
+    }
+  });
+
+  if (scope === "brand" && values.campaignType === "milestone_based") {
+    if (!values.milestones.length) {
+      errors.milestones = "At least one milestone row is required.";
+    }
+    values.milestones.forEach((row, index) => {
+      if (!row.milestoneName.trim()) errors[`ms_${row.id}_milestoneName`] = `Milestone ${index + 1}: name is required.`;
+      if (!row.paymentAmount.trim()) errors[`ms_${row.id}_paymentAmount`] = `Milestone ${index + 1}: payment amount is required.`;
+      if (!row.triggerEvent.trim()) errors[`ms_${row.id}_triggerEvent`] = `Milestone ${index + 1}: trigger event is required.`;
+      if (!row.dueDate.trim()) errors[`ms_${row.id}_dueDate`] = `Milestone ${index + 1}: due date is required.`;
+    });
+  }
+
+  return errors;
+}
+
+function sectionFields(keys: Array<keyof LaneAContractValues>) {
+  return ALL_FIELD_DEFS.filter((field) => keys.includes(field.key));
+}
+
+const identityFields = sectionFields([
+  "brandLegalName",
+  "campaignTitleId",
+  "brandContactNameTitle",
+  "brandNoticeEmailPhone",
+  "brandBillingAddress",
+  "productsServicesCovered",
+  "territoryTargetCountry",
+  "effectiveDate",
+  "influencerLegalName",
+  "postingHandleUrl",
+  "influencerContactEmailPhone",
+  "influencerMailingAddress",
+]);
+
+const deliverableFields = sectionFields([
+  "platforms",
+  "deliverableFormat",
+  "numberOfDeliverables",
+  "draftDueDate",
+  "livePostingDate",
+  "minimumLivePeriod",
+  "videoLengthFormatSpecs",
+  "includedRevisionRounds",
+  "brandReviewSlaBusinessDays",
+  "mandatoryTagsLinks",
+  "additionalRevisionFee",
+  "preShootScriptRequired",
+  "scriptDueDate",
+  "reshootObligation",
+]);
+
+const fixedPaymentFields = sectionFields([
+  "fixedTotalCampaignFee",
+  "paymentStructure",
+  "customSplitDetails",
+  "advancePaymentTrigger",
+  "balancePaymentTrigger",
+  "fixedProcessorFeesBorneBy",
+  "fixedKillFee",
+  "fixedPayoutMethod",
+  "fixedPayoutAccountId",
+  "fixedTaxId",
+]);
+
+const milestoneHeaderFields = sectionFields([
+  "milestoneTotalCampaignFee",
+  "milestoneProcessorFeesBorneBy",
+  "milestoneKillFee",
+  "milestonePayoutMethod",
+  "milestonePayoutAccountId",
+]);
+
+const giftingFields = sectionFields([
+  "estimatedRetailValue",
+  "receiptConfirmationDeadline",
+  "productDisposition",
+  "returnWindow",
+  "returnShippingMethod",
+  "returnPackagingInstructions",
+  "itemsToKeepReturn",
+  "shipToName",
+  "shippingAddress",
+  "shippingPhoneNumber",
+  "deliveryInstructions",
+]);
+
+const giftingCashFields = sectionFields([
+  "cashCompensationModel",
+  "cashFeeAmount",
+  "cashPaymentTrigger",
+  "cashProcessorFeesBorneBy",
+  "affiliateCommissionRate",
+  "affiliateLinkCode",
+  "commissionReportingPeriod",
+  "giftingCashPayoutMethod",
+  "giftingCashPayoutAccountId",
+]);
+
+const usageFields = sectionFields([
+  "grantedUsageRights",
+  "usageRightsDuration",
+  "editingRights",
+  "musicAssetResponsibility",
+  "attributionRequirement",
+  "rawSourceFileDelivery",
+]);
+
+const reportingFields = sectionFields([
+  "analyticsReportingDeadline",
+  "requiredAnalyticsItems",
+]);
+
+const complianceFields = sectionFields([
+  "competitorExclusivity",
+  "competitorCategoryList",
+  "exclusivityPeriod",
+  "creativeBrief",
+  "prohibitedStatements",
+  "moralsClause",
+  "ftcAcknowledgement",
+]);
+
+const governingFields = sectionFields([
+  "governingLaw",
+  "disputeResolutionMethod",
+  "venueSeat",
+  "attorneysFees",
+  "noBypassPeriod",
+]);
+
+export function LaneAContractEditor({
+  value,
+  onChange,
+  viewerParty,
+  onViewerPartyChange,
+  fieldErrors = {},
+  className = "",
+}: LaneAContractEditorProps) {
+  const [openObjectionKey, setOpenObjectionKey] = useState<string | null>(null);
+
+  const pendingObjections = useMemo(() => {
+    const entries = Object.entries(value.objections || {});
+    return entries.filter(([, entry]) => Boolean(entry?.text?.trim()));
+  }, [value.objections]);
+
+  const setField = <K extends keyof LaneAContractValues>(key: K, next: LaneAContractValues[K]) => {
+    onChange((prev) => {
+      const updated: LaneAContractValues = { ...prev, [key]: next };
+
+      if (key === "campaignType") {
+        if (next !== "fixed_payment") {
+          updated.fixedTotalCampaignFee = "";
+          updated.paymentStructure = "";
+          updated.customSplitDetails = "";
+          updated.advancePaymentTrigger = "";
+          updated.balancePaymentTrigger = "";
+          updated.fixedProcessorFeesBorneBy = "";
+          updated.fixedKillFee = "";
+          updated.fixedPayoutMethod = "";
+          updated.fixedPayoutAccountId = "";
+          updated.fixedTaxId = "";
+        }
+        if (next !== "milestone_based") {
+          updated.milestoneTotalCampaignFee = "";
+          updated.milestoneProcessorFeesBorneBy = "";
+          updated.milestoneKillFee = "";
+          updated.milestones = [createMilestoneRow()];
+          updated.milestonePayoutMethod = "";
+          updated.milestonePayoutAccountId = "";
+        }
+        if (next !== "product_gifting") {
+          updated.estimatedRetailValue = "";
+          updated.receiptConfirmationDeadline = "";
+          updated.productDisposition = "Keep";
+          updated.returnWindow = "";
+          updated.returnShippingMethod = "";
+          updated.returnPackagingInstructions = "";
+          updated.itemsToKeepReturn = "";
+          updated.shipToName = "";
+          updated.shippingAddress = "";
+          updated.shippingPhoneNumber = "";
+          updated.deliveryInstructions = "";
+          updated.cashCompensationModel = "Gifting Only";
+          updated.cashFeeAmount = "";
+          updated.cashPaymentTrigger = "";
+          updated.cashProcessorFeesBorneBy = "";
+          updated.affiliateCommissionRate = "";
+          updated.affiliateLinkCode = "";
+          updated.commissionReportingPeriod = "";
+          updated.giftingCashPayoutMethod = "";
+          updated.giftingCashPayoutAccountId = "";
+        }
+      }
+
+      if (key === "preShootScriptRequired" && next !== "Yes") {
+        updated.scriptDueDate = "";
+      }
+
+      if (key === "paymentStructure" && next !== "Custom Split") {
+        updated.customSplitDetails = "";
+      }
+
+      if (key === "productDisposition") {
+        if (next === "Keep") {
+          updated.returnWindow = "";
+          updated.returnShippingMethod = "";
+          updated.returnPackagingInstructions = "";
+          updated.itemsToKeepReturn = "";
+        }
+        if (next !== "Partial") {
+          updated.itemsToKeepReturn = "";
+        }
+      }
+
+      if (key === "cashCompensationModel") {
+        if (next !== "Gifting + Fixed Cash Fee") {
+          updated.cashFeeAmount = "";
+          updated.cashPaymentTrigger = "";
+          updated.cashProcessorFeesBorneBy = "";
+          updated.giftingCashPayoutMethod = "";
+          updated.giftingCashPayoutAccountId = "";
+        }
+        if (next !== "Gifting + Affiliate / Commission") {
+          updated.affiliateCommissionRate = "";
+          updated.affiliateLinkCode = "";
+          updated.commissionReportingPeriod = "";
+        }
+      }
+
+      if (key === "competitorExclusivity" && next !== "Applies") {
+        updated.competitorCategoryList = "";
+        updated.exclusivityPeriod = "";
+      }
+
+      return updated;
+    });
+  };
+
+  const updateObjection = (fieldKey: string, text: string) => {
+    onChange((prev) => {
+      const next = { ...prev, objections: { ...prev.objections } };
+      if (!text.trim()) {
+        delete next.objections[fieldKey];
+      } else {
+        next.objections[fieldKey] = {
+          by: viewerParty,
+          text,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return next;
+    });
+  };
+
+  const renderField = (field: FieldDef) => {
+    const state = fieldState(field, value, viewerParty);
+    if (state === "hidden") return null;
+
+    const objection = value.objections[String(field.key)];
+    const canEditObjection = state === "locked" && (!objection || objection.by === viewerParty);
+    const key = String(field.key);
+    const editableLike = state === "editable" || state === "private";
+
+    return (
+      <FieldShell
+        key={key}
+        state={state}
+        label={field.label}
+        tooltip={field.tooltip}
+        required={isRequired(field, value)}
+        owner={field.owner}
+        error={fieldErrors[key]}
+        objection={objection}
+        canEditObjection={canEditObjection}
+        openObjection={openObjectionKey === key}
+        onToggleObjection={() => setOpenObjectionKey((prev) => (prev === key ? null : key))}
+        onSaveObjection={(text) => {
+          updateObjection(key, text);
+          setOpenObjectionKey(null);
+        }}
+        onClearObjection={() => {
+          updateObjection(key, "");
+          setOpenObjectionKey(null);
+        }}
+        showOuterLabel={!editableLike}
+        showOuterError={!editableLike}
+      >
+        {editableLike ? (
+          <EditableControl
+            field={field}
+            value={value[field.key]}
+            error={fieldErrors[key]}
+            onChange={(next) => setField(field.key, next as never)}
+          />
+        ) : state === "waiting" ? (
+          <WaitingState owner={field.owner} />
+        ) : (
+          <LockedValue field={field} value={value[field.key]} />
+        )}
+      </FieldShell>
+    );
+  };
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className={`space-y-5 ${className}`}>
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Lane A Contract Editor</div>
+              <div className="text-sm text-gray-500">Brand and Influencer preview the same contract with role-specific field states.</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="inline-flex rounded-full border border-gray-200 bg-gray-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => onViewerPartyChange("brand")}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium ${viewerParty === "brand" ? "bg-black text-white" : "text-gray-600"}`}
+                >
+                  Brand View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewerPartyChange("influencer")}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium ${viewerParty === "influencer" ? "bg-black text-white" : "text-gray-600"}`}
+                >
+                  Influencer View
+                </button>
+              </div>
+              <Badge variant="secondary" className="rounded-full bg-rose-50 text-rose-700">
+                ✋ {pendingObjections.length} Objections Pending
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {pendingObjections.length > 0 ? (
+          <ObjectionSummary viewerParty={viewerParty} objections={pendingObjections} />
+        ) : null}
+
+        <SectionCard title="Campaign Type">
+          {renderField(ALL_FIELD_DEFS.find((field) => field.key === "campaignType")!)}
+        </SectionCard>
+
+        <SectionCard title="Parties & Campaign Identity" description="Present in all three campaign types.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {identityFields.map(renderField)}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Deliverables & Timeline" description="Brand-owned section visible in every campaign type.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {deliverableFields.map(renderField)}
+          </div>
+        </SectionCard>
+
+        {value.campaignType === "fixed_payment" ? (
+          <SectionCard title="Fixed Payment Terms" description="Brand fields plus influencer private payout fields.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {fixedPaymentFields.map(renderField)}
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {value.campaignType === "milestone_based" ? (
+          <SectionCard title="Milestone Payment Schedule" description="Brand defines milestone rows. Each cell can be objected to independently.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{milestoneHeaderFields.map(renderField)}</div>
+            <MilestonesEditor
+              value={value}
+              onChange={onChange}
+              viewerParty={viewerParty}
+              fieldErrors={fieldErrors}
+              openObjectionKey={openObjectionKey}
+              setOpenObjectionKey={setOpenObjectionKey}
+              updateObjection={updateObjection}
+            />
+          </SectionCard>
+        ) : null}
+
+        {value.campaignType === "product_gifting" ? (
+          <SectionCard title="Product Gifting & Shipping" description="Brand defines gifting terms. Influencer fills ship-to details.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{giftingFields.map(renderField)}</div>
+          </SectionCard>
+        ) : null}
+
+        {value.campaignType === "product_gifting" ? (
+          <SectionCard title="Additional Cash Compensation" description="Shown only for product gifting campaigns.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{giftingCashFields.map(renderField)}</div>
+          </SectionCard>
+        ) : null}
+
+        <SectionCard title="Usage Rights & Content Ownership" description="Brand-owned permissions and usage scope.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{usageFields.map(renderField)}</div>
+        </SectionCard>
+
+        <SectionCard title="Reporting & Analytics" description="Brand-defined post-campaign reporting requirements.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{reportingFields.map(renderField)}</div>
+        </SectionCard>
+
+        <SectionCard title="Exclusivity, Compliance & Claims" description="Shared visibility. FTC acknowledgement belongs to the influencer.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{complianceFields.map(renderField)}</div>
+        </SectionCard>
+
+        <SectionCard title="Governing Law & Dispute Resolution" description="Brand-owned legal terms shown in all campaign types.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{governingFields.map(renderField)}</div>
+        </SectionCard>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function MilestonesEditor({
+  value,
+  onChange,
+  viewerParty,
+  fieldErrors,
+  openObjectionKey,
+  setOpenObjectionKey,
+  updateObjection,
+}: {
+  value: LaneAContractValues;
+  onChange: React.Dispatch<React.SetStateAction<LaneAContractValues>>;
+  viewerParty: Party;
+  fieldErrors: Record<string, string>;
+  openObjectionKey: string | null;
+  setOpenObjectionKey: React.Dispatch<React.SetStateAction<string | null>>;
+  updateObjection: (fieldKey: string, text: string) => void;
+}) {
+  const isOwner = viewerParty === "brand";
+
+  const addMilestone = () => {
+    if (!isOwner) return;
+    onChange((prev) => ({ ...prev, milestones: [...prev.milestones, createMilestoneRow()] }));
+  };
+
+  const removeMilestone = (id: string) => {
+    if (!isOwner) return;
+    onChange((prev) => ({
+      ...prev,
+      milestones: prev.milestones.length > 1 ? prev.milestones.filter((row) => row.id !== id) : prev.milestones,
+    }));
+  };
+
+  const updateCell = (id: string, key: keyof Omit<MilestoneRow, "id">, next: string) => {
+    onChange((prev) => ({
+      ...prev,
+      milestones: prev.milestones.map((row) => (row.id === id ? { ...row, [key]: next } : row)),
+    }));
+  };
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Milestone Rows</div>
+          <div className="text-sm text-gray-500">Minimum one milestone is always present. Only Brand can add or remove rows.</div>
+        </div>
+        {isOwner ? (
+          <Button type="button" variant="outline" className="rounded-full" onClick={addMilestone}>
+            + Add Milestone
+          </Button>
+        ) : null}
+      </div>
+
+      {fieldErrors.milestones ? <div className="text-sm text-red-600">{fieldErrors.milestones}</div> : null}
+
+      {value.milestones.map((row, index) => (
+        <div key={row.id} className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-gray-900">Milestone {index + 1}</div>
+            {isOwner && value.milestones.length > 1 ? (
+              <button type="button" className="text-sm text-red-600" onClick={() => removeMilestone(row.id)}>
+                Remove
+              </button>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {(["milestoneName", "paymentAmount", "triggerEvent", "dueDate"] as const).map((key) => {
+              const fieldKey = `ms_${row.id}_${key}`;
+              const val = getMilestoneCellValue(row, key);
+              const locked = !isOwner && Boolean(String(val).trim());
+              const waiting = !isOwner && !String(val).trim();
+              const state = isOwner ? "editable" : waiting ? "waiting" : "locked";
+              const objection = value.objections[fieldKey];
+              const canEditObjection = state === "locked" && (!objection || objection.by === viewerParty);
+
+              return (
+                <FieldShell
+                  key={fieldKey}
+                  state={state as "editable" | "waiting" | "locked"}
+                  label={milestoneCellLabel(key)}
+                  required
+                  owner="brand"
+                  error={fieldErrors[fieldKey]}
+                  objection={objection}
+                  showOuterLabel={!isOwner}
+                  showOuterError={!isOwner}
+                  canEditObjection={canEditObjection}
+                  openObjection={openObjectionKey === fieldKey}
+                  onToggleObjection={() => setOpenObjectionKey((prev) => (prev === fieldKey ? null : fieldKey))}
+                  onSaveObjection={(text) => {
+                    updateObjection(fieldKey, text);
+                    setOpenObjectionKey(null);
+                  }}
+                  onClearObjection={() => {
+                    updateObjection(fieldKey, "");
+                    setOpenObjectionKey(null);
+                  }}
+                >
+                  {isOwner ? (
+                    key === "dueDate" ? (
+                      <input
+                        type="date"
+                        value={row.dueDate}
+                        onChange={(e) => updateCell(row.id, "dueDate", e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#1A1A1A] focus:ring-2 focus:ring-[#1A1A1A]/10"
+                      />
+                    ) : key === "triggerEvent" ? (
+                      <textarea
+                        rows={3}
+                        value={row.triggerEvent}
+                        onChange={(e) => updateCell(row.id, "triggerEvent", e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#1A1A1A] focus:ring-2 focus:ring-[#1A1A1A]/10"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={String(val)}
+                        onChange={(e) => updateCell(row.id, key, e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#1A1A1A] focus:ring-2 focus:ring-[#1A1A1A]/10"
+                      />
+                    )
+                  ) : state === "waiting" ? (
+                    <WaitingState owner="brand" />
+                  ) : (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-gray-800">{val || "—"}</div>
+                  )}
+                </FieldShell>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EditableControl({
+  field,
+  value,
+  error,
+  onChange,
+}: {
+  field: FieldDef;
+  value: LaneAContractValues[keyof LaneAContractValues];
+  error?: string;
+  onChange: (next: unknown) => void;
+}) {
+  if (TAG_STYLE_FIELDS.has(field.key)) {
+    return (
+      <FloatingTagInput
+        label={field.label}
+        value={csvToTags(String(value || ""))}
+        options={[]}
+        onValueChange={(next) => onChange(tagsToCsv(next))}
+        dropdownDirection="up"
+      />
+    );
+  }
+
+  if (field.kind === "textarea") {
+    return (
+      <LabeledTextarea
+        label={field.label}
+        value={String(value || "")}
+        placeholder={field.placeholder}
+        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value)}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  if (field.kind === "date") {
+    return (
+      <FloatingDateInput
+        label={field.label}
+        type="date"
+        value={String(value || "")}
+        onValueChange={(next) => onChange(next)}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  if (field.kind === "number") {
+    return (
+      <FloatingInput
+        label={field.label}
+        type="number"
+        value={String(value || "")}
+        onValueChange={(next) => onChange(next)}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  if (field.kind === "select" || field.kind === "radio") {
+    return (
+      <FloatingSelect
+        label={field.label}
+        value={String(value || "")}
+        searchable={false}
+        onValueChange={(next) => onChange(next)}
+        state={toControlState(error)}
+        errorText={error}
+      >
+        {(field.options || []).map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </FloatingSelect>
+    );
+  }
+
+  if (field.kind === "multi") {
+    const listValue = (Array.isArray(value) ? value : []) as string[];
+
+    return (
+      <FloatingMultiSelect
+        label={field.label}
+        value={listValue}
+        options={field.options || []}
+        onValueChange={(next) => onChange(next)}
+        includeAll={false}
+        searchable={false}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  return (
+    <FloatingInput
+      label={field.label}
+      value={String(value || "")}
+      onValueChange={(next) => onChange(next)}
+      state={toControlState(error)}
+      errorText={error}
+    />
+  );
+}
+
+function LockedValue({
+  field,
+  value,
+}: {
+  field: FieldDef;
+  value: LaneAContractValues[keyof LaneAContractValues];
+}) {
+  if (Array.isArray(value)) {
+    const listValue = value as string[];
+
+    if (!listValue.length) {
+      return (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-gray-700">
+          —
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+        {listValue.map((item: string) => (
+          <span key={item} className="rounded-full bg-white px-2.5 py-1 text-xs text-gray-700">
+            {item}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-gray-800">
+      {String(value || "—")}
+    </div>
+  );
+}
+
+function WaitingState({ owner }: { owner: Party }) {
+  return (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm italic text-gray-500">
+      {waitingText(owner)}
+    </div>
+  );
+}
+
+function FieldShell({
+  label,
+  tooltip,
+  required,
+  owner,
+  state,
+  children,
+  error,
+  objection,
+  canEditObjection,
+  openObjection,
+  onToggleObjection,
+  onSaveObjection,
+  onClearObjection,
+  showOuterLabel = true,
+  showOuterError = true,
+}: {
+  label: string;
+  tooltip?: string;
+  required?: boolean;
+  owner: Party;
+  state: "editable" | "locked" | "waiting" | "private";
+  children: React.ReactNode;
+  error?: string;
+  objection?: ObjectionEntry;
+  canEditObjection?: boolean;
+  openObjection?: boolean;
+  onToggleObjection?: () => void;
+  onSaveObjection?: (text: string) => void;
+  onClearObjection?: () => void;
+  showOuterLabel?: boolean;
+  showOuterError?: boolean;
+}) {
+  const [draftObjection, setDraftObjection] = useState(objection?.text || "");
+
+  React.useEffect(() => {
+    setDraftObjection(objection?.text || "");
+  }, [objection?.text]);
+
+  const badge =
+    state === "private" ? (
+      <Badge className="rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
+        <EyeSlash className="mr-1 h-3.5 w-3.5" /> Private
+      </Badge>
+    ) : state === "locked" ? (
+      <Badge className="rounded-full bg-amber-100 text-amber-700 hover:bg-amber-100">
+        <LockSimple className="mr-1 h-3.5 w-3.5" /> Locked
+      </Badge>
+    ) : null;
+
+  return (
+    <div className="space-y-2">
+      {showOuterLabel ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1 text-sm font-medium text-gray-800">
+            <span>{label}</span>
+            {required ? <span className="text-red-500">*</span> : null}
+            {tooltip ? <InfoPill text={tooltip} /> : null}
+          </div>
+          {badge}
+          <span className="text-xs text-gray-400">Owner: {owner === "brand" ? "Brand" : "Influencer"}</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {badge}
+          <span className="text-xs text-gray-400">Owner: {owner === "brand" ? "Brand" : "Influencer"}</span>
+          {tooltip ? <InfoPill text={tooltip} /> : null}
+        </div>
+      )}
+
+      <div>{children}</div>
+
+      {state === "locked" && onToggleObjection ? (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleObjection}
+            className="text-sm font-medium text-amber-700 hover:text-amber-800"
+          >
+            {objection && canEditObjection ? "✎ Edit Objection" : "+ Raise Objection"}
+          </button>
+        </div>
+      ) : null}
+
+      {openObjection && canEditObjection ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <div className="mb-2 text-sm font-medium text-rose-800">✋ Your Objection / Requested Change</div>
+          <textarea
+            rows={2}
+            value={draftObjection}
+            onChange={(e) => setDraftObjection(e.target.value)}
+            placeholder={`I'd prefer ${label} to be changed to…`}
+            className="w-full rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm outline-none focus:border-rose-400"
+          />
+          <div className="mt-3 flex items-center gap-2">
+            <Button type="button" size="sm" className="h-8 rounded-full" onClick={() => onSaveObjection?.(draftObjection)}>
+              Save
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-8 rounded-full" onClick={onClearObjection}>
+              Clear
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {objection ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-800">
+          <div className="mb-1 font-medium">Objection noted</div>
+          <div>{objection.text}</div>
+        </div>
+      ) : null}
+
+      {showOuterError && error ? (
+        <div className="inline-flex items-center gap-1 text-xs text-red-600">
+          <WarningCircle className="h-3.5 w-3.5" /> {error}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 border-b border-gray-100 pb-3">
+        <div className="text-base font-semibold text-gray-900">{title}</div>
+        {description ? <div className="mt-1 text-sm text-gray-500">{description}</div> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function InfoPill({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="inline-flex items-center text-gray-400 hover:text-gray-600" aria-label="Field help">
+          <Info className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-sm leading-6">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function MultiChipField({
+  value,
+  options,
+  onChange,
+}: {
+  value: string[];
+  options: Option[];
+  onChange: (next: string[]) => void;
+}) {
+  const toggle = (entry: string) => {
+    if (value.includes(entry)) onChange(value.filter((item) => item !== entry));
+    else onChange([...value, entry]);
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => {
+        const active = value.includes(option.value);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => toggle(option.value)}
+            className={`rounded-full border px-3 py-2 text-sm ${active ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ObjectionSummary({
+  viewerParty,
+  objections,
+}: {
+  viewerParty: Party;
+  objections: Array<[string, ObjectionEntry]>;
+}) {
+  return (
+    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-rose-800">
+        ✋ Objections Summary
+      </div>
+      <div className="space-y-3">
+        {objections.map(([key, entry]) => {
+          const label = key.startsWith("ms_")
+            ? `Milestone — ${milestoneSummaryLabel(key)}`
+            : FIELD_LABEL_MAP[key] || key;
+          const direction = entry.by === viewerParty ? "Raised by you" : `Raised by ${entry.by === "brand" ? "Brand" : "Influencer"}`;
+          return (
+            <div key={key} className="rounded-xl border border-rose-200 bg-white px-3 py-3">
+              <div className="mb-1 text-sm font-medium text-gray-900">{label}</div>
+              <div className="mb-1 text-xs uppercase tracking-wide text-rose-700">{direction}</div>
+              <div className="text-sm text-gray-700">{entry.text}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function milestoneSummaryLabel(fieldKey: string) {
+  const key = fieldKey.split("_").slice(2).join("_") as keyof Omit<MilestoneRow, "id">;
+  return milestoneCellLabel(key);
+}
 
 const ReactSelect = dynamic(() => import("react-select"), { ssr: false });
 
-// ✅ Canonical contract statuses (match backend constants/contract.js)
 const CONTRACT_STATUS = {
   DRAFT: "DRAFT",
   BRAND_SENT_DRAFT: "BRAND_SENT_DRAFT",
@@ -71,158 +1609,129 @@ const CONTRACT_STATUS = {
   SUPERSEDED: "SUPERSEDED",
 } as const;
 
-export type ContractStatus =
-  (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
+type ContractStatus = (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
+type PanelMode = "send" | "edit";
+type FormErrors = Record<string, string>;
+type CurrencyOption = { value: string; label: string; meta?: any };
+type TzOption = { value: string; label: string; meta?: any };
 
-const buildReactSelectStyles = (opts?: { hasError?: boolean }) => {
-  const hasError = opts?.hasError;
-  return {
-    control: (base: any, state: any) => ({
-      ...base,
-      minHeight: 44,
-      borderRadius: 8,
-      borderWidth: 2,
-      borderColor: hasError
-        ? "#ef4444"
-        : state.isFocused
-          ? "#FF8A35"
-          : "#e5e7eb",
-      boxShadow: state.isFocused
-        ? "0 0 0 1px #FF8A35, 0 0 0 3px rgba(255,138,53,0.35)"
-        : "none",
-      "&:hover": {
-        borderColor: hasError
-          ? "#ef4444"
-          : state.isFocused
-            ? "#FF8A35"
-            : "#e5e7eb",
-      },
-    }),
-    valueContainer: (base: any) => ({
-      ...base,
-      padding: "0 12px",
-    }),
-    indicatorsContainer: (base: any) => ({
-      ...base,
-      minHeight: 44,
-    }),
-    input: (base: any) => ({
-      ...base,
-      margin: 0,
-      padding: 0,
-    }),
-    multiValue: (base: any) => ({
-      ...base,
-      borderRadius: 9999,
-      paddingLeft: 4,
-      paddingRight: 4,
-    }),
+type ContractPartyBrand = {
+  legalName: string;
+  contactPersonName: string;
+  noticeEmail: string;
+  noticePhone: string;
+  billingAddress: string;
+};
+
+type ContractPartyInfluencer = {
+  legalName: string;
+  contactName: string;
+  postingHandleUrl: string;
+  contactEmail: string;
+  contactPhone: string;
+  whatsApp: string;
+  address: string;
+};
+
+type ContractCampaign = {
+  productsServicesCovered: string;
+  territoryTargetCountry: string;
+  effectiveDate: string;
+  campaignTitleOrId: string;
+};
+
+type ScheduleADeliverable = {
+  id: string;
+  srNo: number;
+  platformHandle: string;
+  deliverableFormat: string;
+  qty: string;
+  draftDue: string;
+  liveDate: string;
+};
+
+type UsageRightsRow = {
+  id: string;
+  usageRight: string;
+  selected: boolean;
+  duration: string;
+  territoryNotes: string;
+};
+
+type ContractFormState = {
+  brand: ContractPartyBrand;
+  influencer: ContractPartyInfluencer;
+  campaign: ContractCampaign;
+  scheduleA: {
+    minimumVideoSpecs: string;
+    preShootScriptRequired: boolean;
+    preShootScriptDue: string;
+    preShootScriptReviewBusinessDays: string;
+    mandatoryTagsMentionsLinksCodes: string;
+    review: {
+      includedRevisionRounds: string;
+      additionalRevisionFee: string;
+      reshootObligation: string;
+      reshootFee: string;
+      minimumLivePeriod: string;
+    };
+    commercial: {
+      totalCampaignFee: string;
+      currency: string;
+      platformMilestonePaymentStructure: string;
+      customSplit: string;
+      advancePaymentTrigger: string;
+      remainingPaymentTrigger: string;
+      paymentProcessorFeesBorneBy: string;
+      paymentProcessorFeesNotes: string;
+      laneAMarketplaceFeeNote: string;
+    };
+    rawFiles: {
+      rawSourceFileDelivery: string;
+      deliveryDue: string;
+      format: string;
+      analyticsReportingDeadline: string;
+      analyticsReportingItems: string;
+    };
+    shipping: {
+      productShippingApplicable: string;
+      shipToName: string;
+      shipToAddress: string;
+      shipToPhone: string;
+      productReceiptConfirmationDeadline: string;
+      productReturnable: string;
+      returnWindowMethod: string;
+      riskOfLossNotes: string;
+    };
+    usageRights: {
+      rows: UsageRightsRow[];
+      attributionRequirement: string;
+      attributionText: string;
+      editingRights: string;
+      musicStockAssetResponsibility: string;
+    };
+    compliance: {
+      creativeBriefMandatoryTalkingPoints: string;
+      restrictedStatements: string;
+    };
+    exclusivity: {
+      competitorBlackout: string;
+      categoryCompetitorList: string;
+      blackoutPeriod: string;
+      optionalMoralsClause: string;
+    };
+    cancellation: {
+      killFeeOrProrata: string;
+      refundOfUnearnedAdvance: string;
+    };
+    dispute: {
+      governingLaw: string;
+      disputeResolutionMethod: string;
+      disputeVenue: string;
+      arbitrationSeat: string;
+      attorneysFees: string;
+    };
   };
-};
-
-/* ===============================================================
-   Types
-   =============================================================== */
-
-type AppliedInfluencerRow = InfluencerRow & {
-  rawInfluencer: Influencer;
-  contractMeta: ContractMeta | null;
-  hasContract: boolean;
-  rejected: boolean;
-  typeLabel: string;
-  feeAmountValue: number;
-};
-
-const normalizePlatform = (platform?: string | null): PlatformType => {
-  switch ((platform || "").toLowerCase()) {
-    case "instagram":
-      return "instagram";
-    case "tiktok":
-      return "tiktok";
-    case "youtube":
-    default:
-      return "youtube";
-  }
-};
-
-const getEngagementValue = (inf: Influencer) => {
-  const raw = Number((inf as any)?.engagementRate ?? (inf as any)?.engagement ?? 0);
-  return Number.isFinite(raw) ? raw : 0;
-};
-
-const getFollowerTierBucket = (n: number) => {
-  if (n < 10_000) return "Nano";
-  if (n < 100_000) return "Micro";
-  if (n < 500_000) return "Mid";
-  if (n < 1_000_000) return "Macro";
-  return "Mega";
-};
-
-const matchesEngagementFilter = (value: number, filterValue: string) => {
-  if (!filterValue || filterValue === "All") return true;
-  if (filterValue === "0-2%") return value >= 0 && value < 2;
-  if (filterValue === "2-5%") return value >= 2 && value < 5;
-  if (filterValue === "5-8%") return value >= 5 && value < 8;
-  if (filterValue === "8-12%") return value >= 8 && value < 12;
-  if (filterValue === "12%+") return value >= 12;
-  return true;
-};
-
-const matchesDateFilter = (dateStr: string, filterValue: string) => {
-  if (!filterValue || filterValue === "All") return true;
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return false;
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-  if (filterValue === "Today") {
-    return date.toDateString() === now.toDateString();
-  }
-  if (filterValue === "Last 7 Days") {
-    return diffDays <= 7;
-  }
-  if (filterValue === "Last 30 Days") {
-    return diffDays <= 30;
-  }
-  return true;
-};
-
-const getAppliedTypeLabel = (
-  meta: ContractMeta | null,
-  hasContract: boolean
-) => {
-  if (isRejectedMeta(meta)) return "Rejected";
-
-  const status = String(meta?.status || "");
-
-  if (!hasContract) return "Applied";
-
-  if (
-    status === CONTRACT_STATUS.CONTRACT_SIGNED ||
-    status === CONTRACT_STATUS.MILESTONES_CREATED
-  ) {
-    return "Active";
-  }
-
-  if (
-    status === CONTRACT_STATUS.INFLUENCER_ACCEPTED ||
-    status === CONTRACT_STATUS.BRAND_ACCEPTED ||
-    status === CONTRACT_STATUS.READY_TO_SIGN
-  ) {
-    return "Selected";
-  }
-
-  return "Invited";
-};
-
-const matchesInfluencerType = (
-  typeLabel: string,
-  filterValue: string
-) => {
-  if (!filterValue || filterValue === "All") return true;
-  return typeLabel.toLowerCase() === filterValue.toLowerCase();
 };
 
 interface Influencer {
@@ -256,6 +1765,7 @@ interface PartyConfirm {
   byUserId?: string;
   at?: string;
 }
+
 interface PartySign {
   signed?: boolean;
   byUserId?: string;
@@ -272,62 +1782,271 @@ interface AuditEvent {
   at?: string;
 }
 
+interface ContractContent {
+  brand?: Partial<ContractPartyBrand>;
+  influencer?: Partial<ContractPartyInfluencer>;
+  campaign?: Partial<ContractCampaign>;
+  scheduleA?: Partial<ContractFormState["scheduleA"]> & {
+    deliverables?: Array<Partial<ScheduleADeliverable>>;
+    usageRights?: Partial<ContractFormState["scheduleA"]["usageRights"]> & {
+      rows?: Array<Partial<UsageRightsRow>>;
+    };
+  };
+}
+
 interface ContractMeta {
   contractId: string;
   campaignId: string;
-
   status: ContractStatus | string;
-
   lastSentAt?: string;
   lockedAt?: string | null;
-
+  requestedEffectiveDate?: string | null;
+  requestedEffectiveDateTimezone?: string | null;
   confirmations?: { brand?: PartyConfirm; influencer?: PartyConfirm };
   signatures?: {
     brand?: PartySign;
     influencer?: PartySign;
+    collabglam?: PartySign;
   };
-
   resendIteration?: number;
   audit?: AuditEvent[];
   flags?: Record<string, any>;
   statusFlags?: Record<string, any>;
-  brand?: any;
+  content?: ContractContent;
 }
 
-type CurrencyOption = { value: string; label: string; meta?: any };
-type TzOption = { value: string; label: string; meta?: any };
+type AppliedInfluencerRow = InfluencerRow & {
+  rawInfluencer: Influencer;
+  contractMeta: ContractMeta | null;
+  hasContract: boolean;
+  rejected: boolean;
+  typeLabel: string;
+  feeAmountValue: number;
+};
 
-type PanelMode = "send" | "edit";
-type FormErrors = Record<string, string>;
+const MILESTONE_OPTIONS = [
+  { value: "50% advance / 50% balance", label: "50% advance / 50% balance" },
+  { value: "100% on completion", label: "100% on completion" },
+  { value: "50% upfront / 50% on completion", label: "50% upfront / 50% on completion" },
+  { value: "30% on signing / 70% on completion", label: "30% on signing / 70% on completion" },
+  { value: "Custom", label: "Custom" },
+] as const;
 
-// Per-row deliverable data
-interface DeliverableRow {
-  id: string;
-  type: string;
-  quantity: string;
-  format: string;
-  durationSec: string;
-  minLiveValue: string;
-  minLiveUnit: "hours" | "months";
+const SHIPPING_APPLICABLE_OPTIONS = [
+  { value: "No", label: "No" },
+  { value: "Yes", label: "Yes" },
+] as const;
 
-  // per-deliverable settings
-  draftRequired: boolean;
-  draftDue: string; // yyyy-mm-dd
-  captions: string;
-  disclosures: string;
-  tags: string[];
-  links: string[];
-  handles: string[];
+const RETURNABLE_OPTIONS = [
+  { value: "Gift / keep product", label: "Gift / keep product" },
+  { value: "Returnable loaner", label: "Returnable loaner" },
+] as const;
 
-  // NEW: per-deliverable usage toggles
-  whitelistingEnabled: boolean;
-  sparkAdsEnabled: boolean;
-  insightsReadOnly: boolean;
+const defaultUsageRightsRows = (): UsageRightsRow[] => [
+  {
+    id: createRowId(),
+    usageRight: "Organic repost on Brand-owned social channels",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Brand website / blog / PDP / retailer listing",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Email / CRM / deck / internal presentation use",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Paid social / boosting / ads",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Whitelisting / Spark Ads / dark posting / creator handle",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+  {
+    id: createRowId(),
+    usageRight: "Perpetual rights / buyout / work-made-for-hire",
+    selected: false,
+    duration: "",
+    territoryNotes: "",
+  },
+];
+
+const createDefaultScheduleDeliverable = (): ScheduleADeliverable => ({
+  id: createRowId(),
+  srNo: 1,
+  platformHandle: "",
+  deliverableFormat: "",
+  qty: "1",
+  draftDue: "",
+  liveDate: "",
+});
+
+const createDefaultContractForm = (): ContractFormState => ({
+  brand: {
+    legalName: "",
+    contactPersonName: "",
+    noticeEmail: "",
+    noticePhone: "",
+    billingAddress: "",
+  },
+  influencer: {
+    legalName: "",
+    contactName: "",
+    postingHandleUrl: "",
+    contactEmail: "",
+    contactPhone: "",
+    whatsApp: "",
+    address: "",
+  },
+  campaign: {
+    productsServicesCovered: "",
+    territoryTargetCountry: "Worldwide",
+    effectiveDate: "",
+    campaignTitleOrId: "",
+  },
+  scheduleA: {
+    minimumVideoSpecs: "",
+    preShootScriptRequired: false,
+    preShootScriptDue: "",
+    preShootScriptReviewBusinessDays: "2",
+    mandatoryTagsMentionsLinksCodes: "",
+    review: {
+      includedRevisionRounds: "1",
+      additionalRevisionFee: "",
+      reshootObligation:
+        "No reshoot required except for material failure to follow approved brief",
+      reshootFee: "",
+      minimumLivePeriod: "",
+    },
+    commercial: {
+      totalCampaignFee: "",
+      currency: "USD",
+      platformMilestonePaymentStructure: "50% advance / 50% balance",
+      customSplit: "",
+      advancePaymentTrigger: "",
+      remainingPaymentTrigger: "",
+      paymentProcessorFeesBorneBy: "",
+      paymentProcessorFeesNotes: "",
+      laneAMarketplaceFeeNote:
+        "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
+    },
+    rawFiles: {
+      rawSourceFileDelivery: "Not included",
+      deliveryDue: "",
+      format: "",
+      analyticsReportingDeadline: "",
+      analyticsReportingItems: "",
+    },
+    shipping: {
+      productShippingApplicable: "No",
+      shipToName: "",
+      shipToAddress: "",
+      shipToPhone: "",
+      productReceiptConfirmationDeadline: "",
+      productReturnable: "Gift / keep product",
+      returnWindowMethod: "",
+      riskOfLossNotes: "",
+    },
+    usageRights: {
+      rows: defaultUsageRightsRows(),
+      attributionRequirement: "No attribution required",
+      attributionText: "",
+      editingRights: "Cropping / resizing only",
+      musicStockAssetResponsibility:
+        "Brand responsible for separate commercial licensing",
+    },
+    compliance: {
+      creativeBriefMandatoryTalkingPoints: "",
+      restrictedStatements: "",
+    },
+    exclusivity: {
+      competitorBlackout: "None",
+      categoryCompetitorList: "",
+      blackoutPeriod: "",
+      optionalMoralsClause: "Not included",
+    },
+    cancellation: {
+      killFeeOrProrata: "None",
+      refundOfUnearnedAdvance:
+        "Yes — on material non-performance / uncured breach",
+    },
+    dispute: {
+      governingLaw: "Nevada, USA",
+      disputeResolutionMethod: "AAA arbitration",
+      disputeVenue: "",
+      arbitrationSeat: "Las Vegas, Nevada, USA",
+      attorneysFees: "Each Party bears own fees",
+    },
+  },
+});
+
+function createRowId() {
+  return Math.random().toString(36).slice(2);
 }
 
-/* ===============================================================
-   Utilities
-   =============================================================== */
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getAtPath(obj: any, path: string, fallback: any = "") {
+  const value = String(path)
+    .split(".")
+    .reduce((acc, key) => acc?.[key], obj);
+  return value === undefined || value === null ? fallback : value;
+}
+
+function setAtPath<T extends Record<string, any>>(obj: T, path: string, value: any): T {
+  const clone = deepClone(obj);
+  const keys = String(path).split(".");
+  let ref: any = clone;
+  while (keys.length > 1) {
+    const key = keys.shift()!;
+    if (!ref[key] || typeof ref[key] !== "object") ref[key] = {};
+    ref = ref[key];
+  }
+  ref[keys[0]] = value;
+  return clone;
+}
+
+function mergeDeep<T>(base: T, patch: any): T {
+  if (patch === undefined || patch === null) return base;
+  if (Array.isArray(patch)) return patch as T;
+  if (typeof patch !== "object") return patch;
+
+  const output: any = Array.isArray(base) ? [...base] : { ...(base as any) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      output[key] &&
+      typeof output[key] === "object" &&
+      !Array.isArray(output[key])
+    ) {
+      output[key] = mergeDeep(output[key], value);
+    } else {
+      output[key] = value;
+    }
+  }
+  return output;
+}
+
 const toast = (opts: {
   icon: "success" | "error" | "info";
   title: string;
@@ -336,14 +2055,14 @@ const toast = (opts: {
   Swal.fire({
     ...opts,
     showConfirmButton: false,
-    timer: 1600,
+    timer: 1800,
     timerProgressBar: true,
     background: "white",
     customClass: { popup: "rounded-lg border border-gray-200" },
   });
 
 const askConfirm = async (title: string, text?: string) => {
-  const res = await Swal.fire({
+  const result = await Swal.fire({
     title,
     text,
     icon: "question",
@@ -353,17 +2072,43 @@ const askConfirm = async (title: string, text?: string) => {
     reverseButtons: true,
     background: "white",
   });
-  return res.isConfirmed;
+  return result.isConfirmed;
 };
 
-const formatAudience = (n: number) => {
+function toInputDate(v?: string | Date | null) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatCompactAudience(n: number) {
   if (!n && n !== 0) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
-};
+}
 
-const buildHandleUrl = (platform?: string | null, handle?: string | null) => {
+function formatMoneyINR(n: number) {
+  return `₹${Number(n || 0).toLocaleString("en-IN")}`;
+}
+
+function normalizePlatform(platform?: string | null): PlatformType {
+  switch ((platform || "").toLowerCase()) {
+    case "instagram":
+      return "instagram";
+    case "tiktok":
+      return "tiktok";
+    case "youtube":
+    default:
+      return "youtube";
+  }
+}
+
+function buildHandleUrl(platform?: string | null, handle?: string | null) {
   if (!handle) return null;
   const raw = handle.startsWith("@") ? handle.slice(1) : handle;
   switch ((platform || "").toLowerCase()) {
@@ -375,117 +2120,131 @@ const buildHandleUrl = (platform?: string | null, handle?: string | null) => {
     default:
       return `https://www.youtube.com/@${raw}`;
   }
-};
+}
 
-const isRejectedMeta = (meta?: any) => {
-  if (!meta) return false;
-  const s = String(meta.status || "").toUpperCase();
-  return (
-    s === CONTRACT_STATUS.REJECTED ||
-    meta.isRejected === 1 ||
-    meta.flags?.isRejected ||
-    meta.statusFlags?.isRejected
-  );
-};
+function sanitizeHandle(h: string) {
+  const t = (h || "").trim();
+  if (!t) return t;
+  return t.startsWith("@") ? t : `@${t}`;
+}
 
-const signingStatusLabel = (meta?: ContractMeta | null) => {
-  if (!meta) return null;
-  const s = String(meta.status || "");
-  if (s !== CONTRACT_STATUS.READY_TO_SIGN) return null;
-
-  const b = !!meta.signatures?.brand?.signed;
-  const i = !!meta.signatures?.influencer?.signed;
-
-  if (b && !i) return "Awaiting influencer signature";
-  if (!b && i) return "Awaiting brand signature";
-  if (!b && !i) return "Ready to sign";
-  if (b && i) return "Signed"; // ✅ fully signed now (no CollabGlam)
-  return null;
-};
-
-const getRejectReasonFromMeta = (meta: ContractMeta | null): string | null => {
-  if (!meta) return null;
-  const events: AuditEvent[] = Array.isArray(meta.audit) ? meta.audit : [];
-  const lastRejected = [...events]
-    .reverse()
-    .find((ev) => (ev.type || "").toUpperCase() === "REJECTED");
-  return lastRejected?.details?.reason
-    ? String(lastRejected.details.reason).trim()
-    : null;
-};
-
-const mapPlatformToApi = (p?: string | null) => {
-  switch ((p || "").toLowerCase()) {
-    case "instagram":
-      return "Instagram";
-    case "tiktok":
-      return "TikTok";
-    case "youtube":
-    default:
-      return "YouTube";
-  }
-};
-
-const getCategoryLabel = (inf: any) => {
+function getCategoryLabel(inf: any) {
   const pick = (...vals: any[]) =>
     vals.find((v) => typeof v === "string" && v.trim());
   const fromObj = (o?: any) =>
     o && typeof o.name === "string" && o.name.trim() ? o.name : "";
+
   const direct = pick(
     inf.category,
     inf.category_name,
+    inf.categoryName,
     inf.categoryTitle,
     inf.primaryCategory,
     inf.niche,
     inf.vertical
   );
   if (direct) return direct;
+
   const obj =
     fromObj(inf.category) ||
     fromObj(inf.primary_category) ||
     fromObj(inf.influencerCategory);
   if (obj) return obj;
+
   const arr =
     inf.categories || inf.category_list || inf.influencerCategories || [];
   if (Array.isArray(arr) && arr.length) {
     const names = arr.map(fromObj).filter(Boolean);
     if (names.length) return names.join(", ");
   }
+
   return "—";
-};
+}
 
-const sanitizeHandle = (h: string) => {
-  const t = (h || "").trim();
-  if (!t) return t;
-  return t.startsWith("@") ? t : `@${t}`;
-};
+function getEngagementValue(inf: Influencer) {
+  const raw = Number((inf as any)?.engagementRate ?? (inf as any)?.engagement ?? 0);
+  return Number.isFinite(raw) ? raw : 0;
+}
 
-const createRowId = () => Math.random().toString(36).slice(2);
+function getFollowerTierBucket(n: number) {
+  if (n < 10_000) return "Nano";
+  if (n < 100_000) return "Micro";
+  if (n < 500_000) return "Mid";
+  if (n < 1_000_000) return "Macro";
+  return "Mega";
+}
 
-const isLockedStatus = (status?: string | null) =>
-  status === CONTRACT_STATUS.CONTRACT_SIGNED ||
-  status === CONTRACT_STATUS.MILESTONES_CREATED;
+function matchesEngagementFilter(value: number, filterValue: string) {
+  if (!filterValue || filterValue === "All") return true;
+  if (filterValue === "0-2%") return value >= 0 && value < 2;
+  if (filterValue === "2-5%") return value >= 2 && value < 5;
+  if (filterValue === "5-8%") return value >= 5 && value < 8;
+  if (filterValue === "8-12%") return value >= 8 && value < 12;
+  if (filterValue === "12%+") return value >= 12;
+  return true;
+}
 
-const isEditableStatus = (status?: string | null) =>
-  status === CONTRACT_STATUS.BRAND_SENT_DRAFT ||
-  status === CONTRACT_STATUS.BRAND_EDITED ||
-  status === CONTRACT_STATUS.INFLUENCER_EDITED ||
-  status === CONTRACT_STATUS.INFLUENCER_ACCEPTED;
+function matchesDateFilter(dateStr: string, filterValue: string) {
+  if (!filterValue || filterValue === "All") return true;
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return false;
 
-const needsBrandAcceptance = (status?: string | null) =>
-  status === CONTRACT_STATUS.INFLUENCER_ACCEPTED;
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
-const canSignNow = (status?: string | null) =>
-  status === CONTRACT_STATUS.READY_TO_SIGN;
+  if (filterValue === "Today") {
+    return date.toDateString() === now.toDateString();
+  }
+  if (filterValue === "Last 7 Days") return diffDays <= 7;
+  if (filterValue === "Last 30 Days") return diffDays <= 30;
+  return true;
+}
 
-const statusLabel = (status?: string | null) => {
+function isRejectedMeta(meta?: ContractMeta | null) {
+  if (!meta) return false;
+  const s = String(meta.status || "").toUpperCase();
+  return (
+    s === CONTRACT_STATUS.REJECTED ||
+    (meta as any).isRejected === 1 ||
+    meta.flags?.isRejected ||
+    meta.statusFlags?.isRejected
+  );
+}
+
+function wasResent(meta?: ContractMeta | null) {
+  if (!meta) return false;
+  if ((meta as any).isResend || (meta as any).isresend) return true;
+  if (meta.flags?.isResend || meta.flags?.isResendChild) return true;
+  if (meta.statusFlags?.isResend || meta.statusFlags?.isResendChild) return true;
+  if (typeof meta.resendIteration === "number" && meta.resendIteration > 0) return true;
+  const audit = Array.isArray(meta.audit) ? meta.audit : [];
+  return audit.some((ev) => (ev.type || "").toUpperCase() === "RESENT");
+}
+
+function signingStatusLabel(meta?: ContractMeta | null) {
+  if (!meta) return null;
+  const s = String(meta.status || "");
+  if (s !== CONTRACT_STATUS.READY_TO_SIGN) return null;
+
+  const brandSigned = !!meta.signatures?.brand?.signed;
+  const influencerSigned = !!meta.signatures?.influencer?.signed;
+
+  if (brandSigned && !influencerSigned) return "Awaiting influencer signature";
+  if (!brandSigned && influencerSigned) return "Awaiting brand signature";
+  if (!brandSigned && !influencerSigned) return "Ready to sign";
+  if (brandSigned && influencerSigned) return "Signed";
+  return null;
+}
+
+function statusLabel(status?: string | null) {
   switch (status) {
     case CONTRACT_STATUS.BRAND_SENT_DRAFT:
       return "Draft sent to influencer";
     case CONTRACT_STATUS.BRAND_EDITED:
-      return "Brand edited (awaiting influencer)";
+      return "Brand edited";
     case CONTRACT_STATUS.INFLUENCER_EDITED:
-      return "Influencer requested changes";
+      return "Influencer edited";
     case CONTRACT_STATUS.INFLUENCER_ACCEPTED:
       return "Influencer accepted";
     case CONTRACT_STATUS.BRAND_ACCEPTED:
@@ -496,100 +2255,145 @@ const statusLabel = (status?: string | null) => {
       return "Signed";
     case CONTRACT_STATUS.MILESTONES_CREATED:
       return "Milestones created";
+    case CONTRACT_STATUS.SUPERSEDED:
+      return "Superseded";
+    case CONTRACT_STATUS.REJECTED:
+      return "Rejected";
     default:
       return status ? String(status) : "—";
   }
-};
+}
 
-/* ===============================================================
-   FDD-driven helpers
-   =============================================================== */
-const VIDEO_TYPES = new Set([
-  "Video",
-  "Reel/Short/TikTok",
-  "UGC Video",
-  "YouTube Integration",
-  "YouTube Dedicated Video",
-  "Live Stream",
-]);
-const IMAGE_TYPES = new Set(["Static Post (Image)", "Carousel Post"]);
-const TEXT_ONLY_TYPES = new Set([
-  "Custom Deliverable (Text)",
-  "Text (caption only)",
-]);
+function prettyStatus(meta: ContractMeta | null, hasContract: boolean, fallbackApplied = false) {
+  if (!hasContract) return fallbackApplied ? "Applied" : "—";
+  if (isRejectedMeta(meta)) return "Rejected";
+  const signing = signingStatusLabel(meta);
+  if (signing) return signing;
+  return statusLabel(String(meta?.status || ""));
+}
 
-/* ===============================================================
-   Constants for Usage Bundle & Geographies
-   =============================================================== */
-const LICENSE_TYPES = [
-  { value: "Organic", label: "Organic Use" },
-  { value: "Paid Digital", label: "Paid Digital Use" },
-  { value: "Custom", label: "Custom (define in notes)" },
-];
+function getAppliedTypeLabel(meta: ContractMeta | null, hasContract: boolean) {
+  if (isRejectedMeta(meta)) return "Rejected";
+  const status = String(meta?.status || "");
 
-const GEO_OPTIONS = [
-  { value: "Worldwide", label: "Worldwide" },
-  { value: "United States", label: "United States" },
-  { value: "Canada", label: "Canada" },
-  { value: "United Kingdom", label: "United Kingdom" },
-  { value: "European Union", label: "European Union" },
-  { value: "Australia", label: "Australia" },
-  { value: "India", label: "India" },
-  { value: "Southeast Asia", label: "Southeast Asia" },
-  { value: "Middle East", label: "Middle East" },
-  { value: "Custom Territory", label: "Custom Territory" },
-];
+  if (!hasContract) return "Applied";
+  if (
+    status === CONTRACT_STATUS.CONTRACT_SIGNED ||
+    status === CONTRACT_STATUS.MILESTONES_CREATED
+  ) {
+    return "Active";
+  }
+  if (
+    status === CONTRACT_STATUS.INFLUENCER_ACCEPTED ||
+    status === CONTRACT_STATUS.BRAND_ACCEPTED ||
+    status === CONTRACT_STATUS.READY_TO_SIGN
+  ) {
+    return "Selected";
+  }
+  return "Invited";
+}
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+function matchesInfluencerType(typeLabel: string, filterValue: string) {
+  if (!filterValue || filterValue === "All") return true;
+  return typeLabel.toLowerCase() === filterValue.toLowerCase();
+}
 
-const DELIVERABLE_TYPE_OPTIONS = [
-  { value: "Video", label: "Video" },
-  { value: "Reel/Short/TikTok", label: "Reel / Short / TikTok" },
-  { value: "Static Post (Image)", label: "Static Post (Image)" },
-  { value: "Carousel Post", label: "Carousel Post" },
-  { value: "Story (Single)", label: "Story (Single)" },
-  { value: "Story Set", label: "Story Set (Multiple)" },
-  { value: "UGC Video", label: "UGC Video" },
-  { value: "YouTube Integration", label: "YouTube Integration" },
-  { value: "YouTube Dedicated Video", label: "YouTube Dedicated Video" },
-  { value: "Live Stream", label: "Live Stream" },
-  { value: "Text (caption only)", label: "Text (caption only)" },
-  { value: "Custom Deliverable", label: "Custom Deliverable" },
-];
+function isLockedStatus(status?: string | null) {
+  return (
+    status === CONTRACT_STATUS.CONTRACT_SIGNED ||
+    status === CONTRACT_STATUS.MILESTONES_CREATED
+  );
+}
 
-/* ===============================================================
-   Main Page Component
-   =============================================================== */
+function isEditableStatus(status?: string | null) {
+  return (
+    status === CONTRACT_STATUS.BRAND_SENT_DRAFT ||
+    status === CONTRACT_STATUS.BRAND_EDITED ||
+    status === CONTRACT_STATUS.INFLUENCER_EDITED ||
+    status === CONTRACT_STATUS.INFLUENCER_ACCEPTED
+  );
+}
+
+function needsBrandAcceptance(status?: string | null) {
+  return status === CONTRACT_STATUS.INFLUENCER_ACCEPTED;
+}
+
+function canSignNow(status?: string | null) {
+  return status === CONTRACT_STATUS.READY_TO_SIGN;
+}
+
+function getRejectReasonFromMeta(meta: ContractMeta | null): string | null {
+  if (!meta) return null;
+  const events = Array.isArray(meta.audit) ? meta.audit : [];
+  const rejected = [...events]
+    .reverse()
+    .find((ev) => (ev.type || "").toUpperCase() === "REJECTED");
+  return rejected?.details?.reason ? String(rejected.details.reason).trim() : null;
+}
+
+function buildReactSelectStyles(opts?: { hasError?: boolean }) {
+  const hasError = opts?.hasError;
+
+  return {
+    control: (base: any, state: any) => ({
+      ...base,
+      minHeight: 44,
+      borderRadius: 8,
+      borderWidth: 2,
+      borderColor: hasError
+        ? "#ef4444"
+        : state.isFocused
+          ? BRAND_PRIMARY
+          : "#e5e7eb",
+      boxShadow: state.isFocused
+        ? `0 0 0 1px ${BRAND_PRIMARY}, 0 0 0 3px ${BRAND_PRIMARY_RING}`
+        : "none",
+      "&:hover": {
+        borderColor: hasError
+          ? "#ef4444"
+          : state.isFocused
+            ? BRAND_PRIMARY
+            : "#d4d4d4",
+      },
+    }),
+    valueContainer: (base: any) => ({ ...base, padding: "0 12px" }),
+    indicatorsContainer: (base: any) => ({ ...base, minHeight: 44 }),
+    input: (base: any) => ({ ...base, margin: 0, padding: 0 }),
+    multiValue: (base: any) => ({
+      ...base,
+      borderRadius: 9999,
+      paddingLeft: 4,
+      paddingRight: 4,
+      backgroundColor: "#f3f4f6",
+    }),
+  };
+}
+
 export default function AppliedInfluencersPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
   const campaignId = searchParams.get("id");
   const influencerId = searchParams.get("infId");
   const createdPage = searchParams.get("createdPage") === "true";
 
-
+  const [serverCampaignTitle, setServerCampaignTitle] = useState("");
   const [serverBudget, setServerBudget] = useState<number | null>(null);
   const [serverTimeline, setServerTimeline] = useState<{
     startDate?: string | Date;
     endDate?: string | Date;
   } | null>(null);
 
-  const router = useRouter();
-  const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
-
-  // Data & Pagination
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
-  const [applicantCount, setApplicantCount] = useState(0);
   const [meta, setMeta] = useState<Meta>({
     total: 0,
     page: 1,
-    limit: PAGE_SIZE_OPTIONS[0],
+    limit: PAGE_SIZE,
     totalPages: 1,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [page, setPage] = useState(1);
-  const [limit] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const [filters, setFilters] = useState<FilterState>({
     "Influencer Type": "",
@@ -599,129 +2403,45 @@ export default function AppliedInfluencersPage() {
     Platform: [],
     Date: "",
   });
-
   const [search, setSearch] = useState("");
-  const [sortValue, setSortValue] = useState("Priority");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sortValue, setSortValue] = useState("Priority");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // keep backend sort stable, do UI sort client-side
-  const sortField = "createdAt" as keyof Influencer;
-  const sortOrder = 0 as 1 | 0;
+  const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
 
-  // Right Panel (send/edit contract)
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>("send");
   const [selectedInf, setSelectedInf] = useState<Influencer | null>(null);
   const [selectedMeta, setSelectedMeta] = useState<ContractMeta | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string>("");
+  const [pdfUrl, setPdfUrl] = useState("");
 
-  // Cache of latest contract meta per influencer
-  const [metaCache, setMetaCache] = useState<Record<string, ContractMeta | null>>(
-    {}
-  );
+  const [metaCache, setMetaCache] = useState<Record<string, ContractMeta | null>>({});
   const [metaCacheLoading, setMetaCacheLoading] = useState(false);
 
-  // Form (brand)
-  const [campaignTitle, setCampaignTitle] = useState("");
-  const [platforms, setPlatforms] = useState<string[]>([]);
-  const [goLiveStart, setGoLiveStart] = useState("");
-  const [goLiveEnd, setGoLiveEnd] = useState("");
-  const [totalFee, setTotalFee] = useState<string>("");
-  const [currency, setCurrency] = useState("USD");
-  const [milestoneSplit, setMilestoneSplit] = useState("50/50");
-  const [revisionsIncluded, setRevisionsIncluded] = useState<string>("1");
-
-  const milestonePreset = useMemo(() => {
-    const match = MILESTONE_SPLIT_PRESETS.find(
-      (p) => p.value === milestoneSplit
-    );
-    return match ? match.value : "custom";
-  }, [milestoneSplit]);
-
-  // Deliverables list (per row)
-  const [deliverables, setDeliverables] = useState<DeliverableRow[]>([
-    {
-      id: createRowId(),
-      type: "Video",
-      quantity: "1",
-      format: "",
-      durationSec: "",
-      minLiveValue: "",
-      minLiveUnit: "hours",
-      draftRequired: false,
-      draftDue: "",
-      captions: "",
-      disclosures: "",
-      tags: [],
-      links: [],
-      handles: [],
-      whitelistingEnabled: false,
-      sparkAdsEnabled: false,
-      insightsReadOnly: false,
-    },
-  ]);
-
   const [brandId, setBrandId] = useState<string | null>(null);
-  const [brandPlanName, setBrandPlanName] = useState<string>("free");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const bid = localStorage.getItem("brandId");
-    setBrandId(bid);
-
-    // fast UI from cache
-    const cached = localStorage.getItem("brandPlanName");
-    if (cached) setBrandPlanName(String(cached).toLowerCase());
-  }, []);
-
-  useEffect(() => {
-    if (!brandId) return;
-
-    (async () => {
-      try {
-        const res: any = await api.get("/subscription/brand/current", {
-          params: { brandId },
-        });
-
-        const data = res?.data || res || {};
-        const latestName = (data?.brandPlanName || "free").toString().toLowerCase();
-        const latestId = data?.brandPlanId || null;
-
-        setBrandPlanName(latestName);
-
-        try {
-          localStorage.setItem("brandPlanName", latestName);
-          if (latestId) localStorage.setItem("brandPlanId", latestId);
-        } catch { }
-      } catch {
-      }
-    })();
-  }, [brandId]);
-
-  const isFullyManagedPlan = brandPlanName === "fully_managed";
-
-  // Usage Bundle
-  const [usageType, setUsageType] = useState<string>("Organic");
-  const [usageDurationMonths, setUsageDurationMonths] = useState<string>("12");
-  const [usageGeographies, setUsageGeographies] = useState<string[]>([
-    "Worldwide",
-  ]);
-  const [usageDerivativeEdits, setUsageDerivativeEdits] =
-    useState<boolean>(false);
-
-  // Requested Effective Date
-  const [requestedEffDate, setRequestedEffDate] = useState<string>("");
-  const [requestedEffTz, setRequestedEffTz] =
-    useState<string>("America/Los_Angeles");
-
-  // currency & timezone options
+  const [brandPlanName, setBrandPlanName] = useState("free");
   const [currencyOptions, setCurrencyOptions] = useState<CurrencyOption[]>([]);
   const [tzOptions, setTzOptions] = useState<TzOption[]>([]);
   const [listsLoading, setListsLoading] = useState(true);
 
-  // Brand signer identity
+  const [requestedEffDate, setRequestedEffDate] = useState("");
+  const [requestedEffTz, setRequestedEffTz] = useState(DEFAULT_TIMEZONE);
+  const [contractForm, setContractForm] = useState<ContractFormState>(
+    createDefaultContractForm()
+  );
+  const [deliverables, setDeliverables] = useState<ScheduleADeliverable[]>([
+    createDefaultScheduleDeliverable(),
+  ]);
+
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isSendLoading, setIsSendLoading] = useState(false);
+  const [isUpdateLoading, setIsUpdateLoading] = useState(false);
+
+  const [signOpen, setSignOpen] = useState(false);
+  const [signTargetMeta, setSignTargetMeta] = useState<ContractMeta | null>(null);
+
   const signerName =
     (typeof window !== "undefined" &&
       (localStorage.getItem("brandContactName") ||
@@ -729,92 +2449,115 @@ export default function AppliedInfluencersPage() {
         "")) ||
     "";
   const signerEmail =
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("brandEmail") || "")) ||
-    "";
+    (typeof window !== "undefined" && localStorage.getItem("brandEmail")) || "";
 
-  // Signature modal
-  const [signOpen, setSignOpen] = useState(false);
-  const [signTargetMeta, setSignTargetMeta] = useState<ContractMeta | null>(
-    null
-  );
+  const isFullyManagedPlan = brandPlanName === "fully_managed";
+  const pageTitle = serverCampaignTitle || contractForm.campaign.campaignTitleOrId || "Unknown Campaign";
 
-  // Form errors
-  const [formErrors, setFormErrors] = useState<FormErrors>({});
-  const clearErrors = () => setFormErrors({});
-  const setErr = (key: string, msg: string) =>
-    setFormErrors((e) => ({ ...e, [key]: msg }));
+  const clearErrors = useCallback(() => setFormErrors({}), []);
+  const setErr = useCallback((key: string, msg: string) => {
+    setFormErrors((prev) => ({ ...prev, [key]: msg }));
+  }, []);
 
-  // Loading states for actions
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [isSendLoading, setIsSendLoading] = useState(false);
-  const [isUpdateLoading, setIsUpdateLoading] = useState(false);
+  const setContractField = useCallback((path: string, value: any) => {
+    setContractForm((prev) => setAtPath(prev, path, value));
+  }, []);
 
-  /* ---------------- Helpers: dates ---------------- */
-  const toInputDate = (v?: string | Date | null) => {
-    if (!v) return "";
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return "";
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedBrandId = localStorage.getItem("brandId");
+    setBrandId(storedBrandId);
+    const cachedPlan = localStorage.getItem("brandPlanName");
+    if (cachedPlan) setBrandPlanName(String(cachedPlan).toLowerCase());
+  }, []);
 
-  const parseDateOnly = (s?: string) => (s ? new Date(s + "T00:00:00") : null);
+  useEffect(() => {
+    if (!brandId) return;
+    (async () => {
+      try {
+        const res: any = await api.get("/subscription/brand/current", {
+          params: { brandId },
+        });
+        const data = res?.data || res || {};
+        const latestName = (data?.brandPlanName || "free").toString().toLowerCase();
+        const latestId = data?.brandPlanId || null;
+        setBrandPlanName(latestName);
+        localStorage.setItem("brandPlanName", latestName);
+        if (latestId) localStorage.setItem("brandPlanId", latestId);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [brandId]);
 
-  const formatDateLong = (s?: string) => {
-    if (!s) return "";
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
-  const todayStr = toInputDate(new Date());
-  const startMin = todayStr;
-  const endMin = goLiveStart || todayStr;
-  const startMax = goLiveEnd || "";
-  const effMin = todayStr;
-  const effMax = goLiveEnd || "";
-  const draftMin = todayStr;
-  const draftMax = goLiveStart || "";
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isEditable =
+        target?.isContentEditable ||
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT";
+      if (isEditable) return;
 
-  /* ---------------- Seed campaign summary ---------------- */
+      if (e.key === "/") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === "Escape" && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sidebarOpen]);
+
   useEffect(() => {
     if (!campaignId) return;
-
     (async () => {
       try {
         const res: any = await api.get("/campaign/campaignSummary", {
           params: { id: campaignId },
         });
-        const d = res?.data || res || {};
-        const name = d.campaignName || "";
+        const data = res?.data || res || {};
+        const campaignName = data.campaignName || data.productOrServiceName || "";
         const budgetNum =
-          typeof d.budget === "number" ? d.budget : Number(d.budget ?? NaN);
+          typeof data.budget === "number" ? data.budget : Number(data.budget ?? NaN);
 
-        setCampaignTitle(name);
+        setServerCampaignTitle(campaignName);
+        setContractField("campaign.campaignTitleOrId", campaignName);
+        setContractField("campaign.productsServicesCovered", data.productOrServiceName || "");
 
         if (!Number.isNaN(budgetNum)) {
           setServerBudget(budgetNum);
-          setTotalFee(String(budgetNum));
+          setContractField("scheduleA.commercial.totalCampaignFee", String(budgetNum));
         }
 
-        if (d.timeline) {
-          const start = d.timeline.startDate
-            ? toInputDate(new Date(d.timeline.startDate))
+        if (data.timeline) {
+          const start = data.timeline.startDate
+            ? toInputDate(new Date(data.timeline.startDate))
             : "";
-          const end = d.timeline.endDate
-            ? toInputDate(new Date(d.timeline.endDate))
+          const end = data.timeline.endDate
+            ? toInputDate(new Date(data.timeline.endDate))
             : "";
-          setServerTimeline(d.timeline);
-          if (start) setGoLiveStart(start);
-          if (end) setGoLiveEnd(end);
-          if (!requestedEffDate && start) setRequestedEffDate(start);
+          setServerTimeline(data.timeline);
+          if (start) {
+            setRequestedEffDate(start);
+            setContractField("campaign.effectiveDate", start);
+          }
+          if (end) {
+            setContractField(
+              "scheduleA.review.minimumLivePeriod",
+              `Until ${new Date(end).toLocaleDateString()}`
+            );
+          }
         }
       } catch (e: any) {
         toast({
@@ -827,41 +2570,8 @@ export default function AppliedInfluencersPage() {
         });
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId]);
+  }, [campaignId, setContractField]);
 
-  /* ---------------- Debounce search ---------------- */
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(id);
-  }, [search]);
-
-  /* ---------------- Keyboard shortcuts ---------------- */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      const isEditable =
-        target?.isContentEditable ||
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT";
-
-      if (isEditable) return;
-
-      if (e.key === "/") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-
-      if (e.key === "Escape" && sidebarOpen) closeSidebar();
-    };
-
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sidebarOpen]);
-
-  /* ---------------- Currency & Timezone lists ---------------- */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -869,12 +2579,9 @@ export default function AppliedInfluencersPage() {
       try {
         const curRes: any = await api.get("/contract/currencies");
         const curArr: any[] =
-          (curRes?.data?.currencies ||
-            curRes?.currencies ||
-            curRes ||
-            []) as any[];
-        const curOpts: CurrencyOption[] = curArr.map((c) => {
-          const code = (c.code || c.symbol || "").toString();
+          curRes?.data?.currencies || curRes?.currencies || curRes || [];
+        const currencies = curArr.map((c) => {
+          const code = String(c.code || c.symbol || "");
           return {
             value: code,
             label: c.name ? `${code} — ${c.name}` : code,
@@ -883,23 +2590,24 @@ export default function AppliedInfluencersPage() {
         });
 
         const tzRes: any = await api.get("/contract/timezones");
-        const tzArr: any[] =
-          (tzRes?.data?.timezones || tzRes?.timezones || tzRes || []) as any[];
-        const tzOpts: TzOption[] = tzArr.map((t) => {
-          const canonical =
-            Array.isArray(t.utc) && t.utc.length ? t.utc[0] : t.value;
-          const label = t.text || t.value;
-          return { value: canonical, label, meta: t };
+        const tzArr: any[] = tzRes?.data?.timezones || tzRes?.timezones || tzRes || [];
+        const zones = tzArr.map((t) => {
+          const canonical = Array.isArray(t.utc) && t.utc.length ? t.utc[0] : t.value;
+          return {
+            value: canonical,
+            label: t.text || t.value,
+            meta: t,
+          };
         });
 
         if (!alive) return;
-        setCurrencyOptions(curOpts);
-        setTzOptions(tzOpts);
+        setCurrencyOptions(currencies);
+        setTzOptions(zones);
       } catch (e: any) {
         toast({
           icon: "error",
           title: "Lists failed",
-          text: e?.message || "Could not load currency/timezones.",
+          text: e?.message || "Could not load currency/timezone lists.",
         });
       } finally {
         if (alive) setListsLoading(false);
@@ -910,1083 +2618,226 @@ export default function AppliedInfluencersPage() {
     };
   }, []);
 
-  /* ---------------- Chat ---------------- */
-  const handleViewMessage = async (inf?: Influencer) => {
-    const target = inf || selectedInf;
-    if (!target) return;
-
-    const brandId =
-      typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
-    if (!brandId) {
-      return toast({
-        icon: "error",
-        title: "Not ready",
-        text: "Missing brandId. Please sign in as a brand.",
-      });
-    }
-
-    try {
-      const res: any = await post("/chat/create-room", {
-        brandId,
-        influencerId: target.influencerId,
-      });
-
-      const roomId = res?.roomId || res?.data?.roomId;
-      if (!roomId) throw new Error("Room could not be created");
-
-      router.push(`/brand/messages/${encodeURIComponent(roomId)}`);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Open chat failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not open messages.",
-      });
-    }
-  };
-
-  /* ---------------- Applicants load ---------------- */
   const fetchApplicants = useCallback(
-    async (search?: string) => {
+    async (searchTerm?: string) => {
       if (!campaignId) return;
       setLoading(true);
       setError(null);
       try {
-        const payload = {
+        const res: any = await post("/apply/list", {
           campaignId,
           page,
-          limit,
-          search: (search ?? "").trim(),
-          sortField,
-          sortOrder,
+          limit: PAGE_SIZE,
+          search: (searchTerm ?? "").trim(),
+          sortField: "createdAt",
+          sortOrder: 0,
           createdPage,
-        };
-        const res: any = await post("/apply/list", payload);
+        });
+
         const influencersList =
           res?.influencers || res?.data?.influencers || res?.data?.data || [];
-        const applicantCountVal =
-          res?.applicantCount ||
-          res?.data?.applicantCount ||
-          influencersList?.length ||
-          0;
-        const metaVal =
+        const incomingMeta =
           res?.meta ||
           res?.data?.meta || {
             total: 0,
             page: 1,
-            limit,
+            limit: PAGE_SIZE,
             totalPages: 1,
           };
+
         setInfluencers(influencersList || []);
-        setApplicantCount(applicantCountVal || 0);
-        setMeta(metaVal);
+        setMeta(incomingMeta);
       } catch (e: any) {
         setError(
-          e?.response?.data?.message ||
-          e?.message ||
-          "Failed to load applicants."
+          e?.response?.data?.message || e?.message || "Failed to load applicants."
         );
       } finally {
         setLoading(false);
       }
     },
-    [campaignId, page, limit]
+    [campaignId, page, createdPage]
   );
 
   useEffect(() => {
     fetchApplicants(debouncedSearch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, page, debouncedSearch, sortField, sortOrder]);
+  }, [fetchApplicants, debouncedSearch]);
 
-  /* ---------------- Highlight influencer from URL ---------------- */
+  const getLatestContractFor = useCallback(
+    async (inf: Influencer): Promise<ContractMeta | null> => {
+      const activeBrandId =
+        typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
+      if (!activeBrandId || !campaignId) return null;
+      try {
+        const res: any = await post("/contract/getContract", {
+          brandId: activeBrandId,
+          influencerId: inf.influencerId,
+          campaignId,
+        });
+        const list = res?.contracts || res?.data?.contracts || [];
+        const filtered = (list as ContractMeta[]).filter(
+          (c) => String(c.campaignId) === String(campaignId)
+        );
+        return filtered.length ? filtered[0] : list.length ? list[0] : null;
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Meta fetch failed",
+          text:
+            e?.response?.data?.message ||
+            e?.message ||
+            "Could not load contract state.",
+        });
+        return null;
+      }
+    },
+    [campaignId]
+  );
+
+  const loadMetaCache = useCallback(
+    async (list: Influencer[]) => {
+      if (!list.length) {
+        setMetaCache({});
+        return;
+      }
+      setMetaCacheLoading(true);
+      try {
+        const metas = await Promise.all(list.map((inf) => getLatestContractFor(inf)));
+        const next: Record<string, ContractMeta | null> = {};
+        list.forEach((inf, index) => {
+          next[inf.influencerId] = metas[index] || null;
+        });
+        setMetaCache(next);
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Meta cache failed",
+          text: e?.message || "Unable to build contract cache.",
+        });
+      } finally {
+        setMetaCacheLoading(false);
+      }
+    },
+    [getLatestContractFor]
+  );
+
   useEffect(() => {
-    if (!influencerId) return;
-    if (!influencers.length) return;
+    loadMetaCache(influencers);
+  }, [influencers, loadMetaCache]);
 
+  useEffect(() => {
+    if (!influencerId || !influencers.length) return;
     const exists = influencers.some(
       (inf) => String(inf.influencerId) === String(influencerId)
     );
     if (!exists) return;
 
     setHighlightInfId(influencerId);
-
     const el =
       document.getElementById(`inf-row-${influencerId}`) ||
       document.getElementById(`inf-card-${influencerId}`);
-
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 
     const timeout = setTimeout(() => setHighlightInfId(null), 4000);
     return () => clearTimeout(timeout);
   }, [influencerId, influencers]);
 
-  /* ---------------- Contract meta cache ---------------- */
-  const getLatestContractFor = async (
-    inf: Influencer
-  ): Promise<ContractMeta | null> => {
-    const brandId =
-      typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
-    if (!brandId) return null;
-    try {
-      const res = await post("/contract/getContract", {
-        brandId,
-        influencerId: inf.influencerId,
-        campaignId,
-      });
-      const list =
-        (res as any)?.contracts || (res as any)?.data?.contracts || [];
-      const filtered = (list as ContractMeta[]).filter(
-        (c) => String(c.campaignId) === String(campaignId)
-      );
-      return filtered.length
-        ? filtered[0]
-        : (list as ContractMeta[]).length
-          ? (list as ContractMeta[])[0]
-          : null;
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Meta fetch failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not get contract meta.",
-      });
-      return null;
-    }
-  };
-
-  const loadMetaCache = async (list: Influencer[]) => {
-    if (!list.length) {
-      setMetaCache({});
-      return;
-    }
-    setMetaCacheLoading(true);
-    try {
-      const metas = await Promise.all(list.map((inf) => getLatestContractFor(inf)));
-      const next: Record<string, ContractMeta | null> = {};
-      list.forEach((inf, i) => {
-        next[inf.influencerId] = metas[i] || null;
-      });
-      setMetaCache(next);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Meta cache failed",
-        text: e?.message || "Unable to build contract cache.",
-      });
-    } finally {
-      setMetaCacheLoading(false);
-    }
-  };
+  const clearPreview = useCallback(() => {
+    setPdfUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
+  }, []);
 
   useEffect(() => {
-    loadMetaCache(influencers);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [influencers]);
-
-  /* ---------------- Helpers ---------------- */
-  const clearPreview = () => {
-    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-    setPdfUrl("");
-  };
-
-  const prefillFormFor = (inf: Influencer, meta?: ContractMeta | null) => {
-    clearErrors();
-
-    setCampaignTitle((prev) => prev || "");
-    setPlatforms(
-      inf?.primaryPlatform ? [mapPlatformToApi(inf.primaryPlatform) as string] : []
-    );
-
-    if (serverTimeline?.startDate || serverTimeline?.endDate) {
-      const start = serverTimeline?.startDate
-        ? toInputDate(serverTimeline.startDate)
-        : "";
-      const end = serverTimeline?.endDate
-        ? toInputDate(serverTimeline.endDate)
-        : "";
-      setGoLiveStart(start);
-      setGoLiveEnd(end);
-    } else {
-      setGoLiveStart("");
-      setGoLiveEnd("");
-    }
-
-    const initialFee = String(serverBudget ?? inf.feeAmount ?? 5000);
-    setTotalFee(initialFee);
-    setCurrency("USD");
-
-    setMilestoneSplit("50/50");
-    setRevisionsIncluded("1");
-
-    // default single deliverable row
-    setDeliverables([
-      {
-        id: createRowId(),
-        type: "Video",
-        quantity: "1",
-        format: "",
-        durationSec: "",
-        minLiveValue: "",
-        minLiveUnit: "hours",
-        draftRequired: false,
-        draftDue: "",
-        captions: "",
-        disclosures: "",
-        tags: [],
-        links: [],
-        handles: inf.handle ? [sanitizeHandle(inf.handle)] : [],
-        whitelistingEnabled: false,
-        sparkAdsEnabled: false,
-        insightsReadOnly: false,
-      },
-    ]);
-
-    setUsageType("Organic");
-    setUsageDurationMonths("12");
-    setUsageGeographies(["Worldwide"]);
-    setUsageDerivativeEdits(false);
-
-    const start = serverTimeline?.startDate ? toInputDate(serverTimeline.startDate) : "";
-    const startDefault = start || toInputDate(new Date());
-    setRequestedEffDate(startDefault);
-    setRequestedEffTz("Europe/Amsterdam");
-
-    if (meta && meta.brand) {
-      const brand = meta.brand;
-
-      if (typeof brand.campaignTitle === "string")
-        setCampaignTitle(String(brand.campaignTitle));
-
-      if (Array.isArray(brand.platforms) && brand.platforms.length)
-        setPlatforms((brand.platforms as string[]).map((p) => String(p || "")));
-
-      if (brand.goLive) {
-        setGoLiveStart(toInputDate((brand.goLive as any).start));
-        setGoLiveEnd(toInputDate((brand.goLive as any).end));
-      }
-
-      if (brand.totalFee !== undefined && brand.totalFee !== null)
-        setTotalFee(String(brand.totalFee));
-
-      if (brand.currency) setCurrency(String(brand.currency));
-      if (brand.milestoneSplit) setMilestoneSplit(String(brand.milestoneSplit));
-
-      if (
-        brand.revisionsIncluded !== undefined &&
-        brand.revisionsIncluded !== null
-      )
-        setRevisionsIncluded(String(brand.revisionsIncluded));
-
-      if (brand.requestedEffectiveDate)
-        setRequestedEffDate(toInputDate(brand.requestedEffectiveDate));
-      if (brand.requestedEffectiveDateTimezone)
-        setRequestedEffTz(String(brand.requestedEffectiveDateTimezone));
-
-      if (brand.usageBundle) {
-        const ub = brand.usageBundle;
-        if (ub.type) setUsageType(String(ub.type));
-        if (ub.durationMonths !== undefined && ub.durationMonths !== null)
-          setUsageDurationMonths(String(ub.durationMonths));
-        if (Array.isArray(ub.geographies))
-          setUsageGeographies(ub.geographies.map((g: any) => String(g)));
-        if (typeof ub.derivativeEditsAllowed === "boolean")
-          setUsageDerivativeEdits(Boolean(ub.derivativeEditsAllowed));
-      }
-
-      const expanded = brand.deliverablesExpanded;
-      if (Array.isArray(expanded) && expanded.length) {
-        const mapped: DeliverableRow[] = expanded.map((d: any, index: number) => {
-          const minLiveHours: number =
-            typeof d.minLiveHours === "number" ? d.minLiveHours : 0;
-          let minLiveValue = "";
-          let minLiveUnit: "hours" | "months" = "hours";
-
-          if (minLiveHours > 0) {
-            if (minLiveHours % 720 === 0) {
-              minLiveUnit = "months";
-              minLiveValue = String(minLiveHours / 720);
-            } else {
-              minLiveUnit = "hours";
-              minLiveValue = String(minLiveHours);
-            }
-          }
-
-          return {
-            id: `${String(d.type || "row")}-${index}-${d.quantity ?? 1}`,
-            type: String(d.type || "Video"),
-            quantity:
-              d.quantity !== undefined && d.quantity !== null
-                ? String(d.quantity)
-                : "1",
-            format: d.format ? String(d.format) : "",
-            durationSec:
-              d.durationSec !== undefined && d.durationSec !== null
-                ? String(d.durationSec)
-                : "",
-            minLiveValue,
-            minLiveUnit,
-            draftRequired: Boolean(d.draftRequired),
-            draftDue: d.draftDueDate ? toInputDate(d.draftDueDate) : "",
-            captions: d.captions ? String(d.captions) : "",
-            disclosures:
-              typeof d.disclosures === "string" ? d.disclosures : "",
-            tags: Array.isArray(d.tags)
-              ? d.tags.map((t: any) => String(t))
-              : [],
-            links: Array.isArray(d.links)
-              ? d.links.map((l: any) => String(l))
-              : [],
-            handles: Array.isArray(d.handles)
-              ? d.handles.map((h: any) => sanitizeHandle(String(h)))
-              : inf.handle
-                ? [sanitizeHandle(inf.handle)]
-                : [],
-            whitelistingEnabled:
-              typeof d.whitelistingEnabled === "boolean"
-                ? d.whitelistingEnabled
-                : false,
-            sparkAdsEnabled:
-              typeof d.sparkAdsEnabled === "boolean"
-                ? d.sparkAdsEnabled
-                : false,
-            insightsReadOnly:
-              typeof d.insightsReadOnly === "boolean"
-                ? d.insightsReadOnly
-                : false,
-          };
-        });
-
-        setDeliverables(mapped);
-      }
-    }
-  };
-
-  // toggle-specific support by platform (row-level uses this as proxy)
-  const supportsSparkAds = platforms.includes("TikTok");
-  const supportsWhitelisting =
-    platforms.includes("Instagram") || platforms.includes("TikTok");
-
-  // If a platform no longer supports a toggle, force it off on all rows
-  useEffect(() => {
-    if (!supportsSparkAds || !supportsWhitelisting) {
-      setDeliverables((prev) =>
-        prev.map((row) => ({
-          ...row,
-          sparkAdsEnabled: supportsSparkAds ? row.sparkAdsEnabled : false,
-          whitelistingEnabled: supportsWhitelisting
-            ? row.whitelistingEnabled
-            : false,
-        }))
-      );
-    }
-  }, [supportsSparkAds, supportsWhitelisting]);
-
-  const updateBtnLabel =
-    selectedMeta && isRejectedMeta(selectedMeta)
-      ? "Resend Contract"
-      : "Update Contract";
-
-  const openSidebar = async (inf: Influencer, mode: PanelMode) => {
-    if (isFullyManagedPlan) {
-      toast({
-        icon: "info",
-        title: "Fully Managed Plan",
-        text: "Contract sending is handled by CollabGlam for Fully Managed brands.",
-      });
-      return;
-    }
-
-    setSelectedInf(inf);
-    setPanelMode(mode);
-    const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
-    setSelectedMeta(meta || null);
-    prefillFormFor(inf, meta || null);
     clearPreview();
-    setSidebarOpen(true);
-  };
+  }, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
 
-  const closeSidebar = () => {
-    setSidebarOpen(false);
-    clearPreview();
-    setSelectedInf(null);
-    setSelectedMeta(null);
-    setIsPreviewLoading(false);
-    setIsSendLoading(false);
-    setIsUpdateLoading(false);
-  };
+  const prefillFormFor = useCallback(
+    (inf: Influencer, meta?: ContractMeta | null) => {
+      clearErrors();
 
-  // Lock body scroll when sidebar is open
-  useEffect(() => {
-    if (sidebarOpen) {
-      const prev = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = prev;
-      };
-    }
-  }, [sidebarOpen]);
+      const base = createDefaultContractForm();
+      base.brand.legalName = localStorage.getItem("brandName") || "";
+      base.brand.contactPersonName = localStorage.getItem("brandContactName") || "";
+      base.brand.noticeEmail = localStorage.getItem("brandEmail") || "";
+      base.brand.noticePhone = localStorage.getItem("brandPhone") || "";
+      base.brand.billingAddress = localStorage.getItem("brandAddress") || "";
 
-  /* ---------------- Build payload ---------------- */
-  const buildBrandPayload = () => {
-    const toLocalMidnight = (d: string) => new Date(d + "T00:00:00");
+      base.influencer.legalName = inf.name || "";
+      base.influencer.contactName = inf.name || "";
+      base.influencer.postingHandleUrl =
+        buildHandleUrl(inf.primaryPlatform, inf.handle) || "";
+      base.influencer.contactEmail = (inf as any)?.email || "";
+      base.influencer.contactPhone = (inf as any)?.phone || "";
+      base.influencer.whatsApp = (inf as any)?.whatsapp || "";
+      base.influencer.address = (inf as any)?.address || "";
 
-    const goLive =
-      goLiveStart || goLiveEnd
-        ? {
-          start: goLiveStart ? toLocalMidnight(goLiveStart) : undefined,
-          end: goLiveEnd ? toLocalMidnight(goLiveEnd) : undefined,
+      base.campaign.campaignTitleOrId = serverCampaignTitle || "";
+      base.campaign.productsServicesCovered =
+        (inf as any)?.productOrServiceName || "";
+      base.campaign.territoryTargetCountry = "Worldwide";
+      base.campaign.effectiveDate = requestedEffDate || toInputDate(new Date());
+
+      base.scheduleA.commercial.totalCampaignFee = String(
+        serverBudget ?? inf.feeAmount ?? 0
+      );
+
+      if (serverTimeline?.startDate) {
+        const start = toInputDate(serverTimeline.startDate);
+        if (start) {
+          base.campaign.effectiveDate = start;
+          setRequestedEffDate(start);
         }
-        : undefined;
-
-    const feeNum = Number(totalFee || "0");
-    const revisionsNum = Number(revisionsIncluded || "0");
-    const usageDurationNum = Number(usageDurationMonths || "0");
-
-    const isVideoRowType = (type: string, format: string) => {
-      const isTextOnly =
-        TEXT_ONLY_TYPES.has(type) ||
-        (format || "").toLowerCase().startsWith("text ");
-      return VIDEO_TYPES.has(type) && !isTextOnly;
-    };
-
-    const deliverablesExpanded =
-      deliverables.length > 0
-        ? deliverables.map((row) => {
-          const qtyNum = Number(row.quantity || "0");
-          const durNum = Number(row.durationSec || "0");
-          const isVideoRow = isVideoRowType(row.type, row.format);
-
-          const minLiveHoursNum =
-            row.minLiveUnit === "months"
-              ? (Number(row.minLiveValue || "0") || 0) * 720
-              : Number(row.minLiveValue || "0") || 0;
-
-          const rowTags = (row.tags || []).map((t) =>
-            t.startsWith("#") ? t : `#${t}`
-          );
-          const rowLinks = (row.links || []).filter((l) =>
-            /^https?:\/\/.+/i.test(l)
-          );
-          const rowHandles = (row.handles || [])
-            .map(sanitizeHandle)
-            .filter(Boolean);
-
-          return {
-            type: row.type || "Video",
-            quantity: Number.isFinite(qtyNum) ? qtyNum : 0,
-            format: row.format,
-            durationSec:
-              isVideoRow && Number.isFinite(durNum) ? durNum : 0,
-            postingWindow: goLive || { start: undefined, end: undefined },
-            draftRequired: Boolean(row.draftRequired),
-            draftDueDate: row.draftDue || undefined,
-            minLiveHours: minLiveHoursNum,
-            tags: rowTags,
-            handles: rowHandles,
-            captions: row.captions,
-            links: rowLinks,
-            disclosures: row.disclosures,
-            whitelistingEnabled: row.whitelistingEnabled,
-            sparkAdsEnabled: row.sparkAdsEnabled,
-            insightsReadOnly: row.insightsReadOnly,
-          };
-        })
-        : [];
-
-    return {
-      campaignTitle,
-      platforms,
-      ...(goLive ? { goLive } : {}),
-      totalFee: Number.isFinite(feeNum) ? feeNum : 0,
-      currency,
-      milestoneSplit,
-      revisionsIncluded: Number.isFinite(revisionsNum) ? revisionsNum : 0,
-      usageBundle: {
-        type: usageType,
-        durationMonths: Number.isFinite(usageDurationNum)
-          ? usageDurationNum
-          : 0,
-        geographies: usageGeographies,
-        derivativeEditsAllowed: Boolean(usageDerivativeEdits),
-      },
-      deliverablesPresetKey: "ui-manual",
-      deliverablesExpanded,
-      ...(requestedEffDate ? { requestedEffectiveDate: requestedEffDate } : {}),
-      ...(requestedEffTz
-        ? { requestedEffectiveDateTimezone: requestedEffTz }
-        : {}),
-    };
-  };
-
-  /* ---------------- Validation helpers ---------------- */
-  const parseMilestoneSplit = (s: string): number[] => {
-    if (!s) return [];
-    return s
-      .split("/")
-      .map((x) => x.replace(/%/g, "").trim())
-      .filter(Boolean)
-      .map((x) => Number(x))
-      .filter((n) => Number.isFinite(n));
-  };
-
-  const scrollFirstErrorIntoView = () => {
-    const first = document.querySelector(
-      "[data-field-error=true]"
-    ) as HTMLElement | null;
-    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
-
-  const validateForPreview = (): boolean => {
-    clearErrors();
-    let ok = true;
-    const add = (k: string, msg: string) => {
-      ok = false;
-      setErr(k, msg);
-    };
-
-    const today = parseDateOnly(todayStr)!;
-    const start = parseDateOnly(goLiveStart || undefined);
-    const end = parseDateOnly(goLiveEnd || undefined);
-
-    if (!campaignTitle.trim())
-      add("campaignTitle", "Campaign title is required.");
-    if (!platforms.length) add("platforms", "Select at least one platform.");
-
-    if (start && start < today)
-      add("goLiveStart", "Start date must be today or later.");
-    if (end && end < today)
-      add("goLiveEnd", "End date must be today or later.");
-    if (start && end && start > end)
-      add("goLiveEnd", "End must be on/after Start.");
-
-    if (requestedEffDate) {
-      const eff = parseDateOnly(requestedEffDate)!;
-      if (eff < today)
-        add("requestedEffDate", "Requested date cannot be before today.");
-      if (end && eff > end)
-        add(
-          "requestedEffDate",
-          "Requested date must be on/before Posting Window End."
-        );
-    }
-
-    const feeNum = Number(totalFee || "");
-    if (!totalFee.trim() || Number.isNaN(feeNum) || feeNum < 0)
-      add("totalFee", "Enter a valid non-negative fee.");
-    if (!currency) add("currency", "Choose a currency.");
-
-    const parts = parseMilestoneSplit(milestoneSplit);
-    if (!parts.length)
-      add("milestoneSplit", "Use a percentage split like 50/50 or 100.");
-    if (parts.some((p) => p < 0 || p > 100))
-      add("milestoneSplit", "Each percentage must be between 0 and 100.");
-    const sum = parts.reduce((a, b) => a + b, 0);
-    if (sum > 100) add("milestoneSplit", "Split total must be ≤ 100%.");
-
-    // Deliverables validation
-    if (!deliverables.length) {
-      add("deliverables", "Add at least one deliverable.");
-    } else {
-      const messages: string[] = [];
-      const isVideoRowType = (type: string, format: string) => {
-        const isTextOnly =
-          TEXT_ONLY_TYPES.has(type) ||
-          (format || "").toLowerCase().startsWith("text ");
-        return VIDEO_TYPES.has(type) && !isTextOnly;
-      };
-
-      deliverables.forEach((row, idx) => {
-        const idxLabel = `Deliverable #${idx + 1}`;
-
-        // Type
-        if (!row.type) {
-          messages.push(`${idxLabel}: Type is required.`);
-        }
-
-        // Quantity
-        const qtyNum = Number(row.quantity || "");
-        if (!row.quantity.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
-          messages.push(`${idxLabel}: Quantity must be at least 1.`);
-        }
-
-        // Duration (for video)
-        const isVideoRow = isVideoRowType(row.type, row.format);
-        if (isVideoRow) {
-          const durNum = Number(row.durationSec || "");
-          if (!row.durationSec.trim() || Number.isNaN(durNum) || durNum <= 0) {
-            messages.push(
-              `${idxLabel}: Duration (sec) must be > 0 for video type.`
-            );
-          }
-        }
-
-        // Minimum Live
-        if (row.minLiveValue) {
-          const liveNum = Number(row.minLiveValue);
-          if (Number.isNaN(liveNum) || liveNum < 0) {
-            messages.push(
-              `${idxLabel}: Minimum Live must be a non-negative number.`
-            );
-          }
-        }
-
-        // Draft per deliverable
-        if (row.draftRequired && !row.draftDue) {
-          messages.push(
-            `${idxLabel}: Draft due date is required when a draft is required.`
-          );
-        }
-        if (row.draftDue) {
-          const draft = parseDateOnly(row.draftDue)!;
-          if (draft < today) {
-            messages.push(
-              `${idxLabel}: Draft due cannot be before today.`
-            );
-          }
-          if (start && draft > start) {
-            messages.push(
-              `${idxLabel}: Draft due must be on/before Posting Window Start.`
-            );
-          }
-        }
-
-        // Links per deliverable
-        const badLink = (row.links || []).find(
-          (l) => !/^https?:\/\/.+/i.test(l)
-        );
-        if (badLink) {
-          messages.push(
-            `${idxLabel}: All links must be valid URLs (https://).`
-          );
-        }
-
-        // Handles per deliverable
-        const badHandle = (row.handles || []).find(
-          (h) => !/^@?\w[\w._-]*$/.test(h)
-        );
-        if (badHandle) {
-          messages.push(
-            `${idxLabel}: Handles should be like @username (letters, numbers, . _ -).`
-          );
-        }
-      });
-
-      if (messages.length) {
-        add("deliverables", messages.join(" "));
       }
-    }
-
-    if (!usageType) add("usageType", "Choose a license type.");
-    const usageDurNum = Number(usageDurationMonths || "");
-    if (
-      !usageDurationMonths.trim() ||
-      Number.isNaN(usageDurNum) ||
-      usageDurNum < 0
-    )
-      add("usageDurationMonths", "Duration must be ≥ 0.");
-
-    const revNum = Number(revisionsIncluded || "");
-    if (Number.isNaN(revNum) || revNum < 0)
-      add("revisionsIncluded", "Revisions must be ≥ 0.");
-
-    if (!ok) {
-      toast({ icon: "error", title: "Please fix the highlighted fields" });
-      setTimeout(scrollFirstErrorIntoView, 50);
-    }
-    return ok;
-  };
-
-  /* ---------------- Preview ---------------- */
-  const handleGeneratePreview = async () => {
-    if (!selectedInf) return;
-    if (!validateForPreview()) return;
-
-    if (isFullyManagedPlan) {
-      return toast({
-        icon: "info",
-        title: "Not available on Fully Managed",
-        text: "Contract sending/preview is disabled for Fully Managed brands.",
-      });
-    }
-
-    setIsPreviewLoading(true);
-    try {
-      if (panelMode === "send") {
-        const brand = buildBrandPayload();
-        const payload: any = {
-          brandId: localStorage.getItem("brandId"),
-          campaignId,
-          influencerId: selectedInf.influencerId,
-          brand,
-          preview: true,
-          ...(requestedEffDate && { requestedEffectiveDate: requestedEffDate }),
-          ...(requestedEffTz && {
-            requestedEffectiveDateTimezone: requestedEffTz,
-          }),
-        };
-
-        const res = await api.post("/contract/initiate", payload, {
-          responseType: "blob",
-        });
-
-        clearPreview();
-        setPdfUrl(URL.createObjectURL(res.data));
+      if (meta?.requestedEffectiveDate) {
+        setRequestedEffDate(toInputDate(meta.requestedEffectiveDate));
+      }
+      if (meta?.requestedEffectiveDateTimezone) {
+        setRequestedEffTz(meta.requestedEffectiveDateTimezone || DEFAULT_TIMEZONE);
       } else {
-        if (!selectedMeta?.contractId) {
-          toast({
-            icon: "error",
-            title: "No Contract",
-            text: "Cannot edit before a contract exists.",
-          });
-          setIsPreviewLoading(false);
-          return;
-        }
-
-        if (panelMode === "edit" && isRejectedMeta(selectedMeta)) {
-          const brandUpdates = buildBrandPayload();
-
-          const res = await api.post(
-            "/contract/resend",
-            {
-              contractId: selectedMeta.contractId,
-              brandUpdates,
-              requestedEffectiveDate: requestedEffDate,
-              requestedEffectiveDateTimezone: requestedEffTz,
-              preview: true,
-            },
-            { responseType: "blob" }
-          );
-
-          clearPreview();
-          setPdfUrl(URL.createObjectURL(res.data));
-          return;
-        }
-
-        const brandUpdates = buildBrandPayload();
-
-        await post("/contract/brand/update", {
-          contractId: selectedMeta.contractId,
-          brandId: localStorage.getItem("brandId"),
-          type: 1,
-          brandUpdates,
-          ...(requestedEffDate && {
-            requestedEffectiveDate: requestedEffDate,
-          }),
-          ...(requestedEffTz && {
-            requestedEffectiveDateTimezone: requestedEffTz,
-          }),
-        });
-
-        const res = await api.get("/contract/preview", {
-          params: { contractId: selectedMeta.contractId },
-          responseType: "blob",
-        });
-
-        clearPreview();
-        setPdfUrl(URL.createObjectURL(res.data));
+        setRequestedEffTz(DEFAULT_TIMEZONE);
       }
 
-      toast({
-        icon: "success",
-        title: "Preview ready",
-        text: "Review the PDF on the left.",
-      });
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Preview failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not generate preview.",
-      });
-    } finally {
-      setIsPreviewLoading(false);
-    }
-  };
+      const seededDeliverable = createDefaultScheduleDeliverable();
+      seededDeliverable.platformHandle = inf.handle ? sanitizeHandle(inf.handle) : "";
+      seededDeliverable.srNo = 1;
 
-  const wasResent = (meta?: ContractMeta | null) => {
-    if (!meta) return false;
-    if ((meta as any).isResend || (meta as any).isresend) return true;
-    if (meta.flags?.isResend || meta.flags?.isResendChild) return true;
-    if (meta.statusFlags?.isResend || meta.statusFlags?.isResendChild)
-      return true;
-    if (typeof meta.resendIteration === "number" && meta.resendIteration > 0)
-      return true;
-    const audit = Array.isArray(meta.audit) ? meta.audit : [];
-    return audit.some((ev) => (ev.type || "").toUpperCase() === "RESENT");
-  };
+      const merged = mergeDeep(base, meta?.content || {});
+      const scheduleAFromMeta = meta?.content?.scheduleA;
+      const usageRows = scheduleAFromMeta?.usageRights?.rows;
+      const deliverablesFromMeta = scheduleAFromMeta?.deliverables;
 
-  /* ---------------- Row actions ---------------- */
-  const handleViewContract = async (inf?: Influencer) => {
-    const target = inf || selectedInf;
-    if (!target) return;
-    const meta =
-      metaCache[target.influencerId] ?? (await getLatestContractFor(target));
-    if (!meta?.contractId)
-      return toast({
-        icon: "error",
-        title: "No Contract",
-        text: "Please send the contract first.",
-      });
-    try {
-      const res = await api.post(
-        "/contract/viewPdf",
-        { contractId: meta.contractId },
-        { responseType: "blob" }
+      if (Array.isArray(usageRows) && usageRows.length) {
+        merged.scheduleA.usageRights.rows = usageRows.map((row) => ({
+          id: createRowId(),
+          usageRight: String(row?.usageRight || ""),
+          selected: Boolean(row?.selected),
+          duration: String(row?.duration || ""),
+          territoryNotes: String(row?.territoryNotes || ""),
+        }));
+      }
+
+      setDeliverables(
+        Array.isArray(deliverablesFromMeta) && deliverablesFromMeta.length
+          ? deliverablesFromMeta.map((row, index) => ({
+            id: createRowId(),
+            srNo: Number(row?.srNo ?? index + 1),
+            platformHandle: String(row?.platformHandle || ""),
+            deliverableFormat: String(row?.deliverableFormat || ""),
+            qty: String(row?.qty ?? "1"),
+            draftDue: String(row?.draftDue || ""),
+            liveDate: String(row?.liveDate || ""),
+          }))
+          : [seededDeliverable]
       );
-      const url = URL.createObjectURL(res.data);
-      window.open(url, "_blank");
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Open Failed",
-        text: e?.message || "Unable to open contract.",
-      });
-    }
-  };
 
-  const handleSendContract = async () => {
-    if (!selectedInf) return;
-    if (!pdfUrl) {
-      toast({
-        icon: "info",
-        title: "Preview required",
-        text: "Generate preview before sending.",
-      });
-      return;
-    }
-    if (!validateForPreview()) return;
+      setContractForm(merged);
+    },
+    [clearErrors, requestedEffDate, serverBudget, serverCampaignTitle, serverTimeline]
+  );
 
-    if (isFullyManagedPlan) {
-      return toast({
-        icon: "info",
-        title: "Not available on Fully Managed",
-        text: "Contract sending is disabled for Fully Managed brands.",
-      });
-    }
-
-    setIsSendLoading(true);
-    try {
-      const brand = buildBrandPayload();
-      const brandId = localStorage.getItem("brandId")!;
-      await post("/contract/initiate", {
-        brandId,
-        campaignId,
-        influencerId: selectedInf.influencerId,
-        brand,
-        ...(requestedEffDate
-          ? { requestedEffectiveDate: requestedEffDate }
-          : {}),
-        ...(requestedEffTz
-          ? { requestedEffectiveDateTimezone: requestedEffTz }
-          : {}),
-      });
-      toast({
-        icon: "success",
-        title: "Sent!",
-        text: "Contract sent to influencer.",
-      });
-      closeSidebar();
-      fetchApplicants();
-      loadMetaCache(influencers);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Send failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Failed to send.",
-      });
-    } finally {
-      setIsSendLoading(false);
-    }
-  };
-
-  const handleEditContract = async () => {
-    if (!selectedMeta?.contractId) return;
-    if (!pdfUrl) return toast({ icon: "info", title: "Preview required" });
-    if (!validateForPreview()) return;
-
-    if (isFullyManagedPlan) {
-      return toast({
-        icon: "info",
-        title: "Not available on Fully Managed",
-        text: "Contract editing/resending is disabled for Fully Managed brands.",
-      });
-    }
-
-    setIsUpdateLoading(true);
-    try {
-      const brandUpdates = buildBrandPayload();
-
-      if (isRejectedMeta(selectedMeta)) {
-        await post("/contract/resend", {
-          contractId: selectedMeta.contractId,
-          brandUpdates,
-          requestedEffectiveDate: requestedEffDate,
-          requestedEffectiveDateTimezone: requestedEffTz,
-        });
-
-        toast({ icon: "success", title: "Resent!", text: "New contract sent to influencer." });
-      } else {
-        await post("/contract/brand/update", {
-          contractId: selectedMeta.contractId,
-          brandId: localStorage.getItem("brandId"),
-          type: 0,
-          brandUpdates,
-          requestedEffectiveDate: requestedEffDate,
-          requestedEffectiveDateTimezone: requestedEffTz,
-        });
-
-        toast({ icon: "success", title: "Updated", text: "Contract updated (new version sent)." });
-      }
-
-      closeSidebar();
-      fetchApplicants();
-      loadMetaCache(influencers);
-    } catch (e: any) {
-      toast({ icon: "error", title: "Action failed", text: e?.response?.data?.message || e?.message || "Failed." });
-    } finally {
-      setIsUpdateLoading(false);
-    }
-  };
-
-  const handleBrandAccept = async (inf?: Influencer) => {
-    const target = inf || selectedInf;
-    if (!target) return;
-    const meta =
-      metaCache[target.influencerId] ?? (await getLatestContractFor(target));
-    if (!meta?.contractId)
-      return toast({
-        icon: "error",
-        title: "No Contract",
-        text: "Send contract first.",
-      });
-
-    const statusStr = meta?.status ? String(meta.status) : "";
-    const influencerAccepted =
-      statusStr === CONTRACT_STATUS.INFLUENCER_ACCEPTED ||
-      !!meta.confirmations?.influencer?.confirmed; // fallback if some old docs still use confirmations
-
-    if (!influencerAccepted) {
-      return toast({
-        icon: "info",
-        title: "Awaiting influencer",
-        text: "Influencer must accept before you can accept.",
-      });
-    }
-
-    const ok = await askConfirm(
-      "Confirm as Brand?",
-      "Once confirmed, your next step is to sign."
-    );
-    if (!ok) return;
-
-    try {
-      await post("/contract/brand/confirm", { contractId: meta.contractId });
-      toast({ icon: "success", title: "Brand Accepted" });
-      fetchApplicants();
-      loadMetaCache(influencers);
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Confirm failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not confirm.",
-      });
-    }
-  };
-
-
-  const openSignModal = (meta: ContractMeta | null) => {
-    if (!meta?.contractId)
-      return toast({
-        icon: "error",
-        title: "No Contract",
-        text: "Send/accept contract first.",
-      });
-    setSignTargetMeta(meta);
-    setSignOpen(true);
-  };
-
-  /* ---------------- Invalidate preview when form changes ---------------- */
-  useEffect(() => {
-    clearPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    campaignTitle,
-    platforms,
-    goLiveStart,
-    goLiveEnd,
-    totalFee,
-    currency,
-    milestoneSplit,
-    revisionsIncluded,
-    requestedEffDate,
-    requestedEffTz,
-    usageType,
-    usageDurationMonths,
-    usageDerivativeEdits,
-    usageGeographies.length,
-    JSON.stringify(deliverables),
-  ]);
-
-  const prettyStatus = (
-    meta: ContractMeta | null,
-    hasContract: boolean,
-    fallbackApplied = false
-  ) => {
-    if (!hasContract) return fallbackApplied ? "Applied" : "—";
-    if (isRejectedMeta(meta)) return "Rejected";
-
-    const signingLabel = signingStatusLabel(meta);
-    if (signingLabel) return signingLabel;
-
-    const s = meta?.status ? String(meta.status) : "";
-    return statusLabel(s);
-  };
-
-  const StatusBadge = ({
-    meta,
-    hasContract,
-  }: {
-    meta: ContractMeta | null;
-    hasContract: boolean;
-  }) => {
-    const label = prettyStatus(meta, hasContract, true);
-    const rejected = isRejectedMeta(meta);
-    return (
-      <span
-        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${rejected
-          ? "bg-black text-white"
-          : "bg-gray-100 text-gray-800"
-          }`}
-      >
-        {label}
-      </span>
-    );
-  };
-
-  function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
-    const inf = row.rawInfluencer;
-    const meta = row.contractMeta;
-    const hasContract = row.hasContract;
-
-    const statusStr = meta?.status ? String(meta.status) : "";
-    const locked = isLockedStatus(statusStr);
-    const editable = isEditableStatus(statusStr) || row.rejected;
-
-    const handleSendContractClick = () => {
+  const openSidebar = useCallback(
+    async (inf: Influencer, mode: PanelMode) => {
       if (isFullyManagedPlan) {
         toast({
           icon: "info",
@@ -1996,85 +2847,420 @@ export default function AppliedInfluencersPage() {
         return;
       }
 
-      if (!hasContract) {
-        openSidebar(inf, "send");
-        return;
-      }
+      setSelectedInf(inf);
+      setPanelMode(mode);
+      const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
+      setSelectedMeta(meta || null);
+      prefillFormFor(inf, meta || null);
+      clearPreview();
+      setSidebarOpen(true);
+    },
+    [clearPreview, getLatestContractFor, isFullyManagedPlan, metaCache, prefillFormFor]
+  );
 
-      if (!locked && editable) {
-        openSidebar(inf, "edit");
-        return;
-      }
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+    clearPreview();
+    setSelectedInf(null);
+    setSelectedMeta(null);
+    setIsPreviewLoading(false);
+    setIsSendLoading(false);
+    setIsUpdateLoading(false);
+  }, [clearPreview]);
 
-      handleViewContract(inf);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sidebarOpen]);
+
+  const buildContentPayload = useCallback(() => {
+    const content = deepClone(contractForm);
+
+    return {
+      ...content,
+      campaign: {
+        ...content.campaign,
+        effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
+      },
+      scheduleA: {
+        ...content.scheduleA,
+        deliverables: deliverables.map((row, index) => ({
+          srNo: index + 1,
+          platformHandle: row.platformHandle,
+          deliverableFormat: row.deliverableFormat,
+          qty: Number(row.qty || "0") || 0,
+          draftDue: row.draftDue,
+          liveDate: row.liveDate,
+        })),
+        review: {
+          ...content.scheduleA.review,
+          includedRevisionRounds:
+            Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+        },
+        commercial: {
+          ...content.scheduleA.commercial,
+          totalCampaignFee:
+            Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+        },
+        usageRights: {
+          ...content.scheduleA.usageRights,
+          rows: content.scheduleA.usageRights.rows.map((row) => ({
+            usageRight: row.usageRight,
+            selected: row.selected,
+            duration: row.duration,
+            territoryNotes: row.territoryNotes,
+          })),
+        },
+      },
+    };
+  }, [contractForm, deliverables, requestedEffDate]);
+  const buildBrandUpdatesPayload = useCallback(() => {
+    return {
+      content: buildContentPayload(),
+    };
+  }, [buildContentPayload]);
+
+  const scrollFirstErrorIntoView = useCallback(() => {
+    const first = document.querySelector("[data-field-error=true]") as HTMLElement | null;
+    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const validateForPreview = useCallback(() => {
+    clearErrors();
+    let ok = true;
+    const add = (key: string, message: string) => {
+      ok = false;
+      setErr(key, message);
     };
 
-    const handleManageClick = () => {
-      router.push(`/brand/influencers?id=${inf.influencerId}`);
-    };
+    const feeValue = Number(contractForm.scheduleA.commercial.totalCampaignFee || "");
+    const revisionValue = Number(contractForm.scheduleA.review.includedRevisionRounds || "");
+    const reviewDays = Number(
+      contractForm.scheduleA.preShootScriptReviewBusinessDays || "2"
+    );
 
-    const handleMoreClick = () => {
-      if (hasContract) {
-        handleViewContract(inf);
-        return;
+    if (!contractForm.brand.legalName.trim()) add("brand.legalName", "Brand legal name is required.");
+    if (!contractForm.influencer.legalName.trim()) add("influencer.legalName", "Influencer legal name is required.");
+    if (!contractForm.campaign.campaignTitleOrId.trim()) add("campaign.campaignTitleOrId", "Campaign title / ID is required.");
+    if (!contractForm.scheduleA.commercial.currency) add("scheduleA.commercial.currency", "Currency is required.");
+    if (
+      !contractForm.scheduleA.commercial.totalCampaignFee.trim() ||
+      Number.isNaN(feeValue) ||
+      feeValue < 0
+    ) {
+      add("scheduleA.commercial.totalCampaignFee", "Enter a valid non-negative fee.");
+    }
+    if (Number.isNaN(revisionValue) || revisionValue < 0) {
+      add("scheduleA.review.includedRevisionRounds", "Revision rounds must be zero or more.");
+    }
+    if (Number.isNaN(reviewDays) || reviewDays < 0) {
+      add(
+        "scheduleA.preShootScriptReviewBusinessDays",
+        "Review business days must be zero or more."
+      );
+    }
+    if (!requestedEffDate) add("requestedEffDate", "Requested effective date is required.");
+
+    if (!deliverables.length) {
+      add("scheduleA.deliverables", "Add at least one deliverable.");
+    } else {
+      const messages: string[] = [];
+      deliverables.forEach((row, index) => {
+        const label = `Deliverable #${index + 1}`;
+        const qtyNum = Number(row.qty || "");
+        if (!row.deliverableFormat.trim()) {
+          messages.push(`${label}: deliverable format is required.`);
+        }
+        if (!row.platformHandle.trim()) {
+          messages.push(`${label}: platform / handle is required.`);
+        }
+        if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
+          messages.push(`${label}: quantity must be at least 1.`);
+        }
+      });
+      if (messages.length) add("scheduleA.deliverables", messages.join(" "));
+    }
+
+    if (!ok) {
+      toast({ icon: "error", title: "Please fix the highlighted fields" });
+      setTimeout(scrollFirstErrorIntoView, 50);
+    }
+    return ok;
+  }, [
+    clearErrors,
+    contractForm,
+    deliverables,
+    requestedEffDate,
+    scrollFirstErrorIntoView,
+    setErr,
+  ]);
+
+  const handleGeneratePreview = useCallback(async () => {
+    if (!selectedInf || !campaignId || !brandId) return;
+    if (!validateForPreview()) return;
+    if (isFullyManagedPlan) {
+      toast({
+        icon: "info",
+        title: "Not available on Fully Managed",
+        text: "Contract sending and preview are disabled for Fully Managed brands.",
+      });
+      return;
+    }
+
+    setIsPreviewLoading(true);
+    try {
+      const content = buildContentPayload();
+      let res: any;
+
+      if (panelMode === "send") {
+        res = await api.post(
+          "/contract/initiate",
+          {
+            brandId,
+            campaignId,
+            influencerId: selectedInf.influencerId,
+            content,
+            requestedEffectiveDate: requestedEffDate,
+            requestedEffectiveDateTimezone: requestedEffTz,
+            preview: true,
+          },
+          { responseType: "blob" }
+        );
+      } else {
+        if (!selectedMeta?.contractId) {
+          toast({ icon: "error", title: "No contract", text: "No contract found." });
+          return;
+        }
+        res = await api.post(
+          "/contract/resend",
+          {
+            contractId: selectedMeta.contractId,
+            content,
+            requestedEffectiveDate: requestedEffDate,
+            requestedEffectiveDateTimezone: requestedEffTz,
+            preview: true,
+          },
+          { responseType: "blob" }
+        );
       }
 
-      if (isFullyManagedPlan) {
+      setPdfUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(res.data);
+      });
+      toast({ icon: "success", title: "Preview ready" });
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Preview failed",
+        text: e?.response?.data?.message || e?.message || "Could not generate preview.",
+      });
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }, [
+    brandId,
+    buildContentPayload,
+    campaignId,
+    clearPreview,
+    isFullyManagedPlan,
+    panelMode,
+    requestedEffDate,
+    requestedEffTz,
+    selectedInf,
+    selectedMeta?.contractId,
+    validateForPreview,
+  ]);
+
+  const handleSendContract = useCallback(async () => {
+    if (!selectedInf || !campaignId || !brandId) return;
+    if (!pdfUrl) {
+      toast({ icon: "info", title: "Preview required", text: "Generate preview before sending." });
+      return;
+    }
+    if (!validateForPreview()) return;
+
+    setIsSendLoading(true);
+    try {
+      await post("/contract/initiate", {
+        brandId,
+        campaignId,
+        influencerId: selectedInf.influencerId,
+        content: buildContentPayload(),
+        requestedEffectiveDate: requestedEffDate,
+        requestedEffectiveDateTimezone: requestedEffTz,
+      });
+
+      toast({ icon: "success", title: "Sent!", text: "Contract sent to influencer." });
+      closeSidebar();
+      fetchApplicants(debouncedSearch);
+      loadMetaCache(influencers);
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Send failed",
+        text: e?.response?.data?.message || e?.message || "Failed to send contract.",
+      });
+    } finally {
+      setIsSendLoading(false);
+    }
+  }, [
+    brandId,
+    buildContentPayload,
+    campaignId,
+    closeSidebar,
+    debouncedSearch,
+    fetchApplicants,
+    influencers,
+    loadMetaCache,
+    pdfUrl,
+    requestedEffDate,
+    requestedEffTz,
+    selectedInf,
+    validateForPreview,
+  ]);
+
+  const handleEditContract = useCallback(async () => {
+    if (!selectedMeta?.contractId || !brandId) return;
+    if (!pdfUrl) {
+      toast({ icon: "info", title: "Preview required" });
+      return;
+    }
+    if (!validateForPreview()) return;
+
+    setIsUpdateLoading(true);
+    try {
+      if (isRejectedMeta(selectedMeta)) {
+        await post("/contract/resend", {
+          contractId: selectedMeta.contractId,
+          content: buildContentPayload(),
+          requestedEffectiveDate: requestedEffDate,
+          requestedEffectiveDateTimezone: requestedEffTz,
+        });
+        toast({ icon: "success", title: "Resent!", text: "New contract sent to influencer." });
+      } else {
+        await post("/contract/brand/update", {
+          contractId: selectedMeta.contractId,
+          brandId,
+          type: 0,
+          brandUpdates: buildBrandUpdatesPayload(),
+        });
+        toast({ icon: "success", title: "Updated", text: "Contract updated and shared." });
+      }
+
+      closeSidebar();
+      fetchApplicants(debouncedSearch);
+      loadMetaCache(influencers);
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Action failed",
+        text: e?.response?.data?.message || e?.message || "Failed to update contract.",
+      });
+    } finally {
+      setIsUpdateLoading(false);
+    }
+  }, [
+    brandId,
+    buildBrandUpdatesPayload,
+    buildContentPayload,
+    closeSidebar,
+    debouncedSearch,
+    fetchApplicants,
+    influencers,
+    loadMetaCache,
+    pdfUrl,
+    requestedEffDate,
+    requestedEffTz,
+    selectedMeta,
+    validateForPreview,
+  ]);
+
+  const handleViewContract = useCallback(
+    async (inf?: Influencer) => {
+      const target = inf || selectedInf;
+      if (!target) return;
+      const activeMeta = metaCache[target.influencerId] ?? (await getLatestContractFor(target));
+      if (!activeMeta?.contractId) {
         toast({
-          icon: "info",
-          title: "No contract yet",
-          text: "This influencer does not have a contract yet.",
+          icon: "error",
+          title: "No contract",
+          text: "Please send the contract first.",
         });
         return;
       }
+      try {
+        const res = await api.post(
+          "/contract/viewPdf",
+          { contractId: activeMeta.contractId },
+          { responseType: "blob" }
+        );
+        const url = URL.createObjectURL(res.data);
+        window.open(url, "_blank");
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Open failed",
+          text: e?.message || "Unable to open contract.",
+        });
+      }
+    },
+    [getLatestContractFor, metaCache, selectedInf]
+  );
 
-      openSidebar(inf, "send");
-    };
+  const handleBrandAccept = useCallback(
+    async (inf?: Influencer) => {
+      const target = inf || selectedInf;
+      if (!target) return;
+      const activeMeta = metaCache[target.influencerId] ?? (await getLatestContractFor(target));
+      if (!activeMeta?.contractId) {
+        toast({ icon: "error", title: "No contract", text: "Send contract first." });
+        return;
+      }
 
-    return (
-      <div className="flex flex-wrap items-center justify-end gap-2 max-w-full">
-        <button
-          type="button"
-          onClick={handleSendContractClick}
-          className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#D9D9D9] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
-        >
-          Send Contract
-        </button>
+      const ok = await askConfirm(
+        "Confirm as Brand?",
+        "Once confirmed, the contract can move to signing if the influencer already accepted."
+      );
+      if (!ok) return;
 
-        <button
-          type="button"
-          onClick={handleManageClick}
-          className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
-        >
-          Manage
-        </button>
+      try {
+        await post("/contract/brand/confirm", { contractId: activeMeta.contractId });
+        toast({ icon: "success", title: "Brand accepted" });
+        fetchApplicants(debouncedSearch);
+        loadMetaCache(influencers);
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Confirm failed",
+          text: e?.response?.data?.message || e?.message || "Could not confirm.",
+        });
+      }
+    },
+    [debouncedSearch, fetchApplicants, getLatestContractFor, influencers, loadMetaCache, metaCache, selectedInf]
+  );
 
-        <button
-          type="button"
-          onClick={() => handleViewMessage(inf)}
-          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
-        >
-          <EnvelopeOpen size={16} />
-          {hasContract ? (
-            <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
-          ) : null}
-        </button>
+  const openSignModal = useCallback((meta: ContractMeta | null) => {
+    if (!meta?.contractId) {
+      toast({ icon: "error", title: "No contract", text: "No contract found." });
+      return;
+    }
+    setSignTargetMeta(meta);
+    setSignOpen(true);
+  }, []);
 
-        <button
-          type="button"
-          onClick={handleMoreClick}
-          className="flex h-8 w-8 items-center shrink-0 justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
-        >
-          <DotsThree size={16} weight="bold" />
-        </button>
-      </div>
-    );
-  }
-  /* ---------------- Rows rendering ---------------- */
   const tableRows = useMemo<AppliedInfluencerRow[]>(() => {
     return influencers.map((inf) => {
       const contractMeta = metaCache[inf.influencerId] || null;
-      const hasContract = !!(contractMeta?.contractId || inf.contractId || inf.isAssigned);
+      const hasContract = !!(
+        contractMeta?.contractId ||
+        inf.contractId ||
+        inf.isAssigned
+      );
       const rejected = isRejectedMeta(contractMeta);
       const typeLabel = getAppliedTypeLabel(contractMeta, hasContract);
       const engagement = getEngagementValue(inf);
@@ -2093,18 +3279,10 @@ export default function AppliedInfluencersPage() {
         category,
         followers: audience,
         engagement,
-        platforms: [
-          {
-            platform,
-            followers: audience,
-            engagement,
-          },
-        ],
+        platforms: [{ platform, followers: audience, engagement }],
         appliedDate: inf.createdAt || "",
         status: prettyStatus(contractMeta, hasContract, true),
-        budget: feeAmountValue
-          ? `₹${feeAmountValue.toLocaleString("en-IN")}`
-          : "₹0",
+        budget: feeAmountValue ? formatMoneyINR(feeAmountValue) : "₹0",
         rawInfluencer: inf,
         contractMeta,
         hasContract,
@@ -2132,9 +3310,7 @@ export default function AppliedInfluencersPage() {
       const categoryOk =
         filters.Category.length === 0 ||
         filters.Category.includes("All") ||
-        filters.Category.some((c) =>
-          row.category.toLowerCase().includes(c.toLowerCase())
-        );
+        filters.Category.some((c) => row.category.toLowerCase().includes(c.toLowerCase()));
 
       const platformNames = (row.platforms || []).map((p) => p.platform.toLowerCase());
       const platformOk =
@@ -2143,7 +3319,6 @@ export default function AppliedInfluencersPage() {
         filters.Platform.some((p) => platformNames.includes(p.toLowerCase()));
 
       const dateOk = matchesDateFilter(row.appliedDate, filters.Date);
-
       const followerTierLabel = getFollowerTierBucket(row.followers ?? 0);
       const followerOk =
         !filters.Follower ||
@@ -2167,23 +3342,18 @@ export default function AppliedInfluencersPage() {
             new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
         );
         break;
-
       case "Highest engagement":
         list.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0));
         break;
-
       case "Highest follower":
         list.sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0));
         break;
-
       case "Price: Low to High":
         list.sort((a, b) => a.feeAmountValue - b.feeAmountValue);
         break;
-
       case "Price: HIgh to Low":
         list.sort((a, b) => b.feeAmountValue - a.feeAmountValue);
         break;
-
       case "Priority":
       default:
         list.sort(
@@ -2194,15 +3364,136 @@ export default function AppliedInfluencersPage() {
     }
 
     return list;
-  }, [tableRows, filters, sortValue]);
+  }, [filters, sortValue, tableRows]);
+
+  function StatusBadge({
+    meta,
+    hasContract,
+  }: {
+    meta: ContractMeta | null;
+    hasContract: boolean;
+  }) {
+    const label = prettyStatus(meta, hasContract, true);
+    const rejected = isRejectedMeta(meta);
+    return (
+      <span
+        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${rejected ? "bg-black text-white" : "bg-[#F7F7F7] text-[#1A1A1A]"
+          }`}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
+    const inf = row.rawInfluencer;
+    const meta = row.contractMeta;
+    const hasContract = row.hasContract;
+    const statusStr = String(meta?.status || "");
+    const locked = isLockedStatus(statusStr);
+    const editable = isEditableStatus(statusStr) || row.rejected;
+    const needsAccept = needsBrandAcceptance(statusStr);
+    const readyToSign = canSignNow(statusStr) && !meta?.signatures?.brand?.signed;
+
+    const primaryLabel = !hasContract
+      ? "Send Contract"
+      : row.rejected
+        ? "Resend"
+        : editable && !locked
+          ? "Edit Contract"
+          : "View Contract";
+
+    const handlePrimary = () => {
+      if (!hasContract) {
+        openSidebar(inf, "send");
+        return;
+      }
+      if (editable && !locked) {
+        openSidebar(inf, "edit");
+        return;
+      }
+      handleViewContract(inf);
+    };
+
+    const handleManageClick = () => {
+      router.push(`/brand/influencers?id=${inf.influencerId}`);
+    };
+
+    const handleMoreClick = () => {
+      if (hasContract) {
+        handleViewContract(inf);
+        return;
+      }
+      openSidebar(inf, "send");
+    };
+
+    return (
+      <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={handlePrimary}
+          className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#D9D9D9] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
+        >
+          {primaryLabel}
+        </button>
+
+        {needsAccept ? (
+          <button
+            type="button"
+            onClick={() => handleBrandAccept(inf)}
+            className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#E6E6E6] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
+          >
+            <SealCheck className="mr-2 h-4 w-4" /> Accept
+          </button>
+        ) : null}
+
+        {readyToSign ? (
+          <button
+            type="button"
+            onClick={() => openSignModal(meta)}
+            className="inline-flex h-9 shrink-0 items-center rounded-full border border-[#E6E6E6] bg-white px-4 text-[0.875rem] font-medium text-[#1A1A1A] transition-colors hover:bg-[#F7F7F7]"
+          >
+            <Signature className="mr-2 h-4 w-4" /> Sign
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={handleManageClick}
+          className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Manage
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push("/brand/inbox")}
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+        >
+          <EnvelopeOpen size={16} />
+          {hasContract ? (
+            <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
+          ) : null}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleMoreClick}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+        >
+          <DotsThree size={16} weight="bold" />
+        </button>
+      </div>
+    );
+  }
 
   const EmptyState = () => (
-    <div className="p-12 text-center space-y-3">
+    <div className="space-y-3 p-12 text-center">
       <div
-        className="mx-auto w-14 h-14 rounded-2xl flex items-center justify-center"
+        className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl"
         style={{ backgroundColor: "#000" }}
       >
-        <MagnifyingGlass className="text-white w-6 h-6" />
+        <MagnifyingGlass className="h-6 w-6 text-white" />
       </div>
       <h3 className="text-lg font-semibold">No applicants found</h3>
       <p className="text-sm text-gray-600">
@@ -2217,55 +3508,41 @@ export default function AppliedInfluencersPage() {
         const inf = row.rawInfluencer;
         const meta = row.contractMeta;
         const hasContract = row.hasContract;
-        const rejected = row.rejected;
-        const iConfirmed = !!meta?.confirmations?.influencer?.confirmed;
-        const bConfirmed = !!meta?.confirmations?.brand?.confirmed;
-        const bSigned = !!meta?.signatures?.brand?.signed;
-        const locked = isLockedStatus(meta?.status ? String(meta.status) : null);
         const href = buildHandleUrl(inf.primaryPlatform, inf.handle);
 
         return (
           <div
             key={inf.influencerId}
             id={`inf-card-${inf.influencerId}`}
-            className={`relative rounded-xl border p-4 bg-white transition-all duration-300 ${highlightInfId === inf.influencerId
-              ? "border-[#EA580C] bg-[#FFE4C4] shadow-[0_0_0_2px_rgba(234,88,12,0.9),0_18px_45px_rgba(0,0,0,0.35)] animate-pulse scale-[1.02]"
-              : "border-gray-200 hover:shadow-md hover:-translate-y-[1px]"
+            className={`relative rounded-xl border bg-white p-4 transition-all duration-300 ${highlightInfId === inf.influencerId
+              ? "border-[#1A1A1A] bg-[#F5F5F5] shadow-[0_0_0_2px_rgba(26,26,26,0.22),0_18px_45px_rgba(0,0,0,0.18)] animate-pulse scale-[1.02]"
+              : "border-gray-200 hover:-translate-y-[1px] hover:shadow-md"
               }`}
           >
-            {highlightInfId === inf.influencerId && (
-              <span className="absolute -top-2 right-3 rounded-full bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+            {highlightInfId === inf.influencerId ? (
+              <span className="absolute -top-2 right-3 rounded-full bg-[#1A1A1A] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
                 From notification
               </span>
-            )}
+            ) : null}
 
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="font-semibold truncate" title={inf.name}>
+                <div className="truncate font-semibold" title={inf.name}>
                   {inf.name}
                 </div>
-
-                <div className="text-sm text-gray-600 truncate">
+                <div className="truncate text-sm text-gray-600">
                   {href ? (
-                    <a
-                      className="hover:underline text-black"
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a href={href} target="_blank" rel="noreferrer" className="text-black hover:underline">
                       {inf.handle}
                     </a>
                   ) : (
                     <span className="text-gray-500">—</span>
                   )}
                 </div>
-
                 <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
-                  <Badge className="bg-gray-200 text-gray-800">
-                    {row.category}
-                  </Badge>
+                  <Badge className="bg-gray-200 text-gray-800">{row.category}</Badge>
                   <span>•</span>
-                  <span>{formatAudience(inf.audienceSize)} audience</span>
+                  <span>{formatCompactAudience(inf.audienceSize)} audience</span>
                 </div>
               </div>
 
@@ -2281,23 +3558,62 @@ export default function AppliedInfluencersPage() {
     </div>
   );
 
-  /* ===============================================================
-     Render
-     =============================================================== */
+  const todayStr = toInputDate(new Date());
+  const updateBtnLabel =
+    selectedMeta && isRejectedMeta(selectedMeta) ? "Resend Contract" : "Update Contract";
+
+  const sidebarStateFor = useCallback(
+    (key: string) => (formErrors[key] ? ("error" as const) : undefined),
+    [formErrors]
+  );
+
+  const sidebarErrorFor = useCallback(
+    (key: string) => formErrors[key] || "",
+    [formErrors]
+  );
+
+  const usageRightOptions = useMemo(
+    () =>
+      contractForm.scheduleA.usageRights.rows.map((row) => ({
+        value: row.usageRight,
+        label: row.usageRight,
+      })),
+    [contractForm.scheduleA.usageRights.rows]
+  );
+
+  const selectedUsageRights = useMemo(
+    () =>
+      contractForm.scheduleA.usageRights.rows
+        .filter((row) => row.selected)
+        .map((row) => row.usageRight),
+    [contractForm.scheduleA.usageRights.rows]
+  );
+
+  const setSelectedUsageRights = useCallback(
+    (next: string[]) => {
+      setContractField(
+        "scheduleA.usageRights.rows",
+        contractForm.scheduleA.usageRights.rows.map((row) => ({
+          ...row,
+          selected: next.includes(row.usageRight),
+        }))
+      );
+    },
+    [contractForm.scheduleA.usageRights.rows, setContractField]
+  );
+
+  const YES_NO_BOOL_OPTIONS = [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+  ];
+
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="min-h-screen p-4 md:p-8 space-y-6 md:space-y-8 max-w-full mx-auto">
-        <header className="flex items-center justify-between p-2 md:p-4 rounded-md sticky top-0 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white/90 border-b border-gray-100">
-          <h1 className="text-xl md:text-3xl font-bold truncate">
-            Campaign: {campaignTitle || "Unknown Campaign"}
-          </h1>
+      <div className="mx-auto min-h-screen max-w-full space-y-6 p-4 md:space-y-8 md:p-8">
+        <header className="sticky top-0 flex items-center justify-between rounded-md border-b border-gray-100 bg-white/90 p-2 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:p-4">
+          <h1 className="truncate text-xl font-bold md:text-3xl">Campaign: {pageTitle}</h1>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="bg-gray-200 text-black"
-              onClick={() => router.back()}
-            >
+            <Button size="sm" variant="outline" className="bg-gray-200 text-black" onClick={() => router.back()}>
               Back
             </Button>
           </div>
@@ -2313,42 +3629,37 @@ export default function AppliedInfluencersPage() {
         />
 
         {loading ? (
-          <div className="bg-white rounded-md shadow-sm">
-            <LoadingSkeleton rows={limit} />
+          <div className="rounded-md bg-white shadow-sm">
+            <LoadingSkeleton rows={PAGE_SIZE} />
           </div>
         ) : error ? (
           <ErrorMessage>{error}</ErrorMessage>
         ) : filteredRows.length === 0 ? (
-          <div className="bg-white rounded-md shadow-sm">
+          <div className="rounded-md bg-white shadow-sm">
             <EmptyState />
           </div>
         ) : (
           <>
-            <div className="rounded-md overflow-x-auto hidden md:block">
+            <div className="hidden overflow-x-auto rounded-md md:block">
               <InfluencerTable
                 rows={filteredRows}
                 variant="shortlisted"
                 renderStatus={(baseRow) => {
                   const row = baseRow as AppliedInfluencerRow;
-
                   if (row.rejected) {
                     return (
                       <div className="space-y-1 text-center">
                         <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
                           Rejected
                         </span>
-                        <p className="max-w-[140px] break-words text-[11px] text-gray-500">
+                        <p className="max-w-[150px] break-words text-[11px] text-gray-500">
                           {getRejectReasonFromMeta(row.contractMeta) || "No reason provided"}
                         </p>
                       </div>
                     );
                   }
 
-                  return (
-                    <span className="inline-flex items-center rounded-full bg-[#F7F7F7] px-3 py-1 text-xs font-semibold text-[#1A1A1A]">
-                      {row.status || "Applied"}
-                    </span>
-                  );
+                  return <StatusBadge meta={row.contractMeta} hasContract={row.hasContract} />;
                 }}
                 renderShortlistedActions={(baseRow) => (
                   <AppliedCampaignActionCell row={baseRow as AppliedInfluencerRow} />
@@ -2360,8 +3671,8 @@ export default function AppliedInfluencersPage() {
           </>
         )}
 
-        {meta.totalPages > 1 && (
-          <div className="flex justify-center md:justify-end items-center gap-2">
+        {meta.totalPages > 1 ? (
+          <div className="flex items-center justify-center gap-2 md:justify-end">
             <Button
               variant="outline"
               size="icon"
@@ -2379,18 +3690,15 @@ export default function AppliedInfluencersPage() {
               variant="outline"
               size="icon"
               disabled={page === meta.totalPages}
-              onClick={() =>
-                setPage((p) => Math.min(p + 1, meta.totalPages))
-              }
+              onClick={() => setPage((p) => Math.min(p + 1, meta.totalPages))}
               className="text-black"
               aria-label="Next page"
             >
               <CaretRight />
             </Button>
           </div>
-        )}
+        ) : null}
 
-        {/* ================= Sidebar ================= */}
         <ContractSidebar
           isOpen={sidebarOpen && !isFullyManagedPlan}
           onClose={closeSidebar}
@@ -2403,835 +3711,1073 @@ export default function AppliedInfluencersPage() {
           }
           subtitle={
             selectedInf
-              ? `${campaignTitle || "Agreement"} • ${selectedInf.name}`
-              : campaignTitle || "Agreement"
+              ? `${pageTitle || "Agreement"} • ${selectedInf.name}`
+              : pageTitle || "Agreement"
           }
           previewUrl={pdfUrl}
           onClosePreview={clearPreview}
         >
-          {/* Campaign Details */}
-          <SidebarSection
-            title="Campaign Details"
-            icon={<FileText className="w-4 h-4" />}
-          >
-            <div className="space-y-4">
-              <FloatingLabelInput
-                id="campaignTitle"
-                label="Campaign Title"
-                info="The display name for this agreement (Schedule A, item 1)."
-                value={campaignTitle}
-                onChange={(e: any) => {
-                  setCampaignTitle(e.target.value);
-                  clearPreview();
-                }}
-                error={formErrors.campaignTitle}
-                data-field-error={!!formErrors.campaignTitle}
+          <SidebarSection title="Brand" icon={<FileText className="h-4 w-4" />}>
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Brand
+              </div>
+
+              <FloatingInput
+                id="brand-legal-name"
+                label="Brand Legal Name"
+                value={getAtPath(contractForm, "brand.legalName")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.legalName", value)
+                }
+                state={sidebarStateFor("brand.legalName")}
+                errorText={sidebarErrorFor("brand.legalName")}
               />
 
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <LabelWithInfo
-                    text="Platforms"
-                    info="Select the channels for this SOW (Schedule A, item 3)."
-                  />
-                  {formErrors.platforms && (
-                    <span
-                      className="text-xs text-red-600"
-                      data-field-error
-                    >
-                      {formErrors.platforms}
-                    </span>
-                  )}
-                </div>
-                <PlatformSelector
-                  platforms={platforms}
-                  onChange={(v: string[]) => {
-                    setPlatforms(v);
-                    clearPreview();
-                  }}
-                />
-              </div>
+              <FloatingInput
+                id="brand-contact-person"
+                label="Contact Person Name"
+                value={getAtPath(contractForm, "brand.contactPersonName")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.contactPersonName", value)
+                }
+              />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Total Fee */}
-                <NumberInputTop
-                  id="totalFee"
-                  label="Total Fee"
-                  info="The full compensation for the campaign (Schedule A, 7a)."
-                  value={totalFee}
-                  onChange={(v: string) => {
-                    setTotalFee(v);
-                    clearPreview();
-                  }}
-                  error={formErrors.totalFee}
-                  data-field-error={!!formErrors.totalFee}
-                />
+              <FloatingInput
+                id="brand-notice-email"
+                label="Notice Email"
+                value={getAtPath(contractForm, "brand.noticeEmail")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.noticeEmail", value)
+                }
+              />
 
-                {/* Currency */}
-                <div
-                  className="space-y-1.5"
-                  data-field-error={!!formErrors.currency}
-                >
-                  <LabelWithInfo
-                    text="Currency"
-                    info="Payment currency (Schedule A, 7a)."
-                  />
-                  <ReactSelect
-                    instanceId="currency-select"
-                    inputId="currency-select-input"
-                    name="currency"
-                    isLoading={listsLoading}
-                    options={currencyOptions}
-                    value={
-                      currencyOptions.find((o) => o.value === currency) ||
-                      null
-                    }
-                    onChange={(opt: any) => {
-                      setCurrency(opt?.value || "");
-                      clearPreview();
-                    }}
-                    placeholder="Select currency"
-                    styles={buildReactSelectStyles({
-                      hasError: !!formErrors.currency,
-                    })}
-                  />
-                  {formErrors.currency && (
-                    <div
-                      className="text-xs text-red-600"
-                      data-field-error
-                    >
-                      {formErrors.currency}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <FloatingInput
+                id="brand-notice-phone"
+                label="Notice Phone"
+                value={getAtPath(contractForm, "brand.noticePhone")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.noticePhone", value)
+                }
+              />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Milestone Split with dropdown */}
-                <div
-                  className="space-y-1.5"
-                  data-field-error={!!formErrors.milestoneSplit}
-                >
-                  <LabelWithInfo
-                    text="Milestone Split (%)"
-                    info="Percentages like 50/50 or 40/30/30. Total must be ≤ 100%."
-                  />
-                  <div className="flex flex-col gap-2">
-                    <select
-                      value={milestonePreset}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setMilestoneSplit("");
-                          clearPreview();
-                          return;
-                        }
-                        setMilestoneSplit(val);
-                        clearPreview();
-                      }}
-                      className="w-full h-[44px] px-3 border-2 rounded-lg text-sm border-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white"
-                    >
-                      {MILESTONE_SPLIT_PRESETS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    {milestonePreset === "custom" && (
-                      <input
-                        id="milestoneSplitCustom"
-                        type="text"
-                        value={milestoneSplit}
-                        onChange={(e) => {
-                          setMilestoneSplit(e.target.value);
-                          clearPreview();
-                        }}
-                        placeholder="e.g. 50/50 or 40/30/30"
-                        className="w-full h-[44px] px-3 border-2 rounded-lg text-sm border-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white"
-                      />
-                    )}
-                  </div>
-                  {formErrors.milestoneSplit && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.milestoneSplit}
-                    </div>
-                  )}
-                </div>
-
-                {/* Revisions Included */}
-                <NumberInput
-                  id="revisionsIncluded"
-                  label="Revisions Included"
-                  info="Included rounds of edits (Schedule A, 5b)."
-                  value={revisionsIncluded}
-                  onChange={(v: string) => {
-                    setRevisionsIncluded(v);
-                    clearPreview();
-                  }}
-                  error={formErrors.revisionsIncluded}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <LabelWithInfo
-                    text="Requested Effective Date (display)"
-                    info="Shown in the PDF header; does not change locking rules."
-                  />
-                  <input
-                    id="requestedEffDate"
-                    type="date"
-                    value={requestedEffDate}
-                    min={effMin}
-                    max={effMax || undefined}
-                    onChange={(e) => {
-                      setRequestedEffDate(e.target.value);
-                      clearPreview();
-                    }}
-                    className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${formErrors.requestedEffDate
-                      ? "border-red-500"
-                      : "border-gray-200 focus:border-[#FF8A35]"
-                      }`}
-                    data-field-error={!!formErrors.requestedEffDate}
-                  />
-                  {formErrors.requestedEffDate && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.requestedEffDate}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <LabelWithInfo
-                    text="Timezone"
-                    info="Used for date formatting and review windows (Section 2c)."
-                  />
-                  <ReactSelect
-                    instanceId="timezone-select"
-                    inputId="timezone-select-input"
-                    name="timezone"
-                    isLoading={listsLoading}
-                    options={tzOptions}
-                    value={
-                      tzOptions.find((o) => o.value === requestedEffTz) ||
-                      null
-                    }
-                    onChange={(opt: any) => {
-                      setRequestedEffTz(opt?.value || "");
-                      clearPreview();
-                    }}
-                    placeholder="Select timezone"
-                    styles={buildReactSelectStyles()}
-                  />
-                </div>
-              </div>
+              <LabeledTextarea
+                id="brand-billing-address"
+                label="Billing Address"
+                value={getAtPath(contractForm, "brand.billingAddress")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("brand.billingAddress", e.target.value)
+                }
+              />
             </div>
           </SidebarSection>
 
-          {/* Posting Window */}
           <SidebarSection
-            title="Posting Window"
-            icon={<Info className="w-4 h-4" />}
-          >
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <LabelWithInfo
-                    text="Start"
-                    info="Earliest date content may go live."
-                  />
-                  <input
-                    id="goLiveStart"
-                    type="date"
-                    value={goLiveStart}
-                    min={startMin}
-                    max={startMax || undefined}
-                    onChange={(e) => {
-                      setGoLiveStart(e.target.value);
-                      clearPreview();
-                    }}
-                    className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${formErrors.goLiveStart
-                      ? "border-red-500"
-                      : "border-gray-200 focus:border-[#FF8A35]"
-                      }`}
-                    data-field-error={!!formErrors.goLiveStart}
-                  />
-                  {formErrors.goLiveStart && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.goLiveStart}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <LabelWithInfo
-                    text="End"
-                    info="Latest date content must be posted."
-                  />
-                  <input
-                    id="goLiveEnd"
-                    type="date"
-                    value={goLiveEnd}
-                    min={endMin}
-                    onChange={(e) => {
-                      setGoLiveEnd(e.target.value);
-                      clearPreview();
-                    }}
-                    className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${formErrors.goLiveEnd
-                      ? "border-red-500"
-                      : "border-gray-200 focus:border-[#FF8A35]"
-                      }`}
-                    data-field-error={!!formErrors.goLiveEnd}
-                  />
-                  {formErrors.goLiveEnd && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {formErrors.goLiveEnd}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </SidebarSection>
-
-          {/* Deliverables (multi-row, everything per row) */}
-          <SidebarSection
-            title="Deliverables"
-            icon={<ClipboardText className="w-4 h-4" />}
+            title="Campaign Overview"
+            icon={<Info className="h-4 w-4" />}
           >
             <div className="space-y-4">
-              {formErrors.deliverables && (
-                <div
-                  className="text-xs text-red-600 mb-1"
-                  data-field-error={true}
-                >
-                  {formErrors.deliverables}
-                </div>
-              )}
+              <FloatingInput
+                id="campaign-title"
+                label="Campaign Title / ID"
+                value={getAtPath(contractForm, "campaign.campaignTitleOrId")}
+                onValueChange={(value: string) =>
+                  setContractField("campaign.campaignTitleOrId", value)
+                }
+                state={sidebarStateFor("campaign.campaignTitleOrId")}
+                errorText={sidebarErrorFor("campaign.campaignTitleOrId")}
+              />
 
-              <div className="space-y-3">
-                {deliverables.map((row, index) => {
-                  const isVideoRow =
-                    VIDEO_TYPES.has(row.type) &&
-                    !TEXT_ONLY_TYPES.has(row.type);
+              <LabeledTextarea
+                id="campaign-products-services"
+                label="Products / Services Covered"
+                value={getAtPath(contractForm, "campaign.productsServicesCovered")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("campaign.productsServicesCovered", e.target.value)
+                }
+              />
 
-                  return (
-                    <div
-                      key={row.id}
-                      className="border border-gray-200 rounded-xl p-3 bg-white flex flex-col gap-3"
-                    >
-                      {/* Row header */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-gray-800">
-                          Deliverable #{index + 1}
-                        </div>
-                        {deliverables.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDeliverables((prev) =>
-                                prev.filter((d) => d.id !== row.id)
-                              )
-                            }
-                            className="text-xs text-gray-500 hover:text-red-600"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingInput
+                  id="campaign-territory"
+                  label="Territory / Target Country"
+                  value={getAtPath(contractForm, "campaign.territoryTargetCountry")}
+                  onValueChange={(value: string) =>
+                    setContractField("campaign.territoryTargetCountry", value)
+                  }
+                />
 
-                      {/* Type + Quantity + Duration (for video) */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <LabelWithInfo
-                            text="Type"
-                            info="Content category for this line item."
-                          />
-                          <ReactSelect
-                            instanceId={`dtype-${row.id}`}
-                            inputId={`dtype-${row.id}-input`}
-                            options={DELIVERABLE_TYPE_OPTIONS}
-                            value={
-                              DELIVERABLE_TYPE_OPTIONS.find(
-                                (o) => o.value === row.type
-                              ) || null
-                            }
-                            onChange={(opt: any) => {
-                              const nextType = opt?.value || "Video";
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, type: nextType }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                            styles={buildReactSelectStyles()}
-                            placeholder="Select type"
-                          />
-                        </div>
-
-                        <NumberInputTop
-                          id={`quantity-${row.id}`}
-                          label="Quantity"
-                          info="Number of pieces of this type."
-                          value={row.quantity}
-                          onChange={(v: string) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id
-                                  ? { ...d, quantity: v }
-                                  : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                        />
-
-                        {isVideoRow && (
-                          <NumberInputTop
-                            id={`duration-${row.id}`}
-                            label="Duration (sec)"
-                            info="Required for video deliverables."
-                            value={row.durationSec}
-                            onChange={(v: string) => {
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, durationSec: v }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                          />
-                        )}
-                      </div>
-
-                      {/* Format per deliverable */}
-                      <FloatingLabelInput
-                        id={`format-${row.id}`}
-                        label="Format (file • aspect • res)"
-                        info="Example: MP4 • 9:16 • 1080×1920"
-                        value={row.format}
-                        onChange={(e: any) => {
-                          const v = e.target.value;
-                          setDeliverables((prev) =>
-                            prev.map((d) =>
-                              d.id === row.id ? { ...d, format: v } : d
-                            )
-                          );
-                          clearPreview();
-                        }}
-                      />
-
-                      {/* Minimum Live + Units per deliverable */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <NumberInputTop
-                          id={`minlive-${row.id}`}
-                          label="Minimum Live"
-                          info="How long this piece must stay live."
-                          value={row.minLiveValue}
-                          onChange={(v: string) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id
-                                  ? { ...d, minLiveValue: v }
-                                  : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                        />
-                        <div className="space-y-1.5 md:col-span-2 md:max-w-xs">
-                          <label className="text-sm font-medium text-gray-700">
-                            Units
-                          </label>
-                          <select
-                            value={row.minLiveUnit}
-                            onChange={(e) => {
-                              const val = e.target.value as
-                                | "hours"
-                                | "months";
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, minLiveUnit: val }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                            className="w-full h-[44px] px-3 border-2 rounded-lg text-sm border-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white focus:border-[#FF8A35]"
-                          >
-                            <option value="hours">Hours</option>
-                            <option value="months">Months</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Draft Required + Draft Due per deliverable */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <Checkbox
-                          id={`draftRequired-${row.id}`}
-                          label={
-                            <>
-                              Draft Required{" "}
-                              <InfoTip text="If enabled, a draft must be submitted before posting (Section 4b)." />
-                            </>
-                          }
-                          checked={row.draftRequired}
-                          onChange={(v: boolean) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id
-                                  ? {
-                                    ...d,
-                                    draftRequired: v,
-                                    draftDue: v ? d.draftDue : "",
-                                  }
-                                  : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                        />
-                        <div>
-                          <LabelWithInfo
-                            text="Draft Due (if required)"
-                            info="Date the draft must be submitted for review."
-                          />
-                          <input
-                            id={`draftDue-${row.id}`}
-                            type="date"
-                            value={row.draftDue}
-                            min={draftMin}
-                            max={draftMax || undefined}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, draftDue: v }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                            disabled={!row.draftRequired}
-                            className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${row.draftRequired
-                              ? "border-gray-200 focus:border-[#FF8A35]"
-                              : "opacity-60 cursor-not-allowed border-gray-200"
-                              }`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Usage & Access per deliverable */}
-                      <div className="space-y-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-700">
-                            Usage &amp; Access for this deliverable
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                          {supportsWhitelisting && (
-                            <Checkbox
-                              id={`whitelist-${row.id}`}
-                              label={
-                                <>
-                                  Enable Whitelisting Access{" "}
-                                  <InfoTip text="Allow the brand to run ads from the creator handle for this deliverable." />
-                                </>
-                              }
-                              checked={row.whitelistingEnabled}
-                              onChange={(v: boolean) => {
-                                setDeliverables((prev) =>
-                                  prev.map((d) =>
-                                    d.id === row.id
-                                      ? { ...d, whitelistingEnabled: v }
-                                      : d
-                                  )
-                                );
-                                clearPreview();
-                              }}
-                            />
-                          )}
-                          {supportsSparkAds && (
-                            <Checkbox
-                              id={`sparkads-${row.id}`}
-                              label={
-                                <>
-                                  Enable Spark Ads / Boosting{" "}
-                                  <InfoTip text="Allow boosting or Spark Ads for this TikTok asset." />
-                                </>
-                              }
-                              checked={row.sparkAdsEnabled}
-                              onChange={(v: boolean) => {
-                                setDeliverables((prev) =>
-                                  prev.map((d) =>
-                                    d.id === row.id
-                                      ? { ...d, sparkAdsEnabled: v }
-                                      : d
-                                  )
-                                );
-                                clearPreview();
-                              }}
-                            />
-                          )}
-                          <Checkbox
-                            id={`insights-${row.id}`}
-                            label={
-                              <>
-                                Grant Read-only Insights{" "}
-                                <InfoTip text="Permit read-only analytics access for this specific deliverable." />
-                              </>
-                            }
-                            checked={row.insightsReadOnly}
-                            onChange={(v: boolean) => {
-                              setDeliverables((prev) =>
-                                prev.map((d) =>
-                                  d.id === row.id
-                                    ? { ...d, insightsReadOnly: v }
-                                    : d
-                                )
-                              );
-                              clearPreview();
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Captions / Disclosures per deliverable */}
-                      <TextArea
-                        id={`captions-${row.id}`}
-                        label={
-                          <LabelWithInfo
-                            text="Captions / Notes"
-                            info="Guidelines, messaging, and creative notes."
-                          />
-                        }
-                        value={row.captions}
-                        onChange={(e: any) => {
-                          const v = e.target.value;
-                          setDeliverables((prev) =>
-                            prev.map((d) =>
-                              d.id === row.id ? { ...d, captions: v } : d
-                            )
-                          );
-                          clearPreview();
-                        }}
-                        rows={3}
-                        placeholder="Hashtags, call-outs, shot list…"
-                      />
-
-                      <TextArea
-                        id={`disclosures-${row.id}`}
-                        label={
-                          <LabelWithInfo
-                            text="Disclosures (e.g., #ad)"
-                            info="Required compliance labels (Schedule B)."
-                          />
-                        }
-                        value={row.disclosures}
-                        onChange={(e: any) => {
-                          const v = e.target.value;
-                          setDeliverables((prev) =>
-                            prev.map((d) =>
-                              d.id === row.id
-                                ? { ...d, disclosures: v }
-                                : d
-                            )
-                          );
-                          clearPreview();
-                        }}
-                        rows={2}
-                        placeholder="Clear & conspicuous material-connection labels"
-                      />
-
-                      {/* Tags / Links / Handles per deliverable */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <ChipInput
-                          label={
-                            <LabelWithInfo
-                              text="Tags"
-                              info="Required hashtags to include."
-                            />
-                          }
-                          items={row.tags}
-                          setItems={(items: string[]) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id ? { ...d, tags: items } : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                          placeholder="#tag"
-                        />
-                        <ChipInput
-                          label={
-                            <LabelWithInfo
-                              text="Links"
-                              info="Campaign or tracking links (https://)."
-                            />
-                          }
-                          items={row.links}
-                          setItems={(items: string[]) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id ? { ...d, links: items } : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                          placeholder="https://"
-                          validator={(s: string) => /^https?:\/\/.+/i.test(s)}
-                        />
-                        <ChipInput
-                          label={
-                            <LabelWithInfo
-                              text="Handles"
-                              info="Brand or partner handles to tag."
-                            />
-                          }
-                          items={row.handles}
-                          setItems={(items: string[]) => {
-                            setDeliverables((prev) =>
-                              prev.map((d) =>
-                                d.id === row.id ? { ...d, handles: items } : d
-                              )
-                            );
-                            clearPreview();
-                          }}
-                          placeholder="@brand"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                <FloatingDateInput
+                  id="requested-effective-date"
+                  label="Requested Effective Date"
+                  type="date"
+                  value={requestedEffDate}
+                  min={todayStr}
+                  onValueChange={(value) => {
+                    setRequestedEffDate(value);
+                    setContractField("campaign.effectiveDate", value);
+                  }}
+                  state={sidebarStateFor("requestedEffDate")}
+                  errorText={sidebarErrorFor("requestedEffDate")}
+                />
               </div>
 
-              {/* Add new row */}
+              <FloatingSelect
+                label="Timezone"
+                value={requestedEffTz}
+                onValueChange={(value) => setRequestedEffTz(value)}
+                searchable
+              >
+                {tzOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Deliverables & Publication Timeline"
+            icon={<ClipboardText className="h-4 w-4" />}
+          >
+            <div className="space-y-4">
+              {formErrors["scheduleA.deliverables"] ? (
+                <div className="text-xs text-red-600">
+                  {formErrors["scheduleA.deliverables"]}
+                </div>
+              ) : null}
+
+              {deliverables.map((row, index) => (
+                <div
+                  key={row.id}
+                  className="space-y-3 rounded-xl border border-gray-200 bg-white p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-gray-800">
+                      Deliverable #{index + 1}
+                    </div>
+
+                    {deliverables.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDeliverables((prev) =>
+                            prev.filter((item) => item.id !== row.id)
+                          )
+                        }
+                        className="text-xs text-gray-500 hover:text-red-600"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <FloatingInput
+                      id={`deliverable-sr-${row.id}`}
+                      label="Sr. No."
+                      type="number"
+                      value={String(index + 1)}
+                      onValueChange={() => undefined}
+                      disabled
+                    />
+
+                    <FloatingInput
+                      id={`deliverable-platform-${row.id}`}
+                      label="Platform / Handle"
+                      value={row.platformHandle}
+                      onValueChange={(value: string) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id
+                              ? { ...item, platformHandle: value }
+                              : item
+                          )
+                        )
+                      }
+                    />
+
+                    <FloatingInput
+                      id={`deliverable-qty-${row.id}`}
+                      label="Qty"
+                      type="number"
+                      value={row.qty}
+                      onValueChange={(value: string) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, qty: value } : item
+                          )
+                        )
+                      }
+                    />
+                  </div>
+
+                  <FloatingSelect
+                    label="Deliverable Format"
+                    value={row.deliverableFormat}
+                    onValueChange={(value) =>
+                      setDeliverables((prev) =>
+                        prev.map((item) =>
+                          item.id === row.id
+                            ? { ...item, deliverableFormat: value }
+                            : item
+                        )
+                      )
+                    }
+                    searchable={false}
+                  >
+                    {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <FloatingDateInput
+                      id={`deliverable-draft-${row.id}`}
+                      label="Draft Due"
+                      type="date"
+                      value={row.draftDue}
+                      min={todayStr}
+                      onValueChange={(value) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, draftDue: value } : item
+                          )
+                        )
+                      }
+                    />
+
+                    <FloatingDateInput
+                      id={`deliverable-live-${row.id}`}
+                      label="Live Date"
+                      type="date"
+                      value={row.liveDate}
+                      min={todayStr}
+                      onValueChange={(value) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, liveDate: value } : item
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="border-dashed border-gray-300 text-gray-700"
-                onClick={() => {
+                onClick={() =>
                   setDeliverables((prev) => [
                     ...prev,
                     {
-                      id: createRowId(),
-                      type: "Video",
-                      quantity: "1",
-                      format: "",
-                      durationSec: "",
-                      minLiveValue: "",
-                      minLiveUnit: "hours",
-                      draftRequired: false,
-                      draftDue: "",
-                      captions: "",
-                      disclosures: "",
-                      tags: [],
-                      links: [],
-                      handles: [],
-                      whitelistingEnabled: false,
-                      sparkAdsEnabled: false,
-                      insightsReadOnly: false,
+                      ...createDefaultScheduleDeliverable(),
+                      srNo: prev.length + 1,
                     },
-                  ]);
-                  clearPreview();
-                }}
+                  ])
+                }
               >
                 + Add another deliverable
               </Button>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <LabeledTextarea
+                  id="minimum-video-specs"
+                  label="Minimum Video Specs"
+                  value={getAtPath(contractForm, "scheduleA.minimumVideoSpecs")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("scheduleA.minimumVideoSpecs", e.target.value)
+                  }
+                />
+
+                <FloatingTagInput
+                  label="Mandatory Tags / Mentions / Links / Codes"
+                  value={csvToTags(
+                    getAtPath(
+                      contractForm,
+                      "scheduleA.mandatoryTagsMentionsLinksCodes"
+                    )
+                  )}
+                  options={[]}
+                  onValueChange={(next) =>
+                    setContractField(
+                      "scheduleA.mandatoryTagsMentionsLinksCodes",
+                      tagsToCsv(next)
+                    )
+                  }
+                  dropdownDirection="up"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <FloatingSelect
+                  label="Pre-Shoot Script Required"
+                  value={
+                    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+                      ? "yes"
+                      : "no"
+                  }
+                  onValueChange={(value) =>
+                    setContractField(
+                      "scheduleA.preShootScriptRequired",
+                      value === "yes"
+                    )
+                  }
+                  searchable={false}
+                >
+                  {YES_NO_BOOL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <FloatingDateInput
+                  id="pre-shoot-script-due"
+                  label="Pre-Shoot Script Due"
+                  type="date"
+                  value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
+                  min={todayStr}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.preShootScriptDue", value)
+                  }
+                />
+
+                <FloatingInput
+                  id="pre-shoot-review-days"
+                  label="Script Review Business Days"
+                  type="number"
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.preShootScriptReviewBusinessDays"
+                  )}
+                  onValueChange={(value: string) =>
+                    setContractField(
+                      "scheduleA.preShootScriptReviewBusinessDays",
+                      value
+                    )
+                  }
+                  state={sidebarStateFor(
+                    "scheduleA.preShootScriptReviewBusinessDays"
+                  )}
+                  errorText={sidebarErrorFor(
+                    "scheduleA.preShootScriptReviewBusinessDays"
+                  )}
+                />
+              </div>
             </div>
           </SidebarSection>
 
-          {/* Usage Bundle & Rights */}
           <SidebarSection
-            title="Usage Bundle & Rights (Schedule)"
-            icon={<Info className="w-4 h-4" />}
+            title="Review, Revisions & Reshoots"
+            icon={<PenNib className="h-4 w-4" />}
           >
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <SelectWithInfo
-                  id="usageType"
-                  label="License Type"
-                  info="Organic Use or Paid Digital Use."
-                  value={usageType}
-                  onChange={(e: any) => {
-                    setUsageType(e.target.value);
-                    clearPreview();
-                  }}
-                  options={LICENSE_TYPES}
-                  error={formErrors.usageType}
-                />
-                <NumberInputTop
-                  id="usageDuration"
-                  label="Duration (months)"
-                  info="Length of license from first go-live."
-                  value={usageDurationMonths}
-                  onChange={(v: string) => {
-                    setUsageDurationMonths(v);
-                    clearPreview();
-                  }}
-                  error={formErrors.usageDurationMonths}
-                  data-field-error={!!formErrors.usageDurationMonths}
-                />
-              </div>
-
-              <div>
-                <LabelWithInfo
-                  text="Geographies"
-                  info="Territories where the license applies."
-                />
-                <ReactSelect
-                  instanceId="geo-select"
-                  inputId="geo-select-input"
-                  isMulti
-                  options={GEO_OPTIONS}
-                  value={GEO_OPTIONS.filter((o) =>
-                    usageGeographies.includes(o.value)
-                  )}
-                  onChange={(vals: any) => {
-                    setUsageGeographies(
-                      (vals || []).map((v: any) => v.value)
-                    );
-                    clearPreview();
-                  }}
-                  placeholder="Select territories"
-                  styles={buildReactSelectStyles()}
-                />
-              </div>
-
-              <Checkbox
-                id="deriv-edits"
-                label={
-                  <>
-                    Allow Derivative Edits{" "}
-                    <InfoTip text="Permit cut-downs, captions, translations, thumbnails, metadata edits." />
-                  </>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingInput
+                id="included-revision-rounds"
+                label="Included Revision Rounds"
+                type="number"
+                value={getAtPath(contractForm, "scheduleA.review.includedRevisionRounds")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.includedRevisionRounds", value)
                 }
-                checked={usageDerivativeEdits}
-                onChange={setUsageDerivativeEdits}
+                state={sidebarStateFor("scheduleA.review.includedRevisionRounds")}
+                errorText={sidebarErrorFor("scheduleA.review.includedRevisionRounds")}
+              />
+
+              <FloatingInput
+                id="additional-revision-fee"
+                label="Additional Revision Fee"
+                value={getAtPath(contractForm, "scheduleA.review.additionalRevisionFee")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.additionalRevisionFee", value)
+                }
+              />
+
+              <FloatingSelect
+                label="Reshoot Obligation"
+                value={getAtPath(contractForm, "scheduleA.review.reshootObligation")}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.review.reshootObligation", value)
+                }
+                searchable={false}
+              >
+                {RESHOOT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
+                id="reshoot-fee"
+                label="Reshoot Fee"
+                value={getAtPath(contractForm, "scheduleA.review.reshootFee")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.reshootFee", value)
+                }
+              />
+
+              <FloatingInput
+                id="minimum-live-period"
+                label="Minimum Live Period"
+                value={getAtPath(contractForm, "scheduleA.review.minimumLivePeriod")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.minimumLivePeriod", value)
+                }
               />
             </div>
           </SidebarSection>
 
-          {/* Footer Buttons */}
-          <div className="sticky bottom-0 -mx-6 -mb-6 bg-white/95 backdrop-blur border-t border-gray-200 p-6 flex flex-wrap justify-end gap-3">
+          <SidebarSection
+            title="Commercial Terms"
+            icon={<FileText className="h-4 w-4" />}
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingInput
+                  id="total-campaign-fee"
+                  label="Total Campaign Fee"
+                  type="number"
+                  value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
+                  onValueChange={(value: string) =>
+                    setContractField("scheduleA.commercial.totalCampaignFee", value)
+                  }
+                  state={sidebarStateFor("scheduleA.commercial.totalCampaignFee")}
+                  errorText={sidebarErrorFor("scheduleA.commercial.totalCampaignFee")}
+                />
+
+                <FloatingSelect
+                  label="Currency"
+                  value={getAtPath(contractForm, "scheduleA.commercial.currency")}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.commercial.currency", value)
+                  }
+                  searchable
+                  state={sidebarStateFor("scheduleA.commercial.currency")}
+                  errorText={sidebarErrorFor("scheduleA.commercial.currency")}
+                >
+                  {currencyOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+              </div>
+
+              <FloatingSelect
+                label="Platform Milestone Payment Structure"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.commercial.platformMilestonePaymentStructure"
+                )}
+                onValueChange={(value) =>
+                  setContractField(
+                    "scheduleA.commercial.platformMilestonePaymentStructure",
+                    value
+                  )
+                }
+                searchable={false}
+              >
+                {MILESTONE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
+                id="commercial-custom-split"
+                label="Custom Split"
+                value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.commercial.customSplit", value)
+                }
+              />
+
+              <LabeledTextarea
+                id="advance-payment-trigger"
+                label="Advance Payment Trigger"
+                value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField(
+                    "scheduleA.commercial.advancePaymentTrigger",
+                    e.target.value
+                  )
+                }
+              />
+
+              <LabeledTextarea
+                id="remaining-payment-trigger"
+                label="Remaining Payment Trigger"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.commercial.remainingPaymentTrigger"
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField(
+                    "scheduleA.commercial.remainingPaymentTrigger",
+                    e.target.value
+                  )
+                }
+              />
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingSelect
+                  label="Payment Processor Fees Borne By"
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.commercial.paymentProcessorFeesBorneBy"
+                  )}
+                  onValueChange={(value) =>
+                    setContractField(
+                      "scheduleA.commercial.paymentProcessorFeesBorneBy",
+                      value
+                    )
+                  }
+                  searchable={false}
+                >
+                  {PROCESSOR_FEE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <FloatingInput
+                  id="processor-fees-notes"
+                  label="Payment Processor Fee Notes"
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.commercial.paymentProcessorFeesNotes"
+                  )}
+                  onValueChange={(value: string) =>
+                    setContractField(
+                      "scheduleA.commercial.paymentProcessorFeesNotes",
+                      value
+                    )
+                  }
+                />
+              </div>
+
+              <LabeledTextarea
+                id="lane-a-marketplace-fee-note"
+                label="Lane A Marketplace Fee Note"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.commercial.laneAMarketplaceFeeNote"
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField(
+                    "scheduleA.commercial.laneAMarketplaceFeeNote",
+                    e.target.value
+                  )
+                }
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Raw Files & Reporting"
+            icon={<ClipboardText className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingSelect
+                label="Raw / Source File Delivery"
+                value={getAtPath(contractForm, "scheduleA.rawFiles.rawSourceFileDelivery")}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.rawFiles.rawSourceFileDelivery", value)
+                }
+                searchable={false}
+              >
+                {RAW_FILE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
+                id="raw-files-format"
+                label="Format"
+                value={getAtPath(contractForm, "scheduleA.rawFiles.format")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.rawFiles.format", value)
+                }
+              />
+
+              <FloatingDateInput
+                id="raw-files-delivery-due"
+                label="Delivery Due"
+                type="date"
+                value={getAtPath(contractForm, "scheduleA.rawFiles.deliveryDue")}
+                min={todayStr}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.rawFiles.deliveryDue", value)
+                }
+              />
+
+              <FloatingDateInput
+                id="analytics-reporting-deadline"
+                label="Analytics Reporting Deadline"
+                type="date"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.rawFiles.analyticsReportingDeadline"
+                )}
+                min={todayStr}
+                onValueChange={(value) =>
+                  setContractField(
+                    "scheduleA.rawFiles.analyticsReportingDeadline",
+                    value
+                  )
+                }
+              />
+
+              <div className="md:col-span-2">
+                <FloatingTagInput
+                  label="Analytics Reporting Items"
+                  value={csvToTags(
+                    getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingItems")
+                  )}
+                  options={[]}
+                  onValueChange={(next) =>
+                    setContractField(
+                      "scheduleA.rawFiles.analyticsReportingItems",
+                      tagsToCsv(next)
+                    )
+                  }
+                  dropdownDirection="up"
+                />
+              </div>
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Shipping & Returns"
+            icon={<Info className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingSelect
+                label="Product Shipping Applicable"
+                value={getAtPath(contractForm, "scheduleA.shipping.productShippingApplicable")}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.shipping.productShippingApplicable", value)
+                }
+                searchable={false}
+              >
+                {SHIPPING_APPLICABLE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingSelect
+                label="Product Returnable"
+                value={getAtPath(contractForm, "scheduleA.shipping.productReturnable")}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.shipping.productReturnable", value)
+                }
+                searchable={false}
+              >
+                {RETURNABLE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
+                id="ship-to-name"
+                label="Ship-To Name"
+                value={getAtPath(contractForm, "scheduleA.shipping.shipToName")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.shipping.shipToName", value)
+                }
+              />
+
+              <FloatingInput
+                id="ship-to-phone"
+                label="Ship-To Phone"
+                value={getAtPath(contractForm, "scheduleA.shipping.shipToPhone")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.shipping.shipToPhone", value)
+                }
+              />
+
+              <div className="md:col-span-2">
+                <LabeledTextarea
+                  id="ship-to-address"
+                  label="Ship-To Address"
+                  value={getAtPath(contractForm, "scheduleA.shipping.shipToAddress")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("scheduleA.shipping.shipToAddress", e.target.value)
+                  }
+                />
+              </div>
+
+              <FloatingDateInput
+                id="product-receipt-confirmation-deadline"
+                label="Product Receipt Confirmation Deadline"
+                type="date"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.shipping.productReceiptConfirmationDeadline"
+                )}
+                min={todayStr}
+                onValueChange={(value) =>
+                  setContractField(
+                    "scheduleA.shipping.productReceiptConfirmationDeadline",
+                    value
+                  )
+                }
+              />
+
+              <FloatingInput
+                id="return-window-method"
+                label="Return Window / Method"
+                value={getAtPath(contractForm, "scheduleA.shipping.returnWindowMethod")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.shipping.returnWindowMethod", value)
+                }
+              />
+
+              <div className="md:col-span-2">
+                <LabeledTextarea
+                  id="risk-of-loss-notes"
+                  label="Risk of Loss Notes"
+                  value={getAtPath(contractForm, "scheduleA.shipping.riskOfLossNotes")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("scheduleA.shipping.riskOfLossNotes", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Usage Rights"
+            icon={<SealCheck className="h-4 w-4" />}
+          >
+            <div className="space-y-4">
+              <FloatingMultiSelect
+                label="Granted Usage Rights"
+                value={selectedUsageRights}
+                options={usageRightOptions}
+                onValueChange={(next) => setSelectedUsageRights(next)}
+                includeAll={false}
+                searchable={false}
+              />
+
+              <div className="space-y-3">
+                {contractForm.scheduleA.usageRights.rows
+                  .filter((row) => row.selected)
+                  .map((row) => (
+                    <div
+                      key={row.id}
+                      className="rounded-xl border border-gray-200 bg-white p-3"
+                    >
+                      <div className="mb-3 text-sm font-semibold text-gray-800">
+                        {row.usageRight}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <FloatingInput
+                          id={`usage-duration-${row.id}`}
+                          label="Duration"
+                          value={row.duration}
+                          onValueChange={(value: string) =>
+                            setContractField(
+                              "scheduleA.usageRights.rows",
+                              contractForm.scheduleA.usageRights.rows.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, duration: value }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+
+                        <FloatingInput
+                          id={`usage-territory-${row.id}`}
+                          label="Territory / Notes"
+                          value={row.territoryNotes}
+                          onValueChange={(value: string) =>
+                            setContractField(
+                              "scheduleA.usageRights.rows",
+                              contractForm.scheduleA.usageRights.rows.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, territoryNotes: value }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingSelect
+                  label="Attribution Requirement"
+                  value={getAtPath(contractForm, "scheduleA.usageRights.attributionRequirement")}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.usageRights.attributionRequirement", value)
+                  }
+                  searchable={false}
+                >
+                  {ATTRIBUTION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <FloatingSelect
+                  label="Editing Rights"
+                  value={getAtPath(contractForm, "scheduleA.usageRights.editingRights")}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.usageRights.editingRights", value)
+                  }
+                  searchable={false}
+                >
+                  {EDITING_RIGHTS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+              </div>
+
+              <FloatingInput
+                id="attribution-text"
+                label="Attribution Text"
+                value={getAtPath(contractForm, "scheduleA.usageRights.attributionText")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.usageRights.attributionText", value)
+                }
+              />
+
+              <FloatingSelect
+                label="Music / Stock Asset Responsibility"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.usageRights.musicStockAssetResponsibility"
+                )}
+                onValueChange={(value) =>
+                  setContractField(
+                    "scheduleA.usageRights.musicStockAssetResponsibility",
+                    value
+                  )
+                }
+                searchable={false}
+              >
+                {MUSIC_RESPONSIBILITY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Compliance & Brand Safety"
+            icon={<Info className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <LabeledTextarea
+                id="creative-brief-mandatory-talking-points"
+                label="Creative Brief / Mandatory Talking Points"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.compliance.creativeBriefMandatoryTalkingPoints"
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField(
+                    "scheduleA.compliance.creativeBriefMandatoryTalkingPoints",
+                    e.target.value
+                  )
+                }
+              />
+
+              <LabeledTextarea
+                id="restricted-statements"
+                label="Restricted Statements"
+                value={getAtPath(contractForm, "scheduleA.compliance.restrictedStatements")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField(
+                    "scheduleA.compliance.restrictedStatements",
+                    e.target.value
+                  )
+                }
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Exclusivity & Morals"
+            icon={<SealCheck className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingInput
+                id="competitor-blackout"
+                label="Competitor Blackout"
+                value={getAtPath(contractForm, "scheduleA.exclusivity.competitorBlackout")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.exclusivity.competitorBlackout", value)
+                }
+              />
+
+              <FloatingTagInput
+                label="Category / Competitor List"
+                value={csvToTags(
+                  getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList")
+                )}
+                options={[]}
+                onValueChange={(next) =>
+                  setContractField(
+                    "scheduleA.exclusivity.categoryCompetitorList",
+                    tagsToCsv(next)
+                  )
+                }
+                dropdownDirection="up"
+              />
+
+              <FloatingInput
+                id="blackout-period"
+                label="Blackout Period"
+                value={getAtPath(contractForm, "scheduleA.exclusivity.blackoutPeriod")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.exclusivity.blackoutPeriod", value)
+                }
+              />
+
+              <FloatingSelect
+                label="Optional Morals Clause"
+                value={getAtPath(contractForm, "scheduleA.exclusivity.optionalMoralsClause")}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.exclusivity.optionalMoralsClause", value)
+                }
+                searchable={false}
+              >
+                {MORALS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Cancellation & Refunds"
+            icon={<Info className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <LabeledTextarea
+                id="kill-fee-or-prorata"
+                label="Kill Fee / Pro-Rata"
+                value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
+                }
+              />
+
+              <LabeledTextarea
+                id="refund-of-unearned-advance"
+                label="Refund of Unearned Advance"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.cancellation.refundOfUnearnedAdvance"
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField(
+                    "scheduleA.cancellation.refundOfUnearnedAdvance",
+                    e.target.value
+                  )
+                }
+              />
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Dispute & Notices"
+            icon={<FileText className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingInput
+                id="governing-law"
+                label="Governing Law"
+                value={getAtPath(contractForm, "scheduleA.dispute.governingLaw")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.dispute.governingLaw", value)
+                }
+              />
+
+              <FloatingSelect
+                label="Dispute Resolution Method"
+                value={getAtPath(contractForm, "scheduleA.dispute.disputeResolutionMethod")}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.dispute.disputeResolutionMethod", value)
+                }
+                searchable={false}
+              >
+                {DISPUTE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
+                id="dispute-venue"
+                label="Venue"
+                value={getAtPath(contractForm, "scheduleA.dispute.disputeVenue")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.dispute.disputeVenue", value)
+                }
+              />
+
+              <FloatingInput
+                id="arbitration-seat"
+                label="Arbitration Seat"
+                value={getAtPath(contractForm, "scheduleA.dispute.arbitrationSeat")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.dispute.arbitrationSeat", value)
+                }
+              />
+
+              <FloatingSelect
+                label="Attorneys’ Fees"
+                value={getAtPath(contractForm, "scheduleA.dispute.attorneysFees")}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.dispute.attorneysFees", value)
+                }
+                searchable={false}
+              >
+                {ATTORNEYS_FEES_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+            </div>
+          </SidebarSection>
+
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 border-t border-gray-200 bg-white/95 p-6 backdrop-blur">
             <Button
               onClick={handleGeneratePreview}
-              className="px-6 border-2 border-black text-black bg-white hover:bg-gray-50 disabled:opacity-60"
-              title="Generate a PDF preview on the left"
-              disabled={
-                !platforms.length ||
-                !campaignTitle.trim() ||
-                isPreviewLoading ||
-                isSendLoading ||
-                isUpdateLoading
-              }
+              className="border-2 border-black bg-white px-6 text-black hover:bg-gray-50 disabled:opacity-60"
+              disabled={isPreviewLoading || isSendLoading || isUpdateLoading}
             >
               {isPreviewLoading ? (
                 <>
@@ -3239,25 +4785,15 @@ export default function AppliedInfluencersPage() {
                 </>
               ) : (
                 <>
-                  <Eye className="w-5 h-5 mr-2" /> Preview
+                  <Eye className="mr-2 h-5 w-5" /> Preview
                 </>
               )}
             </Button>
+
             {panelMode === "send" ? (
               <Button
                 onClick={handleSendContract}
-                className="px-6 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none disabled:opacity-60"
-                disabled={
-                  !platforms.length ||
-                  !campaignTitle.trim() ||
-                  !pdfUrl ||
-                  isSendLoading ||
-                  isPreviewLoading ||
-                  isUpdateLoading
-                }
-                title={
-                  !pdfUrl ? "Preview required first" : "Send contract"
-                }
+                disabled={!pdfUrl || isSendLoading || isPreviewLoading || isUpdateLoading}
               >
                 {isSendLoading ? (
                   <>
@@ -3265,29 +4801,18 @@ export default function AppliedInfluencersPage() {
                   </>
                 ) : (
                   <>
-                    <PaperPlaneTilt className="w-5 h-5 mr-2" /> Send
-                    Contract
+                    <PaperPlaneTilt className="mr-2 h-5 w-5" /> Send Contract
                   </>
                 )}
               </Button>
             ) : (
               <Button
                 onClick={handleEditContract}
-                className="px-6 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none disabled:opacity-60"
-                disabled={
-                  !pdfUrl ||
-                  isUpdateLoading ||
-                  isPreviewLoading ||
-                  isSendLoading
-                }
-                title={
-                  !pdfUrl ? "Preview required first" : updateBtnLabel
-                }
+                disabled={!pdfUrl || isUpdateLoading || isPreviewLoading || isSendLoading}
               >
                 {isUpdateLoading ? (
                   <>
-                    <span className="mr-2 animate-spin">⏳</span>{" "}
-                    Updating…
+                    <span className="mr-2 animate-spin">⏳</span> Updating…
                   </>
                 ) : (
                   updateBtnLabel
@@ -3297,7 +4822,6 @@ export default function AppliedInfluencersPage() {
           </div>
         </ContractSidebar>
 
-        {/* Signature Modal */}
         <SignatureModal
           isOpen={signOpen}
           onClose={() => {
@@ -3314,14 +4838,10 @@ export default function AppliedInfluencersPage() {
                 email: signerEmail,
                 signatureImageDataUrl: sigDataUrl,
               });
-              toast({
-                icon: "success",
-                title: "Signed",
-                text: "Signature recorded.",
-              });
+              toast({ icon: "success", title: "Signed", text: "Signature recorded." });
               setSignOpen(false);
               setSignTargetMeta(null);
-              fetchApplicants();
+              fetchApplicants(debouncedSearch);
               loadMetaCache(influencers);
             } catch (e: any) {
               toast({
@@ -3373,51 +4893,6 @@ const ErrorMessage: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => <p className="p-6 text-center text-red-600">{children}</p>;
 
-export function FloatingLabelInput({
-  id,
-  label,
-  value,
-  onChange,
-  type = "text",
-  error,
-  info,
-  ...props
-}: any) {
-  const [focused, setFocused] = useState(false);
-  const hasValue = value !== "" && value !== undefined && value !== null;
-  return (
-    <div className="relative" data-field-error={!!error}>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={onChange}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#FF8A35]"
-          } peer`}
-        placeholder=" "
-        {...props}
-      />
-      <label
-        htmlFor={id}
-        className={`absolute left-4 transition-all duration-200 pointer-events-none inline-flex items-center gap-1 ${focused || hasValue
-          ? "top-1.5 text-[11px] text-black font-medium"
-          : "top-1/2 -translate-y-1/2 text-sm text-gray-500"
-          }`}
-      >
-        <span>{label}</span>
-        {info ? (
-          <span className="pointer-events-auto">
-            <InfoTip text={String(info)} />
-          </span>
-        ) : null}
-      </label>
-      {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
-    </div>
-  );
-}
-
 export function Select({
   id,
   label,
@@ -3445,12 +4920,13 @@ export function Select({
         value={value}
         onChange={onChange}
         disabled={disabled}
-        className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${disabled
-          ? "opacity-60 cursor-not-allowed border-gray-200"
-          : error
-            ? "border-red-500"
-            : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  disabled
+    ? "opacity-60 cursor-not-allowed border-gray-200"
+    : error
+      ? "border-red-500"
+      : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
       >
         {flat.map((o) => (
           <option key={o.value} value={o.value}>
@@ -3506,8 +4982,9 @@ export function NumberInput({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
         {...props}
       />
       <label
@@ -3552,8 +5029,9 @@ export function NumberInputTop({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
         {...props}
       />
       {error && (
@@ -3603,11 +5081,14 @@ export function PlatformSelector({
       : [...platforms, p];
     onChange(next);
   };
+
   const opts = ["YouTube", "Instagram", "TikTok"];
+
   return (
     <div className="flex flex-wrap gap-2">
       {opts.map((p) => {
         const active = platforms.includes(p);
+
         return (
           <button
             key={p}
@@ -3616,23 +5097,14 @@ export function PlatformSelector({
             disabled={disabled}
             aria-pressed={active}
             className={[
-              "px-3 py-1.5 rounded-lg text-sm font-medium transition-all border flex items-center gap-1",
-              disabled ? "opacity-60 cursor-not-allowed" : "",
+              "flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+              disabled ? "cursor-not-allowed opacity-60" : "",
               active
-                ? "border-transparent text-white shadow-sm"
-                : "border-gray-300 text-gray-800 bg-white hover:bg-gray-50",
+                ? "border-[#1A1A1A] bg-[#1A1A1A] text-white shadow-sm"
+                : "border-gray-300 bg-white text-gray-800 hover:bg-gray-50",
             ].join(" ")}
-            style={
-              active
-                ? {
-                  backgroundImage: `linear-gradient(to right, ${GRADIENT_FROM}, ${GRADIENT_TO})`,
-                }
-                : undefined
-            }
           >
-            {active && (
-              <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
-            )}
+            {active && <span className="h-1.5 w-1.5 rounded-full bg-white/80" />}
             {p}
           </button>
         );
@@ -3770,12 +5242,13 @@ export function TextArea({
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}
-        className={`w-full px-3 py-2.5 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${disabled
-          ? "opacity-60 cursor-not-allowed border-gray-200"
-          : error
-            ? "border-red-500"
-            : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full px-3 py-2.5 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  disabled
+    ? "opacity-60 cursor-not-allowed border-gray-200"
+    : error
+      ? "border-red-500"
+      : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
       />
       {error && (
         <div className="text-xs text-red-600">{error}</div>
@@ -3795,44 +5268,33 @@ function ContractSidebar({
 }: any) {
   return (
     <div
-      className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"
-        }`}
+      className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="contract-title"
     >
       <div
-        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"
-          }`}
+        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
         onClick={onClose}
       />
+
       <div
-        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
       >
-        <div className="relative h-36 overflow-hidden">
-          <div
-            className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: `linear-gradient(135deg, ${GRADIENT_FROM} 0%, ${GRADIENT_TO} 100%)`,
-              clipPath: "polygon(0 0, 100% 0, 100% 65%, 0 100%)",
-            }}
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, ${GRADIENT_FROM} 0%, ${GRADIENT_TO} 100%)`,
-              clipPath: "polygon(0 0, 100% 0, 100% 78%, 0 92%)",
-            }}
-          />
-          <div className="relative z-10 p-6 text-white flex items-start justify-between h-full">
+        <div className="relative h-36 overflow-hidden border-b border-neutral-200 bg-[#1A1A1A]">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,#1A1A1A_0%,#2A2A2A_100%)] opacity-100" />
+          <div className="relative z-10 flex h-full items-start justify-between p-6 text-white">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mt-1 shadow-sm">
-                <FileText className="w-6 h-6 text-white" />
+              <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md shadow-sm">
+                <FileText className="h-6 w-6 text-white" />
               </div>
               <div>
                 <div
-                  className="text-[11px] tracking-wide font-semibold uppercase/relaxed opacity-95 mb-1"
+                  className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/75"
                   id="contract-title"
                 >
                   {title}
@@ -3842,8 +5304,9 @@ function ContractSidebar({
                 </div>
               </div>
             </div>
+
             <button
-              className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm flex items-center justify-center transition-all duration-150 hover:scale-110"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/10 transition-all duration-150 hover:scale-105 hover:bg-white/20"
               onClick={onClose}
               aria-label="Close"
               title="Close"
@@ -3852,24 +5315,27 @@ function ContractSidebar({
             </button>
           </div>
         </div>
+
         <div className="flex h-[calc(100%-9rem)]">
           {previewUrl ? (
-            <div className="w-full sm:w-1/2 p-6 border-r border-gray-100 flex flex-col">
-              <div className="flex items-center justify-between mb-3">
+            <div className="flex w-full flex-col border-r border-gray-100 p-6 sm:w-1/2">
+              <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <Eye className="w-4 h-4" />
+                  <Eye className="h-4 w-4" />
                   <span>Preview</span>
                 </div>
+
                 {onClosePreview && (
                   <button
                     type="button"
                     onClick={onClosePreview}
-                    className="text-xs px-3 py-1 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                    className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-gray-700 hover:bg-neutral-100"
                   >
                     Close preview
                   </button>
                 )}
               </div>
+
               <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-gray-50">
                 <iframe
                   src={previewUrl}
@@ -3881,19 +5347,16 @@ function ContractSidebar({
               </div>
             </div>
           ) : (
-            <div className="hidden sm:flex w-1/2 p-6 items-center justify-center text-gray-400 select-none">
+            <div className="hidden w-1/2 select-none items-center justify-center p-6 text-gray-400 sm:flex">
               <div className="text-center">
-                <Eye className="mx-auto w-8 h-8 mb-2" />
-                <div className="text-sm">
-                  Generate a preview to see the PDF here
-                </div>
+                <Eye className="mx-auto mb-2 h-8 w-8" />
+                <div className="text-sm">Generate a preview to see the PDF here</div>
               </div>
             </div>
           )}
 
           <div
-            className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"
-              } h-full px-6 space-y-5 overflow-auto`}
+            className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"} h-full overflow-auto px-6 space-y-5`}
           >
             {children}
           </div>
@@ -4059,9 +5522,9 @@ function SignatureModal({
         <div className="relative h-24">
           <div
             className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, ${GRADIENT_FROM} 0%, ${GRADIENT_TO} 100%)`,
-            }}
+style={{
+  background: "linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)",
+}}
           />
           <div className="relative z-10 h-full px-5 flex items-center justify-between text-white">
             <div className="flex items-center gap-3">
@@ -4113,7 +5576,7 @@ function SignatureModal({
           <div
             ref={dropRef}
             className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all cursor-pointer select-none ${isDragging
-              ? "border-orange-400 bg-orange-50/80 shadow-sm"
+? "border-[#1A1A1A] bg-neutral-100 shadow-sm"
               : "border-gray-300 bg-gray-50 hover:bg-gray-100/80"
               }`}
           >
@@ -4219,7 +5682,6 @@ function SignatureModal({
           </Button>
 
           <Button
-            className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none disabled:opacity-60 disabled:cursor-not-allowed"
             onClick={handleSignClick}
             disabled={!sigDataUrl || isSubmitting} // ✅ key line
           >
@@ -4234,10 +5696,10 @@ function SignatureModal({
 
 function SidebarSection({ title, children, icon }: any) {
   return (
-    <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-100 shadow-sm p-5 transition-all duration-200 hover:shadow-md">
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md">
+      <div className="mb-4 flex items-center gap-2 border-b border-gray-100 pb-3">
         {icon && (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white flex items-center justify-center">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] text-white">
             {icon}
           </div>
         )}
@@ -4247,8 +5709,6 @@ function SidebarSection({ title, children, icon }: any) {
     </div>
   );
 }
-
-
 
 function LabelWithInfo({
   text,

@@ -25,6 +25,7 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog";
+import { useRouter } from "next/navigation";
 /* -------------------------------------------------------------------------- */
 /*                               TYPES                                        */
 /* -------------------------------------------------------------------------- */
@@ -530,7 +531,7 @@ export default function InvitesPage() {
     const [activeTab, setActiveTab] = useState<"all" | InviteStatus>("all");
     const [invites, setInvites] = useState<CampaignInvite[]>(invitesData);
     const [detailsInvite, setDetailsInvite] = useState<CampaignInvite | null>(null);
-
+    const router = useRouter()
     const handleAccept = (id: string) => {
         setInvites((prev) =>
             prev.map((inv) => (inv.id === id ? { ...inv, status: "accepted" } : inv))
@@ -690,7 +691,9 @@ export default function InvitesPage() {
                                                 respondBy: inv.respondBy,
                                                 onAccept: () => handleAccept(inv.id),
                                                 onDecline: () => handleDecline(inv.id),
-                                                onViewDetails: () => setDetailsInvite(inv),
+                                                onViewDetails: () => {
+                                                    router.push("/influencer/my-campaigns/abc")
+                                                },
                                             }}
                                         />
                                     </div>

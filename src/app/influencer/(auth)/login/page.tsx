@@ -193,7 +193,7 @@ function routeToPath(route?: string) {
       return "/influencer/onboarding?step=page2";
     case "page3":
       return "/influencer/onboarding?step=page3";
-    case "homepage":
+    case "campaign":
     default:
       return "/influencer/campaign";
   }
@@ -252,6 +252,9 @@ export default function InfluencerLoginPage() {
 
       setCookie("influencerToken", res.token, { days: 30 });
       setCookie("influencerId", res.influencerId, { days: 30 });
+      // store in localStorage
+      localStorage.setItem("influencerToken", res.token);
+      localStorage.setItem("influencerId", res.influencerId);
 
       await fetch("/api-1/influencer-auth", {
         method: "POST",
@@ -261,7 +264,14 @@ export default function InfluencerLoginPage() {
       });
 
       // ✅ UPDATED: go onboarding first if incomplete
-      router.replace(routeToPath(res.route));
+      const onboardingDone =
+        res?.onboarding?.page1Done &&
+        res?.onboarding?.page2Done &&
+        res?.onboarding?.page3Done;
+
+      router.replace(
+        onboardingDone ? "/influencer/dashboards" : routeToPath(res.route)
+      );
     } catch (err) {
       const fallback = getApiErrorMessage(err, "Login failed");
       const details = getApiErrorDetails(err, fallback);

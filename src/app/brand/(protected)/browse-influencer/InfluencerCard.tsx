@@ -1,8 +1,21 @@
-// src/app/brand/(protected)/browse-influencer/InfluencerCard.tsx
-import React from "react";
-import { MapPin, Users, CheckCircle, ExternalLink, Lock } from "lucide-react";
+"use client";
+
+import React, { useMemo, useState } from "react";
 import type { Platform } from "./filters";
 import { platformTheme } from "./utils/platform";
+import {
+  ArrowSquareOut,
+  CheckCircle,
+  GlobeHemisphereWest,
+  InstagramLogo,
+  LockSimple,
+  MapPin,
+  TiktokLogo,
+  UsersThree,
+  XLogo,
+  YoutubeLogo,
+} from "@phosphor-icons/react/dist/ssr";
+import { Button } from "@/components/ui/buttonComp";
 
 interface InfluencerCardProps {
   platform: Platform;
@@ -10,13 +23,44 @@ interface InfluencerCardProps {
   onViewProfile?: (influencer: any) => void;
 }
 
-export function InfluencerCard({ platform, influencer, onViewProfile }: InfluencerCardProps) {
-  const platformKey: Platform = (influencer?.platform as Platform) || platform;
+function getPlatformIcon(platform?: string) {
+  const key = String(platform || "").toLowerCase();
+
+  switch (key) {
+    case "instagram":
+      return <InstagramLogo size={14} weight="fill" />;
+    case "youtube":
+      return <YoutubeLogo size={14} weight="fill" />;
+    case "tiktok":
+      return <TiktokLogo size={14} weight="fill" />;
+    case "twitter":
+    case "x":
+      return <XLogo size={14} weight="fill" />;
+    default:
+      return <GlobeHemisphereWest size={14} weight="fill" />;
+  }
+}
+
+export function InfluencerCard({
+  platform,
+  influencer,
+  onViewProfile,
+}: InfluencerCardProps) {
+  const [bgFailed, setBgFailed] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  const platformKey: Platform =
+    (influencer?.platform as Platform) || platform;
+
   const theme = platformTheme[platformKey];
 
   const username =
     influencer?.username || influencer?.handle || influencer?.name || "unknown";
-  const handle = username.startsWith("@") ? username : `@${username}`;
+
+  const handle = String(username).startsWith("@")
+    ? String(username)
+    : `@${username}`;
+
   const displayName =
     influencer?.fullname ||
     influencer?.fullName ||
@@ -31,163 +75,285 @@ export function InfluencerCard({ platform, influencer, onViewProfile }: Influenc
     0;
 
   const engagementRate =
-    influencer?.engagementRate ?? influencer?.stats?.engagementRate ?? 0;
+    influencer?.engagementRate ??
+    influencer?.stats?.engagementRate ??
+    0;
 
-  const engagements =
-    influencer?.engagements ??
-    influencer?.stats?.avgEngagements ??
-    influencer?.stats?.avgLikes;
+  const averageViews =
+    influencer?.averageViews ??
+    influencer?.stats?.avgViews ??
+    influencer?.stats?.views;
 
-  const averageViews = influencer?.averageViews ?? influencer?.stats?.avgViews;
-  const location = influencer?.location || influencer?.country || influencer?.city;
+  const bio = influencer?.bio || influencer?.description || "";
+
+  const country =
+    influencer?.country ||
+    influencer?.location?.country ||
+    "";
+
+  const state =
+    influencer?.state ||
+    influencer?.location?.state ||
+    "";
+
+  const city =
+    influencer?.city ||
+    influencer?.location?.city ||
+    "";
+
+  const location =
+    influencer?.location && typeof influencer.location === "string"
+      ? influencer.location
+      : [city, state, country].filter(Boolean).join(", ");
+
+  const language =
+    typeof influencer?.language === "string"
+      ? influencer.language
+      : influencer?.language?.name || influencer?.language?.code || "";
+
+  const categories = useMemo(() => {
+    const raw = influencer?.categories;
+
+    if (!Array.isArray(raw)) {
+      return influencer?.category ? [influencer.category] : [];
+    }
+
+    const names = raw.flatMap((item: any) => {
+      if (!item) return [];
+      if (typeof item === "string") return [item];
+      return [
+        item.categoryName,
+        item.subcategoryName,
+        item.name,
+        item.subcategory,
+      ].filter(Boolean);
+    });
+
+    return Array.from(new Set(names.map((x: any) => String(x).trim()).filter(Boolean))).slice(0, 3);
+  }, [influencer]);
+
   const avatar =
     influencer?.picture ||
     influencer?.avatar ||
     influencer?.profilePicUrl ||
-    influencer?.thumbnail;
+    influencer?.thumbnail ||
+    influencer?.profilePicture ||
+    "";
 
   const isVerified = Boolean(influencer?.isVerified || influencer?.verified);
   const isPrivate = Boolean(influencer?.isPrivate);
   const profileUrl = influencer?.url || "#";
-  const bio = influencer?.bio || influencer?.description || "";
 
-  const formatNumber = (num?: number) => {
+  const formatNumber = (num?: number | null) => {
     if (num == null) return "—";
+    if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)}B`;
     if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
     if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
-    return num.toLocaleString();
+    return Number(num).toLocaleString();
   };
 
-  const formatRate = (rate?: number) =>
-    rate == null ? "—" : `${(rate * 100).toFixed(2)}%`;
+  const formatRate = (rate?: number | null) => {
+    if (rate == null) return "—";
+    const normalized = rate > 1 ? rate : rate * 100;
+    return `${normalized.toFixed(2)}%`;
+  };
+
+  const initials = String(displayName)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  const openExternalProfile = () => {
+    if (!profileUrl || profileUrl === "#") return;
+    window.open(profileUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleViewProfile = () => {
+    if (onViewProfile) {
+      onViewProfile(influencer);
+      return;
+    }
+    openExternalProfile();
+  };
 
   return (
-    <div className="w-full h-full bg-white rounded-2xl border border-gray-200 hover:shadow-lg transition-all duration-200 overflow-hidden group flex flex-col">
-      {/* Header */}
-      <a
-        href={profileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`${theme.color} px-4 py-3 sm:px-5 sm:py-3 text-white relative block focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white/70`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-6 h-6 bg-white/20 rounded-md flex items-center justify-center">
-              {theme.icon}
+    <div className="group relative isolate w-full h-full min-h-[520px] overflow-hidden rounded-[30px] border border-black/5 bg-zinc-200 shadow-[0_12px_40px_rgba(15,23,42,0.14)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_56px_rgba(15,23,42,0.2)]">
+      {/* Background image */}
+      {avatar && !bgFailed ? (
+        <img
+          src={avatar}
+          alt={displayName}
+          loading="lazy"
+          className="absolute inset-0 z-0 h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-[1.04]"
+          onError={() => setBgFailed(true)}
+        />
+      ) : null}
+
+      {/* Fallback bg only when image missing/failed */}
+      {(!avatar || bgFailed) && (
+        <div className="absolute inset-0 z-0 bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-300" />
+      )}
+
+      {/* Overlays */}
+      <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-black/15 to-black/80" />
+      <div className="absolute inset-x-0 bottom-0 z-10 h-[70%] bg-gradient-to-t from-black/85 via-black/50 to-transparent" />
+
+      {/* Top chips */}
+      <div className="absolute inset-x-0 top-0 z-20 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md ${theme?.color || "bg-zinc-900"}`}
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
+                {getPlatformIcon(platformKey)}
+              </span>
+              <span className="truncate">
+                {theme?.label || platformKey || "Platform"}
+              </span>
             </div>
-            {/* smaller, lighter */}
-            <span className="font-medium text-[13px] sm:text-sm truncate">
-              {theme.label}
-            </span>
+
+            {country && (
+              <div className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-medium text-zinc-900 backdrop-blur-md">
+                <MapPin size={13} weight="fill" />
+                <span className="truncate">{country}</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-1">
-            {isPrivate && (
-              <span
-                className="flex items-center bg-white/20 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium"
-                aria-label="Private account"
-                title="Private account"
-              >
-                <Lock className="w-3 h-3 mr-1" />
-                Private
-              </span>
-            )}
-            {isVerified && (
-              <span
-                className="flex items-center bg-white/20 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium"
-                aria-label="Verified account"
-                title="Verified account"
-              >
-                <CheckCircle className="w-3 h-3 mr-1" />
-                Verified
-              </span>
-            )}
-          </div>
+          {profileUrl !== "#" && (
+            <Button onClick={openExternalProfile}>
+              <ArrowSquareOut size={18} weight="bold" />
+            </Button>
+          )}
         </div>
-        <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-      </a>
+      </div>
 
-      {/* Body */}
-      <div className="p-4 sm:p-5 flex-1 flex flex-col">
-        {/* Avatar + name */}
-        <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
-          {avatar ? (
-            <img
-              src={avatar}
-              loading="lazy"
-              alt={`${displayName} avatar`}
-              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover border-2 border-gray-200"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src =
-                  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIyMCIgZmlsbD0iI0YzRjRGNiIvPjwvc3ZnPg==';
-              }}
-            />
-          ) : (
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-200 rounded-full flex items-center justify-center">
-              <Users className="w-6 h-6 text-gray-400" />
+      {/* Bottom content */}
+      <div className="absolute inset-x-0 bottom-0 z-20 p-4 sm:p-5">
+        <div className="rounded-[26px] border border-white/15 bg-white/10 p-4 sm:p-5 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-[24px] font-semibold tracking-tight text-white">
+                  {displayName}
+                </h3>
+
+                {isVerified && (
+                  <span
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-white shadow-md"
+                    aria-label="Verified account"
+                    title="Verified account"
+                  >
+                    <CheckCircle size={14} weight="fill" />
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-white/75">
+                <span className="truncate">{handle}</span>
+
+                {isPrivate && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2 py-1 text-[11px] font-medium text-white/90 ring-1 ring-white/10"
+                    aria-label="Private account"
+                    title="Private account"
+                  >
+                    <LockSimple size={12} weight="fill" />
+                    Private
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/12">
+              {avatar && !avatarFailed ? (
+                <img
+                  src={avatar}
+                  alt={`${displayName} avatar`}
+                  className="h-full w-full object-cover"
+                  onError={() => setAvatarFailed(true)}
+                />
+              ) : (
+                <span className="text-sm font-semibold text-white/90">
+                  {initials || <UsersThree size={20} weight="fill" />}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Bio */}
+          {bio && (
+            <p className="mt-3 line-clamp-2 text-sm leading-5 text-white/78">
+              {bio}
+            </p>
+          )}
+
+          {/* Meta */}
+          {(location || language || categories.length > 0) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {location && (
+                <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/12 px-3 py-1.5 text-[11px] font-medium text-white/90 ring-1 ring-white/10">
+                  <MapPin size={12} weight="fill" />
+                  <span className="truncate">{location}</span>
+                </span>
+              )}
+
+              {language && (
+                <span className="inline-flex rounded-full bg-white/12 px-3 py-1.5 text-[11px] font-medium text-white/90 ring-1 ring-white/10">
+                  {language}
+                </span>
+              )}
+
+              {categories.map((cat: string) => (
+                <span
+                  key={cat}
+                  className="inline-flex rounded-full bg-white/12 px-3 py-1.5 text-[11px] font-medium text-white/90 ring-1 ring-white/10"
+                >
+                  {cat}
+                </span>
+              ))}
             </div>
           )}
 
-          <div className="flex-1 min-w-0">
-            {/* smaller + lighter */}
-            <h3 className="font-semibold text-gray-900 text-sm sm:text-[15px] md:text-base truncate">
-              {displayName}
-            </h3>
-            <p className="text-gray-600 text-[11px] sm:text-xs md:text-sm truncate">
-              {handle}
-            </p>
-
-            {location && (
-              <div className="flex items-center mt-1 text-[10px] sm:text-xs md:text-[13px] text-gray-500 min-w-0">
-                <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-                <span className="truncate">{location}</span>
-              </div>
-            )}
-
-            {bio && (
-              <p className="text-[11px] sm:text-xs text-gray-600 mt-2 line-clamp-2">
-                {bio}
+          {/* Stats */}
+          <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/12 pt-4">
+            <div className="rounded-2xl border border-white/8 bg-white/8 px-3 py-3 text-center">
+              <p className="text-lg font-semibold tracking-tight text-white">
+                {formatNumber(followers)}
               </p>
+              <p className="mt-1 text-[11px] text-white/65">Followers</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/8 bg-white/8 px-3 py-3 text-center">
+              <p className="text-lg font-semibold tracking-tight text-white">
+                {formatRate(engagementRate)}
+              </p>
+              <p className="mt-1 text-[11px] text-white/65">Engagement</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/8 bg-white/8 px-3 py-3 text-center">
+              <p className="text-lg font-semibold tracking-tight text-white">
+                {averageViews == null ? "—" : formatNumber(averageViews)}
+              </p>
+              <p className="mt-1 text-[11px] text-white/65">Avg. Views</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="mt-4 flex items-center gap-3">
+            <Button onClick={handleViewProfile}>View Profile</Button>
+
+            {profileUrl !== "#" && (
+              <Button onClick={openExternalProfile}>
+                <ArrowSquareOut size={18} weight="bold" />
+              </Button>
             )}
           </div>
         </div>
-
-        {/* Metrics (smaller numbers + normal labels) */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center mb-4 sm:mb-5">
-          <div className="min-w-0">
-            <div className="font-semibold text-gray-900 leading-none whitespace-nowrap tracking-tight text-sm sm:text-base md:text-lg">
-              {formatNumber(followers)}
-            </div>
-            <div className="mt-1 text-[10px] sm:text-xs text-gray-500">Followers</div>
-          </div>
-
-          <div className="min-w-0">
-            <div
-              className="font-semibold text-gray-900 leading-none whitespace-nowrap tracking-tight text-sm sm:text-base md:text-lg"
-              title={`${formatNumber(engagements)} engagements`}
-            >
-              {formatRate(engagementRate)}
-            </div>
-            <div className="mt-1 text-[10px] sm:text-xs text-gray-500">Engagement</div>
-          </div>
-
-          <div className="min-w-0">
-            <div className="font-semibold text-gray-900 leading-none whitespace-nowrap tracking-tight text-sm sm:text-base md:text-lg">
-              {averageViews == null ? "—" : formatNumber(averageViews)}
-            </div>
-            <div className="mt-1 text-[10px] sm:text-xs text-gray-500">Avg. Views</div>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <button
-          type="button"
-          onClick={() => onViewProfile && onViewProfile(influencer)}
-          className="mt-auto w-full inline-flex items-center justify-center px-4 py-2 sm:py-2.5 bg-gray-900 text-white text-sm sm:text-[15px] font-medium rounded-lg hover:bg-gray-800 transition-colors group"
-        >
-          View Profile
-          <ExternalLink className="w-4 h-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
-        </button>
       </div>
     </div>
   );

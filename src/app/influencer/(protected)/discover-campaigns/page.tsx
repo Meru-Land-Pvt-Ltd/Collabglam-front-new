@@ -196,30 +196,9 @@ export default function DiscoverCampaigns() {
   const [budgetRange, setBudgetRange] = useState<[number, number]>([0, 6000]);
   const [applied, setApplied] = useState<number[]>([]);
   const [saved, setSaved] = useState<number[]>([]);
-  const [platformQuery, setPlatformQuery] = useState("");
-  /* ------------------------------ FILTER LOGIC ----------------------------- */
-  const platformOptions = useMemo(() => {
-    const q = platformQuery.trim().toLowerCase();
 
-    return platforms
-      .filter((p) => {
-        if (!q) return true;
-        return (
-          p.label.toLowerCase().includes(q) ||
-          p.value.toLowerCase().includes(q)
-        );
-      })
-      .map((p) => ({
-        value: p.value,
-        // keep JSX for UI, but satisfy MultiOption.label: string
-        label: (
-          <div className="flex items-center gap-2">
-            <p.icon className="h-4 w-4 text-gray-500" />
-            {p.label}
-          </div>
-        ) as unknown as string,
-      }));
-  }, [platformQuery]);
+  /* ------------------------------ FILTER LOGIC ----------------------------- */
+
   const filteredCampaigns = useMemo(() => {
     let filtered = campaignsData.filter((campaign) => {
       const matchesSearch =
@@ -356,7 +335,15 @@ export default function DiscoverCampaigns() {
             <div className="w-[240px] shrink-0">
               <FloatingMultiSelect
                 label="Platform"
-                options={platformOptions}
+                options={platforms.map((p) => ({
+                  value: p.value,
+                  label: (
+                    <div className="flex items-center gap-2">
+                      <p.icon className="h-4 w-4 text-gray-500" />
+                      {p.label}
+                    </div>
+                  ),
+                }))}
                 value={selectedPlatform}
                 onValueChange={setSelectedPlatform}
                 searchable

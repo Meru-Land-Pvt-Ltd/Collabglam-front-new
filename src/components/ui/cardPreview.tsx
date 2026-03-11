@@ -4,28 +4,38 @@ import {
   UsersThree,
   DotsThree,
   MapPin,
+  BookmarkSimpleIcon,
 } from "@phosphor-icons/react";
 import { PenLine, Eye } from "lucide-react";
 import { Button } from "./button";
+import { useRouter } from "next/navigation";
 
 type Option = { label: string; value: string };
 type IdLabelMap = Record<string, string>;
+export type ProductImage =
+  | string
+  | {
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl?: string;
+    url?: string;
+  };
+
 
 export type ManualForm = {
   title?: string;
   description?: string;
-
   categoryName?: string;
-
   subcategories?: string[];
   targetCountry?: string[];
   targetAgeGroups?: string[];
   goals?: string[];
   platforms?: string[];
   hashtags?: string[];
-
   campaigngoal?: string;
   campaignBudget?: number;
+  productImages?: ProductImage[];
 };
 
 export type PreviewMeta = {
@@ -88,6 +98,11 @@ export type ContractCardProps = {
 
 const normSt = (s?: string) => String(s || "").trim().toUpperCase();
 
+function getProductImageSrc(img?: ProductImage) {
+  if (!img) return "";
+  if (typeof img === "string") return img;
+  return img.dataUrl || img.url || "";
+}
 function resolveContractStatus(meta: ContractCardMeta | null): {
   statusText: string;
   isLocked: boolean;
@@ -150,20 +165,20 @@ function resolveContractStatus(meta: ContractCardMeta | null): {
     (st === "BRAND_SENT_DRAFT"
       ? "Awaiting Your Acceptance"
       : st === "BRAND_EDITED"
-      ? "Updated by Brand"
-      : st === "INFLUENCER_ACCEPTED"
-      ? "Awaiting Brand Acceptance"
-      : st === "INFLUENCER_EDITED"
-      ? "Sent to Brand"
-      : st === "READY_TO_SIGN"
-      ? "Ready to Sign"
-      : st === "REJECTED"
-      ? "Rejected"
-      : st === "SUPERSEDED"
-      ? "Superseded"
-      : meta?.status
-      ? String(meta.status)
-      : "Contract");
+        ? "Updated by Brand"
+        : st === "INFLUENCER_ACCEPTED"
+          ? "Awaiting Brand Acceptance"
+          : st === "INFLUENCER_EDITED"
+            ? "Sent to Brand"
+            : st === "READY_TO_SIGN"
+              ? "Ready to Sign"
+              : st === "REJECTED"
+                ? "Rejected"
+                : st === "SUPERSEDED"
+                  ? "Superseded"
+                  : meta?.status
+                    ? String(meta.status)
+                    : "Contract");
 
   return {
     statusText,
@@ -223,6 +238,7 @@ function InlinePlus({
   className?: string;
 }) {
   if (!first) return null;
+
   return (
     <span className={["text-[12px] text-primary", className].join(" ")}>
       <span className="truncate">{first}</span>
@@ -253,6 +269,7 @@ function OutlinedPill({
         "inline-flex items-center gap-1.5 rounded-full",
         "border border-[#1A1A1A] bg-white",
         "px-3 py-1 text-[12px] text-neutral-900",
+        "min-w-0",
         "min-w-0",
         className,
       ].join(" ")}
@@ -364,46 +381,46 @@ function ContractActions({ contract }: { contract: ContractCardProps }) {
     canSign,
     canReject,
   } = resolveContractStatus(contract.meta);
-
+  const router = useRouter()
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       {/* Primary CTA */}
       {(needsAccept || canEdit) && (
-        <button
+        <Button
           onClick={contract.onReviewAccept}
-          className="rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+          className="rounded-lg bg-black px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
         >
           {needsAccept ? "Review & Accept" : "Edit Details"}
-        </button>
+        </Button>
       )}
 
       {canSign && (
-        <button
+        <Button
           onClick={contract.onSign}
           className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98]"
         >
           <PenLine className="h-3 w-3" />
           Sign
-        </button>
+        </Button>
       )}
 
       {/* View */}
-      <button
-        onClick={contract.onView}
-        className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
+      <Button
+        onClick={() => router.push(`/influencer/my-campaigns/1`)}
+        className="flex items-center gap-1 rounded-lg border border-neutral-200 px-3 py-2 text-[12px] bg-black text-white font-medium text-neutral-700 transition "
       >
         <Eye className="h-3 w-3" />
         View
-      </button>
+      </Button>
 
       {/* Reject */}
       {canReject && (
-        <button
+        <Button
           onClick={contract.onReject}
           className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
         >
           Reject
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -417,17 +434,28 @@ export function ManualPreviewCard({
   contract,
   invite,
   className = "",
+  onViewClick
 }: {
   form: ManualForm;
   meta?: PreviewMeta;
   contract?: ContractCardProps;
-  /** Pass this prop to render Accept Invite / Decline / View Details buttons */
   invite?: InviteCardProps;
   className?: string;
+  onViewClick?: () => void;
 }) {
   const title = form.title?.trim() ?? "";
   const desc = form.description?.trim() ?? "";
+  const productImages = useMemo(
+    () => (Array.isArray(form.productImages) ? form.productImages : []),
+    [form.productImages]
+  );
 
+  const heroImage = useMemo(
+    () => getProductImageSrc(productImages[0]),
+    [productImages]
+  );
+
+  const imageCount = productImages.length;
   const hasTitle = Boolean(title);
   const hasDesc = Boolean(desc);
 
@@ -472,8 +500,25 @@ export function ManualPreviewCard({
       </div>
 
       {/* center image icon */}
-      <div className="mt-8 flex justify-center [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-6">
-        <Images className="h-[4.625rem] w-[4.625rem] text-[#EDEDED] [@media_(max-width:80rem)_and_(max-height:48.75rem)]:scale-[0.92]" />
+      <div className="mt-6 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5">
+        {heroImage ? (
+          <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-neutral-100">
+            <img
+              src={heroImage}
+              alt={title || "Campaign product"}
+              className="h-full w-full object-cover"
+            />
+            {imageCount > 1 && (
+              <div className="absolute right-3 top-3 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white">
+                +{imageCount - 1} more
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex justify-center">
+            <Images className="h-[4.625rem] w-[4.625rem] text-[#EDEDED] [@media_(max-width:80rem)_and_(max-height:48.75rem)]:scale-[0.92]" />
+          </div>
+        )}
       </div>
 
       {/* AD badge */}
@@ -523,8 +568,6 @@ export function ManualPreviewCard({
           <SkeletonLine className="w-[58%] h-4" />
         )}
       </div>
-
-      {/* description */}
       <div className="mt-3 space-y-3">
         {hasDesc ? (
           <div className="text-[0.75rem] leading-5 text-neutral-700 line-clamp-2">
@@ -538,6 +581,7 @@ export function ManualPreviewCard({
         )}
       </div>
 
+      {/* countries line */}
       {/* countries line */}
       <div className="mt-3">
         {country.first ? (
@@ -560,15 +604,35 @@ export function ManualPreviewCard({
       <div className="mt-6 h-px w-full bg-neutral-100 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5" />
 
       {/* bottom row: Budget + actions */}
+      {/* bottom row: Budget + actions */}
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
         {/* Budget */}
-        <div className="min-w-0 flex-1">
-          {budget > 0 ? (
-            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
-              ${formatBudget(budget)}
-            </span>
+        {/* Budget */}
+        <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
+          <div className="min-w-0 flex-1">
+            {budget > 0 ? (
+              <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
+                ${formatBudget(budget)}
+              </span>
+            ) : (
+              <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            )}
+          </div>
+
+          {invite ? (
+            <InviteActions invite={invite} />
+          ) : contract ? (
+            <ContractActions contract={contract} />
           ) : (
-            <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            <div className="flex items-center gap-3 shrink-0 cursor-pointer">
+              <Button variant="ghost" className="shadow-none hover:bg-white">
+                <BookmarkSimpleIcon />
+                <span>Save</span>
+              </Button>
+              <Button variant="default" onClick={onViewClick}>
+                View
+              </Button>
+            </div>
           )}
         </div>
 
@@ -579,10 +643,11 @@ export function ManualPreviewCard({
           <ContractActions contract={contract} />
         ) : (
           <div className="flex items-center gap-3 shrink-0 cursor-pointer">
-            <Button variant="ghost" className="shadow-none">
-              Save
+            <Button variant="ghost" className="shadow-none hover:bg-white" >
+              <BookmarkSimpleIcon />
+              <span>Save</span>
             </Button>
-            <Button variant="default">View</Button>
+            <Button variant="default" onClick={onViewClick}>View</Button>
           </div>
         )}
       </div>
