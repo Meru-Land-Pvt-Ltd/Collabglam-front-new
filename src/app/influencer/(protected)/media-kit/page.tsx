@@ -755,7 +755,7 @@ export default function CreatorProfileDashboard() {
                     </section>
 
                     <section className="rounded-[28px] bg-white p-6 ">
-                        <SectionTitle title="Campaign History" />
+                        <SectionTitle title="Work History" />
                         <div className="overflow-x-auto">
                             <table className="min-w-full border-separate border-spacing-y-3 text-left">
                                 <thead>
