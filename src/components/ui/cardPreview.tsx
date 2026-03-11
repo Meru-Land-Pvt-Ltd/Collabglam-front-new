@@ -404,14 +404,14 @@ function ContractActions({ contract }: { contract: ContractCardProps }) {
         </Button>
       )}
 
-      {/* View */}
+      {/* View
       <Button
-        onClick={() => router.push(`/influencer/my-campaigns/1`)}
+        onClick={() => router.push(`/influencer/my-campaigns/${contract.campaignId}`)}
         className="flex items-center gap-1 rounded-lg border border-neutral-200 px-3 py-2 text-[12px] bg-black text-white font-medium text-neutral-700 transition "
       >
         <Eye className="h-3 w-3" />
         View
-      </Button>
+      </Button> */}
 
       {/* Reject */}
       {canReject && (

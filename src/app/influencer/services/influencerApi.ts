@@ -475,10 +475,27 @@ export const apiGetfetchCampaignbyId = (
   token?: string
 ) => {
   return apiPost<any>(
-    `/campaign/view-campaign-by-influencer`,
+    `${CAMPAIGN_BASE}/view-campaign-by-influencer`,
     {
       influencerId,
       campaignId,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+};
+
+export const apiGetContractedCampaigns = (influencerId: string, token?: string) => {
+  return apiPost<any[]>(
+    `${CAMPAIGN_BASE}/contracted`,
+    {
+      influencerId,
+      limit: 10,
+      pagination: 1,
+      search: "",
     },
     {
       headers: {
