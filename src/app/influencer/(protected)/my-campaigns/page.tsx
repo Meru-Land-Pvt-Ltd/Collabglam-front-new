@@ -22,7 +22,7 @@ import CampaignFilter, {
   DEFAULT_DATE_FILTER,
   type DateFilterValue,
 } from "@/components/ui/brand/CampaignFilter";
-import { apiGetAllCampaigns } from "../../services/influencerApi";
+import { apiGetAllCampaigns, apiGetAppliedCampaigns } from "../../services/influencerApi";
 /* ─────────────────────────── Toast & Confirm helpers ───────────────────────── */
 const toast = (opts: {
   icon: "success" | "error" | "info";
@@ -1088,6 +1088,7 @@ export default function MyCampaignsPage() {
   const [sortBy] = useState("match");
   const router = useRouter();
   const influencerId = localStorage.getItem("influencerId");
+
   // ── Contract state ────────────────────────────────────────────────────────
   const [metaCache, setMetaCache] = useState<Record<string, ContractMeta | null>>({});
 
@@ -1105,25 +1106,41 @@ export default function MyCampaignsPage() {
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
 
   /* ── Fetch campaigns ──────────────────────────────────────────────────── */
-  const fetchCampaigns = useCallback(async () => {
+  const fetchCampaigns = useCallback(async (tab = activeTab) => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const id = influencerId || (typeof window !== "undefined" ? localStorage.getItem("influencerId") : "") || "";
-      const res = await apiGetAllCampaigns(id);
-      // response shape: { total, page, pages, influencer, campaigns[] }
+      const id =
+        influencerId ||
+        (typeof window !== "undefined" ? localStorage.getItem("influencerId") : "") ||
+        "";
+
+      // ✅ Read fresh from localStorage every time, not from stale closure
+      const token =
+        (typeof window !== "undefined" ? localStorage.getItem("influencerToken") : null) ?? undefined;
+
+      const res =
+        tab === "applied"
+          ? await apiGetAppliedCampaigns(id, token)
+          : await apiGetAllCampaigns(id);
+
       const mapped = (res?.campaigns || []).map(mapApiCampaign);
       setCampaigns(mapped);
     } catch (e: any) {
-      setFetchError(e?.response?.data?.message || e?.message || "Failed to load campaigns.");
+      setFetchError(
+        e?.response?.data?.message || e?.message || "Failed to load campaigns."
+      );
       console.error("Failed to fetch campaigns:", e);
     } finally {
       setIsLoading(false);
     }
-  }, [influencerId]);
+  }, [influencerId, activeTab]);
 
-  useEffect(() => { fetchCampaigns(); }, [fetchCampaigns]);
+  // Initial load
+  useEffect(() => { fetchCampaigns(activeTab); }, [fetchCampaigns]);
 
+  // Re-fetch when tab changes
+  useEffect(() => { fetchCampaigns(activeTab); }, [activeTab]);
   /* ── Load contract meta cache ─────────────────────────────────────────── */
   const loadMetaCache = useCallback(async (list: CampaignData[]) => {
     const influencerId = typeof window !== "undefined" ? localStorage.getItem("influencerId") : null;
