@@ -204,9 +204,19 @@ export default function RaiseIssueModal({
     loadCampaigns();
   }, [influencerId, open]);
 
+  const validCampaigns = useMemo(
+    () =>
+      campaigns.filter(
+        (campaign) =>
+          String(campaign._id || "").trim() !== "" &&
+          String(campaign.campaignName || "").trim() !== ""
+      ),
+    [campaigns]
+  );
+
   const selectedCampaign = useMemo(
-    () => campaigns.find((campaign) => campaign._id === campaignId),
-    [campaigns, campaignId]
+    () => validCampaigns.find((campaign) => campaign._id === campaignId),
+    [validCampaigns, campaignId]
   );
 
   useEffect(() => {
@@ -261,13 +271,11 @@ export default function RaiseIssueModal({
     fillBrand();
   }, [selectedCampaign]);
 
-  const campaignOptions: SelectOption[] = campaigns
-    .filter((campaign) => String(campaign._id || "").trim() !== "")
-    .map((campaign) => ({
-      key: `campaign-${campaign._id}`,
-      value: String(campaign._id),
-      label: campaign.campaignName || String(campaign._id),
-    }));
+  const campaignOptions: SelectOption[] = validCampaigns.map((campaign) => ({
+    key: `campaign-${campaign._id}`,
+    value: String(campaign._id),
+    label: campaign.campaignName.trim(),
+  }));
 
   const resetForm = () => {
     setCampaignId("");
@@ -437,7 +445,7 @@ export default function RaiseIssueModal({
                 placeholder={
                   loadingCampaigns
                     ? "Loading your campaigns..."
-                    : campaigns.length
+                    : campaignOptions.length
                     ? "Select a campaign"
                     : "No campaigns found"
                 }
