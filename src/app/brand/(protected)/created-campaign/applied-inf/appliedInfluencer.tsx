@@ -11,7 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Swal from "sweetalert2";
 import api, { post } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/buttonComp";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import InfluencerFilter, {
@@ -1610,7 +1610,7 @@ const CONTRACT_STATUS = {
 } as const;
 
 type ContractStatus = (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
-type PanelMode = "send" | "edit";
+type PanelMode = "send" | "edit" | "bulk-send";
 type FormErrors = Record<string, string>;
 type CurrencyOption = { value: string; label: string; meta?: any };
 type TzOption = { value: string; label: string; meta?: any };
@@ -1887,9 +1887,11 @@ const defaultUsageRightsRows = (): UsageRightsRow[] => [
   },
 ];
 
-const createDefaultScheduleDeliverable = (): ScheduleADeliverable => ({
-  id: createRowId(),
-  srNo: 1,
+const createDefaultScheduleDeliverable = (
+  index: number = 1
+): ScheduleADeliverable => ({
+  id: `deliverable-${index}`,
+  srNo: index,
   platformHandle: "",
   deliverableFormat: "",
   qty: "1",
@@ -2377,6 +2379,9 @@ export default function AppliedInfluencersPage() {
   const influencerId = searchParams.get("infId");
   const createdPage = searchParams.get("createdPage") === "true";
 
+  const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
+  const [bulkTargets, setBulkTargets] = useState<Influencer[]>([]);
+
   const [serverCampaignTitle, setServerCampaignTitle] = useState("");
   const [serverBudget, setServerBudget] = useState<number | null>(null);
   const [serverTimeline, setServerTimeline] = useState<{
@@ -2461,6 +2466,10 @@ export default function AppliedInfluencersPage() {
 
   const setContractField = useCallback((path: string, value: any) => {
     setContractForm((prev) => setAtPath(prev, path, value));
+  }, []);
+
+  const isBulkSelectable = useCallback((row: AppliedInfluencerRow) => {
+    return !row.hasContract || row.rejected;
   }, []);
 
   useEffect(() => {
@@ -2863,6 +2872,7 @@ export default function AppliedInfluencersPage() {
     clearPreview();
     setSelectedInf(null);
     setSelectedMeta(null);
+    setBulkTargets([]);
     setIsPreviewLoading(false);
     setIsSendLoading(false);
     setIsUpdateLoading(false);
@@ -2918,9 +2928,26 @@ export default function AppliedInfluencersPage() {
       },
     };
   }, [contractForm, deliverables, requestedEffDate]);
+
   const buildBrandUpdatesPayload = useCallback(() => {
     return {
       content: buildContentPayload(),
+    };
+  }, [buildContentPayload]);
+
+  const buildBulkContentPayload = useCallback(() => {
+    const content = buildContentPayload();
+
+    return {
+      ...content,
+      influencer: {}, // backend will fill per influencer
+      scheduleA: {
+        ...content.scheduleA,
+        deliverables: content.scheduleA.deliverables.map((row) => ({
+          ...row,
+          platformHandle: "", // backend should fill this per influencer
+        })),
+      },
     };
   }, [buildContentPayload]);
 
@@ -3030,6 +3057,30 @@ export default function AppliedInfluencersPage() {
           },
           { responseType: "blob" }
         );
+      } else if (panelMode === "bulk-send") {
+        const sampleInf = bulkTargets[0];
+        if (!sampleInf) {
+          toast({
+            icon: "error",
+            title: "No influencer selected",
+            text: "Please select at least one influencer.",
+          });
+          return;
+        }
+
+        res = await api.post(
+          "/contract/initiate",
+          {
+            brandId,
+            campaignId,
+            influencerId: sampleInf.influencerId,
+            content: buildBulkContentPayload(),
+            requestedEffectiveDate: requestedEffDate,
+            requestedEffectiveDateTimezone: requestedEffTz,
+            preview: true,
+          },
+          { responseType: "blob" }
+        );
       } else {
         if (!selectedMeta?.contractId) {
           toast({ icon: "error", title: "No contract", text: "No contract found." });
@@ -3052,7 +3103,14 @@ export default function AppliedInfluencersPage() {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(res.data);
       });
-      toast({ icon: "success", title: "Preview ready" });
+      toast({
+        icon: "success",
+        title: "Preview ready",
+        text:
+          panelMode === "bulk-send"
+            ? "Sample preview generated for the first selected influencer."
+            : undefined,
+      });
     } catch (e: any) {
       toast({
         icon: "error",
@@ -3122,6 +3180,75 @@ export default function AppliedInfluencersPage() {
     requestedEffTz,
     selectedInf,
     validateForPreview,
+  ]);
+
+  const handleBulkSendContracts = useCallback(async () => {
+    if (!brandId || !campaignId || !selectedBulkIds.length) return;
+
+    if (!pdfUrl) {
+      toast({
+        icon: "info",
+        title: "Preview required",
+        text: "Generate preview before bulk sending.",
+      });
+      return;
+    }
+
+    if (!validateForPreview()) return;
+
+    setIsSendLoading(true);
+    try {
+      const res: any = await post("/contract/initiate-bulk", {
+        brandId,
+        campaignId,
+        influencerIds: selectedBulkIds,
+        content: buildBulkContentPayload(),
+        requestedEffectiveDate: requestedEffDate,
+        requestedEffectiveDateTimezone: requestedEffTz,
+      });
+
+      const sentCount = res?.sentCount || res?.data?.sentCount || 0;
+      const failed = res?.failed || res?.data?.failed || [];
+
+      toast({
+        icon: failed.length ? "info" : "success",
+        title: `${sentCount} contract${sentCount > 1 ? "s" : ""} sent`,
+        text: failed.length
+          ? `${failed.length} failed.`
+          : "Bulk contract send completed.",
+      });
+
+      setSelectedBulkIds([]);
+      setBulkTargets([]);
+      closeSidebar();
+      fetchApplicants(debouncedSearch);
+      loadMetaCache(influencers);
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Bulk send failed",
+        text:
+          e?.response?.data?.message ||
+          e?.message ||
+          "Failed to send bulk contracts.",
+      });
+    } finally {
+      setIsSendLoading(false);
+    }
+  }, [
+    brandId,
+    campaignId,
+    selectedBulkIds,
+    pdfUrl,
+    validateForPreview,
+    buildBulkContentPayload,
+    requestedEffDate,
+    requestedEffTz,
+    closeSidebar,
+    fetchApplicants,
+    debouncedSearch,
+    loadMetaCache,
+    influencers,
   ]);
 
   const handleEditContract = useCallback(async () => {
@@ -3366,6 +3493,74 @@ export default function AppliedInfluencersPage() {
     return list;
   }, [filters, sortValue, tableRows]);
 
+  const selectedBulkRows = useMemo(() => {
+    return filteredRows.filter((row) =>
+      selectedBulkIds.includes(row.rawInfluencer.influencerId)
+    );
+  }, [filteredRows, selectedBulkIds]);
+
+  const toggleBulkRow = useCallback((influencerId: string) => {
+    setSelectedBulkIds((prev) =>
+      prev.includes(influencerId)
+        ? prev.filter((id) => id !== influencerId)
+        : [...prev, influencerId]
+    );
+  }, []);
+
+  const toggleBulkAllVisible = useCallback(() => {
+    const eligibleIds = filteredRows
+      .filter(isBulkSelectable)
+      .map((row) => row.rawInfluencer.influencerId);
+
+    const allSelected =
+      eligibleIds.length > 0 &&
+      eligibleIds.every((id) => selectedBulkIds.includes(id));
+
+    setSelectedBulkIds((prev) => {
+      if (allSelected) {
+        return prev.filter((id) => !eligibleIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...eligibleIds]));
+    });
+  }, [filteredRows, isBulkSelectable, selectedBulkIds]);
+
+  const clearBulkSelection = useCallback(() => {
+    setSelectedBulkIds([]);
+  }, []);
+
+  const openBulkSidebar = useCallback(() => {
+    const targets = filteredRows
+      .filter((row) => selectedBulkIds.includes(row.rawInfluencer.influencerId))
+      .filter((row) => isBulkSelectable(row))
+      .map((row) => row.rawInfluencer);
+
+    if (!targets.length) {
+      toast({
+        icon: "info",
+        title: "No influencers selected",
+        text: "Select at least one eligible influencer.",
+      });
+      return;
+    }
+
+    setBulkTargets(targets);
+    setPanelMode("bulk-send");
+    setSelectedInf(targets[0]);
+    setSelectedMeta(null);
+
+    prefillFormFor(targets[0], null);
+    clearPreview();
+    clearErrors();
+    setSidebarOpen(true);
+  }, [
+    clearErrors,
+    clearPreview,
+    filteredRows,
+    isBulkSelectable,
+    prefillFormFor,
+    selectedBulkIds,
+  ]);
+
   function StatusBadge({
     meta,
     hasContract,
@@ -3509,6 +3704,8 @@ export default function AppliedInfluencersPage() {
         const meta = row.contractMeta;
         const hasContract = row.hasContract;
         const href = buildHandleUrl(inf.primaryPlatform, inf.handle);
+        const selectable = isBulkSelectable(row);
+        const checked = selectedBulkIds.includes(inf.influencerId);
 
         return (
           <div
@@ -3548,6 +3745,20 @@ export default function AppliedInfluencersPage() {
 
               <StatusBadge meta={meta} hasContract={hasContract} />
             </div>
+
+            {selectable ? (
+              <div className="mt-3">
+                <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBulkRow(inf.influencerId)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Select for bulk contract
+                </label>
+              </div>
+            ) : null}
 
             <div className="mt-3">
               <AppliedCampaignActionCell row={row} />
@@ -3613,7 +3824,7 @@ export default function AppliedInfluencersPage() {
         <header className="sticky top-0 flex items-center justify-between rounded-md border-b border-gray-100 bg-white/90 p-2 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:p-4">
           <h1 className="truncate text-xl font-bold md:text-3xl">Campaign: {pageTitle}</h1>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="bg-gray-200 text-black" onClick={() => router.back()}>
+            <Button size="sm" variant="outline" onClick={() => router.back()}>
               Back
             </Button>
           </div>
@@ -3640,10 +3851,33 @@ export default function AppliedInfluencersPage() {
           </div>
         ) : (
           <>
+            {selectedBulkIds.length > 0 ? (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4">
+                <div className="text-sm font-medium text-gray-800">
+                  {selectedBulkIds.length} influencer{selectedBulkIds.length > 1 ? "s" : ""} selected
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={clearBulkSelection}>
+                    Clear
+                  </Button>
+                  <Button onClick={openBulkSidebar}>
+                    <PaperPlaneTilt className="mr-2 h-4 w-4" />
+                    Bulk Send Contract
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="hidden overflow-x-auto rounded-md md:block">
               <InfluencerTable
                 rows={filteredRows}
                 variant="shortlisted"
+                selectable
+                selectedIds={selectedBulkIds}
+                onToggleRow={toggleBulkRow}
+                onToggleAll={toggleBulkAllVisible}
+                isRowSelectable={(baseRow) => isBulkSelectable(baseRow as AppliedInfluencerRow)}
                 renderStatus={(baseRow) => {
                   const row = baseRow as AppliedInfluencerRow;
                   if (row.rejected) {
@@ -3675,7 +3909,6 @@ export default function AppliedInfluencersPage() {
           <div className="flex items-center justify-center gap-2 md:justify-end">
             <Button
               variant="outline"
-              size="icon"
               disabled={page === 1}
               onClick={() => setPage((p) => Math.max(p - 1, 1))}
               className="text-black"
@@ -3688,7 +3921,6 @@ export default function AppliedInfluencersPage() {
             </span>
             <Button
               variant="outline"
-              size="icon"
               disabled={page === meta.totalPages}
               onClick={() => setPage((p) => Math.min(p + 1, meta.totalPages))}
               className="text-black"
@@ -3703,16 +3935,20 @@ export default function AppliedInfluencersPage() {
           isOpen={sidebarOpen && !isFullyManagedPlan}
           onClose={closeSidebar}
           title={
-            panelMode === "send"
-              ? "Send Contract"
-              : selectedMeta && isRejectedMeta(selectedMeta)
-                ? "Resend Contract"
-                : "Edit Contract"
+            panelMode === "bulk-send"
+              ? "Bulk Send Contracts"
+              : panelMode === "send"
+                ? "Send Contract"
+                : selectedMeta && isRejectedMeta(selectedMeta)
+                  ? "Resend Contract"
+                  : "Edit Contract"
           }
           subtitle={
-            selectedInf
-              ? `${pageTitle || "Agreement"} • ${selectedInf.name}`
-              : pageTitle || "Agreement"
+            panelMode === "bulk-send"
+              ? `${selectedBulkIds.length} influencers selected`
+              : selectedInf
+                ? `${pageTitle || "Agreement"} • ${selectedInf.name}`
+                : pageTitle || "Agreement"
           }
           previewUrl={pdfUrl}
           onClosePreview={clearPreview}
@@ -3969,10 +4205,7 @@ export default function AppliedInfluencersPage() {
               ))}
 
               <Button
-                type="button"
                 variant="outline"
-                size="sm"
-                className="border-dashed border-gray-300 text-gray-700"
                 onClick={() =>
                   setDeliverables((prev) => [
                     ...prev,
@@ -4775,8 +5008,8 @@ export default function AppliedInfluencersPage() {
 
           <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 border-t border-gray-200 bg-white/95 p-6 backdrop-blur">
             <Button
+              variant="outline"
               onClick={handleGeneratePreview}
-              className="border-2 border-black bg-white px-6 text-black hover:bg-gray-50 disabled:opacity-60"
               disabled={isPreviewLoading || isSendLoading || isUpdateLoading}
             >
               {isPreviewLoading ? (
@@ -4790,7 +5023,23 @@ export default function AppliedInfluencersPage() {
               )}
             </Button>
 
-            {panelMode === "send" ? (
+            {panelMode === "bulk-send" ? (
+              <Button
+                onClick={handleBulkSendContracts}
+                disabled={!pdfUrl || isSendLoading || isPreviewLoading || isUpdateLoading}
+              >
+                {isSendLoading ? (
+                  <>
+                    <span className="mr-2 animate-spin">⏳</span> Sending…
+                  </>
+                ) : (
+                  <>
+                    <PaperPlaneTilt className="mr-2 h-5 w-5" />
+                    Send {selectedBulkIds.length} Contracts
+                  </>
+                )}
+              </Button>
+            ) : panelMode === "send" ? (
               <Button
                 onClick={handleSendContract}
                 disabled={!pdfUrl || isSendLoading || isPreviewLoading || isUpdateLoading}
@@ -4920,13 +5169,12 @@ export function Select({
         value={value}
         onChange={onChange}
         disabled={disabled}
-className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
-  disabled
-    ? "opacity-60 cursor-not-allowed border-gray-200"
-    : error
-      ? "border-red-500"
-      : "border-gray-200 focus:border-[#1A1A1A]"
-}`}
+        className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${disabled
+          ? "opacity-60 cursor-not-allowed border-gray-200"
+          : error
+            ? "border-red-500"
+            : "border-gray-200 focus:border-[#1A1A1A]"
+          }`}
       >
         {flat.map((o) => (
           <option key={o.value} value={o.value}>
@@ -4982,9 +5230,8 @@ export function NumberInput({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
-  error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
-}`}
+        className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
+          }`}
         {...props}
       />
       <label
@@ -5029,9 +5276,8 @@ export function NumberInputTop({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
-  error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
-}`}
+        className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
+          }`}
         {...props}
       />
       {error && (
@@ -5242,13 +5488,12 @@ export function TextArea({
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}
-className={`w-full px-3 py-2.5 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
-  disabled
-    ? "opacity-60 cursor-not-allowed border-gray-200"
-    : error
-      ? "border-red-500"
-      : "border-gray-200 focus:border-[#1A1A1A]"
-}`}
+        className={`w-full px-3 py-2.5 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${disabled
+          ? "opacity-60 cursor-not-allowed border-gray-200"
+          : error
+            ? "border-red-500"
+            : "border-gray-200 focus:border-[#1A1A1A]"
+          }`}
       />
       {error && (
         <div className="text-xs text-red-600">{error}</div>
@@ -5268,45 +5513,44 @@ function ContractSidebar({
 }: any) {
   return (
     <div
-      className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"}`}
+      className={`fixed inset-0 z-[120] ${isOpen ? "" : "pointer-events-none"}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="contract-title"
     >
       <div
-        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${
-          isOpen ? "opacity-100" : "opacity-0"
-        }`}
+        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"
+          }`}
         onClick={onClose}
       />
 
       <div
-        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${
-          isOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
+          }`}
       >
-        <div className="relative h-36 overflow-hidden border-b border-neutral-200 bg-[#1A1A1A]">
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,#1A1A1A_0%,#2A2A2A_100%)] opacity-100" />
-          <div className="relative z-10 flex h-full items-start justify-between p-6 text-white">
+        <div className="relative h-36 overflow-hidden border-b border-[#e5e5e5] bg-white">
+          <div className="relative z-10 flex h-full items-start justify-between p-6">
             <div className="flex items-start gap-4">
-              <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md shadow-sm">
-                <FileText className="h-6 w-6 text-white" />
+              <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e8e8e8] bg-[#f7f7f7] shadow-sm">
+                <FileText className="h-6 w-6 text-[#1a1a1a]" />
               </div>
+
               <div>
                 <div
-                  className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/75"
+                  className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]"
                   id="contract-title"
                 >
                   {title}
                 </div>
-                <div className="text-2xl font-extrabold leading-tight">
+                <div className="text-2xl font-extrabold leading-tight text-[#1a1a1a]">
                   {subtitle}
                 </div>
               </div>
             </div>
 
             <button
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/10 transition-all duration-150 hover:scale-105 hover:bg-white/20"
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e8e8e8] bg-white text-[#9d9d9d] transition-all duration-150 hover:bg-[#f7f7f7] hover:text-[#1a1a1a]"
               onClick={onClose}
               aria-label="Close"
               title="Close"
@@ -5522,9 +5766,9 @@ function SignatureModal({
         <div className="relative h-24">
           <div
             className="absolute inset-0"
-style={{
-  background: "linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)",
-}}
+            style={{
+              background: "linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)",
+            }}
           />
           <div className="relative z-10 h-full px-5 flex items-center justify-between text-white">
             <div className="flex items-center gap-3">
@@ -5576,7 +5820,7 @@ style={{
           <div
             ref={dropRef}
             className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all cursor-pointer select-none ${isDragging
-? "border-[#1A1A1A] bg-neutral-100 shadow-sm"
+              ? "border-[#1A1A1A] bg-neutral-100 shadow-sm"
               : "border-gray-300 bg-gray-50 hover:bg-gray-100/80"
               }`}
           >

@@ -47,6 +47,12 @@ type InfluencerTableProps = {
   renderRecommendedActions?: RowRenderer;
   renderShortlistedActions?: RowRenderer;
   renderStatus?: RowRenderer;
+
+  selectable?: boolean;
+  selectedIds?: string[];
+  onToggleRow?: (id: string) => void;
+  onToggleAll?: () => void;
+  isRowSelectable?: (row: InfluencerRow) => boolean;
 };
 
 const headerTextStyle: React.CSSProperties = {
@@ -424,7 +430,7 @@ function DefaultTable({
               const plat = getPlatformRows(r);
               const appliedText =
                 typeof r.appliedDate === "string" &&
-                r.appliedDate.toLowerCase().startsWith("applied")
+                  r.appliedDate.toLowerCase().startsWith("applied")
                   ? r.appliedDate
                   : `applied ${r.appliedDate}`;
 
@@ -614,18 +620,38 @@ function ShortlistedTable({
   rows,
   renderActions,
   renderStatus,
+  selectable = false,
+  selectedIds = [],
+  onToggleRow,
+  onToggleAll,
+  isRowSelectable,
 }: {
   rows: InfluencerRow[];
   renderActions?: RowRenderer;
   renderStatus?: RowRenderer;
+  selectable?: boolean;
+  selectedIds?: string[];
+  onToggleRow?: (id: string) => void;
+  onToggleAll?: () => void;
+  isRowSelectable?: (row: InfluencerRow) => boolean;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
-  const allChecked =
-    rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
-  const someChecked = rows.some((r) => Boolean(selected[r.id])) && !allChecked;
+  const rowSelectable = (row: InfluencerRow) =>
+    isRowSelectable ? isRowSelectable(row) : true;
 
-  const toggleAll = (checked: boolean) => {
+  const selectableRows = rows.filter((row) => rowSelectable(row));
+
+  const allChecked = selectable
+    ? selectableRows.length > 0 &&
+    selectableRows.every((row) => selectedIds.includes(row.id))
+    : rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
+
+  const someChecked = selectable
+    ? selectableRows.some((row) => selectedIds.includes(row.id)) && !allChecked
+    : rows.some((r) => Boolean(selected[r.id])) && !allChecked;
+
+  const toggleAllLocal = (checked: boolean) => {
     const next: Record<string, boolean> = {};
     rows.forEach((r) => {
       next[r.id] = checked;
@@ -633,7 +659,7 @@ function ShortlistedTable({
     setSelected(next);
   };
 
-  const toggleOne = (id: string, checked: boolean) => {
+  const toggleOneLocal = (id: string, checked: boolean) => {
     setSelected((prev) => ({ ...prev, [id]: checked }));
   };
 
@@ -688,14 +714,14 @@ function ShortlistedTable({
             <div
               className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}
             >
-              <Checkbox
-                className="cursor-pointer"
-                checked={
-                  allChecked ? true : someChecked ? "indeterminate" : false
-                }
-                onCheckedChange={(v) => toggleAll(Boolean(v))}
-                aria-label="Select all"
-              />
+              {selectable ? (
+                <Checkbox
+                  className="cursor-pointer"
+                  checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                  onCheckedChange={() => onToggleAll?.()}
+                  aria-label="Select all"
+                />
+              ) : null}
             </div>
 
             <div
@@ -764,8 +790,16 @@ function ShortlistedTable({
                   >
                     <Checkbox
                       className="cursor-pointer"
-                      checked={Boolean(selected[r.id])}
-                      onCheckedChange={(v) => toggleOne(r.id, Boolean(v))}
+                      checked={selectable ? selectedIds.includes(r.id) : Boolean(selected[r.id])}
+                      disabled={selectable ? !rowSelectable(r) : false}
+                      onCheckedChange={(v) => {
+                        if (selectable) {
+                          if (!rowSelectable(r)) return;
+                          onToggleRow?.(r.id);
+                          return;
+                        }
+                        toggleOneLocal(r.id, Boolean(v));
+                      }}
                       aria-label={`Select ${r.profile.name}`}
                     />
                   </div>
@@ -913,7 +947,7 @@ function RecommendedTable({
             const plat = getPlatformRows(r);
             const appliedText =
               typeof r.appliedDate === "string" &&
-              r.appliedDate.toLowerCase().startsWith("applied")
+                r.appliedDate.toLowerCase().startsWith("applied")
                 ? r.appliedDate
                 : `applied ${r.appliedDate}`;
 
@@ -1105,6 +1139,11 @@ export function InfluencerTable({
   renderRecommendedActions,
   renderShortlistedActions,
   renderStatus,
+  selectable = false,
+  selectedIds = [],
+  onToggleRow,
+  onToggleAll,
+  isRowSelectable,
 }: InfluencerTableProps) {
   if (variant === "recommended") {
     return (
@@ -1121,6 +1160,11 @@ export function InfluencerTable({
         rows={rows}
         renderActions={renderShortlistedActions}
         renderStatus={renderStatus}
+        selectable={selectable}
+        selectedIds={selectedIds}
+        onToggleRow={onToggleRow}
+        onToggleAll={onToggleAll}
+        isRowSelectable={isRowSelectable}
       />
     );
   }
