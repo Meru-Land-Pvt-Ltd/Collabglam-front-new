@@ -4,28 +4,38 @@ import {
   UsersThree,
   DotsThree,
   MapPin,
+  BookmarkSimpleIcon,
 } from "@phosphor-icons/react";
 import { PenLine, Eye } from "lucide-react";
 import { Button } from "./button";
+import { useRouter } from "next/navigation";
 
 type Option = { label: string; value: string };
 type IdLabelMap = Record<string, string>;
+export type ProductImage =
+  | string
+  | {
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl?: string;
+    url?: string;
+  };
+
 
 export type ManualForm = {
   title?: string;
   description?: string;
-
   categoryName?: string;
-
   subcategories?: string[];
   targetCountry?: string[];
   targetAgeGroups?: string[];
   goals?: string[];
   platforms?: string[];
   hashtags?: string[];
-
   campaigngoal?: string;
   campaignBudget?: number;
+  productImages?: ProductImage[];
 };
 
 export type PreviewMeta = {
@@ -38,152 +48,7 @@ export type PreviewMeta = {
   campaignBudget?: number;
 };
 
-/* ─────────────────────── Contract action types ─────────────────────── */
-
-export type ContractStatus =
-  | "DRAFT"
-  | "BRAND_SENT_DRAFT"
-  | "BRAND_EDITED"
-  | "INFLUENCER_EDITED"
-  | "BRAND_ACCEPTED"
-  | "INFLUENCER_ACCEPTED"
-  | "READY_TO_SIGN"
-  | "CONTRACT_SIGNED"
-  | "MILESTONES_CREATED"
-  | "REJECTED"
-  | "SUPERSEDED"
-  | string;
-
-export type ContractCardMeta = {
-  status?: ContractStatus;
-  confirmations?: {
-    brand?: { confirmed?: boolean };
-    influencer?: { confirmed?: boolean };
-  };
-  signatures?: {
-    brand?: { signed?: boolean };
-    influencer?: { signed?: boolean };
-  };
-  lockedAt?: string | null;
-  editsLockedAt?: string | null;
-  awaitingRole?: string | null;
-  contractId?: string;
-  supersededBy?: string | null;
-  resendOf?: string | null;
-  resendIteration?: number;
-};
-
-export type ContractCardProps = {
-  /** The effective contract id to act on */
-  contractId: string;
-  /** Live contract metadata (fetched async; null = not loaded yet) */
-  meta: ContractCardMeta | null;
-  onReviewAccept: () => void;
-  onView: () => void;
-  onSign: () => void;
-  onReject: () => void;
-};
-
-/* ─────────────────────── Internal helpers ─────────────────────── */
-
-const normSt = (s?: string) => String(s || "").trim().toUpperCase();
-
-function resolveContractStatus(meta: ContractCardMeta | null): {
-  statusText: string;
-  isLocked: boolean;
-  isRejected: boolean;
-  isSuperseded: boolean;
-  isReadyToSign: boolean;
-  influencerConfirmed: boolean;
-  brandConfirmed: boolean;
-  influencerSigned: boolean;
-  brandSigned: boolean;
-  needsAccept: boolean;
-  canEdit: boolean;
-  canSign: boolean;
-  canReject: boolean;
-} {
-  const st = normSt(meta?.status);
-
-  const isLocked =
-    !!meta?.lockedAt ||
-    st === "CONTRACT_SIGNED" ||
-    st === "MILESTONES_CREATED";
-  const isRejected = st === "REJECTED";
-  const isSuperseded = st === "SUPERSEDED";
-  const isReadyToSign = st === "READY_TO_SIGN" || !!meta?.editsLockedAt;
-
-  const influencerConfirmed = !!meta?.confirmations?.influencer?.confirmed;
-  const brandConfirmed = !!meta?.confirmations?.brand?.confirmed;
-  const influencerSigned = !!meta?.signatures?.influencer?.signed;
-  const brandSigned = !!meta?.signatures?.brand?.signed;
-  const anyoneSigned = influencerSigned || brandSigned;
-
-  const canEdit =
-    !isLocked && !isReadyToSign && !isRejected && !isSuperseded && !anyoneSigned;
-  const needsAccept = !influencerConfirmed && canEdit;
-  const canSign =
-    !isLocked &&
-    isReadyToSign &&
-    influencerConfirmed &&
-    brandConfirmed &&
-    !influencerSigned;
-  const canReject = !isLocked && !isRejected && !isSuperseded;
-
-  // Human-readable status label
-  const sigLabel = (() => {
-    if (st === "MILESTONES_CREATED") return "Milestone Added";
-    if (st === "CONTRACT_SIGNED") return "Awaiting Milestone Creation";
-    if (!isReadyToSign) return null;
-    if (influencerSigned && brandSigned) return "Signed";
-    const aw = String(meta?.awaitingRole || "").toLowerCase();
-    if (aw === "brand") return "Awaiting brand signature";
-    if (aw === "influencer") return "Awaiting influencer signature";
-    if (!influencerSigned && !brandSigned) return "Ready to sign";
-    if (brandSigned && !influencerSigned) return "Awaiting your signature";
-    if (!brandSigned && influencerSigned) return "Awaiting brand signature";
-    return null;
-  })();
-
-  const statusText =
-    sigLabel ??
-    (st === "BRAND_SENT_DRAFT"
-      ? "Awaiting Your Acceptance"
-      : st === "BRAND_EDITED"
-      ? "Updated by Brand"
-      : st === "INFLUENCER_ACCEPTED"
-      ? "Awaiting Brand Acceptance"
-      : st === "INFLUENCER_EDITED"
-      ? "Sent to Brand"
-      : st === "READY_TO_SIGN"
-      ? "Ready to Sign"
-      : st === "REJECTED"
-      ? "Rejected"
-      : st === "SUPERSEDED"
-      ? "Superseded"
-      : meta?.status
-      ? String(meta.status)
-      : "Contract");
-
-  return {
-    statusText,
-    isLocked,
-    isRejected,
-    isSuperseded,
-    isReadyToSign,
-    influencerConfirmed,
-    brandConfirmed,
-    influencerSigned,
-    brandSigned,
-    needsAccept,
-    canEdit,
-    canSign,
-    canReject,
-  };
-}
-
-/* ─────────────────────── Shared card sub-components ─────────────────────── */
-
+/** Skeletons stay pill-type */
 function SkeletonLine({ className = "" }: { className?: string }) {
   return <div className={`h-3 rounded-full bg-neutral-100 ${className}`} />;
 }
@@ -279,144 +144,13 @@ function CampaignGlobalBadge({ value }: { value: string }) {
   );
 }
 
-/* ─────────────────────── Invite action types ─────────────────────── */
-
-export type InviteCardProps = {
-  status?: "pending" | "accepted" | "declined";
-  respondBy?: string;
-  onAccept: () => void;
-  onDecline: () => void;
-  onViewDetails: () => void;
-};
-
-/* ─────────────────────── Invite actions (inline, replaces Save/View) ─────────────────────── */
-
-function InviteActions({ invite }: { invite: InviteCardProps }) {
-  const isPending = !invite.status || invite.status === "pending";
-  const isAccepted = invite.status === "accepted";
-  const isDeclined = invite.status === "declined";
-
-  if (isAccepted) {
-    return (
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-[11px] font-semibold text-emerald-700">
-          ✓ Accepted
-        </span>
-        <button
-          onClick={invite.onViewDetails}
-          className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
-        >
-          <Eye className="h-3 w-3" />
-          Details
-        </button>
-      </div>
-    );
-  }
-
-  if (isDeclined) {
-    return (
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="rounded-full bg-red-50 border border-red-200 px-3 py-1.5 text-[11px] font-semibold text-red-600">
-          Declined
-        </span>
-        <button
-          onClick={invite.onViewDetails}
-          className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
-        >
-          <Eye className="h-3 w-3" />
-          Details
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <button
-        onClick={invite.onAccept}
-        className="rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
-      >
-        Accept Invite
-      </button>
-      <button
-        onClick={invite.onDecline}
-        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
-      >
-        Decline
-      </button>
-      <button
-        onClick={invite.onViewDetails}
-        className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98] whitespace-nowrap"
-      >
-        <Eye className="h-3 w-3" />
-        Details
-      </button>
-    </div>
-  );
-}
-
-/* ─────────────────────── Contract actions (inline, replaces Save/View) ─────────────────────── */
-
-function ContractActions({ contract }: { contract: ContractCardProps }) {
-  const {
-    needsAccept,
-    canEdit,
-    canSign,
-    canReject,
-  } = resolveContractStatus(contract.meta);
-
-  return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      {/* Primary CTA */}
-      {(needsAccept || canEdit) && (
-        <button
-          onClick={contract.onReviewAccept}
-          className="rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
-        >
-          {needsAccept ? "Review & Accept" : "Edit Details"}
-        </button>
-      )}
-
-      {canSign && (
-        <button
-          onClick={contract.onSign}
-          className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98]"
-        >
-          <PenLine className="h-3 w-3" />
-          Sign
-        </button>
-      )}
-
-      {/* View */}
-      <button
-        onClick={contract.onView}
-        className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-50 active:scale-[0.98]"
-      >
-        <Eye className="h-3 w-3" />
-        View
-      </button>
-
-      {/* Reject */}
-      {canReject && (
-        <button
-          onClick={contract.onReject}
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
-        >
-          Reject
-        </button>
-      )}
-    </div>
-  );
-}
-
-/* ─────────────────────── ManualPreviewCard ─────────────────────── */
-
 export function ManualPreviewCard({
   form,
   meta,
   contract,
   invite,
   className = "",
+  onViewClick
 }: {
   form: ManualForm;
   meta?: PreviewMeta;
@@ -424,10 +158,21 @@ export function ManualPreviewCard({
   /** Pass this prop to render Accept Invite / Decline / View Details buttons */
   invite?: InviteCardProps;
   className?: string;
+  onViewClick?: () => void;
 }) {
   const title = form.title?.trim() ?? "";
   const desc = form.description?.trim() ?? "";
+  const productImages = useMemo(
+    () => (Array.isArray(form.productImages) ? form.productImages : []),
+    [form.productImages]
+  );
 
+  const heroImage = useMemo(
+    () => getProductImageSrc(productImages[0]),
+    [productImages]
+  );
+
+  const imageCount = productImages.length;
   const hasTitle = Boolean(title);
   const hasDesc = Boolean(desc);
 
@@ -473,7 +218,9 @@ export function ManualPreviewCard({
 
       {/* center image icon */}
       <div className="mt-8 flex justify-center [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-6">
-        <Images className="h-[4.625rem] w-[4.625rem] text-[#EDEDED] [@media_(max-width:80rem)_and_(max-height:48.75rem)]:scale-[0.92]" />
+        <Images
+          className="h-[4.625rem] w-[4.625rem] text-[#EDEDED] [@media_(max-width:80rem)_and_(max-height:48.75rem)]:scale-[0.92]"
+        />
       </div>
 
       {/* AD badge */}
@@ -572,19 +319,13 @@ export function ManualPreviewCard({
           )}
         </div>
 
-        {/* Actions: invite > contract > default Save/View */}
-        {invite ? (
-          <InviteActions invite={invite} />
-        ) : contract ? (
-          <ContractActions contract={contract} />
-        ) : (
-          <div className="flex items-center gap-3 shrink-0 cursor-pointer">
-            <Button variant="ghost" className="shadow-none">
-              Save
-            </Button>
-            <Button variant="default">View</Button>
-          </div>
-        )}
+        {/* Actions */}
+        <div className="flex items-center gap-3 shrink-0 cursor-pointer">
+          <Button variant="ghost" className="shadow-none ">
+            Save
+          </Button>
+          <Button variant="default">View</Button>
+        </div>
       </div>
     </div>
   );
