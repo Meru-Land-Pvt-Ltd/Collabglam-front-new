@@ -250,10 +250,10 @@ export default function InfluencerLoginPage() {
     try {
       const res = await apiSignInInfluencer(emailTrimmed, password);
 
-      setCookie("influencerToken", res.token, { days: 30 });
+      setCookie("token", res.token, { days: 30 });
       setCookie("influencerId", res.influencerId, { days: 30 });
       // store in localStorage
-      localStorage.setItem("influencerToken", res.token);
+      localStorage.setItem("token", res.token);
       localStorage.setItem("influencerId", res.influencerId);
 
       await fetch("/api-1/influencer-auth", {
