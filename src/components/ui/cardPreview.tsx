@@ -7,6 +7,7 @@ import {
   BookmarkSimpleIcon,
 } from "@phosphor-icons/react";
 import { PenLine, Eye } from "lucide-react";
+import { PenLine, Eye } from "lucide-react";
 import { Button } from "./button";
 import { useRouter } from "next/navigation";
 
@@ -246,6 +247,11 @@ function InlinePlus({
           {sep}+{extra}
         </span>
       ) : null}
+      {extra > 0 ? (
+        <span className="text-primary">
+          {sep}+{extra}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -269,6 +275,7 @@ function OutlinedPill({
         "border border-[#1A1A1A] bg-white",
         "px-3 py-1 text-[12px] text-neutral-900",
         "min-w-0",
+        "min-w-0",
         className,
       ].join(" ")}
     >
@@ -277,6 +284,7 @@ function OutlinedPill({
   );
 }
 
+function CampaignGlobalBadge({ value }: { value: string }) {
 function CampaignGlobalBadge({ value }: { value: string }) {
   if (!value) return null;
   return (
@@ -431,11 +439,16 @@ export function ManualPreviewCard({
   meta,
   contract,
   invite,
+  contract,
+  invite,
   className = "",
   onViewClick
 }: {
   form: ManualForm;
   meta?: PreviewMeta;
+  contract?: ContractCardProps;
+  /** Pass this prop to render Accept Invite / Decline / View Details buttons */
+  invite?: InviteCardProps;
   contract?: ContractCardProps;
   /** Pass this prop to render Accept Invite / Decline / View Details buttons */
   invite?: InviteCardProps;
@@ -561,6 +574,7 @@ export function ManualPreviewCard({
       <div className="mt-3">
         {hasTitle ? (
           <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1rem] font-semibold leading-[1.5rem] tracking-[0]">
+          <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1rem] font-semibold leading-[1.5rem] tracking-[0]">
             {title}
           </div>
         ) : (
@@ -583,6 +597,7 @@ export function ManualPreviewCard({
       </div>
 
       {/* countries line */}
+      {/* countries line */}
       <div className="mt-3">
         {country.first ? (
           <div className="flex items-center gap-2 min-w-0">
@@ -604,10 +619,13 @@ export function ManualPreviewCard({
       <div className="mt-6 h-px w-full bg-neutral-100 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5" />
 
       {/* bottom row: Budget + actions */}
+      {/* bottom row: Budget + actions */}
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
+        {/* Budget */}
         {/* Budget */}
         <div className="min-w-0 flex-1">
           {budget > 0 ? (
+            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
             <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
               ${formatBudget(budget)}
             </span>

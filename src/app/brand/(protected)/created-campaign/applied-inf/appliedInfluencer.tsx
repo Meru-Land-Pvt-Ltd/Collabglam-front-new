@@ -35,21 +35,1565 @@ import {
   DotsThree,
   EnvelopeOpen,
   Eye,
+  EyeSlash,
   FileText,
   Info,
+  LockSimple,
   MagnifyingGlass,
   PaperPlaneTilt,
   PenNib,
   SealCheck,
   Signature,
+  WarningCircle,
 } from "@phosphor-icons/react";
+import { FloatingInput } from "@/components/ui/floatingInput";
+import {
+  FloatingMultiSelect,
+  FloatingSelect,
+  SelectItem,
+} from "@/components/ui/selectComp";
+import { LabeledTextarea } from "@/components/ui/textAreaComp";
+import { FloatingDateInput } from "@/components/ui/date";
+import { FloatingTagInput } from "@/components/ui/tagInput";
 
-const ReactSelect = dynamic(() => import("react-select"), { ssr: false });
+export type Party = "brand" | "influencer";
+export type CampaignType = "fixed_payment" | "milestone_based" | "product_gifting";
 
-const GRADIENT_FROM = "#FFA135";
-const GRADIENT_TO = "#FF7236";
+type FieldKind = "text" | "textarea" | "date" | "number" | "select" | "radio" | "multi";
+type Option = { value: string; label: string };
+type RequiredRule = boolean | ((values: LaneAContractValues) => boolean);
+
+type ObjectionEntry = {
+  by: Party;
+  text: string;
+  updatedAt?: string;
+};
+
+export type MilestoneRow = {
+  id: string;
+  milestoneName: string;
+  paymentAmount: string;
+  triggerEvent: string;
+  dueDate: string;
+};
+
+export type LaneAContractValues = {
+  campaignType: CampaignType;
+
+  brandLegalName: string;
+  campaignTitleId: string;
+  brandContactNameTitle: string;
+  brandNoticeEmailPhone: string;
+  brandBillingAddress: string;
+  productsServicesCovered: string;
+  territoryTargetCountry: string;
+  effectiveDate: string;
+
+  influencerLegalName: string;
+  postingHandleUrl: string;
+  influencerContactEmailPhone: string;
+  influencerMailingAddress: string;
+
+  platforms: string[];
+  deliverableFormat: string;
+  numberOfDeliverables: string;
+  draftDueDate: string;
+  livePostingDate: string;
+  minimumLivePeriod: string;
+  videoLengthFormatSpecs: string;
+  includedRevisionRounds: string;
+  brandReviewSlaBusinessDays: string;
+  mandatoryTagsLinks: string;
+  additionalRevisionFee: string;
+  preShootScriptRequired: string;
+  scriptDueDate: string;
+  reshootObligation: string;
+
+  fixedTotalCampaignFee: string;
+  paymentStructure: string;
+  customSplitDetails: string;
+  advancePaymentTrigger: string;
+  balancePaymentTrigger: string;
+  fixedProcessorFeesBorneBy: string;
+  fixedKillFee: string;
+  fixedPayoutMethod: string;
+  fixedPayoutAccountId: string;
+  fixedTaxId: string;
+
+  milestoneTotalCampaignFee: string;
+  milestoneProcessorFeesBorneBy: string;
+  milestoneKillFee: string;
+  milestones: MilestoneRow[];
+  milestonePayoutMethod: string;
+  milestonePayoutAccountId: string;
+
+  estimatedRetailValue: string;
+  receiptConfirmationDeadline: string;
+  productDisposition: string;
+  returnWindow: string;
+  returnShippingMethod: string;
+  returnPackagingInstructions: string;
+  itemsToKeepReturn: string;
+  shipToName: string;
+  shippingAddress: string;
+  shippingPhoneNumber: string;
+  deliveryInstructions: string;
+
+  cashCompensationModel: string;
+  cashFeeAmount: string;
+  cashPaymentTrigger: string;
+  cashProcessorFeesBorneBy: string;
+  affiliateCommissionRate: string;
+  affiliateLinkCode: string;
+  commissionReportingPeriod: string;
+  giftingCashPayoutMethod: string;
+  giftingCashPayoutAccountId: string;
+
+  grantedUsageRights: string[];
+  usageRightsDuration: string;
+  editingRights: string;
+  musicAssetResponsibility: string;
+  attributionRequirement: string;
+  rawSourceFileDelivery: string;
+
+  analyticsReportingDeadline: string;
+  requiredAnalyticsItems: string[];
+
+  competitorExclusivity: string;
+  competitorCategoryList: string;
+  exclusivityPeriod: string;
+  creativeBrief: string;
+  prohibitedStatements: string;
+  moralsClause: string;
+  ftcAcknowledgement: string;
+
+  governingLaw: string;
+  disputeResolutionMethod: string;
+  venueSeat: string;
+  attorneysFees: string;
+  noBypassPeriod: string;
+
+  objections: Record<string, ObjectionEntry>;
+};
+
+type FieldDef = {
+  key: keyof LaneAContractValues;
+  label: string;
+  owner: Party;
+  kind: FieldKind;
+  placeholder?: string;
+  tooltip?: string;
+  required?: RequiredRule;
+  options?: Option[];
+  private?: boolean;
+  showWhen?: (values: LaneAContractValues) => boolean;
+  sectionHint?: string;
+};
+
+export type LaneAContractEditorProps = {
+  value: LaneAContractValues;
+  onChange: React.Dispatch<React.SetStateAction<LaneAContractValues>>;
+  viewerParty: Party;
+  onViewerPartyChange: (party: Party) => void;
+  fieldErrors?: Record<string, string>;
+  className?: string;
+};
+
+const BRAND_PRIMARY = "#1A1A1A";
+const BRAND_PRIMARY_HOVER = "#2A2A2A";
+const BRAND_PRIMARY_SOFT = "#F5F5F5";
+const BRAND_PRIMARY_SOFT_ALT = "#EEEEEE";
+const BRAND_PRIMARY_BORDER = "#D4D4D4";
+const BRAND_PRIMARY_RING = "rgba(26,26,26,0.16)";
+const BRAND_PRIMARY_MUTED = "#525252";
+
+const GRADIENT_FROM = BRAND_PRIMARY;
+const GRADIENT_TO = BRAND_PRIMARY_HOVER;
+
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
 const PAGE_SIZE = 10;
+
+const TAG_STYLE_FIELDS = new Set<keyof LaneAContractValues>([
+  "mandatoryTagsLinks",
+  "competitorCategoryList",
+]);
+
+function toControlState(error?: string) {
+  return error ? ("error" as const) : undefined;
+}
+
+function csvToTags(raw: string) {
+  return String(raw || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function tagsToCsv(tags: string[]) {
+  return tags.join(", ");
+}
+
+const PLATFORM_OPTIONS: Option[] = [
+  { value: "Instagram", label: "Instagram" },
+  { value: "TikTok", label: "TikTok" },
+  { value: "YouTube", label: "YouTube" },
+];
+
+const CAMPAIGN_TYPE_OPTIONS: Option[] = [
+  { value: "fixed_payment", label: "Fixed Payment" },
+  { value: "milestone_based", label: "Milestone-Based" },
+  { value: "product_gifting", label: "Product Gifting" },
+];
+
+const DELIVERABLE_FORMAT_OPTIONS: Option[] = [
+  { value: "Dedicated Video", label: "Dedicated Video" },
+  { value: "Integrated Video", label: "Integrated Video" },
+  { value: "Reel", label: "Reel" },
+  { value: "Story Set", label: "Story Set" },
+  { value: "Static Post", label: "Static Post" },
+  { value: "UGC (Raw Files Only)", label: "UGC (Raw Files Only)" },
+  { value: "Live Stream", label: "Live Stream" },
+];
+
+const YES_NO_SCRIPT_OPTIONS: Option[] = [
+  { value: "No", label: "No" },
+  { value: "Yes", label: "Yes — Script Must Be Submitted First" },
+];
+
+const RESHOOT_OPTIONS: Option[] = [
+  { value: "No reshoot required", label: "No reshoot required" },
+  { value: "Only if brief not followed", label: "Only if brief not followed" },
+  { value: "One reshoot included", label: "One reshoot included" },
+];
+
+const PAYMENT_STRUCTURE_OPTIONS: Option[] = [
+  { value: "50% Advance / 50% Balance", label: "50% Advance / 50% Balance" },
+  { value: "100% Upfront", label: "100% Upfront" },
+  { value: "100% on Completion", label: "100% on Completion" },
+  { value: "Custom Split", label: "Custom Split" },
+];
+
+const ADVANCE_PAYMENT_TRIGGER_OPTIONS: Option[] = [
+  { value: "On Signing", label: "On Signing" },
+  { value: "On Product Receipt", label: "On Product Receipt" },
+  { value: "On Receipt of Invoice", label: "On Receipt of Invoice" },
+  { value: "On Draft Submitted", label: "On Draft Submitted" },
+  { value: "Other", label: "Other" },
+];
+
+const BALANCE_PAYMENT_TRIGGER_OPTIONS: Option[] = [
+  { value: "After Final Draft Approved", label: "After Final Draft Approved" },
+  { value: "After Posting Goes Live", label: "After Posting Goes Live" },
+  { value: "After Analytics Delivered", label: "After Analytics Delivered" },
+  { value: "Other", label: "Other" },
+];
+
+const PROCESSOR_FEE_OPTIONS: Option[] = [
+  { value: "Brand", label: "Brand" },
+  { value: "Influencer", label: "Influencer" },
+  { value: "Split Between Both", label: "Split Between Both" },
+];
+
+const PAYOUT_METHOD_OPTIONS: Option[] = [
+  { value: "PayPal", label: "PayPal" },
+  { value: "Bank Transfer / ACH", label: "Bank Transfer / ACH" },
+  { value: "Wise", label: "Wise" },
+  { value: "Payoneer", label: "Payoneer" },
+  { value: "CollabGlam Wallet", label: "CollabGlam Wallet" },
+];
+
+const PRODUCT_DISPOSITION_OPTIONS: Option[] = [
+  { value: "Keep", label: "Keep — Influencer keeps as a gift" },
+  { value: "Return", label: "Return — Returnable loaner" },
+  { value: "Partial", label: "Partial — Keep some, return others" },
+];
+
+const RETURN_SHIPPING_OPTIONS: Option[] = [
+  { value: "Brand Provides Prepaid Label", label: "Brand Provides Prepaid Label" },
+  { value: "Influencer Ships Back", label: "Influencer Ships Back" },
+  { value: "Brand Schedules Courier Pickup", label: "Brand Schedules Courier Pickup" },
+];
+
+const CASH_COMP_OPTIONS: Option[] = [
+  { value: "Gifting Only", label: "Gifting Only — No cash" },
+  { value: "Gifting + Fixed Cash Fee", label: "Gifting + Fixed Cash Fee" },
+  { value: "Gifting + Affiliate / Commission", label: "Gifting + Affiliate / Commission" },
+];
+
+const CASH_TRIGGER_OPTIONS: Option[] = [
+  { value: "On Signing", label: "On Signing" },
+  { value: "On Product Receipt", label: "On Product Receipt" },
+  { value: "After Draft Approved", label: "After Draft Approved" },
+  { value: "After Posting Goes Live", label: "After Posting Goes Live" },
+];
+
+const COMPETITOR_EXCLUSIVITY_OPTIONS: Option[] = [
+  { value: "None", label: "None" },
+  { value: "Applies", label: "Applies" },
+];
+
+const MORALS_OPTIONS: Option[] = [
+  { value: "Not Included", label: "Not Included" },
+  { value: "Included", label: "Included" },
+];
+
+const EDITING_RIGHTS_OPTIONS: Option[] = [
+  { value: "Cropping / Resizing Only", label: "Cropping / Resizing Only" },
+  { value: "Brand May Create Cutdowns / Clips", label: "Brand May Create Cutdowns / Clips" },
+  { value: "No Edits Without Approval", label: "No Edits Without Approval" },
+];
+
+const MUSIC_RESPONSIBILITY_OPTIONS: Option[] = [
+  { value: "Brand Responsible", label: "Brand Responsible" },
+  { value: "Influencer Responsible", label: "Influencer Responsible" },
+  { value: "Custom Arrangement", label: "Custom Arrangement" },
+];
+
+const ATTRIBUTION_OPTIONS: Option[] = [
+  { value: "Credit Required", label: "Credit Required" },
+  { value: "No Attribution Required", label: "No Attribution Required" },
+];
+
+const RAW_FILE_OPTIONS: Option[] = [
+  { value: "Not Included", label: "Not Included" },
+  { value: "Included", label: "Included" },
+];
+
+const DISPUTE_OPTIONS: Option[] = [
+  { value: "State / Federal Courts", label: "State / Federal Courts" },
+  { value: "AAA Arbitration", label: "AAA Arbitration" },
+  { value: "Other", label: "Other" },
+];
+
+const ATTORNEYS_FEES_OPTIONS: Option[] = [
+  { value: "Prevailing Party Recovers Fees", label: "Prevailing Party Recovers Fees" },
+  { value: "Each Party Bears Own Fees", label: "Each Party Bears Own Fees" },
+  { value: "Other", label: "Other" },
+];
+
+const USAGE_RIGHTS_OPTIONS: Option[] = [
+  { value: "Organic Repost on Brand Social", label: "Organic Repost on Brand Social" },
+  { value: "Website / Product Listing", label: "Website / Product Listing" },
+  { value: "Email / CRM / Internal Decks", label: "Email / CRM / Internal Decks" },
+  { value: "Paid Social / Ads / Boosting", label: "Paid Social / Ads / Boosting" },
+  { value: "Whitelisting / Spark Ads", label: "Whitelisting / Spark Ads" },
+  { value: "Perpetual Rights / Buyout", label: "Perpetual Rights / Buyout" },
+];
+
+const ANALYTICS_ITEMS_OPTIONS: Option[] = [
+  { value: "Live Link", label: "Live Link" },
+  { value: "Screenshots", label: "Screenshots" },
+  { value: "Reach / Views", label: "Reach / Views" },
+  { value: "Watch Time", label: "Watch Time" },
+  { value: "Clicks", label: "Clicks" },
+  { value: "Saves / Shares", label: "Saves / Shares" },
+  { value: "Native Insights Access", label: "Native Insights Access" },
+];
+
+const ALL_FIELD_DEFS: FieldDef[] = [
+  {
+    key: "campaignType",
+    label: "Campaign Type",
+    owner: "brand",
+    kind: "radio",
+    options: CAMPAIGN_TYPE_OPTIONS,
+    required: true,
+    tooltip: "Select the payment model for this contract. This controls which payment sections appear.",
+  },
+
+  { key: "brandLegalName", label: "Brand Legal Name", owner: "brand", kind: "text", placeholder: "e.g. Glow Beauty Inc.", tooltip: "Full registered legal name — must match official documents.", required: true },
+  { key: "campaignTitleId", label: "Campaign Title / ID", owner: "brand", kind: "text", placeholder: "e.g. Summer Glow 2025 / CG-0012", tooltip: "Unique campaign name or CollabGlam platform campaign ID.", required: true },
+  { key: "brandContactNameTitle", label: "Brand Contact Name & Title", owner: "brand", kind: "text", placeholder: "e.g. Jane Smith, Marketing Manager", tooltip: "Brand's main person managing this campaign.", required: true },
+  { key: "brandNoticeEmailPhone", label: "Brand Notice Email / Phone", owner: "brand", kind: "text", placeholder: "e.g. campaigns@brand.com", tooltip: "Primary channel for legal notices and campaign updates.", required: true },
+  { key: "brandBillingAddress", label: "Brand Billing Address", owner: "brand", kind: "textarea", placeholder: "e.g. Street, City, State, ZIP", tooltip: "Brand's full billing address for invoicing and records.", required: true },
+  { key: "productsServicesCovered", label: "Products / Services Covered", owner: "brand", kind: "text", placeholder: "e.g. Vitamin C Serum SKU#123", tooltip: "Product names, SKUs, or service descriptions in this campaign.", required: true },
+  { key: "territoryTargetCountry", label: "Territory / Target Country", owner: "brand", kind: "text", placeholder: "e.g. United States, or Worldwide", tooltip: "Geographic region where content will be targeted or distributed.", required: true },
+  { key: "effectiveDate", label: "Effective Date", owner: "brand", kind: "date", tooltip: "Date this agreement takes legal effect.", required: true },
+  { key: "influencerLegalName", label: "Influencer Legal Name / Entity", owner: "influencer", kind: "text", placeholder: "e.g. Jane Doe or Jane Doe LLC", tooltip: "Full legal name or registered business entity name.", required: true },
+  { key: "postingHandleUrl", label: "Posting Handle / Profile URL", owner: "influencer", kind: "text", placeholder: "e.g. @janeglow / instagram.com/j", tooltip: "Main public social handle and profile URL.", required: true },
+  { key: "influencerContactEmailPhone", label: "Influencer Contact Email / Phone", owner: "influencer", kind: "text", placeholder: "e.g. jane@janeglow.com", tooltip: "Primary contact for all campaign communications.", required: true },
+  { key: "influencerMailingAddress", label: "Influencer Mailing Address", owner: "influencer", kind: "textarea", placeholder: "e.g. Street, City, State, ZIP", tooltip: "Address for legal notices.", required: true },
+
+  { key: "platforms", label: "Platform(s)", owner: "brand", kind: "multi", options: PLATFORM_OPTIONS, tooltip: "Social media platform where content will be published.", required: true },
+  { key: "deliverableFormat", label: "Deliverable Format", owner: "brand", kind: "select", options: DELIVERABLE_FORMAT_OPTIONS, tooltip: "Type of content the influencer must create.", required: true },
+  { key: "numberOfDeliverables", label: "Number of Deliverables", owner: "brand", kind: "number", placeholder: "e.g. 2", tooltip: "Total count of content pieces required.", required: true },
+  { key: "draftDueDate", label: "Draft Due Date", owner: "brand", kind: "date", tooltip: "Deadline for the influencer to submit the first draft for review.", required: true },
+  { key: "livePostingDate", label: "Live / Posting Date", owner: "brand", kind: "date", tooltip: "Date content must be published on the influencer's channel.", required: true },
+  { key: "minimumLivePeriod", label: "Minimum Live Period", owner: "brand", kind: "text", placeholder: "e.g. 12 months", tooltip: "How long the content must remain live and undeleted.", required: true },
+  { key: "videoLengthFormatSpecs", label: "Video Length / Format Specs", owner: "brand", kind: "text", placeholder: "e.g. Min 60s, 9:16 vertical", tooltip: "Technical requirements: duration, aspect ratio, resolution." },
+  { key: "includedRevisionRounds", label: "Included Revision Rounds", owner: "brand", kind: "number", placeholder: "e.g. 1", tooltip: "Free revision cycles included per deliverable.", required: true },
+  { key: "brandReviewSlaBusinessDays", label: "Brand Review SLA (Business Days)", owner: "brand", kind: "number", placeholder: "e.g. 3", tooltip: "Days the brand has to review and respond to submitted drafts.", required: true },
+  { key: "mandatoryTagsLinks", label: "Mandatory Tags / Mentions / Links", owner: "brand", kind: "text", placeholder: "e.g. @BrandHandle, #Ad", tooltip: "Required handles, hashtags, UTM links, or discount codes to include in post." },
+  { key: "additionalRevisionFee", label: "Additional Revision Fee", owner: "brand", kind: "text", placeholder: "e.g. $150 per extra round", tooltip: "Fee charged per revision round beyond the included number." },
+  { key: "preShootScriptRequired", label: "Pre-Shoot Script Required?", owner: "brand", kind: "radio", options: YES_NO_SCRIPT_OPTIONS, tooltip: "Must the influencer submit a script for brand approval before shooting?", required: true },
+  { key: "scriptDueDate", label: "Script Due Date", owner: "brand", kind: "date", tooltip: "Deadline for the influencer to submit the pre-approved script.", required: (v) => v.preShootScriptRequired === "Yes", showWhen: (v) => v.preShootScriptRequired === "Yes" },
+  { key: "reshootObligation", label: "Reshoot Obligation?", owner: "brand", kind: "radio", options: RESHOOT_OPTIONS, tooltip: "Under what circumstances must the influencer reshoot content?" },
+
+  { key: "fixedTotalCampaignFee", label: "Total Campaign Fee", owner: "brand", kind: "text", placeholder: "e.g. $2,500 USD", tooltip: "Total fixed amount the brand will pay for all deliverables.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "paymentStructure", label: "Payment Structure", owner: "brand", kind: "select", options: PAYMENT_STRUCTURE_OPTIONS, tooltip: "How payment is split between advance and balance.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "customSplitDetails", label: "Custom Split Details", owner: "brand", kind: "text", placeholder: "e.g. 30% on signing, 70% on post", tooltip: "Exact payment split percentages and triggers.", required: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom Split", showWhen: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom Split" },
+  { key: "advancePaymentTrigger", label: "Advance Payment Trigger", owner: "brand", kind: "select", options: ADVANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the advance payment released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "balancePaymentTrigger", label: "Balance Payment Trigger", owner: "brand", kind: "select", options: BALANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the remaining balance released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. $500 if cancelled after shoot", tooltip: "Compensation owed to influencer if brand cancels without cause.", showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedPayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive payment. PRIVATE — brand cannot see.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedPayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for the influencer's payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedTaxId", label: "Tax ID (if applicable)", owner: "influencer", kind: "text", placeholder: "e.g. EIN / SSN last 4 / VAT", tooltip: "May be required for processing above IRS thresholds. PRIVATE.", private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+
+  { key: "milestoneTotalCampaignFee", label: "Total Campaign Fee (All Milestones)", owner: "brand", kind: "text", placeholder: "e.g. $5,000 USD", tooltip: "Total gross amount across all milestones combined.", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges per milestone?", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. Completed milestones non-refundable", tooltip: "Compensation if brand cancels mid-campaign.", showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestonePayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive each milestone payment. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestonePayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
+
+  { key: "estimatedRetailValue", label: "Estimated Retail Value (ERV)", owner: "brand", kind: "text", placeholder: "e.g. $150 USD", tooltip: "Market retail value of gifted products — may have tax implications for influencer.", showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "receiptConfirmationDeadline", label: "Product Receipt Confirmation Deadline", owner: "brand", kind: "text", placeholder: "e.g. Within 3 business days", tooltip: "How quickly the influencer must confirm receipt after delivery.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "productDisposition", label: "Product Disposition — Keep or Return?", owner: "brand", kind: "radio", options: PRODUCT_DISPOSITION_OPTIONS, tooltip: "Determines whether the influencer keeps or returns the product after campaign.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "returnWindow", label: "Return Window", owner: "brand", kind: "text", placeholder: "e.g. Within 7 days after shoot", tooltip: "Timeframe for the influencer to return the product.", required: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition), showWhen: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition) },
+  { key: "returnShippingMethod", label: "Return Shipping Method", owner: "brand", kind: "select", options: RETURN_SHIPPING_OPTIONS, tooltip: "Who arranges and pays for return shipping?", required: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition), showWhen: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition) },
+  { key: "returnPackagingInstructions", label: "Return Packaging Instructions", owner: "brand", kind: "text", placeholder: "e.g. Use original packaging", tooltip: "Packaging and handling requirements for the return.", showWhen: (v) => v.campaignType === "product_gifting" && ["Return", "Partial"].includes(v.productDisposition) },
+  { key: "itemsToKeepReturn", label: "Items to Keep / Items to Return", owner: "brand", kind: "text", placeholder: "e.g. Serum (keep), Camera (return)", tooltip: "Specify which items stay vs. which must be returned.", required: (v) => v.campaignType === "product_gifting" && v.productDisposition === "Partial", showWhen: (v) => v.campaignType === "product_gifting" && v.productDisposition === "Partial" },
+  { key: "shipToName", label: "Ship-To Name", owner: "influencer", kind: "text", placeholder: "e.g. Name on the package", tooltip: "Name on the shipping label — can differ from legal name.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "shippingAddress", label: "Shipping Address", owner: "influencer", kind: "textarea", placeholder: "e.g. Street, City, State, ZIP", tooltip: "Full delivery address for the gifted products.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "shippingPhoneNumber", label: "Shipping Phone Number", owner: "influencer", kind: "text", placeholder: "e.g. +1 555 000 0000", tooltip: "Contact number for the carrier in case of delivery issues.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "deliveryInstructions", label: "Delivery Instructions", owner: "influencer", kind: "text", placeholder: "e.g. Leave at door, code 1234", tooltip: "Special instructions to ensure successful delivery.", showWhen: (v) => v.campaignType === "product_gifting" },
+
+  { key: "cashCompensationModel", label: "Cash Compensation Model", owner: "brand", kind: "radio", options: CASH_COMP_OPTIONS, tooltip: "Will the influencer receive cash in addition to gifted products?", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
+  { key: "cashFeeAmount", label: "Cash Fee Amount", owner: "brand", kind: "text", placeholder: "e.g. $500 USD", tooltip: "Fixed cash payment in addition to the gifted product.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "cashPaymentTrigger", label: "Cash Payment Trigger", owner: "brand", kind: "select", options: CASH_TRIGGER_OPTIONS, tooltip: "When does the cash payment get released?", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "cashProcessorFeesBorneBy", label: "Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges for the cash payment?", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "affiliateCommissionRate", label: "Affiliate / Commission Rate", owner: "brand", kind: "text", placeholder: "e.g. 15% of net sales", tooltip: "Commission earned per sale tracked via the influencer's affiliate link.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission" },
+  { key: "affiliateLinkCode", label: "Affiliate Link / Code", owner: "brand", kind: "text", placeholder: "e.g. GLAM15 or bit.ly/link", tooltip: "The unique tracking link or discount code assigned to this influencer.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission" },
+  { key: "commissionReportingPeriod", label: "Commission Reporting Period", owner: "brand", kind: "text", placeholder: "e.g. Monthly", tooltip: "When and how often commission earnings will be reported and paid.", showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Affiliate / Commission" },
+  { key: "giftingCashPayoutMethod", label: "Payout Method", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive the cash payment. PRIVATE.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", private: true, showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+  { key: "giftingCashPayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for the payout method. PRIVATE.", required: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee", private: true, showWhen: (v) => v.campaignType === "product_gifting" && v.cashCompensationModel === "Gifting + Fixed Cash Fee" },
+
+  { key: "grantedUsageRights", label: "Granted Usage Rights", owner: "brand", kind: "multi", options: USAGE_RIGHTS_OPTIONS, tooltip: "All ways the brand is permitted to use the influencer's content." },
+  { key: "usageRightsDuration", label: "Usage Rights Duration", owner: "brand", kind: "text", placeholder: "e.g. 12 months / Perpetual", tooltip: "How long the brand may use the content under the selected rights." },
+  { key: "editingRights", label: "Editing Rights", owner: "brand", kind: "select", options: EDITING_RIGHTS_OPTIONS, tooltip: "Modifications the brand may make to the influencer's content." },
+  { key: "musicAssetResponsibility", label: "Music / Stock Asset Responsibility", owner: "brand", kind: "select", options: MUSIC_RESPONSIBILITY_OPTIONS, tooltip: "Who obtains commercial licensing for music or stock assets." },
+  { key: "attributionRequirement", label: "Attribution Requirement", owner: "brand", kind: "select", options: ATTRIBUTION_OPTIONS, tooltip: "Must the influencer be credited when the brand uses the content?" },
+  { key: "rawSourceFileDelivery", label: "Raw / Source File Delivery?", owner: "brand", kind: "radio", options: RAW_FILE_OPTIONS, tooltip: "Must the influencer hand over unedited raw footage or source files?" },
+
+  { key: "analyticsReportingDeadline", label: "Analytics Reporting Deadline", owner: "brand", kind: "text", placeholder: "e.g. 7 days after posting", tooltip: "How many days after posting the influencer must submit performance data." },
+  { key: "requiredAnalyticsItems", label: "Required Analytics Items", owner: "brand", kind: "multi", options: ANALYTICS_ITEMS_OPTIONS, tooltip: "Performance metrics the influencer must report back to the brand." },
+
+  { key: "competitorExclusivity", label: "Competitor Exclusivity / Blackout?", owner: "brand", kind: "radio", options: COMPETITOR_EXCLUSIVITY_OPTIONS, tooltip: "Should the influencer avoid promoting competitor brands during a set period?" },
+  { key: "competitorCategoryList", label: "Competitor / Category List", owner: "brand", kind: "text", placeholder: "e.g. L'Oreal, all skincare", tooltip: "Brands or product categories the influencer must avoid.", required: (v) => v.competitorExclusivity === "Applies", showWhen: (v) => v.competitorExclusivity === "Applies" },
+  { key: "exclusivityPeriod", label: "Exclusivity / Blackout Period", owner: "brand", kind: "text", placeholder: "e.g. 30 days before/after posting", tooltip: "Duration of the exclusivity restriction.", required: (v) => v.competitorExclusivity === "Applies", showWhen: (v) => v.competitorExclusivity === "Applies" },
+  { key: "creativeBrief", label: "Creative Brief / Mandatory Talking Points", owner: "brand", kind: "textarea", placeholder: "e.g. Key messages, approved claims", tooltip: "Exact product claims and key messages the influencer must include." },
+  { key: "prohibitedStatements", label: "Prohibited Statements / Brand Safety", owner: "brand", kind: "textarea", placeholder: "e.g. No competitor mentions…", tooltip: "Content the influencer must never include." },
+  { key: "moralsClause", label: "Optional Morals / Reputation Clause?", owner: "brand", kind: "radio", options: MORALS_OPTIONS, tooltip: "Allows either party to terminate if serious misconduct occurs." },
+  { key: "ftcAcknowledgement", label: "FTC / Disclosure Acknowledgement", owner: "influencer", kind: "textarea", placeholder: "e.g. I will disclose #ad, #sponsored…", tooltip: "Influencer's commitment to FTC and platform disclosure requirements.", required: true },
+
+  { key: "governingLaw", label: "Governing Law (State / Country)", owner: "brand", kind: "text", placeholder: "e.g. Nevada, USA", tooltip: "Jurisdiction whose laws govern this agreement.", required: true },
+  { key: "disputeResolutionMethod", label: "Dispute Resolution Method", owner: "brand", kind: "select", options: DISPUTE_OPTIONS, tooltip: "How disputes will be resolved if they cannot be settled directly.", required: true },
+  { key: "venueSeat", label: "Venue / Seat", owner: "brand", kind: "text", placeholder: "e.g. Las Vegas, Nevada", tooltip: "City and state where disputes will be heard or arbitration seated." },
+  { key: "attorneysFees", label: "Attorneys' Fees", owner: "brand", kind: "select", options: ATTORNEYS_FEES_OPTIONS, tooltip: "Who pays legal fees if a dispute escalates?" },
+  { key: "noBypassPeriod", label: "No-Bypass Period", owner: "brand", kind: "text", placeholder: "e.g. 12 months after campaign end", tooltip: "Period during which neither party may bypass CollabGlam platform fees." },
+];
+
+const FIELD_LABEL_MAP = ALL_FIELD_DEFS.reduce<Record<string, string>>((acc, field) => {
+  acc[String(field.key)] = field.label;
+  return acc;
+}, {});
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+export function createLaneAContractDefaults(): LaneAContractValues {
+  return {
+    campaignType: "fixed_payment",
+
+    brandLegalName: "",
+    campaignTitleId: "",
+    brandContactNameTitle: "",
+    brandNoticeEmailPhone: "",
+    brandBillingAddress: "",
+    productsServicesCovered: "",
+    territoryTargetCountry: "",
+    effectiveDate: "",
+
+    influencerLegalName: "",
+    postingHandleUrl: "",
+    influencerContactEmailPhone: "",
+    influencerMailingAddress: "",
+
+    platforms: [],
+    deliverableFormat: "",
+    numberOfDeliverables: "",
+    draftDueDate: "",
+    livePostingDate: "",
+    minimumLivePeriod: "",
+    videoLengthFormatSpecs: "",
+    includedRevisionRounds: "",
+    brandReviewSlaBusinessDays: "",
+    mandatoryTagsLinks: "",
+    additionalRevisionFee: "",
+    preShootScriptRequired: "No",
+    scriptDueDate: "",
+    reshootObligation: "",
+
+    fixedTotalCampaignFee: "",
+    paymentStructure: "",
+    customSplitDetails: "",
+    advancePaymentTrigger: "",
+    balancePaymentTrigger: "",
+    fixedProcessorFeesBorneBy: "",
+    fixedKillFee: "",
+    fixedPayoutMethod: "",
+    fixedPayoutAccountId: "",
+    fixedTaxId: "",
+
+    milestoneTotalCampaignFee: "",
+    milestoneProcessorFeesBorneBy: "",
+    milestoneKillFee: "",
+    milestones: [createMilestoneRow()],
+    milestonePayoutMethod: "",
+    milestonePayoutAccountId: "",
+
+    estimatedRetailValue: "",
+    receiptConfirmationDeadline: "",
+    productDisposition: "Keep",
+    returnWindow: "",
+    returnShippingMethod: "",
+    returnPackagingInstructions: "",
+    itemsToKeepReturn: "",
+    shipToName: "",
+    shippingAddress: "",
+    shippingPhoneNumber: "",
+    deliveryInstructions: "",
+
+    cashCompensationModel: "Gifting Only",
+    cashFeeAmount: "",
+    cashPaymentTrigger: "",
+    cashProcessorFeesBorneBy: "",
+    affiliateCommissionRate: "",
+    affiliateLinkCode: "",
+    commissionReportingPeriod: "",
+    giftingCashPayoutMethod: "",
+    giftingCashPayoutAccountId: "",
+
+    grantedUsageRights: [],
+    usageRightsDuration: "",
+    editingRights: "",
+    musicAssetResponsibility: "",
+    attributionRequirement: "",
+    rawSourceFileDelivery: "",
+
+    analyticsReportingDeadline: "",
+    requiredAnalyticsItems: [],
+
+    competitorExclusivity: "None",
+    competitorCategoryList: "",
+    exclusivityPeriod: "",
+    creativeBrief: "",
+    prohibitedStatements: "",
+    moralsClause: "Not Included",
+    ftcAcknowledgement: "",
+
+    governingLaw: "",
+    disputeResolutionMethod: "",
+    venueSeat: "",
+    attorneysFees: "",
+    noBypassPeriod: "",
+
+    objections: {},
+  };
+}
+
+export function createMilestoneRow(): MilestoneRow {
+  return {
+    id: uid(),
+    milestoneName: "",
+    paymentAmount: "",
+    triggerEvent: "",
+    dueDate: "",
+  };
+}
+
+function isVisible(field: FieldDef, values: LaneAContractValues) {
+  return field.showWhen ? field.showWhen(values) : true;
+}
+
+function isRequired(field: FieldDef, values: LaneAContractValues) {
+  if (typeof field.required === "function") return field.required(values);
+  return Boolean(field.required);
+}
+
+function isFilled(value: unknown) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
+  return value !== undefined && value !== null && value !== "";
+}
+
+function fieldState(field: FieldDef, values: LaneAContractValues, viewerParty: Party) {
+  if (!isVisible(field, values)) return "hidden" as const;
+  if (field.private && field.owner !== viewerParty) return "hidden" as const;
+  if (field.owner === viewerParty) return field.private ? ("private" as const) : ("editable" as const);
+  return isFilled(values[field.key]) ? ("locked" as const) : ("waiting" as const);
+}
+
+function waitingText(owner: Party) {
+  return owner === "brand" ? "Waiting for Brand to fill this…" : "Waiting for Influencer to fill this…";
+}
+
+function getMilestoneCellValue(row: MilestoneRow, key: keyof Omit<MilestoneRow, "id">) {
+  return row[key];
+}
+
+function milestoneCellLabel(key: keyof Omit<MilestoneRow, "id">) {
+  switch (key) {
+    case "milestoneName":
+      return "Milestone Name";
+    case "paymentAmount":
+      return "Payment Amount";
+    case "triggerEvent":
+      return "Trigger / Completion Event";
+    case "dueDate":
+      return "Due Date";
+    default:
+      return key;
+  }
+}
+
+export function validateLaneAContract(values: LaneAContractValues, scope: Party): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+  ALL_FIELD_DEFS.forEach((field) => {
+    if (field.owner !== scope) return;
+    if (!isVisible(field, values)) return;
+    if (!isRequired(field, values)) return;
+    if (!isFilled(values[field.key])) {
+      errors[String(field.key)] = `${field.label} is required.`;
+    }
+  });
+
+  if (scope === "brand" && values.campaignType === "milestone_based") {
+    if (!values.milestones.length) {
+      errors.milestones = "At least one milestone row is required.";
+    }
+    values.milestones.forEach((row, index) => {
+      if (!row.milestoneName.trim()) errors[`ms_${row.id}_milestoneName`] = `Milestone ${index + 1}: name is required.`;
+      if (!row.paymentAmount.trim()) errors[`ms_${row.id}_paymentAmount`] = `Milestone ${index + 1}: payment amount is required.`;
+      if (!row.triggerEvent.trim()) errors[`ms_${row.id}_triggerEvent`] = `Milestone ${index + 1}: trigger event is required.`;
+      if (!row.dueDate.trim()) errors[`ms_${row.id}_dueDate`] = `Milestone ${index + 1}: due date is required.`;
+    });
+  }
+
+  return errors;
+}
+
+function sectionFields(keys: Array<keyof LaneAContractValues>) {
+  return ALL_FIELD_DEFS.filter((field) => keys.includes(field.key));
+}
+
+const identityFields = sectionFields([
+  "brandLegalName",
+  "campaignTitleId",
+  "brandContactNameTitle",
+  "brandNoticeEmailPhone",
+  "brandBillingAddress",
+  "productsServicesCovered",
+  "territoryTargetCountry",
+  "effectiveDate",
+  "influencerLegalName",
+  "postingHandleUrl",
+  "influencerContactEmailPhone",
+  "influencerMailingAddress",
+]);
+
+const deliverableFields = sectionFields([
+  "platforms",
+  "deliverableFormat",
+  "numberOfDeliverables",
+  "draftDueDate",
+  "livePostingDate",
+  "minimumLivePeriod",
+  "videoLengthFormatSpecs",
+  "includedRevisionRounds",
+  "brandReviewSlaBusinessDays",
+  "mandatoryTagsLinks",
+  "additionalRevisionFee",
+  "preShootScriptRequired",
+  "scriptDueDate",
+  "reshootObligation",
+]);
+
+const fixedPaymentFields = sectionFields([
+  "fixedTotalCampaignFee",
+  "paymentStructure",
+  "customSplitDetails",
+  "advancePaymentTrigger",
+  "balancePaymentTrigger",
+  "fixedProcessorFeesBorneBy",
+  "fixedKillFee",
+  "fixedPayoutMethod",
+  "fixedPayoutAccountId",
+  "fixedTaxId",
+]);
+
+const milestoneHeaderFields = sectionFields([
+  "milestoneTotalCampaignFee",
+  "milestoneProcessorFeesBorneBy",
+  "milestoneKillFee",
+  "milestonePayoutMethod",
+  "milestonePayoutAccountId",
+]);
+
+const giftingFields = sectionFields([
+  "estimatedRetailValue",
+  "receiptConfirmationDeadline",
+  "productDisposition",
+  "returnWindow",
+  "returnShippingMethod",
+  "returnPackagingInstructions",
+  "itemsToKeepReturn",
+  "shipToName",
+  "shippingAddress",
+  "shippingPhoneNumber",
+  "deliveryInstructions",
+]);
+
+const giftingCashFields = sectionFields([
+  "cashCompensationModel",
+  "cashFeeAmount",
+  "cashPaymentTrigger",
+  "cashProcessorFeesBorneBy",
+  "affiliateCommissionRate",
+  "affiliateLinkCode",
+  "commissionReportingPeriod",
+  "giftingCashPayoutMethod",
+  "giftingCashPayoutAccountId",
+]);
+
+const usageFields = sectionFields([
+  "grantedUsageRights",
+  "usageRightsDuration",
+  "editingRights",
+  "musicAssetResponsibility",
+  "attributionRequirement",
+  "rawSourceFileDelivery",
+]);
+
+const reportingFields = sectionFields([
+  "analyticsReportingDeadline",
+  "requiredAnalyticsItems",
+]);
+
+const complianceFields = sectionFields([
+  "competitorExclusivity",
+  "competitorCategoryList",
+  "exclusivityPeriod",
+  "creativeBrief",
+  "prohibitedStatements",
+  "moralsClause",
+  "ftcAcknowledgement",
+]);
+
+const governingFields = sectionFields([
+  "governingLaw",
+  "disputeResolutionMethod",
+  "venueSeat",
+  "attorneysFees",
+  "noBypassPeriod",
+]);
+
+export function LaneAContractEditor({
+  value,
+  onChange,
+  viewerParty,
+  onViewerPartyChange,
+  fieldErrors = {},
+  className = "",
+}: LaneAContractEditorProps) {
+  const [openObjectionKey, setOpenObjectionKey] = useState<string | null>(null);
+
+  const pendingObjections = useMemo(() => {
+    const entries = Object.entries(value.objections || {});
+    return entries.filter(([, entry]) => Boolean(entry?.text?.trim()));
+  }, [value.objections]);
+
+  const setField = <K extends keyof LaneAContractValues>(key: K, next: LaneAContractValues[K]) => {
+    onChange((prev) => {
+      const updated: LaneAContractValues = { ...prev, [key]: next };
+
+      if (key === "campaignType") {
+        if (next !== "fixed_payment") {
+          updated.fixedTotalCampaignFee = "";
+          updated.paymentStructure = "";
+          updated.customSplitDetails = "";
+          updated.advancePaymentTrigger = "";
+          updated.balancePaymentTrigger = "";
+          updated.fixedProcessorFeesBorneBy = "";
+          updated.fixedKillFee = "";
+          updated.fixedPayoutMethod = "";
+          updated.fixedPayoutAccountId = "";
+          updated.fixedTaxId = "";
+        }
+        if (next !== "milestone_based") {
+          updated.milestoneTotalCampaignFee = "";
+          updated.milestoneProcessorFeesBorneBy = "";
+          updated.milestoneKillFee = "";
+          updated.milestones = [createMilestoneRow()];
+          updated.milestonePayoutMethod = "";
+          updated.milestonePayoutAccountId = "";
+        }
+        if (next !== "product_gifting") {
+          updated.estimatedRetailValue = "";
+          updated.receiptConfirmationDeadline = "";
+          updated.productDisposition = "Keep";
+          updated.returnWindow = "";
+          updated.returnShippingMethod = "";
+          updated.returnPackagingInstructions = "";
+          updated.itemsToKeepReturn = "";
+          updated.shipToName = "";
+          updated.shippingAddress = "";
+          updated.shippingPhoneNumber = "";
+          updated.deliveryInstructions = "";
+          updated.cashCompensationModel = "Gifting Only";
+          updated.cashFeeAmount = "";
+          updated.cashPaymentTrigger = "";
+          updated.cashProcessorFeesBorneBy = "";
+          updated.affiliateCommissionRate = "";
+          updated.affiliateLinkCode = "";
+          updated.commissionReportingPeriod = "";
+          updated.giftingCashPayoutMethod = "";
+          updated.giftingCashPayoutAccountId = "";
+        }
+      }
+
+      if (key === "preShootScriptRequired" && next !== "Yes") {
+        updated.scriptDueDate = "";
+      }
+
+      if (key === "paymentStructure" && next !== "Custom Split") {
+        updated.customSplitDetails = "";
+      }
+
+      if (key === "productDisposition") {
+        if (next === "Keep") {
+          updated.returnWindow = "";
+          updated.returnShippingMethod = "";
+          updated.returnPackagingInstructions = "";
+          updated.itemsToKeepReturn = "";
+        }
+        if (next !== "Partial") {
+          updated.itemsToKeepReturn = "";
+        }
+      }
+
+      if (key === "cashCompensationModel") {
+        if (next !== "Gifting + Fixed Cash Fee") {
+          updated.cashFeeAmount = "";
+          updated.cashPaymentTrigger = "";
+          updated.cashProcessorFeesBorneBy = "";
+          updated.giftingCashPayoutMethod = "";
+          updated.giftingCashPayoutAccountId = "";
+        }
+        if (next !== "Gifting + Affiliate / Commission") {
+          updated.affiliateCommissionRate = "";
+          updated.affiliateLinkCode = "";
+          updated.commissionReportingPeriod = "";
+        }
+      }
+
+      if (key === "competitorExclusivity" && next !== "Applies") {
+        updated.competitorCategoryList = "";
+        updated.exclusivityPeriod = "";
+      }
+
+      return updated;
+    });
+  };
+
+  const updateObjection = (fieldKey: string, text: string) => {
+    onChange((prev) => {
+      const next = { ...prev, objections: { ...prev.objections } };
+      if (!text.trim()) {
+        delete next.objections[fieldKey];
+      } else {
+        next.objections[fieldKey] = {
+          by: viewerParty,
+          text,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return next;
+    });
+  };
+
+  const renderField = (field: FieldDef) => {
+    const state = fieldState(field, value, viewerParty);
+    if (state === "hidden") return null;
+
+    const objection = value.objections[String(field.key)];
+    const canEditObjection = state === "locked" && (!objection || objection.by === viewerParty);
+    const key = String(field.key);
+    const editableLike = state === "editable" || state === "private";
+
+    return (
+      <FieldShell
+        key={key}
+        state={state}
+        label={field.label}
+        tooltip={field.tooltip}
+        required={isRequired(field, value)}
+        owner={field.owner}
+        error={fieldErrors[key]}
+        objection={objection}
+        canEditObjection={canEditObjection}
+        openObjection={openObjectionKey === key}
+        onToggleObjection={() => setOpenObjectionKey((prev) => (prev === key ? null : key))}
+        onSaveObjection={(text) => {
+          updateObjection(key, text);
+          setOpenObjectionKey(null);
+        }}
+        onClearObjection={() => {
+          updateObjection(key, "");
+          setOpenObjectionKey(null);
+        }}
+        showOuterLabel={!editableLike}
+        showOuterError={!editableLike}
+      >
+        {editableLike ? (
+          <EditableControl
+            field={field}
+            value={value[field.key]}
+            error={fieldErrors[key]}
+            onChange={(next) => setField(field.key, next as never)}
+          />
+        ) : state === "waiting" ? (
+          <WaitingState owner={field.owner} />
+        ) : (
+          <LockedValue field={field} value={value[field.key]} />
+        )}
+      </FieldShell>
+    );
+  };
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className={`space-y-5 ${className}`}>
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Lane A Contract Editor</div>
+              <div className="text-sm text-gray-500">Brand and Influencer preview the same contract with role-specific field states.</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="inline-flex rounded-full border border-gray-200 bg-gray-50 p-1">
+                <button
+                  type="button"
+                  onClick={() => onViewerPartyChange("brand")}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium ${viewerParty === "brand" ? "bg-black text-white" : "text-gray-600"}`}
+                >
+                  Brand View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewerPartyChange("influencer")}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium ${viewerParty === "influencer" ? "bg-black text-white" : "text-gray-600"}`}
+                >
+                  Influencer View
+                </button>
+              </div>
+              <Badge variant="secondary" className="rounded-full bg-rose-50 text-rose-700">
+                ✋ {pendingObjections.length} Objections Pending
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {pendingObjections.length > 0 ? (
+          <ObjectionSummary viewerParty={viewerParty} objections={pendingObjections} />
+        ) : null}
+
+        <SectionCard title="Campaign Type">
+          {renderField(ALL_FIELD_DEFS.find((field) => field.key === "campaignType")!)}
+        </SectionCard>
+
+        <SectionCard title="Parties & Campaign Identity" description="Present in all three campaign types.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {identityFields.map(renderField)}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Deliverables & Timeline" description="Brand-owned section visible in every campaign type.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {deliverableFields.map(renderField)}
+          </div>
+        </SectionCard>
+
+        {value.campaignType === "fixed_payment" ? (
+          <SectionCard title="Fixed Payment Terms" description="Brand fields plus influencer private payout fields.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {fixedPaymentFields.map(renderField)}
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {value.campaignType === "milestone_based" ? (
+          <SectionCard title="Milestone Payment Schedule" description="Brand defines milestone rows. Each cell can be objected to independently.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{milestoneHeaderFields.map(renderField)}</div>
+            <MilestonesEditor
+              value={value}
+              onChange={onChange}
+              viewerParty={viewerParty}
+              fieldErrors={fieldErrors}
+              openObjectionKey={openObjectionKey}
+              setOpenObjectionKey={setOpenObjectionKey}
+              updateObjection={updateObjection}
+            />
+          </SectionCard>
+        ) : null}
+
+        {value.campaignType === "product_gifting" ? (
+          <SectionCard title="Product Gifting & Shipping" description="Brand defines gifting terms. Influencer fills ship-to details.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{giftingFields.map(renderField)}</div>
+          </SectionCard>
+        ) : null}
+
+        {value.campaignType === "product_gifting" ? (
+          <SectionCard title="Additional Cash Compensation" description="Shown only for product gifting campaigns.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{giftingCashFields.map(renderField)}</div>
+          </SectionCard>
+        ) : null}
+
+        <SectionCard title="Usage Rights & Content Ownership" description="Brand-owned permissions and usage scope.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{usageFields.map(renderField)}</div>
+        </SectionCard>
+
+        <SectionCard title="Reporting & Analytics" description="Brand-defined post-campaign reporting requirements.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{reportingFields.map(renderField)}</div>
+        </SectionCard>
+
+        <SectionCard title="Exclusivity, Compliance & Claims" description="Shared visibility. FTC acknowledgement belongs to the influencer.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{complianceFields.map(renderField)}</div>
+        </SectionCard>
+
+        <SectionCard title="Governing Law & Dispute Resolution" description="Brand-owned legal terms shown in all campaign types.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{governingFields.map(renderField)}</div>
+        </SectionCard>
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function MilestonesEditor({
+  value,
+  onChange,
+  viewerParty,
+  fieldErrors,
+  openObjectionKey,
+  setOpenObjectionKey,
+  updateObjection,
+}: {
+  value: LaneAContractValues;
+  onChange: React.Dispatch<React.SetStateAction<LaneAContractValues>>;
+  viewerParty: Party;
+  fieldErrors: Record<string, string>;
+  openObjectionKey: string | null;
+  setOpenObjectionKey: React.Dispatch<React.SetStateAction<string | null>>;
+  updateObjection: (fieldKey: string, text: string) => void;
+}) {
+  const isOwner = viewerParty === "brand";
+
+  const addMilestone = () => {
+    if (!isOwner) return;
+    onChange((prev) => ({ ...prev, milestones: [...prev.milestones, createMilestoneRow()] }));
+  };
+
+  const removeMilestone = (id: string) => {
+    if (!isOwner) return;
+    onChange((prev) => ({
+      ...prev,
+      milestones: prev.milestones.length > 1 ? prev.milestones.filter((row) => row.id !== id) : prev.milestones,
+    }));
+  };
+
+  const updateCell = (id: string, key: keyof Omit<MilestoneRow, "id">, next: string) => {
+    onChange((prev) => ({
+      ...prev,
+      milestones: prev.milestones.map((row) => (row.id === id ? { ...row, [key]: next } : row)),
+    }));
+  };
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Milestone Rows</div>
+          <div className="text-sm text-gray-500">Minimum one milestone is always present. Only Brand can add or remove rows.</div>
+        </div>
+        {isOwner ? (
+          <Button type="button" variant="outline" className="rounded-full" onClick={addMilestone}>
+            + Add Milestone
+          </Button>
+        ) : null}
+      </div>
+
+      {fieldErrors.milestones ? <div className="text-sm text-red-600">{fieldErrors.milestones}</div> : null}
+
+      {value.milestones.map((row, index) => (
+        <div key={row.id} className="rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-gray-900">Milestone {index + 1}</div>
+            {isOwner && value.milestones.length > 1 ? (
+              <button type="button" className="text-sm text-red-600" onClick={() => removeMilestone(row.id)}>
+                Remove
+              </button>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {(["milestoneName", "paymentAmount", "triggerEvent", "dueDate"] as const).map((key) => {
+              const fieldKey = `ms_${row.id}_${key}`;
+              const val = getMilestoneCellValue(row, key);
+              const locked = !isOwner && Boolean(String(val).trim());
+              const waiting = !isOwner && !String(val).trim();
+              const state = isOwner ? "editable" : waiting ? "waiting" : "locked";
+              const objection = value.objections[fieldKey];
+              const canEditObjection = state === "locked" && (!objection || objection.by === viewerParty);
+
+              return (
+                <FieldShell
+                  key={fieldKey}
+                  state={state as "editable" | "waiting" | "locked"}
+                  label={milestoneCellLabel(key)}
+                  required
+                  owner="brand"
+                  error={fieldErrors[fieldKey]}
+                  objection={objection}
+                  showOuterLabel={!isOwner}
+                  showOuterError={!isOwner}
+                  canEditObjection={canEditObjection}
+                  openObjection={openObjectionKey === fieldKey}
+                  onToggleObjection={() => setOpenObjectionKey((prev) => (prev === fieldKey ? null : fieldKey))}
+                  onSaveObjection={(text) => {
+                    updateObjection(fieldKey, text);
+                    setOpenObjectionKey(null);
+                  }}
+                  onClearObjection={() => {
+                    updateObjection(fieldKey, "");
+                    setOpenObjectionKey(null);
+                  }}
+                >
+                  {isOwner ? (
+                    key === "dueDate" ? (
+                      <input
+                        type="date"
+                        value={row.dueDate}
+                        onChange={(e) => updateCell(row.id, "dueDate", e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#1A1A1A] focus:ring-2 focus:ring-[#1A1A1A]/10"
+                      />
+                    ) : key === "triggerEvent" ? (
+                      <textarea
+                        rows={3}
+                        value={row.triggerEvent}
+                        onChange={(e) => updateCell(row.id, "triggerEvent", e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#1A1A1A] focus:ring-2 focus:ring-[#1A1A1A]/10"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={String(val)}
+                        onChange={(e) => updateCell(row.id, key, e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#1A1A1A] focus:ring-2 focus:ring-[#1A1A1A]/10"
+                      />
+                    )
+                  ) : state === "waiting" ? (
+                    <WaitingState owner="brand" />
+                  ) : (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-gray-800">{val || "—"}</div>
+                  )}
+                </FieldShell>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EditableControl({
+  field,
+  value,
+  error,
+  onChange,
+}: {
+  field: FieldDef;
+  value: LaneAContractValues[keyof LaneAContractValues];
+  error?: string;
+  onChange: (next: unknown) => void;
+}) {
+  if (TAG_STYLE_FIELDS.has(field.key)) {
+    return (
+      <FloatingTagInput
+        label={field.label}
+        value={csvToTags(String(value || ""))}
+        options={[]}
+        onValueChange={(next) => onChange(tagsToCsv(next))}
+        dropdownDirection="up"
+      />
+    );
+  }
+
+  if (field.kind === "textarea") {
+    return (
+      <LabeledTextarea
+        label={field.label}
+        value={String(value || "")}
+        placeholder={field.placeholder}
+        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value)}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  if (field.kind === "date") {
+    return (
+      <FloatingDateInput
+        label={field.label}
+        type="date"
+        value={String(value || "")}
+        onValueChange={(next) => onChange(next)}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  if (field.kind === "number") {
+    return (
+      <FloatingInput
+        label={field.label}
+        type="number"
+        value={String(value || "")}
+        onValueChange={(next) => onChange(next)}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  if (field.kind === "select" || field.kind === "radio") {
+    return (
+      <FloatingSelect
+        label={field.label}
+        value={String(value || "")}
+        searchable={false}
+        onValueChange={(next) => onChange(next)}
+        state={toControlState(error)}
+        errorText={error}
+      >
+        {(field.options || []).map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </FloatingSelect>
+    );
+  }
+
+  if (field.kind === "multi") {
+    const listValue = (Array.isArray(value) ? value : []) as string[];
+
+    return (
+      <FloatingMultiSelect
+        label={field.label}
+        value={listValue}
+        options={field.options || []}
+        onValueChange={(next) => onChange(next)}
+        includeAll={false}
+        searchable={false}
+        state={toControlState(error)}
+        errorText={error}
+      />
+    );
+  }
+
+  return (
+    <FloatingInput
+      label={field.label}
+      value={String(value || "")}
+      onValueChange={(next) => onChange(next)}
+      state={toControlState(error)}
+      errorText={error}
+    />
+  );
+}
+
+function LockedValue({
+  field,
+  value,
+}: {
+  field: FieldDef;
+  value: LaneAContractValues[keyof LaneAContractValues];
+}) {
+  if (Array.isArray(value)) {
+    const listValue = value as string[];
+
+    if (!listValue.length) {
+      return (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-gray-700">
+          —
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+        {listValue.map((item: string) => (
+          <span key={item} className="rounded-full bg-white px-2.5 py-1 text-xs text-gray-700">
+            {item}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-gray-800">
+      {String(value || "—")}
+    </div>
+  );
+}
+
+function WaitingState({ owner }: { owner: Party }) {
+  return (
+    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm italic text-gray-500">
+      {waitingText(owner)}
+    </div>
+  );
+}
+
+function FieldShell({
+  label,
+  tooltip,
+  required,
+  owner,
+  state,
+  children,
+  error,
+  objection,
+  canEditObjection,
+  openObjection,
+  onToggleObjection,
+  onSaveObjection,
+  onClearObjection,
+  showOuterLabel = true,
+  showOuterError = true,
+}: {
+  label: string;
+  tooltip?: string;
+  required?: boolean;
+  owner: Party;
+  state: "editable" | "locked" | "waiting" | "private";
+  children: React.ReactNode;
+  error?: string;
+  objection?: ObjectionEntry;
+  canEditObjection?: boolean;
+  openObjection?: boolean;
+  onToggleObjection?: () => void;
+  onSaveObjection?: (text: string) => void;
+  onClearObjection?: () => void;
+  showOuterLabel?: boolean;
+  showOuterError?: boolean;
+}) {
+  const [draftObjection, setDraftObjection] = useState(objection?.text || "");
+
+  React.useEffect(() => {
+    setDraftObjection(objection?.text || "");
+  }, [objection?.text]);
+
+  const badge =
+    state === "private" ? (
+      <Badge className="rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-100">
+        <EyeSlash className="mr-1 h-3.5 w-3.5" /> Private
+      </Badge>
+    ) : state === "locked" ? (
+      <Badge className="rounded-full bg-amber-100 text-amber-700 hover:bg-amber-100">
+        <LockSimple className="mr-1 h-3.5 w-3.5" /> Locked
+      </Badge>
+    ) : null;
+
+  return (
+    <div className="space-y-2">
+      {showOuterLabel ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1 text-sm font-medium text-gray-800">
+            <span>{label}</span>
+            {required ? <span className="text-red-500">*</span> : null}
+            {tooltip ? <InfoPill text={tooltip} /> : null}
+          </div>
+          {badge}
+          <span className="text-xs text-gray-400">Owner: {owner === "brand" ? "Brand" : "Influencer"}</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {badge}
+          <span className="text-xs text-gray-400">Owner: {owner === "brand" ? "Brand" : "Influencer"}</span>
+          {tooltip ? <InfoPill text={tooltip} /> : null}
+        </div>
+      )}
+
+      <div>{children}</div>
+
+      {state === "locked" && onToggleObjection ? (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleObjection}
+            className="text-sm font-medium text-amber-700 hover:text-amber-800"
+          >
+            {objection && canEditObjection ? "✎ Edit Objection" : "+ Raise Objection"}
+          </button>
+        </div>
+      ) : null}
+
+      {openObjection && canEditObjection ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <div className="mb-2 text-sm font-medium text-rose-800">✋ Your Objection / Requested Change</div>
+          <textarea
+            rows={2}
+            value={draftObjection}
+            onChange={(e) => setDraftObjection(e.target.value)}
+            placeholder={`I'd prefer ${label} to be changed to…`}
+            className="w-full rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm outline-none focus:border-rose-400"
+          />
+          <div className="mt-3 flex items-center gap-2">
+            <Button type="button" size="sm" className="h-8 rounded-full" onClick={() => onSaveObjection?.(draftObjection)}>
+              Save
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-8 rounded-full" onClick={onClearObjection}>
+              Clear
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {objection ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-800">
+          <div className="mb-1 font-medium">Objection noted</div>
+          <div>{objection.text}</div>
+        </div>
+      ) : null}
+
+      {showOuterError && error ? (
+        <div className="inline-flex items-center gap-1 text-xs text-red-600">
+          <WarningCircle className="h-3.5 w-3.5" /> {error}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 border-b border-gray-100 pb-3">
+        <div className="text-base font-semibold text-gray-900">{title}</div>
+        {description ? <div className="mt-1 text-sm text-gray-500">{description}</div> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function InfoPill({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="inline-flex items-center text-gray-400 hover:text-gray-600" aria-label="Field help">
+          <Info className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-sm leading-6">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function MultiChipField({
+  value,
+  options,
+  onChange,
+}: {
+  value: string[];
+  options: Option[];
+  onChange: (next: string[]) => void;
+}) {
+  const toggle = (entry: string) => {
+    if (value.includes(entry)) onChange(value.filter((item) => item !== entry));
+    else onChange([...value, entry]);
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => {
+        const active = value.includes(option.value);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => toggle(option.value)}
+            className={`rounded-full border px-3 py-2 text-sm ${active ? "border-black bg-black text-white" : "border-gray-200 bg-white text-gray-700"}`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ObjectionSummary({
+  viewerParty,
+  objections,
+}: {
+  viewerParty: Party;
+  objections: Array<[string, ObjectionEntry]>;
+}) {
+  return (
+    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-rose-800">
+        ✋ Objections Summary
+      </div>
+      <div className="space-y-3">
+        {objections.map(([key, entry]) => {
+          const label = key.startsWith("ms_")
+            ? `Milestone — ${milestoneSummaryLabel(key)}`
+            : FIELD_LABEL_MAP[key] || key;
+          const direction = entry.by === viewerParty ? "Raised by you" : `Raised by ${entry.by === "brand" ? "Brand" : "Influencer"}`;
+          return (
+            <div key={key} className="rounded-xl border border-rose-200 bg-white px-3 py-3">
+              <div className="mb-1 text-sm font-medium text-gray-900">{label}</div>
+              <div className="mb-1 text-xs uppercase tracking-wide text-rose-700">{direction}</div>
+              <div className="text-sm text-gray-700">{entry.text}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function milestoneSummaryLabel(fieldKey: string) {
+  const key = fieldKey.split("_").slice(2).join("_") as keyof Omit<MilestoneRow, "id">;
+  return milestoneCellLabel(key);
+}
+
+const ReactSelect = dynamic(() => import("react-select"), { ssr: false });
 
 const CONTRACT_STATUS = {
   DRAFT: "DRAFT",
@@ -296,29 +1840,6 @@ const SHIPPING_APPLICABLE_OPTIONS = [
 const RETURNABLE_OPTIONS = [
   { value: "Gift / keep product", label: "Gift / keep product" },
   { value: "Returnable loaner", label: "Returnable loaner" },
-] as const;
-
-const ATTRIBUTION_OPTIONS = [
-  { value: "No attribution required", label: "No attribution required" },
-  { value: "Brand tag required", label: "Brand tag required" },
-  { value: "Custom attribution", label: "Custom attribution" },
-] as const;
-
-const EDITING_RIGHTS_OPTIONS = [
-  { value: "Cropping / resizing only", label: "Cropping / resizing only" },
-  { value: "Cut-downs / captions allowed", label: "Cut-downs / captions allowed" },
-  { value: "Custom editing rights", label: "Custom editing rights" },
-] as const;
-
-const MORALS_OPTIONS = [
-  { value: "Not included", label: "Not included" },
-  { value: "Included", label: "Included" },
-] as const;
-
-const DISPUTE_OPTIONS = [
-  { value: "AAA arbitration", label: "AAA arbitration" },
-  { value: "Court litigation", label: "Court litigation" },
-  { value: "Mutual negotiation first", label: "Mutual negotiation first" },
 ] as const;
 
 const defaultUsageRightsRows = (): UsageRightsRow[] => [
@@ -812,6 +2333,7 @@ function getRejectReasonFromMeta(meta: ContractMeta | null): string | null {
 
 function buildReactSelectStyles(opts?: { hasError?: boolean }) {
   const hasError = opts?.hasError;
+
   return {
     control: (base: any, state: any) => ({
       ...base,
@@ -821,17 +2343,17 @@ function buildReactSelectStyles(opts?: { hasError?: boolean }) {
       borderColor: hasError
         ? "#ef4444"
         : state.isFocused
-          ? "#FF8A35"
+          ? BRAND_PRIMARY
           : "#e5e7eb",
       boxShadow: state.isFocused
-        ? "0 0 0 1px #FF8A35, 0 0 0 3px rgba(255,138,53,0.35)"
+        ? `0 0 0 1px ${BRAND_PRIMARY}, 0 0 0 3px ${BRAND_PRIMARY_RING}`
         : "none",
       "&:hover": {
         borderColor: hasError
           ? "#ef4444"
           : state.isFocused
-            ? "#FF8A35"
-            : "#e5e7eb",
+            ? BRAND_PRIMARY
+            : "#d4d4d4",
       },
     }),
     valueContainer: (base: any) => ({ ...base, padding: "0 12px" }),
@@ -842,6 +2364,7 @@ function buildReactSelectStyles(opts?: { hasError?: boolean }) {
       borderRadius: 9999,
       paddingLeft: 4,
       paddingRight: 4,
+      backgroundColor: "#f3f4f6",
     }),
   };
 }
@@ -1992,12 +3515,12 @@ export default function AppliedInfluencersPage() {
             key={inf.influencerId}
             id={`inf-card-${inf.influencerId}`}
             className={`relative rounded-xl border bg-white p-4 transition-all duration-300 ${highlightInfId === inf.influencerId
-                ? "border-[#EA580C] bg-[#FFE4C4] shadow-[0_0_0_2px_rgba(234,88,12,0.9),0_18px_45px_rgba(0,0,0,0.35)] animate-pulse scale-[1.02]"
-                : "border-gray-200 hover:-translate-y-[1px] hover:shadow-md"
+              ? "border-[#1A1A1A] bg-[#F5F5F5] shadow-[0_0_0_2px_rgba(26,26,26,0.22),0_18px_45px_rgba(0,0,0,0.18)] animate-pulse scale-[1.02]"
+              : "border-gray-200 hover:-translate-y-[1px] hover:shadow-md"
               }`}
           >
             {highlightInfId === inf.influencerId ? (
-              <span className="absolute -top-2 right-3 rounded-full bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+              <span className="absolute -top-2 right-3 rounded-full bg-[#1A1A1A] px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
                 From notification
               </span>
             ) : null}
@@ -2038,6 +3561,51 @@ export default function AppliedInfluencersPage() {
   const todayStr = toInputDate(new Date());
   const updateBtnLabel =
     selectedMeta && isRejectedMeta(selectedMeta) ? "Resend Contract" : "Update Contract";
+
+  const sidebarStateFor = useCallback(
+    (key: string) => (formErrors[key] ? ("error" as const) : undefined),
+    [formErrors]
+  );
+
+  const sidebarErrorFor = useCallback(
+    (key: string) => formErrors[key] || "",
+    [formErrors]
+  );
+
+  const usageRightOptions = useMemo(
+    () =>
+      contractForm.scheduleA.usageRights.rows.map((row) => ({
+        value: row.usageRight,
+        label: row.usageRight,
+      })),
+    [contractForm.scheduleA.usageRights.rows]
+  );
+
+  const selectedUsageRights = useMemo(
+    () =>
+      contractForm.scheduleA.usageRights.rows
+        .filter((row) => row.selected)
+        .map((row) => row.usageRight),
+    [contractForm.scheduleA.usageRights.rows]
+  );
+
+  const setSelectedUsageRights = useCallback(
+    (next: string[]) => {
+      setContractField(
+        "scheduleA.usageRights.rows",
+        contractForm.scheduleA.usageRights.rows.map((row) => ({
+          ...row,
+          selected: next.includes(row.usageRight),
+        }))
+      );
+    },
+    [contractForm.scheduleA.usageRights.rows, setContractField]
+  );
+
+  const YES_NO_BOOL_OPTIONS = [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+  ];
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -2142,181 +3710,161 @@ export default function AppliedInfluencersPage() {
                 : "Edit Contract"
           }
           subtitle={
-            selectedInf ? `${pageTitle || "Agreement"} • ${selectedInf.name}` : pageTitle || "Agreement"
+            selectedInf
+              ? `${pageTitle || "Agreement"} • ${selectedInf.name}`
+              : pageTitle || "Agreement"
           }
           previewUrl={pdfUrl}
           onClosePreview={clearPreview}
         >
-          <SidebarSection title="Brand & Influencer" icon={<FileText className="h-4 w-4" />}>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Brand</div>
-                <FloatingLabelInput
-                  id="brand-legal-name"
-                  label="Brand Legal Name"
-                  value={getAtPath(contractForm, "brand.legalName")}
-                  onChange={(e: any) => setContractField("brand.legalName", e.target.value)}
-                  error={formErrors["brand.legalName"]}
-                />
-                <FloatingLabelInput
-                  id="brand-contact-person"
-                  label="Contact Person Name"
-                  value={getAtPath(contractForm, "brand.contactPersonName")}
-                  onChange={(e: any) =>
-                    setContractField("brand.contactPersonName", e.target.value)
-                  }
-                />
-                <FloatingLabelInput
-                  id="brand-notice-email"
-                  label="Notice Email"
-                  value={getAtPath(contractForm, "brand.noticeEmail")}
-                  onChange={(e: any) => setContractField("brand.noticeEmail", e.target.value)}
-                />
-                <FloatingLabelInput
-                  id="brand-notice-phone"
-                  label="Notice Phone"
-                  value={getAtPath(contractForm, "brand.noticePhone")}
-                  onChange={(e: any) => setContractField("brand.noticePhone", e.target.value)}
-                />
-                <TextArea
-                  id="brand-billing-address"
-                  label="Billing Address"
-                  value={getAtPath(contractForm, "brand.billingAddress")}
-                  onChange={(e: any) => setContractField("brand.billingAddress", e.target.value)}
-                  rows={3}
-                />
+          <SidebarSection title="Brand" icon={<FileText className="h-4 w-4" />}>
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Brand
               </div>
 
-              <div className="space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Influencer</div>
-                <FloatingLabelInput
-                  id="inf-legal-name"
-                  label="Influencer Legal Name"
-                  value={getAtPath(contractForm, "influencer.legalName")}
-                  onChange={(e: any) => setContractField("influencer.legalName", e.target.value)}
-                  error={formErrors["influencer.legalName"]}
-                />
-                <FloatingLabelInput
-                  id="inf-contact-name"
-                  label="Contact Name"
-                  value={getAtPath(contractForm, "influencer.contactName")}
-                  onChange={(e: any) => setContractField("influencer.contactName", e.target.value)}
-                />
-                <FloatingLabelInput
-                  id="inf-handle-url"
-                  label="Posting Handle URL"
-                  value={getAtPath(contractForm, "influencer.postingHandleUrl")}
-                  onChange={(e: any) =>
-                    setContractField("influencer.postingHandleUrl", e.target.value)
-                  }
-                />
-                <FloatingLabelInput
-                  id="inf-email"
-                  label="Contact Email"
-                  value={getAtPath(contractForm, "influencer.contactEmail")}
-                  onChange={(e: any) => setContractField("influencer.contactEmail", e.target.value)}
-                />
-                <FloatingLabelInput
-                  id="inf-phone"
-                  label="Contact Phone"
-                  value={getAtPath(contractForm, "influencer.contactPhone")}
-                  onChange={(e: any) => setContractField("influencer.contactPhone", e.target.value)}
-                />
-                <FloatingLabelInput
-                  id="inf-whatsapp"
-                  label="WhatsApp"
-                  value={getAtPath(contractForm, "influencer.whatsApp")}
-                  onChange={(e: any) => setContractField("influencer.whatsApp", e.target.value)}
-                />
-                <TextArea
-                  id="inf-address"
-                  label="Address"
-                  value={getAtPath(contractForm, "influencer.address")}
-                  onChange={(e: any) => setContractField("influencer.address", e.target.value)}
-                  rows={3}
-                />
-              </div>
+              <FloatingInput
+                id="brand-legal-name"
+                label="Brand Legal Name"
+                value={getAtPath(contractForm, "brand.legalName")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.legalName", value)
+                }
+                state={sidebarStateFor("brand.legalName")}
+                errorText={sidebarErrorFor("brand.legalName")}
+              />
+
+              <FloatingInput
+                id="brand-contact-person"
+                label="Contact Person Name"
+                value={getAtPath(contractForm, "brand.contactPersonName")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.contactPersonName", value)
+                }
+              />
+
+              <FloatingInput
+                id="brand-notice-email"
+                label="Notice Email"
+                value={getAtPath(contractForm, "brand.noticeEmail")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.noticeEmail", value)
+                }
+              />
+
+              <FloatingInput
+                id="brand-notice-phone"
+                label="Notice Phone"
+                value={getAtPath(contractForm, "brand.noticePhone")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.noticePhone", value)
+                }
+              />
+
+              <LabeledTextarea
+                id="brand-billing-address"
+                label="Billing Address"
+                value={getAtPath(contractForm, "brand.billingAddress")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("brand.billingAddress", e.target.value)
+                }
+              />
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Campaign Overview" icon={<Info className="h-4 w-4" />}>
+          <SidebarSection
+            title="Campaign Overview"
+            icon={<Info className="h-4 w-4" />}
+          >
             <div className="space-y-4">
-              <FloatingLabelInput
+              <FloatingInput
                 id="campaign-title"
                 label="Campaign Title / ID"
                 value={getAtPath(contractForm, "campaign.campaignTitleOrId")}
-                onChange={(e: any) => setContractField("campaign.campaignTitleOrId", e.target.value)}
-                error={formErrors["campaign.campaignTitleOrId"]}
+                onValueChange={(value: string) =>
+                  setContractField("campaign.campaignTitleOrId", value)
+                }
+                state={sidebarStateFor("campaign.campaignTitleOrId")}
+                errorText={sidebarErrorFor("campaign.campaignTitleOrId")}
               />
-              <TextArea
+
+              <LabeledTextarea
                 id="campaign-products-services"
                 label="Products / Services Covered"
                 value={getAtPath(contractForm, "campaign.productsServicesCovered")}
-                onChange={(e: any) =>
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField("campaign.productsServicesCovered", e.target.value)
                 }
-                rows={3}
               />
+
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <FloatingLabelInput
+                <FloatingInput
                   id="campaign-territory"
                   label="Territory / Target Country"
                   value={getAtPath(contractForm, "campaign.territoryTargetCountry")}
-                  onChange={(e: any) =>
-                    setContractField("campaign.territoryTargetCountry", e.target.value)
+                  onValueChange={(value: string) =>
+                    setContractField("campaign.territoryTargetCountry", value)
                   }
                 />
-                <div data-field-error={!!formErrors.requestedEffDate}>
-                  <LabelWithInfo text="Requested Effective Date" />
-                  <input
-                    type="date"
-                    value={requestedEffDate}
-                    min={todayStr}
-                    onChange={(e) => {
-                      setRequestedEffDate(e.target.value);
-                      setContractField("campaign.effectiveDate", e.target.value);
-                    }}
-                    className={`mt-1 h-[44px] w-full rounded-lg border-2 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] ${formErrors.requestedEffDate ? "border-red-500" : "border-gray-200"
-                      }`}
-                  />
-                  {formErrors.requestedEffDate ? (
-                    <div className="mt-1 text-xs text-red-600">{formErrors.requestedEffDate}</div>
-                  ) : null}
-                </div>
-              </div>
-              <div>
-                <LabelWithInfo text="Timezone" />
-                <ReactSelect
-                  instanceId="timezone-select"
-                  inputId="timezone-select-input"
-                  isLoading={listsLoading}
-                  options={tzOptions}
-                  value={tzOptions.find((o) => o.value === requestedEffTz) || null}
-                  onChange={(opt: any) => setRequestedEffTz(opt?.value || DEFAULT_TIMEZONE)}
-                  placeholder="Select timezone"
-                  styles={buildReactSelectStyles()}
+
+                <FloatingDateInput
+                  id="requested-effective-date"
+                  label="Requested Effective Date"
+                  type="date"
+                  value={requestedEffDate}
+                  min={todayStr}
+                  onValueChange={(value) => {
+                    setRequestedEffDate(value);
+                    setContractField("campaign.effectiveDate", value);
+                  }}
+                  state={sidebarStateFor("requestedEffDate")}
+                  errorText={sidebarErrorFor("requestedEffDate")}
                 />
               </div>
+
+              <FloatingSelect
+                label="Timezone"
+                value={requestedEffTz}
+                onValueChange={(value) => setRequestedEffTz(value)}
+                searchable
+              >
+                {tzOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Deliverables & Publication Timeline" icon={<ClipboardText className="h-4 w-4" />}>
+          <SidebarSection
+            title="Deliverables & Publication Timeline"
+            icon={<ClipboardText className="h-4 w-4" />}
+          >
             <div className="space-y-4">
               {formErrors["scheduleA.deliverables"] ? (
-                <div className="text-xs text-red-600">{formErrors["scheduleA.deliverables"]}</div>
+                <div className="text-xs text-red-600">
+                  {formErrors["scheduleA.deliverables"]}
+                </div>
               ) : null}
 
               {deliverables.map((row, index) => (
-                <div key={row.id} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+                <div
+                  key={row.id}
+                  className="space-y-3 rounded-xl border border-gray-200 bg-white p-4"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-sm font-semibold text-gray-800">
                       Deliverable #{index + 1}
                     </div>
+
                     {deliverables.length > 1 ? (
                       <button
                         type="button"
                         onClick={() =>
-                          setDeliverables((prev) => prev.filter((item) => item.id !== row.id))
+                          setDeliverables((prev) =>
+                            prev.filter((item) => item.id !== row.id)
+                          )
                         }
                         className="text-xs text-gray-500 hover:text-red-600"
                       >
@@ -2326,32 +3874,36 @@ export default function AppliedInfluencersPage() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <NumberInputTop
+                    <FloatingInput
                       id={`deliverable-sr-${row.id}`}
                       label="Sr. No."
+                      type="number"
                       value={String(index + 1)}
-                      onChange={() => undefined}
+                      onValueChange={() => undefined}
                       disabled
                     />
-                    <FloatingLabelInput
+
+                    <FloatingInput
                       id={`deliverable-platform-${row.id}`}
                       label="Platform / Handle"
                       value={row.platformHandle}
-                      onChange={(e: any) =>
+                      onValueChange={(value: string) =>
                         setDeliverables((prev) =>
                           prev.map((item) =>
                             item.id === row.id
-                              ? { ...item, platformHandle: e.target.value }
+                              ? { ...item, platformHandle: value }
                               : item
                           )
                         )
                       }
                     />
-                    <NumberInputTop
+
+                    <FloatingInput
                       id={`deliverable-qty-${row.id}`}
                       label="Qty"
+                      type="number"
                       value={row.qty}
-                      onChange={(value: string) =>
+                      onValueChange={(value: string) =>
                         setDeliverables((prev) =>
                           prev.map((item) =>
                             item.id === row.id ? { ...item, qty: value } : item
@@ -2361,54 +3913,57 @@ export default function AppliedInfluencersPage() {
                     />
                   </div>
 
-                  <FloatingLabelInput
-                    id={`deliverable-format-${row.id}`}
+                  <FloatingSelect
                     label="Deliverable Format"
                     value={row.deliverableFormat}
-                    onChange={(e: any) =>
+                    onValueChange={(value) =>
                       setDeliverables((prev) =>
                         prev.map((item) =>
                           item.id === row.id
-                            ? { ...item, deliverableFormat: e.target.value }
+                            ? { ...item, deliverableFormat: value }
                             : item
                         )
                       )
                     }
-                  />
+                    searchable={false}
+                  >
+                    {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div>
-                      <LabelWithInfo text="Draft Due" />
-                      <input
-                        type="date"
-                        value={row.draftDue}
-                        min={todayStr}
-                        onChange={(e) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, draftDue: e.target.value } : item
-                            )
+                    <FloatingDateInput
+                      id={`deliverable-draft-${row.id}`}
+                      label="Draft Due"
+                      type="date"
+                      value={row.draftDue}
+                      min={todayStr}
+                      onValueChange={(value) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, draftDue: value } : item
                           )
-                        }
-                        className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
-                      />
-                    </div>
-                    <div>
-                      <LabelWithInfo text="Live Date" />
-                      <input
-                        type="date"
-                        value={row.liveDate}
-                        min={todayStr}
-                        onChange={(e) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, liveDate: e.target.value } : item
-                            )
+                        )
+                      }
+                    />
+
+                    <FloatingDateInput
+                      id={`deliverable-live-${row.id}`}
+                      label="Live Date"
+                      type="date"
+                      value={row.liveDate}
+                      min={todayStr}
+                      onValueChange={(value) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, liveDate: value } : item
                           )
-                        }
-                        className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
-                      />
-                    </div>
+                        )
+                      }
+                    />
                   </div>
                 </div>
               ))}
@@ -2432,620 +3987,789 @@ export default function AppliedInfluencersPage() {
               </Button>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <TextArea
+                <LabeledTextarea
                   id="minimum-video-specs"
                   label="Minimum Video Specs"
                   value={getAtPath(contractForm, "scheduleA.minimumVideoSpecs")}
-                  onChange={(e: any) =>
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                     setContractField("scheduleA.minimumVideoSpecs", e.target.value)
                   }
-                  rows={3}
                 />
-                <TextArea
-                  id="mandatory-tags"
+
+                <FloatingTagInput
                   label="Mandatory Tags / Mentions / Links / Codes"
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.mandatoryTagsMentionsLinksCodes"
+                  value={csvToTags(
+                    getAtPath(
+                      contractForm,
+                      "scheduleA.mandatoryTagsMentionsLinksCodes"
+                    )
                   )}
-                  onChange={(e: any) =>
+                  options={[]}
+                  onValueChange={(next) =>
                     setContractField(
                       "scheduleA.mandatoryTagsMentionsLinksCodes",
-                      e.target.value
+                      tagsToCsv(next)
                     )
                   }
-                  rows={3}
+                  dropdownDirection="up"
                 />
               </div>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <Checkbox
-                  id="pre-shoot-script-required"
+                <FloatingSelect
                   label="Pre-Shoot Script Required"
-                  checked={Boolean(
+                  value={
                     getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
-                  )}
-                  onChange={(checked: boolean) =>
-                    setContractField("scheduleA.preShootScriptRequired", checked)
+                      ? "yes"
+                      : "no"
+                  }
+                  onValueChange={(value) =>
+                    setContractField(
+                      "scheduleA.preShootScriptRequired",
+                      value === "yes"
+                    )
+                  }
+                  searchable={false}
+                >
+                  {YES_NO_BOOL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <FloatingDateInput
+                  id="pre-shoot-script-due"
+                  label="Pre-Shoot Script Due"
+                  type="date"
+                  value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
+                  min={todayStr}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.preShootScriptDue", value)
                   }
                 />
-                <div>
-                  <LabelWithInfo text="Pre-Shoot Script Due" />
-                  <input
-                    type="date"
-                    value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
-                    min={todayStr}
-                    onChange={(e) =>
-                      setContractField("scheduleA.preShootScriptDue", e.target.value)
-                    }
-                    className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
-                  />
-                </div>
-                <NumberInputTop
+
+                <FloatingInput
                   id="pre-shoot-review-days"
                   label="Script Review Business Days"
-                  value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
-                  onChange={(value: string) =>
-                    setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
+                  type="number"
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.preShootScriptReviewBusinessDays"
+                  )}
+                  onValueChange={(value: string) =>
+                    setContractField(
+                      "scheduleA.preShootScriptReviewBusinessDays",
+                      value
+                    )
                   }
-                  error={formErrors["scheduleA.preShootScriptReviewBusinessDays"]}
+                  state={sidebarStateFor(
+                    "scheduleA.preShootScriptReviewBusinessDays"
+                  )}
+                  errorText={sidebarErrorFor(
+                    "scheduleA.preShootScriptReviewBusinessDays"
+                  )}
                 />
               </div>
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Review, Revisions & Reshoots" icon={<PenNib className="h-4 w-4" />}>
+          <SidebarSection
+            title="Review, Revisions & Reshoots"
+            icon={<PenNib className="h-4 w-4" />}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <NumberInputTop
+              <FloatingInput
                 id="included-revision-rounds"
                 label="Included Revision Rounds"
+                type="number"
                 value={getAtPath(contractForm, "scheduleA.review.includedRevisionRounds")}
-                onChange={(value: string) =>
+                onValueChange={(value: string) =>
                   setContractField("scheduleA.review.includedRevisionRounds", value)
                 }
-                error={formErrors["scheduleA.review.includedRevisionRounds"]}
+                state={sidebarStateFor("scheduleA.review.includedRevisionRounds")}
+                errorText={sidebarErrorFor("scheduleA.review.includedRevisionRounds")}
               />
-              <FloatingLabelInput
+
+              <FloatingInput
                 id="additional-revision-fee"
                 label="Additional Revision Fee"
                 value={getAtPath(contractForm, "scheduleA.review.additionalRevisionFee")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.review.additionalRevisionFee", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.additionalRevisionFee", value)
                 }
               />
-              <FloatingLabelInput
-                id="reshoot-obligation"
+
+              <FloatingSelect
                 label="Reshoot Obligation"
                 value={getAtPath(contractForm, "scheduleA.review.reshootObligation")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.review.reshootObligation", e.target.value)
+                onValueChange={(value) =>
+                  setContractField("scheduleA.review.reshootObligation", value)
                 }
-              />
-              <FloatingLabelInput
+                searchable={false}
+              >
+                {RESHOOT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
                 id="reshoot-fee"
                 label="Reshoot Fee"
                 value={getAtPath(contractForm, "scheduleA.review.reshootFee")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.review.reshootFee", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.reshootFee", value)
                 }
               />
-              <FloatingLabelInput
+
+              <FloatingInput
                 id="minimum-live-period"
                 label="Minimum Live Period"
                 value={getAtPath(contractForm, "scheduleA.review.minimumLivePeriod")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.review.minimumLivePeriod", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.minimumLivePeriod", value)
                 }
               />
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Commercial Terms" icon={<FileText className="h-4 w-4" />}>
+          <SidebarSection
+            title="Commercial Terms"
+            icon={<FileText className="h-4 w-4" />}
+          >
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <NumberInputTop
+                <FloatingInput
                   id="total-campaign-fee"
                   label="Total Campaign Fee"
+                  type="number"
                   value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
-                  onChange={(value: string) =>
+                  onValueChange={(value: string) =>
                     setContractField("scheduleA.commercial.totalCampaignFee", value)
                   }
-                  error={formErrors["scheduleA.commercial.totalCampaignFee"]}
+                  state={sidebarStateFor("scheduleA.commercial.totalCampaignFee")}
+                  errorText={sidebarErrorFor("scheduleA.commercial.totalCampaignFee")}
                 />
-                <div data-field-error={!!formErrors["scheduleA.commercial.currency"]}>
-                  <LabelWithInfo text="Currency" />
-                  <ReactSelect
-                    instanceId="currency-select"
-                    inputId="currency-select-input"
-                    isLoading={listsLoading}
-                    options={currencyOptions}
-                    value={
-                      currencyOptions.find(
-                        (o) => o.value === getAtPath(contractForm, "scheduleA.commercial.currency")
-                      ) || null
-                    }
-                    onChange={(opt: any) =>
-                      setContractField("scheduleA.commercial.currency", opt?.value || "")
-                    }
-                    placeholder="Select currency"
-                    styles={buildReactSelectStyles({
-                      hasError: !!formErrors["scheduleA.commercial.currency"],
-                    })}
-                  />
-                  {formErrors["scheduleA.commercial.currency"] ? (
-                    <div className="mt-1 text-xs text-red-600">
-                      {formErrors["scheduleA.commercial.currency"]}
-                    </div>
-                  ) : null}
-                </div>
+
+                <FloatingSelect
+                  label="Currency"
+                  value={getAtPath(contractForm, "scheduleA.commercial.currency")}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.commercial.currency", value)
+                  }
+                  searchable
+                  state={sidebarStateFor("scheduleA.commercial.currency")}
+                  errorText={sidebarErrorFor("scheduleA.commercial.currency")}
+                >
+                  {currencyOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
               </div>
 
-              <SelectWithInfo
-                id="milestone-structure"
+              <FloatingSelect
                 label="Platform Milestone Payment Structure"
-                value={getAtPath(contractForm, "scheduleA.commercial.platformMilestonePaymentStructure")}
-                onChange={(e: any) =>
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.commercial.platformMilestonePaymentStructure"
+                )}
+                onValueChange={(value) =>
                   setContractField(
                     "scheduleA.commercial.platformMilestonePaymentStructure",
-                    e.target.value
+                    value
                   )
                 }
-                options={MILESTONE_OPTIONS}
-              />
+                searchable={false}
+              >
+                {MILESTONE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
 
-              <FloatingLabelInput
+              <FloatingInput
                 id="commercial-custom-split"
                 label="Custom Split"
                 value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.commercial.customSplit", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.commercial.customSplit", value)
                 }
               />
 
-              <TextArea
+              <LabeledTextarea
                 id="advance-payment-trigger"
                 label="Advance Payment Trigger"
                 value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
-                onChange={(e: any) =>
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField(
                     "scheduleA.commercial.advancePaymentTrigger",
                     e.target.value
                   )
                 }
-                rows={2}
               />
-              <TextArea
+
+              <LabeledTextarea
                 id="remaining-payment-trigger"
                 label="Remaining Payment Trigger"
-                value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
-                onChange={(e: any) =>
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.commercial.remainingPaymentTrigger"
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField(
                     "scheduleA.commercial.remainingPaymentTrigger",
                     e.target.value
                   )
                 }
-                rows={2}
               />
+
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <FloatingLabelInput
-                  id="processor-fees-borne-by"
+                <FloatingSelect
                   label="Payment Processor Fees Borne By"
-                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}
-                  onChange={(e: any) =>
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.commercial.paymentProcessorFeesBorneBy"
+                  )}
+                  onValueChange={(value) =>
                     setContractField(
                       "scheduleA.commercial.paymentProcessorFeesBorneBy",
-                      e.target.value
+                      value
                     )
                   }
-                />
-                <FloatingLabelInput
+                  searchable={false}
+                >
+                  {PROCESSOR_FEE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <FloatingInput
                   id="processor-fees-notes"
                   label="Payment Processor Fee Notes"
-                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesNotes")}
-                  onChange={(e: any) =>
+                  value={getAtPath(
+                    contractForm,
+                    "scheduleA.commercial.paymentProcessorFeesNotes"
+                  )}
+                  onValueChange={(value: string) =>
                     setContractField(
                       "scheduleA.commercial.paymentProcessorFeesNotes",
-                      e.target.value
+                      value
                     )
                   }
                 />
               </div>
-              <TextArea
+
+              <LabeledTextarea
                 id="lane-a-marketplace-fee-note"
                 label="Lane A Marketplace Fee Note"
-                value={getAtPath(contractForm, "scheduleA.commercial.laneAMarketplaceFeeNote")}
-                onChange={(e: any) =>
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.commercial.laneAMarketplaceFeeNote"
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField(
                     "scheduleA.commercial.laneAMarketplaceFeeNote",
                     e.target.value
                   )
                 }
-                rows={3}
               />
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Raw Files & Reporting" icon={<ClipboardText className="h-4 w-4" />}>
+          <SidebarSection
+            title="Raw Files & Reporting"
+            icon={<ClipboardText className="h-4 w-4" />}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <FloatingLabelInput
-                id="raw-source-file-delivery"
+              <FloatingSelect
                 label="Raw / Source File Delivery"
                 value={getAtPath(contractForm, "scheduleA.rawFiles.rawSourceFileDelivery")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.rawFiles.rawSourceFileDelivery", e.target.value)
+                onValueChange={(value) =>
+                  setContractField("scheduleA.rawFiles.rawSourceFileDelivery", value)
                 }
-              />
-              <FloatingLabelInput
+                searchable={false}
+              >
+                {RAW_FILE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
                 id="raw-files-format"
                 label="Format"
                 value={getAtPath(contractForm, "scheduleA.rawFiles.format")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.rawFiles.format", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.rawFiles.format", value)
                 }
               />
-              <div>
-                <LabelWithInfo text="Delivery Due" />
-                <input
-                  type="date"
-                  value={getAtPath(contractForm, "scheduleA.rawFiles.deliveryDue")}
-                  min={todayStr}
-                  onChange={(e) => setContractField("scheduleA.rawFiles.deliveryDue", e.target.value)}
-                  className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
-                />
-              </div>
-              <div>
-                <LabelWithInfo text="Analytics Reporting Deadline" />
-                <input
-                  type="date"
-                  value={getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingDeadline")}
-                  min={todayStr}
-                  onChange={(e) =>
-                    setContractField("scheduleA.rawFiles.analyticsReportingDeadline", e.target.value)
+
+              <FloatingDateInput
+                id="raw-files-delivery-due"
+                label="Delivery Due"
+                type="date"
+                value={getAtPath(contractForm, "scheduleA.rawFiles.deliveryDue")}
+                min={todayStr}
+                onValueChange={(value) =>
+                  setContractField("scheduleA.rawFiles.deliveryDue", value)
+                }
+              />
+
+              <FloatingDateInput
+                id="analytics-reporting-deadline"
+                label="Analytics Reporting Deadline"
+                type="date"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.rawFiles.analyticsReportingDeadline"
+                )}
+                min={todayStr}
+                onValueChange={(value) =>
+                  setContractField(
+                    "scheduleA.rawFiles.analyticsReportingDeadline",
+                    value
+                  )
+                }
+              />
+
+              <div className="md:col-span-2">
+                <FloatingTagInput
+                  label="Analytics Reporting Items"
+                  value={csvToTags(
+                    getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingItems")
+                  )}
+                  options={[]}
+                  onValueChange={(next) =>
+                    setContractField(
+                      "scheduleA.rawFiles.analyticsReportingItems",
+                      tagsToCsv(next)
+                    )
                   }
-                  className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
+                  dropdownDirection="up"
                 />
               </div>
-              <TextArea
-                id="analytics-reporting-items"
-                label="Analytics Reporting Items"
-                value={getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingItems")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.rawFiles.analyticsReportingItems", e.target.value)
-                }
-                rows={3}
-              />
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Shipping & Returns" icon={<Info className="h-4 w-4" />}>
+          <SidebarSection
+            title="Shipping & Returns"
+            icon={<Info className="h-4 w-4" />}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <SelectWithInfo
-                id="shipping-applicable"
+              <FloatingSelect
                 label="Product Shipping Applicable"
                 value={getAtPath(contractForm, "scheduleA.shipping.productShippingApplicable")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.shipping.productShippingApplicable", e.target.value)
+                onValueChange={(value) =>
+                  setContractField("scheduleA.shipping.productShippingApplicable", value)
                 }
-                options={SHIPPING_APPLICABLE_OPTIONS}
-              />
-              <SelectWithInfo
-                id="product-returnable"
+                searchable={false}
+              >
+                {SHIPPING_APPLICABLE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingSelect
                 label="Product Returnable"
                 value={getAtPath(contractForm, "scheduleA.shipping.productReturnable")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.shipping.productReturnable", e.target.value)
+                onValueChange={(value) =>
+                  setContractField("scheduleA.shipping.productReturnable", value)
                 }
-                options={RETURNABLE_OPTIONS}
-              />
-              <FloatingLabelInput
+                searchable={false}
+              >
+                {RETURNABLE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
                 id="ship-to-name"
                 label="Ship-To Name"
                 value={getAtPath(contractForm, "scheduleA.shipping.shipToName")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.shipping.shipToName", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.shipping.shipToName", value)
                 }
               />
-              <FloatingLabelInput
+
+              <FloatingInput
                 id="ship-to-phone"
                 label="Ship-To Phone"
                 value={getAtPath(contractForm, "scheduleA.shipping.shipToPhone")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.shipping.shipToPhone", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.shipping.shipToPhone", value)
                 }
               />
-              <TextArea
-                id="ship-to-address"
-                label="Ship-To Address"
-                value={getAtPath(contractForm, "scheduleA.shipping.shipToAddress")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.shipping.shipToAddress", e.target.value)
-                }
-                rows={3}
-              />
-              <div>
-                <LabelWithInfo text="Product Receipt Confirmation Deadline" />
-                <input
-                  type="date"
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.shipping.productReceiptConfirmationDeadline"
-                  )}
-                  min={todayStr}
-                  onChange={(e) =>
-                    setContractField(
-                      "scheduleA.shipping.productReceiptConfirmationDeadline",
-                      e.target.value
-                    )
+
+              <div className="md:col-span-2">
+                <LabeledTextarea
+                  id="ship-to-address"
+                  label="Ship-To Address"
+                  value={getAtPath(contractForm, "scheduleA.shipping.shipToAddress")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("scheduleA.shipping.shipToAddress", e.target.value)
                   }
-                  className="mt-1 h-[44px] w-full rounded-lg border-2 border-gray-200 px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35]"
                 />
               </div>
-              <FloatingLabelInput
+
+              <FloatingDateInput
+                id="product-receipt-confirmation-deadline"
+                label="Product Receipt Confirmation Deadline"
+                type="date"
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.shipping.productReceiptConfirmationDeadline"
+                )}
+                min={todayStr}
+                onValueChange={(value) =>
+                  setContractField(
+                    "scheduleA.shipping.productReceiptConfirmationDeadline",
+                    value
+                  )
+                }
+              />
+
+              <FloatingInput
                 id="return-window-method"
                 label="Return Window / Method"
                 value={getAtPath(contractForm, "scheduleA.shipping.returnWindowMethod")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.shipping.returnWindowMethod", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.shipping.returnWindowMethod", value)
                 }
               />
-              <TextArea
-                id="risk-of-loss-notes"
-                label="Risk of Loss Notes"
-                value={getAtPath(contractForm, "scheduleA.shipping.riskOfLossNotes")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.shipping.riskOfLossNotes", e.target.value)
-                }
-                rows={3}
-              />
+
+              <div className="md:col-span-2">
+                <LabeledTextarea
+                  id="risk-of-loss-notes"
+                  label="Risk of Loss Notes"
+                  value={getAtPath(contractForm, "scheduleA.shipping.riskOfLossNotes")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("scheduleA.shipping.riskOfLossNotes", e.target.value)
+                  }
+                />
+              </div>
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Usage Rights" icon={<SealCheck className="h-4 w-4" />}>
+          <SidebarSection
+            title="Usage Rights"
+            icon={<SealCheck className="h-4 w-4" />}
+          >
             <div className="space-y-4">
+              <FloatingMultiSelect
+                label="Granted Usage Rights"
+                value={selectedUsageRights}
+                options={usageRightOptions}
+                onValueChange={(next) => setSelectedUsageRights(next)}
+                includeAll={false}
+                searchable={false}
+              />
+
               <div className="space-y-3">
-                {contractForm.scheduleA.usageRights.rows.map((row) => (
-                  <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-gray-800">{row.usageRight}</div>
-                      <input
-                        type="checkbox"
-                        checked={row.selected}
-                        onChange={(e) =>
-                          setContractField(
-                            "scheduleA.usageRights.rows",
-                            contractForm.scheduleA.usageRights.rows.map((item) =>
-                              item.id === row.id ? { ...item, selected: e.target.checked } : item
+                {contractForm.scheduleA.usageRights.rows
+                  .filter((row) => row.selected)
+                  .map((row) => (
+                    <div
+                      key={row.id}
+                      className="rounded-xl border border-gray-200 bg-white p-3"
+                    >
+                      <div className="mb-3 text-sm font-semibold text-gray-800">
+                        {row.usageRight}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <FloatingInput
+                          id={`usage-duration-${row.id}`}
+                          label="Duration"
+                          value={row.duration}
+                          onValueChange={(value: string) =>
+                            setContractField(
+                              "scheduleA.usageRights.rows",
+                              contractForm.scheduleA.usageRights.rows.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, duration: value }
+                                  : item
+                              )
                             )
-                          )
-                        }
-                        className="h-4 w-4"
-                      />
+                          }
+                        />
+
+                        <FloatingInput
+                          id={`usage-territory-${row.id}`}
+                          label="Territory / Notes"
+                          value={row.territoryNotes}
+                          onValueChange={(value: string) =>
+                            setContractField(
+                              "scheduleA.usageRights.rows",
+                              contractForm.scheduleA.usageRights.rows.map((item) =>
+                                item.id === row.id
+                                  ? { ...item, territoryNotes: value }
+                                  : item
+                              )
+                            )
+                          }
+                        />
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <FloatingLabelInput
-                        id={`usage-duration-${row.id}`}
-                        label="Duration"
-                        value={row.duration}
-                        onChange={(e: any) =>
-                          setContractField(
-                            "scheduleA.usageRights.rows",
-                            contractForm.scheduleA.usageRights.rows.map((item) =>
-                              item.id === row.id ? { ...item, duration: e.target.value } : item
-                            )
-                          )
-                        }
-                      />
-                      <FloatingLabelInput
-                        id={`usage-territory-${row.id}`}
-                        label="Territory / Notes"
-                        value={row.territoryNotes}
-                        onChange={(e: any) =>
-                          setContractField(
-                            "scheduleA.usageRights.rows",
-                            contractForm.scheduleA.usageRights.rows.map((item) =>
-                              item.id === row.id
-                                ? { ...item, territoryNotes: e.target.value }
-                                : item
-                            )
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <SelectWithInfo
-                  id="attribution-requirement"
+                <FloatingSelect
                   label="Attribution Requirement"
                   value={getAtPath(contractForm, "scheduleA.usageRights.attributionRequirement")}
-                  onChange={(e: any) =>
-                    setContractField("scheduleA.usageRights.attributionRequirement", e.target.value)
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.usageRights.attributionRequirement", value)
                   }
-                  options={ATTRIBUTION_OPTIONS}
-                />
-                <SelectWithInfo
-                  id="editing-rights"
+                  searchable={false}
+                >
+                  {ATTRIBUTION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <FloatingSelect
                   label="Editing Rights"
                   value={getAtPath(contractForm, "scheduleA.usageRights.editingRights")}
-                  onChange={(e: any) =>
-                    setContractField("scheduleA.usageRights.editingRights", e.target.value)
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.usageRights.editingRights", value)
                   }
-                  options={EDITING_RIGHTS_OPTIONS}
-                />
+                  searchable={false}
+                >
+                  {EDITING_RIGHTS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
               </div>
-              <FloatingLabelInput
+
+              <FloatingInput
                 id="attribution-text"
                 label="Attribution Text"
                 value={getAtPath(contractForm, "scheduleA.usageRights.attributionText")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.usageRights.attributionText", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.usageRights.attributionText", value)
                 }
               />
-              <TextArea
-                id="music-stock-asset-responsibility"
+
+              <FloatingSelect
                 label="Music / Stock Asset Responsibility"
                 value={getAtPath(
                   contractForm,
                   "scheduleA.usageRights.musicStockAssetResponsibility"
                 )}
-                onChange={(e: any) =>
+                onValueChange={(value) =>
                   setContractField(
                     "scheduleA.usageRights.musicStockAssetResponsibility",
-                    e.target.value
+                    value
                   )
                 }
-                rows={3}
-              />
+                searchable={false}
+              >
+                {MUSIC_RESPONSIBILITY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Compliance & Brand Safety" icon={<Info className="h-4 w-4" />}>
+          <SidebarSection
+            title="Compliance & Brand Safety"
+            icon={<Info className="h-4 w-4" />}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <TextArea
+              <LabeledTextarea
                 id="creative-brief-mandatory-talking-points"
                 label="Creative Brief / Mandatory Talking Points"
                 value={getAtPath(
                   contractForm,
                   "scheduleA.compliance.creativeBriefMandatoryTalkingPoints"
                 )}
-                onChange={(e: any) =>
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField(
                     "scheduleA.compliance.creativeBriefMandatoryTalkingPoints",
                     e.target.value
                   )
                 }
-                rows={4}
               />
-              <TextArea
+
+              <LabeledTextarea
                 id="restricted-statements"
                 label="Restricted Statements"
                 value={getAtPath(contractForm, "scheduleA.compliance.restrictedStatements")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.compliance.restrictedStatements", e.target.value)
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField(
+                    "scheduleA.compliance.restrictedStatements",
+                    e.target.value
+                  )
                 }
-                rows={4}
               />
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Exclusivity & Morals" icon={<SealCheck className="h-4 w-4" />}>
+          <SidebarSection
+            title="Exclusivity & Morals"
+            icon={<SealCheck className="h-4 w-4" />}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <FloatingLabelInput
+              <FloatingInput
                 id="competitor-blackout"
                 label="Competitor Blackout"
                 value={getAtPath(contractForm, "scheduleA.exclusivity.competitorBlackout")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.exclusivity.competitorBlackout", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.exclusivity.competitorBlackout", value)
                 }
               />
-              <FloatingLabelInput
-                id="category-competitor-list"
+
+              <FloatingTagInput
                 label="Category / Competitor List"
-                value={getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList")}
-                onChange={(e: any) =>
+                value={csvToTags(
+                  getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList")
+                )}
+                options={[]}
+                onValueChange={(next) =>
                   setContractField(
                     "scheduleA.exclusivity.categoryCompetitorList",
-                    e.target.value
+                    tagsToCsv(next)
                   )
                 }
+                dropdownDirection="up"
               />
-              <FloatingLabelInput
+
+              <FloatingInput
                 id="blackout-period"
                 label="Blackout Period"
                 value={getAtPath(contractForm, "scheduleA.exclusivity.blackoutPeriod")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.exclusivity.blackoutPeriod", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.exclusivity.blackoutPeriod", value)
                 }
               />
-              <SelectWithInfo
-                id="optional-morals-clause"
+
+              <FloatingSelect
                 label="Optional Morals Clause"
                 value={getAtPath(contractForm, "scheduleA.exclusivity.optionalMoralsClause")}
-                onChange={(e: any) =>
-                  setContractField(
-                    "scheduleA.exclusivity.optionalMoralsClause",
-                    e.target.value
-                  )
+                onValueChange={(value) =>
+                  setContractField("scheduleA.exclusivity.optionalMoralsClause", value)
                 }
-                options={MORALS_OPTIONS}
-              />
+                searchable={false}
+              >
+                {MORALS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Cancellation & Refunds" icon={<Info className="h-4 w-4" />}>
+          <SidebarSection
+            title="Cancellation & Refunds"
+            icon={<Info className="h-4 w-4" />}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <TextArea
+              <LabeledTextarea
                 id="kill-fee-or-prorata"
                 label="Kill Fee / Pro-Rata"
                 value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}
-                onChange={(e: any) =>
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
                 }
-                rows={3}
               />
-              <TextArea
+
+              <LabeledTextarea
                 id="refund-of-unearned-advance"
                 label="Refund of Unearned Advance"
-                value={getAtPath(contractForm, "scheduleA.cancellation.refundOfUnearnedAdvance")}
-                onChange={(e: any) =>
+                value={getAtPath(
+                  contractForm,
+                  "scheduleA.cancellation.refundOfUnearnedAdvance"
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField(
                     "scheduleA.cancellation.refundOfUnearnedAdvance",
                     e.target.value
                   )
                 }
-                rows={3}
               />
             </div>
           </SidebarSection>
 
-          <SidebarSection title="Dispute & Notices" icon={<FileText className="h-4 w-4" />}>
+          <SidebarSection
+            title="Dispute & Notices"
+            icon={<FileText className="h-4 w-4" />}
+          >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <FloatingLabelInput
+              <FloatingInput
                 id="governing-law"
                 label="Governing Law"
                 value={getAtPath(contractForm, "scheduleA.dispute.governingLaw")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.dispute.governingLaw", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.dispute.governingLaw", value)
                 }
               />
-              <SelectWithInfo
-                id="dispute-resolution-method"
+
+              <FloatingSelect
                 label="Dispute Resolution Method"
                 value={getAtPath(contractForm, "scheduleA.dispute.disputeResolutionMethod")}
-                onChange={(e: any) =>
-                  setContractField(
-                    "scheduleA.dispute.disputeResolutionMethod",
-                    e.target.value
-                  )
+                onValueChange={(value) =>
+                  setContractField("scheduleA.dispute.disputeResolutionMethod", value)
                 }
-                options={DISPUTE_OPTIONS}
-              />
-              <FloatingLabelInput
+                searchable={false}
+              >
+                {DISPUTE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
+              <FloatingInput
                 id="dispute-venue"
                 label="Venue"
                 value={getAtPath(contractForm, "scheduleA.dispute.disputeVenue")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.dispute.disputeVenue", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.dispute.disputeVenue", value)
                 }
               />
-              <FloatingLabelInput
+
+              <FloatingInput
                 id="arbitration-seat"
                 label="Arbitration Seat"
                 value={getAtPath(contractForm, "scheduleA.dispute.arbitrationSeat")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.dispute.arbitrationSeat", e.target.value)
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.dispute.arbitrationSeat", value)
                 }
               />
-              <FloatingLabelInput
-                id="attorneys-fees"
+
+              <FloatingSelect
                 label="Attorneys’ Fees"
                 value={getAtPath(contractForm, "scheduleA.dispute.attorneysFees")}
-                onChange={(e: any) =>
-                  setContractField("scheduleA.dispute.attorneysFees", e.target.value)
+                onValueChange={(value) =>
+                  setContractField("scheduleA.dispute.attorneysFees", value)
                 }
-              />
+                searchable={false}
+              >
+                {ATTORNEYS_FEES_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
             </div>
           </SidebarSection>
 
@@ -3069,7 +4793,6 @@ export default function AppliedInfluencersPage() {
             {panelMode === "send" ? (
               <Button
                 onClick={handleSendContract}
-                className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-6 text-white hover:from-[#FF7236] hover:to-[#FFA135] disabled:opacity-60"
                 disabled={!pdfUrl || isSendLoading || isPreviewLoading || isUpdateLoading}
               >
                 {isSendLoading ? (
@@ -3085,7 +4808,6 @@ export default function AppliedInfluencersPage() {
             ) : (
               <Button
                 onClick={handleEditContract}
-                className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-6 text-white hover:from-[#FF7236] hover:to-[#FFA135] disabled:opacity-60"
                 disabled={!pdfUrl || isUpdateLoading || isPreviewLoading || isSendLoading}
               >
                 {isUpdateLoading ? (
@@ -3171,51 +4893,6 @@ const ErrorMessage: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => <p className="p-6 text-center text-red-600">{children}</p>;
 
-export function FloatingLabelInput({
-  id,
-  label,
-  value,
-  onChange,
-  type = "text",
-  error,
-  info,
-  ...props
-}: any) {
-  const [focused, setFocused] = useState(false);
-  const hasValue = value !== "" && value !== undefined && value !== null;
-  return (
-    <div className="relative" data-field-error={!!error}>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={onChange}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#FF8A35]"
-          } peer`}
-        placeholder=" "
-        {...props}
-      />
-      <label
-        htmlFor={id}
-        className={`absolute left-4 transition-all duration-200 pointer-events-none inline-flex items-center gap-1 ${focused || hasValue
-          ? "top-1.5 text-[11px] text-black font-medium"
-          : "top-1/2 -translate-y-1/2 text-sm text-gray-500"
-          }`}
-      >
-        <span>{label}</span>
-        {info ? (
-          <span className="pointer-events-auto">
-            <InfoTip text={String(info)} />
-          </span>
-        ) : null}
-      </label>
-      {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
-    </div>
-  );
-}
-
 export function Select({
   id,
   label,
@@ -3243,12 +4920,13 @@ export function Select({
         value={value}
         onChange={onChange}
         disabled={disabled}
-        className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${disabled
-          ? "opacity-60 cursor-not-allowed border-gray-200"
-          : error
-            ? "border-red-500"
-            : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  disabled
+    ? "opacity-60 cursor-not-allowed border-gray-200"
+    : error
+      ? "border-red-500"
+      : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
       >
         {flat.map((o) => (
           <option key={o.value} value={o.value}>
@@ -3304,8 +4982,9 @@ export function NumberInput({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full h-[60px] px-4 pt-5 pb-1.5 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
         {...props}
       />
       <label
@@ -3350,8 +5029,9 @@ export function NumberInputTop({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${error ? "border-red-500" : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full h-[44px] px-3 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  error ? "border-red-500" : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
         {...props}
       />
       {error && (
@@ -3401,11 +5081,14 @@ export function PlatformSelector({
       : [...platforms, p];
     onChange(next);
   };
+
   const opts = ["YouTube", "Instagram", "TikTok"];
+
   return (
     <div className="flex flex-wrap gap-2">
       {opts.map((p) => {
         const active = platforms.includes(p);
+
         return (
           <button
             key={p}
@@ -3414,23 +5097,14 @@ export function PlatformSelector({
             disabled={disabled}
             aria-pressed={active}
             className={[
-              "px-3 py-1.5 rounded-lg text-sm font-medium transition-all border flex items-center gap-1",
-              disabled ? "opacity-60 cursor-not-allowed" : "",
+              "flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-all",
+              disabled ? "cursor-not-allowed opacity-60" : "",
               active
-                ? "border-transparent text-white shadow-sm"
-                : "border-gray-300 text-gray-800 bg-white hover:bg-gray-50",
+                ? "border-[#1A1A1A] bg-[#1A1A1A] text-white shadow-sm"
+                : "border-gray-300 bg-white text-gray-800 hover:bg-gray-50",
             ].join(" ")}
-            style={
-              active
-                ? {
-                  backgroundImage: `linear-gradient(to right, ${GRADIENT_FROM}, ${GRADIENT_TO})`,
-                }
-                : undefined
-            }
           >
-            {active && (
-              <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
-            )}
+            {active && <span className="h-1.5 w-1.5 rounded-full bg-white/80" />}
             {p}
           </button>
         );
@@ -3568,12 +5242,13 @@ export function TextArea({
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}
-        className={`w-full px-3 py-2.5 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8A35] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${disabled
-          ? "opacity-60 cursor-not-allowed border-gray-200"
-          : error
-            ? "border-red-500"
-            : "border-gray-200 focus:border-[#FF8A35]"
-          }`}
+className={`w-full px-3 py-2.5 border-2 rounded-lg text-sm focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A1A1A] focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
+  disabled
+    ? "opacity-60 cursor-not-allowed border-gray-200"
+    : error
+      ? "border-red-500"
+      : "border-gray-200 focus:border-[#1A1A1A]"
+}`}
       />
       {error && (
         <div className="text-xs text-red-600">{error}</div>
@@ -3593,44 +5268,33 @@ function ContractSidebar({
 }: any) {
   return (
     <div
-      className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"
-        }`}
+      className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="contract-title"
     >
       <div
-        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"
-          }`}
+        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
         onClick={onClose}
       />
+
       <div
-        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
       >
-        <div className="relative h-36 overflow-hidden">
-          <div
-            className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: `linear-gradient(135deg, ${GRADIENT_FROM} 0%, ${GRADIENT_TO} 100%)`,
-              clipPath: "polygon(0 0, 100% 0, 100% 65%, 0 100%)",
-            }}
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, ${GRADIENT_FROM} 0%, ${GRADIENT_TO} 100%)`,
-              clipPath: "polygon(0 0, 100% 0, 100% 78%, 0 92%)",
-            }}
-          />
-          <div className="relative z-10 p-6 text-white flex items-start justify-between h-full">
+        <div className="relative h-36 overflow-hidden border-b border-neutral-200 bg-[#1A1A1A]">
+          <div className="absolute inset-0 bg-[linear-gradient(135deg,#1A1A1A_0%,#2A2A2A_100%)] opacity-100" />
+          <div className="relative z-10 flex h-full items-start justify-between p-6 text-white">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mt-1 shadow-sm">
-                <FileText className="w-6 h-6 text-white" />
+              <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md shadow-sm">
+                <FileText className="h-6 w-6 text-white" />
               </div>
               <div>
                 <div
-                  className="text-[11px] tracking-wide font-semibold uppercase/relaxed opacity-95 mb-1"
+                  className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-white/75"
                   id="contract-title"
                 >
                   {title}
@@ -3640,8 +5304,9 @@ function ContractSidebar({
                 </div>
               </div>
             </div>
+
             <button
-              className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm flex items-center justify-center transition-all duration-150 hover:scale-110"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/10 transition-all duration-150 hover:scale-105 hover:bg-white/20"
               onClick={onClose}
               aria-label="Close"
               title="Close"
@@ -3650,24 +5315,27 @@ function ContractSidebar({
             </button>
           </div>
         </div>
+
         <div className="flex h-[calc(100%-9rem)]">
           {previewUrl ? (
-            <div className="w-full sm:w-1/2 p-6 border-r border-gray-100 flex flex-col">
-              <div className="flex items-center justify-between mb-3">
+            <div className="flex w-full flex-col border-r border-gray-100 p-6 sm:w-1/2">
+              <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <Eye className="w-4 h-4" />
+                  <Eye className="h-4 w-4" />
                   <span>Preview</span>
                 </div>
+
                 {onClosePreview && (
                   <button
                     type="button"
                     onClick={onClosePreview}
-                    className="text-xs px-3 py-1 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100"
+                    className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-gray-700 hover:bg-neutral-100"
                   >
                     Close preview
                   </button>
                 )}
               </div>
+
               <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-gray-50">
                 <iframe
                   src={previewUrl}
@@ -3679,19 +5347,16 @@ function ContractSidebar({
               </div>
             </div>
           ) : (
-            <div className="hidden sm:flex w-1/2 p-6 items-center justify-center text-gray-400 select-none">
+            <div className="hidden w-1/2 select-none items-center justify-center p-6 text-gray-400 sm:flex">
               <div className="text-center">
-                <Eye className="mx-auto w-8 h-8 mb-2" />
-                <div className="text-sm">
-                  Generate a preview to see the PDF here
-                </div>
+                <Eye className="mx-auto mb-2 h-8 w-8" />
+                <div className="text-sm">Generate a preview to see the PDF here</div>
               </div>
             </div>
           )}
 
           <div
-            className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"
-              } h-full px-6 space-y-5 overflow-auto`}
+            className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"} h-full overflow-auto px-6 space-y-5`}
           >
             {children}
           </div>
@@ -3857,9 +5522,9 @@ function SignatureModal({
         <div className="relative h-24">
           <div
             className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, ${GRADIENT_FROM} 0%, ${GRADIENT_TO} 100%)`,
-            }}
+style={{
+  background: "linear-gradient(135deg, #1A1A1A 0%, #2A2A2A 100%)",
+}}
           />
           <div className="relative z-10 h-full px-5 flex items-center justify-between text-white">
             <div className="flex items-center gap-3">
@@ -3911,7 +5576,7 @@ function SignatureModal({
           <div
             ref={dropRef}
             className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all cursor-pointer select-none ${isDragging
-              ? "border-orange-400 bg-orange-50/80 shadow-sm"
+? "border-[#1A1A1A] bg-neutral-100 shadow-sm"
               : "border-gray-300 bg-gray-50 hover:bg-gray-100/80"
               }`}
           >
@@ -4017,7 +5682,6 @@ function SignatureModal({
           </Button>
 
           <Button
-            className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none disabled:opacity-60 disabled:cursor-not-allowed"
             onClick={handleSignClick}
             disabled={!sigDataUrl || isSubmitting} // ✅ key line
           >
@@ -4032,10 +5696,10 @@ function SignatureModal({
 
 function SidebarSection({ title, children, icon }: any) {
   return (
-    <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl border border-gray-100 shadow-sm p-5 transition-all duration-200 hover:shadow-md">
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md">
+      <div className="mb-4 flex items-center gap-2 border-b border-gray-100 pb-3">
         {icon && (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white flex items-center justify-center">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#1A1A1A] to-[#2A2A2A] text-white">
             {icon}
           </div>
         )}
@@ -4045,8 +5709,6 @@ function SidebarSection({ title, children, icon }: any) {
     </div>
   );
 }
-
-
 
 function LabelWithInfo({
   text,

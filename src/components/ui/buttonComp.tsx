@@ -20,21 +20,22 @@ export const buttonVariants = cva(
     "[&>span[data-slot='icon']]:inline-flex [&>span[data-slot='icon']]:shrink-0",
     "[&>span[data-slot='label']]:inline-flex [&>span[data-slot='label']]:items-center",
     "[&>span[data-slot='icon']>svg]:pointer-events-none",
+    "rounded-[0.75rem]", 
     RAISED_SHADOW,
   ].join(" "),
   {
     variants: {
       variant: {
         solid: cn(
-          "rounded-s bg-primary text-primary-foreground",
+          "bg-primary text-primary-foreground",
           "hover:bg-primary/90 active:bg-primary/95"
         ),
         outline: cn(
-          "rounded-s bg-background text-foreground border border-bd-focus",
+          "bg-background text-foreground border border-bd-focus",
           "hover:bg-bg-hover active:bg-bg-pressed"
         ),
         raised: cn(
-          "rounded-[0.5625rem] bg-background text-foreground",
+          "bg-background text-foreground",
           "hover:bg-bg-hover active:bg-bg-pressed"
         ),
       },
@@ -176,8 +177,6 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         children: content,
       });
     }
-
-    // Normal button
     return (
       <button
         ref={ref}

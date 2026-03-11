@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
-  SelectTrigger,
   SelectContent,
   SelectItem,
   SelectValue,
@@ -452,9 +451,7 @@ function PaymentForm({
               value={String(type)}
               onValueChange={(v) => setType(Number(v) as 0 | 1)}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
+             
               <SelectContent className="bg-white">
                 <SelectItem value="0">PayPal</SelectItem>
                 <SelectItem value="1">Bank</SelectItem>
@@ -560,9 +557,7 @@ function BankFields({
           value={bank.countryId ?? ""}
           onValueChange={(v) => upd("countryId", v)}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select country" />
-          </SelectTrigger>
+          
           <SelectContent className="bg-white h-64 overflow-y-auto">
             {countries.map((c) => (
               <SelectItem key={c.value} value={c.value}>
