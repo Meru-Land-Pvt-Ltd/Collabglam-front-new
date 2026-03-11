@@ -7,7 +7,6 @@ import {
   BookmarkSimpleIcon,
 } from "@phosphor-icons/react";
 import { PenLine, Eye } from "lucide-react";
-import { PenLine, Eye } from "lucide-react";
 import { Button } from "./button";
 import { useRouter } from "next/navigation";
 
@@ -239,14 +238,10 @@ function InlinePlus({
   className?: string;
 }) {
   if (!first) return null;
+
   return (
     <span className={["text-[12px] text-primary", className].join(" ")}>
       <span className="truncate">{first}</span>
-      {extra > 0 ? (
-        <span className="text-primary">
-          {sep}+{extra}
-        </span>
-      ) : null}
       {extra > 0 ? (
         <span className="text-primary">
           {sep}+{extra}
@@ -284,7 +279,6 @@ function OutlinedPill({
   );
 }
 
-function CampaignGlobalBadge({ value }: { value: string }) {
 function CampaignGlobalBadge({ value }: { value: string }) {
   if (!value) return null;
   return (
@@ -439,18 +433,12 @@ export function ManualPreviewCard({
   meta,
   contract,
   invite,
-  contract,
-  invite,
   className = "",
   onViewClick
 }: {
   form: ManualForm;
   meta?: PreviewMeta;
   contract?: ContractCardProps;
-  /** Pass this prop to render Accept Invite / Decline / View Details buttons */
-  invite?: InviteCardProps;
-  contract?: ContractCardProps;
-  /** Pass this prop to render Accept Invite / Decline / View Details buttons */
   invite?: InviteCardProps;
   className?: string;
   onViewClick?: () => void;
@@ -574,15 +562,12 @@ export function ManualPreviewCard({
       <div className="mt-3">
         {hasTitle ? (
           <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1rem] font-semibold leading-[1.5rem] tracking-[0]">
-          <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1rem] font-semibold leading-[1.5rem] tracking-[0]">
             {title}
           </div>
         ) : (
           <SkeletonLine className="w-[58%] h-4" />
         )}
       </div>
-
-      {/* description */}
       <div className="mt-3 space-y-3">
         {hasDesc ? (
           <div className="text-[0.75rem] leading-5 text-neutral-700 line-clamp-2">
@@ -623,14 +608,31 @@ export function ManualPreviewCard({
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
         {/* Budget */}
         {/* Budget */}
-        <div className="min-w-0 flex-1">
-          {budget > 0 ? (
-            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
-            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
-              ${formatBudget(budget)}
-            </span>
+        <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
+          <div className="min-w-0 flex-1">
+            {budget > 0 ? (
+              <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
+                ${formatBudget(budget)}
+              </span>
+            ) : (
+              <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            )}
+          </div>
+
+          {invite ? (
+            <InviteActions invite={invite} />
+          ) : contract ? (
+            <ContractActions contract={contract} />
           ) : (
-            <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            <div className="flex items-center gap-3 shrink-0 cursor-pointer">
+              <Button variant="ghost" className="shadow-none hover:bg-white">
+                <BookmarkSimpleIcon />
+                <span>Save</span>
+              </Button>
+              <Button variant="default" onClick={onViewClick}>
+                View
+              </Button>
+            </div>
           )}
         </div>
 
