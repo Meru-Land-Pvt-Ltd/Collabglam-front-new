@@ -2,41 +2,91 @@
 
 import React, { useState, useMemo, useRef } from "react";
 import { ManualPreviewCard } from "@/components/ui/cardPreview";
+import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 import {
-  FloatingSelect,
-  SelectItem,
-} from "@/components/ui/select";
-import {
-  LayoutGrid,
-  Clock,
-  TrendingDown,
-  TrendingUp,
-  ArrowUpDown,
-  FileVideo,
-  FileImage,
-  BookImage,
-  Layers,
-  Link2,
-  Upload,
-  X,
+  LayoutGrid, Clock, TrendingDown, TrendingUp, ArrowUpDown,
+  FileVideo, FileImage, BookImage, Layers, Link2, Upload, X, LucideIcon,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/buttonComp";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+
+/* ─────────────────────────────────────────────
+   Types
+   ───────────────────────────────────────────── */
+type ApprovalStatus =
+  | "Pending Approval"
+  | "Under Review"
+  | "Revision Needed"
+  | "Approved"
+  | "Completed";
+
+type SubmissionStatus =
+  | "Pending Submission"
+  | "Under Review"
+  | "Revision Requested"
+  | "Approved"
+  | "Completed";
+
+type DeliverableType = "Reel" | "Post" | "Story" | "Video";
+
+type Tab =
+  | "Pending Submission"
+  | "Under Review"
+  | "Revision Requested"
+  | "Approved"
+  | "Completed";
+
+interface Deliverable {
+  id: number;
+  brand: string;
+  campaign: string;
+  type: DeliverableType;
+  approvalStatus: ApprovalStatus;
+  submissionStatus: SubmissionStatus;
+  overdueDays: number | null;
+  milestone: number;
+  totalMilestones: number;
+  tab: Tab;
+  location: string;
+}
+
+interface PreviewForm {
+  title: string;
+  description: string;
+  categoryName: string;
+  targetAgeGroups: string[];
+  goals: string[];
+  targetCountry: string[];
+  campaignBudget: number;
+}
+
+interface PreviewMeta {
+  ageMap: Record<string, string>;
+  goalsMap: Record<string, string>;
+  countryMap: Record<string, string>;
+  campaignBudget: number;
+}
+
+interface DeliverablePreview {
+  form: PreviewForm;
+  meta: PreviewMeta;
+}
+
+interface FilterOption {
+  value: string;
+  label: string;
+  icon: LucideIcon;
+}
 
 /* ─────────────────────────────────────────────
    Mock deliverables data
    ───────────────────────────────────────────── */
-const mockDeliverables = [
+const mockDeliverables: Deliverable[] = [
   {
     id: 1,
     brand: "Radiant Beauty Co.",
@@ -119,20 +169,10 @@ const mockDeliverables = [
 
 /* ─────────────────────────────────────────────
    Map a deliverable → ManualPreviewCard form + meta
-
-   Slot mapping:
-     topBadge  (goals[0])        → approval status  e.g. "Pending Approval"
-     categoryName                → deliverable type  e.g. "Reel"
-     targetAgeGroups[0]          → milestone label   e.g. "M 1 of 3"
-     title                       → brand name
-     description                 → campaign name  ·  overdue warning (if any)
-     targetCountry[0]            → location / submission status
-     campaignBudget              → 0  (hides the $0 row inside ManualPreviewCard)
    ───────────────────────────────────────────── */
-function deliverableToPreview(d) {
-  const overdueText = d.overdueDays != null
-    ? `⚠ Overdue by ${d.overdueDays} days`
-    : null;
+function deliverableToPreview(d: Deliverable): DeliverablePreview {
+  const overdueText =
+    d.overdueDays != null ? `⚠ Overdue by ${d.overdueDays} days` : null;
 
   const description = [d.campaign, overdueText].filter(Boolean).join(" · ");
 
@@ -143,19 +183,19 @@ function deliverableToPreview(d) {
 
   return {
     form: {
-      title:            d.brand,
+      title: d.brand,
       description,
-      categoryName:     d.type,
-      targetAgeGroups:  [milestoneKey],
-      goals:            [d.approvalStatus],
-      targetCountry:    [locationKey],
-      campaignBudget:   0,
+      categoryName: d.type,
+      targetAgeGroups: [milestoneKey],
+      goals: [d.approvalStatus],
+      targetCountry: [locationKey],
+      campaignBudget: 0,
     },
     meta: {
-      ageMap:          { [milestoneKey]: milestoneLabel },
-      goalsMap:        { [d.approvalStatus]: d.approvalStatus },
-      countryMap:      { [locationKey]: locationKey },
-      campaignBudget:  0,
+      ageMap: { [milestoneKey]: milestoneLabel },
+      goalsMap: { [d.approvalStatus]: d.approvalStatus },
+      countryMap: { [locationKey]: locationKey },
+      campaignBudget: 0,
     },
   };
 }
@@ -163,13 +203,13 @@ function deliverableToPreview(d) {
 /* ─────────────────────────────────────────────
    Filter / sort option lists
    ───────────────────────────────────────────── */
-const campaignOptions = [
+const campaignOptions: FilterOption[] = [
   { value: "all", label: "All Campaigns", icon: LayoutGrid },
   ...["Summer Glow", "Timeless", "30-Day Challenge", "Morning Ritual", "Snack Reviews", "Summer Collection"]
-    .map(c => ({ value: c, label: c, icon: LayoutGrid })),
+    .map((c): FilterOption => ({ value: c, label: c, icon: LayoutGrid })),
 ];
 
-const typeOptions = [
+const typeOptions: FilterOption[] = [
   { value: "all",   label: "All Types", icon: Layers },
   { value: "Reel",  label: "Reel",      icon: FileVideo },
   { value: "Post",  label: "Post",      icon: FileImage },
@@ -177,7 +217,7 @@ const typeOptions = [
   { value: "Video", label: "Video",     icon: FileVideo },
 ];
 
-const statusOptions = [
+const statusOptions: FilterOption[] = [
   { value: "all",              label: "All Statuses",     icon: LayoutGrid },
   { value: "Pending Approval", label: "Pending Approval", icon: Clock },
   { value: "Under Review",     label: "Under Review",     icon: Clock },
@@ -186,12 +226,12 @@ const statusOptions = [
   { value: "Completed",        label: "Completed",        icon: TrendingUp },
 ];
 
-const deadlineOptions = [
+const deadlineOptions: FilterOption[] = [
   { value: "all",     label: "Anytime", icon: Clock },
   { value: "overdue", label: "Overdue", icon: Clock },
 ];
 
-const sortOptions = [
+const sortOptions: FilterOption[] = [
   { value: "latest", label: "Latest", icon: ArrowUpDown },
   { value: "oldest", label: "Oldest", icon: ArrowUpDown },
 ];
@@ -199,22 +239,29 @@ const sortOptions = [
 /* ─────────────────────────────────────────────
    Submit Deliverable Modal
    ───────────────────────────────────────────── */
-function SubmitDeliverableModal({ open, onOpenChange }) {
-  const fileInputRef = useRef(null);
-  const [file, setFile] = useState(null);
-  const [externalLink, setExternalLink] = useState("");
-  const [caption, setCaption] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
+interface SubmitDeliverableModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
 
-  const handleFile = (f) => { if (f) setFile(f); };
+function SubmitDeliverableModal({ open, onOpenChange }: SubmitDeliverableModalProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [externalLink, setExternalLink] = useState<string>("");
+  const [caption, setCaption] = useState<string>("");
+  const [isDragging, setIsDragging] = useState<boolean>(false);
 
-  const handleDrop = (e) => {
+  const handleFile = (f: File | undefined): void => {
+    if (f) setFile(f);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     setIsDragging(false);
     handleFile(e.dataTransfer.files?.[0]);
   };
 
-  const handleClose = () => {
+  const handleClose = (): void => {
     setFile(null);
     setExternalLink("");
     setCaption("");
@@ -241,7 +288,10 @@ function SubmitDeliverableModal({ open, onOpenChange }) {
             </label>
             <div
               onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
               className={[
@@ -257,7 +307,9 @@ function SubmitDeliverableModal({ open, onOpenChange }) {
                 type="file"
                 accept="image/*,video/*,.pdf,.doc,.docx"
                 className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0])}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  handleFile(e.target.files?.[0])
+                }
               />
               {file ? (
                 <>
@@ -267,7 +319,10 @@ function SubmitDeliverableModal({ open, onOpenChange }) {
                   </div>
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                      e.stopPropagation();
+                      setFile(null);
+                    }}
                     className="absolute top-2.5 right-3 text-gray-400 hover:text-gray-600"
                   >
                     <X className="h-4 w-4" />
@@ -297,7 +352,9 @@ function SubmitDeliverableModal({ open, onOpenChange }) {
               <Input
                 placeholder="https://your-content-link.com"
                 value={externalLink}
-                onChange={(e) => setExternalLink(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setExternalLink(e.target.value)
+                }
                 className="pl-9 rounded-xl"
               />
             </div>
@@ -309,7 +366,9 @@ function SubmitDeliverableModal({ open, onOpenChange }) {
             <Textarea
               placeholder="Add any specific captions, hashtags, or notes for the brand..."
               value={caption}
-              onChange={(e) => setCaption(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                setCaption(e.target.value)
+              }
               className="rounded-xl resize-none min-h-[100px]"
             />
           </div>
@@ -320,7 +379,7 @@ function SubmitDeliverableModal({ open, onOpenChange }) {
           <Button variant="outline" className="flex-1 rounded-lg" onClick={handleClose}>
             Cancel
           </Button>
-          <Button  className="flex-1 rounded-lg !bg-[#FFBF00] !text-[#1A1A1A]" onClick={handleClose}>
+          <Button className="flex-1 rounded-lg !bg-[#FFBF00] !text-[#1A1A1A]" onClick={handleClose}>
             Submit
           </Button>
         </div>
@@ -332,7 +391,7 @@ function SubmitDeliverableModal({ open, onOpenChange }) {
 /* ─────────────────────────────────────────────
    TABS
    ───────────────────────────────────────────── */
-const TABS = [
+const TABS: Tab[] = [
   "Pending Submission",
   "Under Review",
   "Revision Requested",
@@ -344,25 +403,26 @@ const TABS = [
    PAGE
    ───────────────────────────────────────────── */
 export default function DeliverablesPage() {
-  const [modalOpen,  setModalOpen]  = useState(false);
-  const [activeTab, setActiveTab] = useState("Pending Submission");
-  const [campaign,  setCampaign]  = useState("all");
-  const [delivType, setDelivType] = useState("all");
-  const [status,    setStatus]    = useState("all");
-  const [deadline,  setDeadline]  = useState("all");
-  const [sortBy,    setSortBy]    = useState("latest");
+  const [modalOpen, setModalOpen] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<Tab>("Pending Submission");
+  const [campaign,  setCampaign]  = useState<string>("all");
+  const [delivType, setDelivType] = useState<string>("all");
+  const [status,    setStatus]    = useState<string>("all");
+  const [deadline,  setDeadline]  = useState<string>("all");
+  const [sortBy,    setSortBy]    = useState<string>("latest");
 
-  const filtered = useMemo(() => {
-    let list = mockDeliverables.filter(d => d.tab === activeTab);
-    if (campaign  !== "all")    list = list.filter(d => d.campaign       === campaign);
-    if (delivType !== "all")    list = list.filter(d => d.type           === delivType);
-    if (status    !== "all")    list = list.filter(d => d.approvalStatus === status);
-    if (deadline === "overdue") list = list.filter(d => d.overdueDays    != null);
+  const filtered = useMemo<Deliverable[]>(() => {
+    let list = mockDeliverables.filter((d) => d.tab === activeTab);
+    if (campaign  !== "all")    list = list.filter((d) => d.campaign       === campaign);
+    if (delivType !== "all")    list = list.filter((d) => d.type           === delivType);
+    if (status    !== "all")    list = list.filter((d) => d.approvalStatus === status);
+    if (deadline === "overdue") list = list.filter((d) => d.overdueDays    != null);
     if (sortBy === "oldest")    list = [...list].reverse();
     return list;
   }, [activeTab, campaign, delivType, status, deadline, sortBy]);
 
-  const tabCount = (tab) => mockDeliverables.filter(d => d.tab === tab).length;
+  const tabCount = (tab: Tab): number =>
+    mockDeliverables.filter((d) => d.tab === tab).length;
 
   return (
     <TooltipProvider>
@@ -378,14 +438,16 @@ export default function DeliverablesPage() {
                 Submit content, track approvals, and manage deadlines.
               </p>
             </div>
-            <Button className="!bg-[#FFBF00] !text-[#1A1A1A]" onClick={() => setModalOpen(true)}>Submit Deliverable</Button>
+            <Button className="!bg-[#FFBF00] !text-[#1A1A1A]" onClick={() => setModalOpen(true)}>
+              Submit Deliverable
+            </Button>
           </div>
 
           <div className="h-px w-full bg-gray-200" />
 
           {/* ── TABS ── */}
           <div className="flex overflow-x-auto border-b border-gray-200">
-            {TABS.map(tab => {
+            {TABS.map((tab) => {
               const active = tab === activeTab;
               const count  = tabCount(tab);
               return (
@@ -418,79 +480,63 @@ export default function DeliverablesPage() {
           </div>
 
           {/* ── FILTERS ── */}
-         <div className="flex items-end justify-between gap-4 py-6 flex-wrap">
-            {/* Left: all filters together */}
+          <div className="flex items-end justify-between gap-4 py-6 flex-wrap">
             <div className="flex items-end gap-3 flex-wrap">
-              <div className="w-[200px] shrink-0">
-                <FloatingSelect label="Campaign" value={campaign} onValueChange={setCampaign} searchable size="small">
-                  {campaignOptions.map(o => {
-                    const Icon = o.icon;
-                    return (
-                      <SelectItem key={o.value} value={o.value}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 text-gray-400" />{o.label}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </FloatingSelect>
-              </div>
-
-              <div className="w-[180px] shrink-0">
-                <FloatingSelect label="Deliverable Type" value={delivType} onValueChange={setDelivType} searchable={false} size="small">
-                  {typeOptions.map(o => {
-                    const Icon = o.icon;
-                    return (
-                      <SelectItem key={o.value} value={o.value}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 text-gray-400" />{o.label}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </FloatingSelect>
-              </div>
-
-              <div className="w-[180px] shrink-0">
-                <FloatingSelect label="Status" value={status} onValueChange={setStatus} searchable={false} size="small">
-                  {statusOptions.map(o => {
-                    const Icon = o.icon;
-                    return (
-                      <SelectItem key={o.value} value={o.value}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 text-gray-400" />{o.label}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </FloatingSelect>
-              </div>
-
-              <div className="w-[180px] shrink-0">
-                <FloatingSelect label="Deadline Proximity" value={deadline} onValueChange={setDeadline} searchable={false} size="small">
-                  {deadlineOptions.map(o => {
-                    const Icon = o.icon;
-                    return (
-                      <SelectItem key={o.value} value={o.value}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 text-gray-400" />{o.label}
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </FloatingSelect>
-              </div>
+              {(
+                [
+                  { label: "Campaign",          value: campaign,  onChange: setCampaign,  options: campaignOptions,  searchable: true,  width: "w-[200px]" },
+                  { label: "Deliverable Type",  value: delivType, onChange: setDelivType, options: typeOptions,      searchable: false, width: "w-[180px]" },
+                  { label: "Status",            value: status,    onChange: setStatus,    options: statusOptions,    searchable: false, width: "w-[180px]" },
+                  { label: "Deadline Proximity",value: deadline,  onChange: setDeadline,  options: deadlineOptions,  searchable: false, width: "w-[180px]" },
+                ] as {
+                  label: string;
+                  value: string;
+                  onChange: (v: string) => void;
+                  options: FilterOption[];
+                  searchable: boolean;
+                  width: string;
+                }[]
+              ).map(({ label, value, onChange, options, searchable, width }) => (
+                <div key={label} className={`${width} shrink-0`}>
+                  <FloatingSelect
+                    label={label}
+                    value={value}
+                    onValueChange={onChange}
+                    searchable={searchable}
+                    size="small"
+                  >
+                    {options.map((o) => {
+                      const Icon = o.icon;
+                      return (
+                        <SelectItem key={o.value} value={o.value}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 text-gray-400" />
+                            {o.label}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </FloatingSelect>
+                </div>
+              ))}
             </div>
 
             {/* Right: Sort By */}
             <div className="w-[160px] shrink-0">
-              <FloatingSelect label="Sort By" value={sortBy} onValueChange={setSortBy} searchable={false} size="small">
-                {sortOptions.map(o => {
+              <FloatingSelect
+                label="Sort By"
+                value={sortBy}
+                onValueChange={setSortBy}
+                searchable={false}
+                size="small"
+              >
+                {sortOptions.map((o) => {
                   const Icon = o.icon;
                   return (
                     <SelectItem key={o.value} value={o.value}>
                       <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-gray-400" />{o.label}
+                        <Icon className="h-4 w-4 text-gray-400" />
+                        {o.label}
                       </div>
                     </SelectItem>
                   );
@@ -508,15 +554,9 @@ export default function DeliverablesPage() {
             </div>
           ) : (
             <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
-              {filtered.map(item => {
+              {filtered.map((item) => {
                 const { form, meta } = deliverableToPreview(item);
-                return (
-                  <ManualPreviewCard
-                    key={item.id}
-                    form={form}
-                    meta={meta}
-                  />
-                );
+                return <ManualPreviewCard key={item.id} form={form} meta={meta} />;
               })}
             </div>
           )}
