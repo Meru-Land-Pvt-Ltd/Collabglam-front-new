@@ -199,17 +199,6 @@ export type LaneAContractEditorProps = {
   className?: string;
 };
 
-const BRAND_PRIMARY = "#1A1A1A";
-const BRAND_PRIMARY_HOVER = "#2A2A2A";
-const BRAND_PRIMARY_SOFT = "#F5F5F5";
-const BRAND_PRIMARY_SOFT_ALT = "#EEEEEE";
-const BRAND_PRIMARY_BORDER = "#D4D4D4";
-const BRAND_PRIMARY_RING = "rgba(26,26,26,0.16)";
-const BRAND_PRIMARY_MUTED = "#525252";
-
-const GRADIENT_FROM = BRAND_PRIMARY;
-const GRADIENT_TO = BRAND_PRIMARY_HOVER;
-
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
 const PAGE_SIZE = 10;
 
@@ -264,13 +253,6 @@ const RESHOOT_OPTIONS: Option[] = [
   { value: "No reshoot required", label: "No reshoot required" },
   { value: "Only if brief not followed", label: "Only if brief not followed" },
   { value: "One reshoot included", label: "One reshoot included" },
-];
-
-const PAYMENT_STRUCTURE_OPTIONS: Option[] = [
-  { value: "50% Advance / 50% Balance", label: "50% Advance / 50% Balance" },
-  { value: "100% Upfront", label: "100% Upfront" },
-  { value: "100% on Completion", label: "100% on Completion" },
-  { value: "Custom Split", label: "Custom Split" },
 ];
 
 const ADVANCE_PAYMENT_TRIGGER_OPTIONS: Option[] = [
@@ -388,6 +370,19 @@ const ANALYTICS_ITEMS_OPTIONS: Option[] = [
   { value: "Clicks", label: "Clicks" },
   { value: "Saves / Shares", label: "Saves / Shares" },
   { value: "Native Insights Access", label: "Native Insights Access" },
+];
+
+const PAYMENT_TYPE_OPTIONS: Option[] = [
+  { value: "fixed_payment", label: "Fixed Payment" },
+  { value: "milestone_based", label: "Milestone Based" },
+  { value: "product_gifting", label: "Product Gifting" },
+];
+
+const PAYMENT_STRUCTURE_OPTIONS: Option[] = [
+  { value: "50% advance / 50% balance", label: "50% advance / 50% balance" },
+  { value: "100% upfront", label: "100% upfront" },
+  { value: "100% on completion", label: "100% on completion" },
+  { value: "Custom", label: "Custom" },
 ];
 
 const ALL_FIELD_DEFS: FieldDef[] = [
@@ -1632,12 +1627,12 @@ type ContractPartyInfluencer = {
   whatsApp: string;
   address: string;
 };
-
-type ContractCampaign = {
-  productsServicesCovered: string;
-  territoryTargetCountry: string;
-  effectiveDate: string;
-  campaignTitleOrId: string;
+type ContractMilestone = {
+  id: string;
+  milestoneName: string;
+  paymentAmount: string;
+  triggerEvent: string;
+  dueDate: string;
 };
 
 type ScheduleADeliverable = {
@@ -1658,6 +1653,22 @@ type UsageRightsRow = {
   territoryNotes: string;
 };
 
+export const PAYMENT_TYPE = {
+  FIXED: "fixed_payment",
+  MILESTONE: "milestone_based",
+  GIFTING: "product_gifting",
+} as const;
+
+export type PaymentType =
+  (typeof PAYMENT_TYPE)[keyof typeof PAYMENT_TYPE];
+
+type ContractCampaign = {
+  productsServicesCovered: string;
+  territoryTargetCountry: string;
+  effectiveDate: string;
+  campaignTitleOrId: string;
+  paymentType: PaymentType;
+};
 type ContractFormState = {
   brand: ContractPartyBrand;
   influencer: ContractPartyInfluencer;
@@ -1678,13 +1689,14 @@ type ContractFormState = {
     commercial: {
       totalCampaignFee: string;
       currency: string;
-      platformMilestonePaymentStructure: string;
+      paymentStructure: string;
       customSplit: string;
       advancePaymentTrigger: string;
       remainingPaymentTrigger: string;
       paymentProcessorFeesBorneBy: string;
       paymentProcessorFeesNotes: string;
       laneAMarketplaceFeeNote: string;
+      milestones: ContractMilestone[];
     };
     rawFiles: {
       rawSourceFileDelivery: string;
@@ -1733,7 +1745,6 @@ type ContractFormState = {
     };
   };
 };
-
 interface Influencer {
   influencerId: string;
   name: string;
@@ -1824,13 +1835,31 @@ type AppliedInfluencerRow = InfluencerRow & {
   feeAmountValue: number;
 };
 
-const MILESTONE_OPTIONS = [
-  { value: "50% advance / 50% balance", label: "50% advance / 50% balance" },
-  { value: "100% on completion", label: "100% on completion" },
-  { value: "50% upfront / 50% on completion", label: "50% upfront / 50% on completion" },
-  { value: "30% on signing / 70% on completion", label: "30% on signing / 70% on completion" },
-  { value: "Custom", label: "Custom" },
-] as const;
+const normalizePaymentType = (raw?: string | null): PaymentType => {
+  const v = String(raw || "").trim().toLowerCase();
+
+  if (["fixed", "fixed_payment", "fixed-payment"].includes(v)) {
+    return PAYMENT_TYPE.FIXED;
+  }
+  if (["milestone", "milestone_based", "milestone-based"].includes(v)) {
+    return PAYMENT_TYPE.MILESTONE;
+  }
+  if (["gifting", "product_gifting", "product-gifting"].includes(v)) {
+    return PAYMENT_TYPE.GIFTING;
+  }
+
+  return PAYMENT_TYPE.FIXED;
+};
+
+const createDefaultCommercialMilestone = (
+  index: number = 1
+): ContractMilestone => ({
+  id: createRowId(),
+  milestoneName: `Milestone ${index}`,
+  paymentAmount: "",
+  triggerEvent: "",
+  dueDate: "",
+});
 
 const SHIPPING_APPLICABLE_OPTIONS = [
   { value: "No", label: "No" },
@@ -1921,6 +1950,7 @@ const createDefaultContractForm = (): ContractFormState => ({
     territoryTargetCountry: "Worldwide",
     effectiveDate: "",
     campaignTitleOrId: "",
+    paymentType: PAYMENT_TYPE.FIXED,
   },
   scheduleA: {
     minimumVideoSpecs: "",
@@ -1939,7 +1969,7 @@ const createDefaultContractForm = (): ContractFormState => ({
     commercial: {
       totalCampaignFee: "",
       currency: "USD",
-      platformMilestonePaymentStructure: "50% advance / 50% balance",
+      paymentStructure: "50% advance / 50% balance",
       customSplit: "",
       advancePaymentTrigger: "",
       remainingPaymentTrigger: "",
@@ -1947,6 +1977,7 @@ const createDefaultContractForm = (): ContractFormState => ({
       paymentProcessorFeesNotes: "",
       laneAMarketplaceFeeNote:
         "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
+      milestones: [createDefaultCommercialMilestone()],
     },
     rawFiles: {
       rawSourceFileDelivery: "Not included",
@@ -2545,12 +2576,15 @@ export default function AppliedInfluencersPage() {
 
   useEffect(() => {
     let alive = true;
+
     (async () => {
       setListsLoading(true);
+
       try {
         const curRes: any = await api.get("/contract/currencies");
         const curArr: any[] =
           curRes?.data?.currencies || curRes?.currencies || curRes || [];
+
         const currencies = curArr.map((c) => {
           const code = String(c.code || c.symbol || "");
           return {
@@ -2561,17 +2595,30 @@ export default function AppliedInfluencersPage() {
         });
 
         const tzRes: any = await api.get("/contract/timezones");
-        const tzArr: any[] = tzRes?.data?.timezones || tzRes?.timezones || tzRes || [];
-        const zones = tzArr.map((t) => {
-          const canonical = Array.isArray(t.utc) && t.utc.length ? t.utc[0] : t.value;
+        const tzArr: any[] =
+          tzRes?.data?.timezones || tzRes?.timezones || tzRes || [];
+
+        const rawZones = tzArr.map((t, index) => {
+          const canonical =
+            typeof t?.value === "string" && t.value.trim()
+              ? t.value.trim()
+              : Array.isArray(t?.utc) && t.utc.length
+                ? String(t.utc[0]).trim()
+                : `timezone-${index}`;
+
           return {
             value: canonical,
-            label: t.text || t.value,
+            label: t?.text || canonical,
             meta: t,
           };
         });
 
+        const zones = Array.from(
+          new Map(rawZones.map((z) => [z.value, z])).values()
+        );
+
         if (!alive) return;
+
         setCurrencyOptions(currencies);
         setTzOptions(zones);
       } catch (e: any) {
@@ -2584,6 +2631,7 @@ export default function AppliedInfluencersPage() {
         if (alive) setListsLoading(false);
       }
     })();
+
     return () => {
       alive = false;
     };
@@ -2774,6 +2822,33 @@ export default function AppliedInfluencersPage() {
       seededDeliverable.srNo = 1;
 
       const merged = mergeDeep(base, meta?.content || {});
+
+      const normalizedPaymentType = normalizePaymentType(
+        meta?.content?.campaign?.paymentType ||
+        (meta as any)?.paymentType ||
+        merged?.campaign?.paymentType
+      );
+
+      merged.campaign.paymentType = normalizedPaymentType;
+
+      const rawMilestones =
+        meta?.content?.scheduleA?.commercial?.milestones ||
+        merged?.scheduleA?.commercial?.milestones ||
+        [];
+
+      merged.scheduleA.commercial.milestones =
+        Array.isArray(rawMilestones) && rawMilestones.length
+          ? rawMilestones.map((row: any, index: number) => ({
+            id: createRowId(),
+            milestoneName: String(row?.milestoneName || `Milestone ${index + 1}`),
+            paymentAmount: String(row?.paymentAmount || ""),
+            triggerEvent: String(row?.triggerEvent || ""),
+            dueDate: String(row?.dueDate || ""),
+          }))
+          : normalizedPaymentType === PAYMENT_TYPE.MILESTONE
+            ? [createDefaultCommercialMilestone()]
+            : [];
+
       const scheduleAFromMeta = meta?.content?.scheduleA;
       const usageRows = scheduleAFromMeta?.usageRights?.rows;
       const deliverablesFromMeta = scheduleAFromMeta?.deliverables;
@@ -2801,6 +2876,7 @@ export default function AppliedInfluencersPage() {
           }))
           : [seededDeliverable]
       );
+
 
       setContractForm(merged);
     },
@@ -2849,47 +2925,61 @@ export default function AppliedInfluencersPage() {
     };
   }, [sidebarOpen]);
 
-  const buildContentPayload = useCallback(() => {
-    const content = deepClone(contractForm);
+const buildContentPayload = useCallback(() => {
+  const content = deepClone(contractForm);
+  const paymentType = normalizePaymentType(content.campaign.paymentType);
 
-    return {
-      ...content,
-      campaign: {
-        ...content.campaign,
-        effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
+  return {
+    ...content,
+
+    campaign: {
+      ...content.campaign,
+      paymentType,
+      effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
+    },
+    scheduleA: {
+      ...content.scheduleA,
+      deliverables: deliverables.map((row, index) => ({
+        srNo: index + 1,
+        platformHandle: row.platformHandle,
+        deliverableFormat: row.deliverableFormat,
+        qty: Number(row.qty || "0") || 0,
+        draftDue: row.draftDue,
+        liveDate: row.liveDate,
+      })),
+      review: {
+        ...content.scheduleA.review,
+        includedRevisionRounds:
+          Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
       },
-      scheduleA: {
-        ...content.scheduleA,
-        deliverables: deliverables.map((row, index) => ({
-          srNo: index + 1,
-          platformHandle: row.platformHandle,
-          deliverableFormat: row.deliverableFormat,
-          qty: Number(row.qty || "0") || 0,
-          draftDue: row.draftDue,
-          liveDate: row.liveDate,
+      commercial: {
+        ...content.scheduleA.commercial,
+        totalCampaignFee:
+          paymentType === PAYMENT_TYPE.GIFTING
+            ? 0
+            : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+        milestones:
+          paymentType === PAYMENT_TYPE.MILESTONE
+            ? content.scheduleA.commercial.milestones.map((row) => ({
+                milestoneName: row.milestoneName,
+                paymentAmount: Number(row.paymentAmount || "0") || 0,
+                triggerEvent: row.triggerEvent,
+                dueDate: row.dueDate,
+              }))
+            : [],
+      },
+      usageRights: {
+        ...content.scheduleA.usageRights,
+        rows: content.scheduleA.usageRights.rows.map((row) => ({
+          usageRight: row.usageRight,
+          selected: row.selected,
+          duration: row.duration,
+          territoryNotes: row.territoryNotes,
         })),
-        review: {
-          ...content.scheduleA.review,
-          includedRevisionRounds:
-            Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
-        },
-        commercial: {
-          ...content.scheduleA.commercial,
-          totalCampaignFee:
-            Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
-        },
-        usageRights: {
-          ...content.scheduleA.usageRights,
-          rows: content.scheduleA.usageRights.rows.map((row) => ({
-            usageRight: row.usageRight,
-            selected: row.selected,
-            duration: row.duration,
-            territoryNotes: row.territoryNotes,
-          })),
-        },
       },
-    };
-  }, [contractForm, deliverables, requestedEffDate]);
+    },
+  };
+}, [contractForm, deliverables, requestedEffDate]);
 
   const buildBrandUpdatesPayload = useCallback(() => {
     return {
@@ -2926,22 +3016,65 @@ export default function AppliedInfluencersPage() {
       setErr(key, message);
     };
 
-    const feeValue = Number(contractForm.scheduleA.commercial.totalCampaignFee || "");
-    const revisionValue = Number(contractForm.scheduleA.review.includedRevisionRounds || "");
-    const reviewDays = Number(
-      contractForm.scheduleA.preShootScriptReviewBusinessDays || "2"
+    const feeRaw = String(contractForm.scheduleA.commercial.totalCampaignFee ?? "");
+    const feeValue = Number(feeRaw);
+    const paymentType = normalizePaymentType(contractForm.campaign.paymentType);
+    const revisionRaw = String(
+      contractForm.scheduleA.review.includedRevisionRounds ?? ""
     );
+    const revisionValue = Number(revisionRaw);
 
-    if (!contractForm.brand.legalName.trim()) add("brand.legalName", "Brand legal name is required.");
-    if (!contractForm.influencer.legalName.trim()) add("influencer.legalName", "Influencer legal name is required.");
-    if (!contractForm.campaign.campaignTitleOrId.trim()) add("campaign.campaignTitleOrId", "Campaign title / ID is required.");
-    if (!contractForm.scheduleA.commercial.currency) add("scheduleA.commercial.currency", "Currency is required.");
-    if (
-      !contractForm.scheduleA.commercial.totalCampaignFee.trim() ||
-      Number.isNaN(feeValue) ||
-      feeValue < 0
-    ) {
-      add("scheduleA.commercial.totalCampaignFee", "Enter a valid non-negative fee.");
+    const reviewDaysRaw = String(
+      contractForm.scheduleA.preShootScriptReviewBusinessDays ?? "2"
+    );
+    const reviewDays = Number(reviewDaysRaw);
+
+    if (!String(contractForm.brand.legalName ?? "").trim()) {
+      add("brand.legalName", "Brand legal name is required.");
+    }
+
+    if (!String(contractForm.influencer.legalName ?? "").trim()) {
+      add("influencer.legalName", "Influencer legal name is required.");
+    }
+
+    if (!String(contractForm.campaign.campaignTitleOrId ?? "").trim()) {
+      add("campaign.campaignTitleOrId", "Campaign title / ID is required.");
+    }
+
+    if (!contractForm.scheduleA.commercial.currency) {
+      add("scheduleA.commercial.currency", "Currency is required.");
+    }
+
+    if (!contractForm.campaign.paymentType) {
+      add("campaign.paymentType", "Payment type is required.");
+    }
+
+    if (paymentType !== PAYMENT_TYPE.GIFTING) {
+      if (!feeRaw.trim() || Number.isNaN(feeValue) || feeValue < 0) {
+        add("scheduleA.commercial.totalCampaignFee", "Enter a valid non-negative fee.");
+      }
+    }
+
+    if (paymentType === PAYMENT_TYPE.MILESTONE) {
+      const milestones = contractForm.scheduleA.commercial.milestones || [];
+
+      if (!milestones.length) {
+        add("scheduleA.commercial.milestones", "Add at least one milestone.");
+      } else {
+        const messages: string[] = [];
+
+        milestones.forEach((row, index) => {
+          const label = `Milestone #${index + 1}`;
+          if (!row.milestoneName.trim()) messages.push(`${label}: name is required.`);
+          if (!row.paymentAmount.trim()) messages.push(`${label}: amount is required.`);
+          if (!row.triggerEvent.trim()) messages.push(`${label}: trigger event is required.`);
+          if (!row.dueDate.trim()) messages.push(`${label}: due date is required.`);
+        });
+
+        if (messages.length) {
+          add("scheduleA.commercial.milestones", messages.join(" "));
+        }
+      }
     }
     if (Number.isNaN(revisionValue) || revisionValue < 0) {
       add("scheduleA.review.includedRevisionRounds", "Revision rounds must be zero or more.");
@@ -3001,8 +3134,8 @@ export default function AppliedInfluencersPage() {
     }
 
     setIsPreviewLoading(true);
+
     try {
-      const content = buildContentPayload();
       let res: any;
 
       if (panelMode === "send") {
@@ -3012,7 +3145,7 @@ export default function AppliedInfluencersPage() {
             brandId,
             campaignId,
             influencerId: selectedInf.influencerId,
-            content,
+            content: buildContentPayload(),
             requestedEffectiveDate: requestedEffDate,
             requestedEffectiveDateTimezone: requestedEffTz,
             preview: true,
@@ -3045,26 +3178,49 @@ export default function AppliedInfluencersPage() {
         );
       } else {
         if (!selectedMeta?.contractId) {
-          toast({ icon: "error", title: "No contract", text: "No contract found." });
+          toast({
+            icon: "error",
+            title: "No contract",
+            text: "No contract found.",
+          });
           return;
         }
-        res = await api.post(
-          "/contract/resend",
-          {
-            contractId: selectedMeta.contractId,
-            content,
-            requestedEffectiveDate: requestedEffDate,
-            requestedEffectiveDateTimezone: requestedEffTz,
-            preview: true,
-          },
-          { responseType: "blob" }
-        );
+
+        if (isRejectedMeta(selectedMeta)) {
+          // rejected contract => resend preview
+          res = await api.post(
+            "/contract/resend",
+            {
+              contractId: selectedMeta.contractId,
+              content: buildContentPayload(),
+              requestedEffectiveDate: requestedEffDate,
+              requestedEffectiveDateTimezone: requestedEffTz,
+              preview: true,
+            },
+            { responseType: "blob" }
+          );
+        } else {
+          // normal edit => brand update preview
+          res = await api.post(
+            "/contract/brand/update",
+            {
+              contractId: selectedMeta.contractId,
+              brandId,
+              preview: true,
+              brandUpdates: buildBrandUpdatesPayload(),
+              requestedEffectiveDate: requestedEffDate,
+              requestedEffectiveDateTimezone: requestedEffTz,
+            },
+            { responseType: "blob" }
+          );
+        }
       }
 
       setPdfUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(res.data);
       });
+
       toast({
         icon: "success",
         title: "Preview ready",
@@ -3077,23 +3233,28 @@ export default function AppliedInfluencersPage() {
       toast({
         icon: "error",
         title: "Preview failed",
-        text: e?.response?.data?.message || e?.message || "Could not generate preview.",
+        text:
+          e?.response?.data?.message ||
+          e?.message ||
+          "Could not generate preview.",
       });
     } finally {
       setIsPreviewLoading(false);
     }
   }, [
-    brandId,
-    buildContentPayload,
+    selectedInf,
     campaignId,
-    clearPreview,
+    brandId,
+    validateForPreview,
     isFullyManagedPlan,
     panelMode,
+    buildContentPayload,
+    bulkTargets,
+    buildBulkContentPayload,
+    selectedMeta,
+    buildBrandUpdatesPayload,
     requestedEffDate,
     requestedEffTz,
-    selectedInf,
-    selectedMeta?.contractId,
-    validateForPreview,
   ]);
 
   const handleSendContract = useCallback(async () => {
@@ -3780,6 +3941,8 @@ export default function AppliedInfluencersPage() {
     { value: "no", label: "No" },
   ];
 
+  const activePaymentType = normalizePaymentType(contractForm.campaign.paymentType);
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="mx-auto min-h-screen max-w-full space-y-6 p-4 md:space-y-8 md:p-8">
@@ -3995,6 +4158,50 @@ export default function AppliedInfluencersPage() {
                 }
               />
 
+              <FloatingSelect
+                label="Payment Type"
+                value={getAtPath(contractForm, "campaign.paymentType")}
+                onValueChange={(value) => {
+                  const nextType = normalizePaymentType(value);
+
+                  setContractForm((prev) => {
+                    const next = deepClone(prev);
+                    next.campaign.paymentType = nextType;
+
+                    if (nextType === PAYMENT_TYPE.MILESTONE) {
+                      if (!next.scheduleA.commercial.milestones.length) {
+                        next.scheduleA.commercial.milestones = [createDefaultCommercialMilestone()];
+                      }
+                      next.scheduleA.commercial.paymentStructure = "";
+                    }
+
+                    if (nextType === PAYMENT_TYPE.FIXED) {
+                      next.scheduleA.commercial.milestones = [];
+                      if (!next.scheduleA.commercial.paymentStructure) {
+                        next.scheduleA.commercial.paymentStructure = "50% advance / 50% balance";
+                      }
+                    }
+
+                    if (nextType === PAYMENT_TYPE.GIFTING) {
+                      next.scheduleA.commercial.milestones = [];
+                      next.scheduleA.commercial.paymentStructure = "";
+                      next.scheduleA.commercial.totalCampaignFee = "0";
+                    }
+
+                    return next;
+                  });
+                }}
+                searchable={false}
+                state={sidebarStateFor("campaign.paymentType")}
+                errorText={sidebarErrorFor("campaign.paymentType")}
+              >
+                {PAYMENT_TYPE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingInput
                   id="campaign-territory"
@@ -4026,8 +4233,8 @@ export default function AppliedInfluencersPage() {
                 onValueChange={(value) => setRequestedEffTz(value)}
                 searchable
               >
-                {tzOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
+                {tzOptions.map((option, index) => (
+                  <SelectItem key={`${option.value}-${index}`} value={option.value}>
                     {option.label}
                   </SelectItem>
                 ))}
@@ -4366,26 +4573,61 @@ export default function AppliedInfluencersPage() {
                 </FloatingSelect>
               </div>
 
-              <FloatingSelect
-                label="Platform Milestone Payment Structure"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.commercial.platformMilestonePaymentStructure"
-                )}
-                onValueChange={(value) =>
-                  setContractField(
-                    "scheduleA.commercial.platformMilestonePaymentStructure",
-                    value
-                  )
-                }
-                searchable={false}
-              >
-                {MILESTONE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </FloatingSelect>
+              {activePaymentType === PAYMENT_TYPE.FIXED ? (
+                <>
+                  <FloatingSelect
+                    label="Payment Structure"
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentStructure")}
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.paymentStructure", value)
+                    }
+                    searchable={false}
+                  >
+                    {PAYMENT_STRUCTURE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
+
+                  {getAtPath(contractForm, "scheduleA.commercial.paymentStructure") === "Custom" ? (
+                    <FloatingInput
+                      id="commercial-custom-split"
+                      label="Custom Split"
+                      value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
+                      onValueChange={(value: string) =>
+                        setContractField("scheduleA.commercial.customSplit", value)
+                      }
+                    />
+                  ) : null}
+
+                  <LabeledTextarea
+                    id="advance-payment-trigger"
+                    label="Advance Payment Trigger"
+                    value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setContractField("scheduleA.commercial.advancePaymentTrigger", e.target.value)
+                    }
+                  />
+
+                  <LabeledTextarea
+                    id="remaining-payment-trigger"
+                    label="Remaining Payment Trigger"
+                    value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setContractField("scheduleA.commercial.remainingPaymentTrigger", e.target.value)
+                    }
+                  />
+                </>
+              ) : null}
+
+              {activePaymentType === PAYMENT_TYPE.MILESTONE ? (
+                <CommercialMilestonesEditor
+                  rows={contractForm.scheduleA.commercial.milestones}
+                  error={formErrors["scheduleA.commercial.milestones"]}
+                  onChange={(rows) => setContractField("scheduleA.commercial.milestones", rows)}
+                />
+              ) : null}
 
               <FloatingInput
                 id="commercial-custom-split"
@@ -5951,6 +6193,97 @@ function InfoTip({ text }: { text: string }) {
         <p>{text}</p>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function CommercialMilestonesEditor({
+  rows,
+  onChange,
+  error,
+}: {
+  rows: ContractMilestone[];
+  onChange: (rows: ContractMilestone[]) => void;
+  error?: string;
+}) {
+  const updateRow = (
+    id: string,
+    key: keyof Omit<ContractMilestone, "id">,
+    value: string
+  ) => {
+    onChange(rows.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
+  };
+
+  const addRow = () => {
+    onChange([...rows, createDefaultCommercialMilestone(rows.length + 1)]);
+  };
+
+  const removeRow = (id: string) => {
+    onChange(rows.length > 1 ? rows.filter((row) => row.id !== id) : rows);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-gray-800">Milestones</div>
+        <Button type="button" variant="outline" onClick={addRow}>
+          + Add Milestone
+        </Button>
+      </div>
+
+      {error ? <div className="text-xs text-red-600">{error}</div> : null}
+
+      {rows.map((row, index) => (
+        <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">Milestone #{index + 1}</div>
+            {rows.length > 1 ? (
+              <button
+                type="button"
+                className="text-xs text-red-600"
+                onClick={() => removeRow(row.id)}
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FloatingInput
+              label="Milestone Name"
+              value={row.milestoneName}
+              onValueChange={(value: string) =>
+                updateRow(row.id, "milestoneName", value)
+              }
+            />
+
+            <FloatingInput
+              label="Payment Amount"
+              type="number"
+              value={row.paymentAmount}
+              onValueChange={(value: string) =>
+                updateRow(row.id, "paymentAmount", value)
+              }
+            />
+
+            <FloatingDateInput
+              label="Due Date"
+              type="date"
+              value={row.dueDate}
+              min={toInputDate(new Date())}
+              onValueChange={(value) => updateRow(row.id, "dueDate", value)}
+            />
+
+            <LabeledTextarea
+              label="Trigger Event"
+              value={row.triggerEvent}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                updateRow(row.id, "triggerEvent", e.target.value)
+              }
+            />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
