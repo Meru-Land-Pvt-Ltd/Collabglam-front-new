@@ -21,22 +21,24 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { label: "Notifications", href: "/admin/notifications", icon: Bell },
-  { label: "Brands", href: "/admin/brands", icon: Home },
-  { label: "Influencers", href: "/admin/influencers", icon: Users },
-  { label: "All Campaigns", href: "/admin/campaigns", icon: List },
-  { label: "Subscriptions", href: "/admin/subscriptions", icon: DollarSign },
-  { label: "Disputes", href: "/admin/disputes", icon: FileText },
-  // { label: "Messages", href: "/admin/messages", icon: MessageCircleIcon },
-  { label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
-  { label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
-  { label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },
-  { label: "Invoice Details", href: "/admin/invoiceDetails", icon: DollarSign },
-  { label: "Payment Notification", href: "/admin/payment", icon: Bell },
-  { label: "Youtube Handle", href: "/admin/youtube", icon: MailCheckIcon },
-  {label:"Modash Data", href:"/admin/modash", icon: MailCheckIcon},
-  {label:"Invited Influencer", href:"/admin/invitedInfluencer", icon: MailCheckIcon}
+  { key: "notifications", label: "Notifications", href: "/admin/notifications", icon: Bell },
+  { key: "brands", label: "Brands", href: "/admin/brands", icon: Home },
+  { key: "influencers", label: "Influencers", href: "/admin/influencers", icon: Users },
+  { key: "campaigns", label: "All Campaigns", href: "/admin/campaigns", icon: List },
+  { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: DollarSign },
+  { key: "disputes", label: "Disputes", href: "/admin/disputes", icon: FileText },
 
+  { key: "emails", label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
+  { key: "influencer-email", label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
+  { key: "missing-email", label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },
+
+  { key: "invoice-details", label: "Invoice Details", href: "/admin/invoiceDetails", icon: DollarSign },
+  { key: "payment-notification", label: "Payment Notification", href: "/admin/payment", icon: Bell },
+
+  { key: "youtube-handle", label: "Youtube Handle", href: "/admin/youtube", icon: MailCheckIcon },
+  { key: "modash-data", label: "Modash Data", href: "/admin/modash", icon: MailCheckIcon },
+  { key: "invited-influencer", label: "Invited Influencer", href: "/admin/invitedInfluencer", icon: MailCheckIcon },
+  { key: "role", label: "Role", href: "/admin/role", icon: MailCheckIcon }
 ];
 
 const documentLinks = [

@@ -4,7 +4,14 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -23,17 +30,18 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
     try {
-      // Call backend and store JWT in localStorage like other roles
-      const data = await post<{ token: string; admin: { adminId: string; email: string } }>(
-        "/admin/login",
+      const data = await post<{ token: string; admin: { _id: string; email: string } }>(
+        "/admins/login",
         { email, password }
       );
-      // Use role-scoped token storage for admin
+
       localStorage.setItem("token", data.token);
-      localStorage.setItem("adminId", data.admin.adminId);
+      localStorage.setItem("adminId", data.admin._id);
       localStorage.setItem("userType", "admin");
       localStorage.setItem("userEmail", data.admin.email || email);
+
       router.replace("/admin/brands");
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || "Invalid credentials");
@@ -47,16 +55,11 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 relative">
-            <Image
-              src="/logo.svg"
-              alt="Admin Logo"
-              fill
-              className="object-contain"
-            />
+            <Image src="/logo.svg" alt="Admin Logo" fill className="object-contain" />
           </div>
           <CardTitle className="text-2xl font-bold">Admin Sign In</CardTitle>
           <CardDescription className="text-gray-500">
-            Please enter your admin credentials
+            Please enter your admin credegghvhjvhjvhjvhjvhjvntials
           </CardDescription>
         </CardHeader>
 
@@ -94,9 +97,7 @@ export default function AdminLoginPage() {
               </button>
             </div>
 
-            {error && (
-              <p className="text-sm text-red-500 text-center">{error}</p>
-            )}
+            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           </CardContent>
 
           <CardFooter className="pt-0">
