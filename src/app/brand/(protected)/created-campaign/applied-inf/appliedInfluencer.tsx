@@ -29,6 +29,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "@/components/ui/combobox";
+import {
   CaretLeft,
   CaretRight,
   ClipboardText,
@@ -2465,6 +2473,42 @@ export default function AppliedInfluencersPage() {
     return !row.hasContract || row.rejected;
   }, []);
 
+  const handleAddMilestone = useCallback(
+    (inf: Influencer, meta: ContractMeta | null) => {
+      if (!meta?.contractId) {
+        toast({
+          icon: "error",
+          title: "No contract",
+          text: "Send/sign the contract before adding milestones.",
+        });
+        return;
+      }
+
+      router.push(
+        `/brand/milestones?mode=add&contractId=${meta.contractId}&campaignId=${campaignId}&influencerId=${inf.influencerId}`
+      );
+    },
+    [campaignId, router]
+  );
+
+  const handleViewMilestone = useCallback(
+    (inf: Influencer, meta: ContractMeta | null) => {
+      if (!meta?.contractId) {
+        toast({
+          icon: "error",
+          title: "No contract",
+          text: "No contract found for milestone viewing.",
+        });
+        return;
+      }
+
+      router.push(
+        `/brand/milestones?mode=view&contractId=${meta.contractId}&campaignId=${campaignId}&influencerId=${inf.influencerId}`
+      );
+    },
+    [campaignId, router]
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedBrandId = localStorage.getItem("brandId");
@@ -2925,61 +2969,61 @@ export default function AppliedInfluencersPage() {
     };
   }, [sidebarOpen]);
 
-const buildContentPayload = useCallback(() => {
-  const content = deepClone(contractForm);
-  const paymentType = normalizePaymentType(content.campaign.paymentType);
+  const buildContentPayload = useCallback(() => {
+    const content = deepClone(contractForm);
+    const paymentType = normalizePaymentType(content.campaign.paymentType);
 
-  return {
-    ...content,
+    return {
+      ...content,
 
-    campaign: {
-      ...content.campaign,
-      paymentType,
-      effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
-    },
-    scheduleA: {
-      ...content.scheduleA,
-      deliverables: deliverables.map((row, index) => ({
-        srNo: index + 1,
-        platformHandle: row.platformHandle,
-        deliverableFormat: row.deliverableFormat,
-        qty: Number(row.qty || "0") || 0,
-        draftDue: row.draftDue,
-        liveDate: row.liveDate,
-      })),
-      review: {
-        ...content.scheduleA.review,
-        includedRevisionRounds:
-          Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+      campaign: {
+        ...content.campaign,
+        paymentType,
+        effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
       },
-      commercial: {
-        ...content.scheduleA.commercial,
-        totalCampaignFee:
-          paymentType === PAYMENT_TYPE.GIFTING
-            ? 0
-            : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
-        milestones:
-          paymentType === PAYMENT_TYPE.MILESTONE
-            ? content.scheduleA.commercial.milestones.map((row) => ({
+      scheduleA: {
+        ...content.scheduleA,
+        deliverables: deliverables.map((row, index) => ({
+          srNo: index + 1,
+          platformHandle: row.platformHandle,
+          deliverableFormat: row.deliverableFormat,
+          qty: Number(row.qty || "0") || 0,
+          draftDue: row.draftDue,
+          liveDate: row.liveDate,
+        })),
+        review: {
+          ...content.scheduleA.review,
+          includedRevisionRounds:
+            Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+        },
+        commercial: {
+          ...content.scheduleA.commercial,
+          totalCampaignFee:
+            paymentType === PAYMENT_TYPE.GIFTING
+              ? 0
+              : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+          milestones:
+            paymentType === PAYMENT_TYPE.MILESTONE
+              ? content.scheduleA.commercial.milestones.map((row) => ({
                 milestoneName: row.milestoneName,
                 paymentAmount: Number(row.paymentAmount || "0") || 0,
                 triggerEvent: row.triggerEvent,
                 dueDate: row.dueDate,
               }))
-            : [],
+              : [],
+        },
+        usageRights: {
+          ...content.scheduleA.usageRights,
+          rows: content.scheduleA.usageRights.rows.map((row) => ({
+            usageRight: row.usageRight,
+            selected: row.selected,
+            duration: row.duration,
+            territoryNotes: row.territoryNotes,
+          })),
+        },
       },
-      usageRights: {
-        ...content.scheduleA.usageRights,
-        rows: content.scheduleA.usageRights.rows.map((row) => ({
-          usageRight: row.usageRight,
-          selected: row.selected,
-          duration: row.duration,
-          territoryNotes: row.territoryNotes,
-        })),
-      },
-    },
-  };
-}, [contractForm, deliverables, requestedEffDate]);
+    };
+  }, [contractForm, deliverables, requestedEffDate]);
 
   const buildBrandUpdatesPayload = useCallback(() => {
     return {
@@ -3780,10 +3824,10 @@ const buildContentPayload = useCallback(() => {
           onClick={handleManageClick}
           className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#1A1A1A] px-6 text-[0.875rem] font-medium text-white transition-opacity hover:opacity-90"
         >
-          Manage
+          View Influencer
         </button>
 
-        <button
+        {/* <button
           type="button"
           onClick={() => router.push("/brand/inbox")}
           className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
@@ -3792,7 +3836,7 @@ const buildContentPayload = useCallback(() => {
           {hasContract ? (
             <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
           ) : null}
-        </button>
+        </button> */}
 
         <button
           type="button"
