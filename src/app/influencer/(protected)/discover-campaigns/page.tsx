@@ -27,7 +27,7 @@ import {
   FloatingSelect,
   FloatingMultiSelect,
   SelectItem,
-} from "@/components/ui/select";
+} from "@/components/ui/selectComp";
 
 import {
   Card,
@@ -337,12 +337,7 @@ export default function DiscoverCampaigns() {
                 label="Platform"
                 options={platforms.map((p) => ({
                   value: p.value,
-                  label: (
-                    <div className="flex items-center gap-2">
-                      <p.icon className="h-4 w-4 text-gray-500" />
-                      {p.label}
-                    </div>
-                  ),
+                  label: p.label, // plain string satisfies MultiOption
                 }))}
                 value={selectedPlatform}
                 onValueChange={setSelectedPlatform}

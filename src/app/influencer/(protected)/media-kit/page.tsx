@@ -129,7 +129,7 @@ function SocialTrendChart({
         showTooltip={false}
         curve="natural"
         area
-        colors={["#18181b"]}
+        color="#18181b"
         sx={{
           ".MuiAreaElement-root": {
             fill: `url(#${gradientId})`,
@@ -194,20 +194,25 @@ export default function CreatorProfileDashboard() {
       const token = localStorage.getItem("token") || "";
       const response = await apiGetContractedCampaigns(influencerId, token);
 
-      const mappedCampaigns =
-        response?.campaigns?.map((item: any) => ({
-          _id: item?._id,
-          company: item?.brandName ?? "—",
-          brief: item?.campaignTitle ?? item?.description ?? "—",
-          rate: item?.feeAmount
-            ? `$${item.feeAmount}`
-            : item?.campaignBudget
-              ? `$${item.campaignBudget}`
-              : "—",
-          status: item?.contractStatus ?? item?.campaignStatus ?? item?.status ?? "—",
-          payout: item?.paymentType ?? "—",
-          raw: item,
-        })) ?? [];
+      // API may return either an array of campaigns or an object containing a `campaigns` array.
+      const respAny: any = response;
+      const campaignsSource = Array.isArray(respAny)
+        ? respAny
+        : respAny?.campaigns ?? respAny?.data?.campaigns ?? [];
+
+      const mappedCampaigns = (campaignsSource ?? []).map((item: any) => ({
+        _id: item?._id,
+        company: item?.brandName ?? "—",
+        brief: item?.campaignTitle ?? item?.description ?? "—",
+        rate: item?.feeAmount
+          ? `$${item.feeAmount}`
+          : item?.campaignBudget
+            ? `$${item.campaignBudget}`
+            : "—",
+        status: item?.contractStatus ?? item?.campaignStatus ?? item?.status ?? "—",
+        payout: item?.paymentType ?? "—",
+        raw: item,
+      }));
 
       setContractedCampaigns(mappedCampaigns);
     } catch (error) {
