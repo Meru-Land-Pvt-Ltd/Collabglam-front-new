@@ -2512,7 +2512,7 @@ export default function AppliedInfluencersPage() {
 
   const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>("send");
   const [selectedInf, setSelectedInf] = useState<Influencer | null>(null);
   const [selectedMeta, setSelectedMeta] = useState<ContractMeta | null>(null);
