@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { X, CaretDown, CaretUp, Plus } from "@phosphor-icons/react";
+import { FieldInfoIcon } from "@/components/ui/field-info-icon";
 
 type FieldState = "default" | "selected" | "error" | "disabled";
 type FieldSize = "small" | "large";
@@ -24,7 +25,7 @@ export type FloatingTagInputProps = {
 
   hint?: boolean;
   hintText?: string;
-
+  info?: React.ReactNode;
   /** ✅ message only; error styling comes from `state="error"` */
   errorText?: string;
 
@@ -92,7 +93,7 @@ export const FloatingTagInput: React.FC<FloatingTagInputProps> = ({
   value,
   defaultValue = [],
   onValueChange,
-
+  info,
   placeholderText = "",
   options = [],
   showDropdown,
@@ -580,9 +581,18 @@ export const FloatingTagInput: React.FC<FloatingTagInputProps> = ({
               isFloatingNow && cn("px-[6px] -ml-[6px] rounded-xs", patchBg)
             )}
           >
-            <span>{label}</span>
-            {required ? <span className="ml-sm text-neutral-750">*</span> : null}
-            {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+            <span className="inline-flex items-center gap-[0.125rem]">
+              <span>{label}</span>
+
+              {required ? <span className="ml-sm text-neutral-750">*</span> : null}
+              {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+
+              {info ? (
+                <span className="ml-1 inline-flex pointer-events-auto">
+                  <FieldInfoIcon content={info} />
+                </span>
+              ) : null}
+            </span>
           </span>
         </label>
 

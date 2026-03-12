@@ -4,6 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { X, CalendarDots, CaretLeft, CaretRight } from "@phosphor-icons/react";
+import { FieldInfoIcon } from "@/components/ui/field-info-icon";
 
 type FieldState = "default" | "selected" | "error" | "disabled";
 type WeekStart = 0 | 1; // 0 = Sunday, 1 = Monday
@@ -30,7 +31,7 @@ export type FloatingDateInputProps = Omit<
 
   required?: boolean;
   optional?: boolean;
-
+info?: React.ReactNode;
   hint?: boolean;
   hintText?: string;
 
@@ -1028,7 +1029,7 @@ export const FloatingDateInput = React.forwardRef<
 
       suffixText,
       suffixClassName,
-
+info,
       disabled,
       value,
       defaultValue,
@@ -1483,6 +1484,13 @@ export const FloatingDateInput = React.forwardRef<
               ) : null}
 
               {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+
+                  {info ? (
+      <span className="ml-1 inline-flex pointer-events-auto">
+        <FieldInfoIcon content={info} />
+      </span>
+    ) : null}
+
             </span>
           </label>
 

@@ -426,7 +426,7 @@ const ALL_FIELD_DEFS: FieldDef[] = [
 
   { key: "fixedTotalCampaignFee", label: "Total Campaign Fee", owner: "brand", kind: "text", placeholder: "e.g. $2,500 USD", tooltip: "Total fixed amount the brand will pay for all deliverables.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
   { key: "paymentStructure", label: "Payment Structure", owner: "brand", kind: "select", options: PAYMENT_STRUCTURE_OPTIONS, tooltip: "How payment is split between advance and balance.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-  { key: "customSplitDetails", label: "Custom Split Details", owner: "brand", kind: "text", placeholder: "e.g. 30% on signing, 70% on post", tooltip: "Exact payment split percentages and triggers.", required: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom Split", showWhen: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom Split" },
+  { key: "customSplitDetails", label: "Custom Details", owner: "brand", kind: "text", placeholder: "e.g. 30% on signing, 70% on post", tooltip: "Exact payment split percentages and triggers.", required: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom", showWhen: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom" },
   { key: "advancePaymentTrigger", label: "Advance Payment Trigger", owner: "brand", kind: "select", options: ADVANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the advance payment released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
   { key: "balancePaymentTrigger", label: "Balance Payment Trigger", owner: "brand", kind: "select", options: BALANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the remaining balance released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
   { key: "fixedProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
@@ -678,6 +678,86 @@ export function validateLaneAContract(values: LaneAContractValues, scope: Party)
   return errors;
 }
 
+const SIDEBAR_TOOLTIPS = {
+  brandLegalName: "Full registered legal name of the brand signing this agreement.",
+  brandContactPerson: "Primary brand contact responsible for campaign coordination and approvals.",
+  brandNoticeEmail: "Official email for notices, updates, and legal communication.",
+  brandNoticePhone: "Phone number for urgent campaign or contract communication.",
+  brandBillingAddress: "Official billing address used for invoicing and records.",
+
+  campaignTitle: "Internal or external campaign title / ID used to identify this agreement.",
+  campaignProductsServices: "Products or services covered by this contract.",
+  campaignTerritory: "Territory where content will be distributed or targeted.",
+  requestedEffectiveDate: "Date the agreement is intended to become effective.",
+  timezone: "Timezone used for the requested effective date and scheduling references.",
+
+  platformHandle: "Social platform and creator handle where the content will be posted.",
+  qty: "Number of content units for this deliverable.",
+  deliverableFormat: "Content format required for this deliverable.",
+  draftDue: "Deadline for draft submission.",
+  liveDate: "Date the deliverable must go live.",
+  minimumVideoSpecs: "Format, duration, resolution, or aspect-ratio requirements.",
+  mandatoryTags: "Required mentions, hashtags, affiliate links, tracking links, or promo codes.",
+  preShootScriptRequired: "Whether brand approval is required before filming.",
+  preShootScriptDue: "Deadline for script submission.",
+  preShootReviewDays: "How many business days the brand gets to review the script.",
+
+  includedRevisionRounds: "Number of revision rounds included without extra charge.",
+  additionalRevisionFee: "Fee charged for each extra revision round.",
+  reshootObligation: "When a reshoot is required.",
+  reshootFee: "Fee applicable when a reshoot is requested.",
+  minimumLivePeriod: "Minimum time the content must stay live.",
+
+  totalCampaignFee: "Total compensation for the campaign.",
+  currency: "Currency in which compensation is denominated.",
+  paymentStructure: "How payment is split across milestones or stages.",
+  customSplit: "Custom breakdown of the payment structure.",
+  advancePaymentTrigger: "Condition that triggers advance payment.",
+  remainingPaymentTrigger: "Condition that triggers the remaining payment.",
+  processorFeesBorneBy: "Who bears payment processing fees.",
+  processorFeesNotes: "Extra notes about processor fee treatment.",
+  laneAMarketplaceFeeNote: "Marketplace fee wording included in the agreement.",
+
+  rawSourceFileDelivery: "Whether raw or source files must be delivered.",
+  rawFilesFormat: "Expected format for delivered raw/source files.",
+  rawFilesDeliveryDue: "Deadline to provide raw/source files.",
+  analyticsReportingDeadline: "Deadline for providing analytics after publishing.",
+  analyticsReportingItems: "Specific performance metrics or reports required.",
+
+  productShippingApplicable: "Whether this campaign includes shipment of product.",
+  productReturnable: "Whether products are gifted or must be returned.",
+  shipToName: "Name to receive the shipment.",
+  shipToPhone: "Phone number for shipping coordination.",
+  shipToAddress: "Shipping destination for campaign products.",
+  productReceiptConfirmationDeadline: "Deadline for acknowledging product receipt.",
+  returnWindowMethod: "Return timeline and method.",
+  riskOfLossNotes: "Notes about delivery risk, damage, or responsibility.",
+
+  grantedUsageRights: "Ways the brand is allowed to use the creator's content.",
+  usageDuration: "Duration of granted usage rights.",
+  usageTerritoryNotes: "Territory or limitations for the selected usage right.",
+  attributionRequirement: "Whether creator attribution is required when content is reused.",
+  editingRights: "Editing rights granted to the brand.",
+  attributionText: "Specific attribution wording, if required.",
+  musicStockAssetResponsibility: "Who is responsible for music / stock asset clearance.",
+
+  creativeBrief: "Mandatory talking points, claims, and content instructions.",
+  restrictedStatements: "Statements or claims the creator must avoid.",
+  competitorBlackout: "Competitor blackout or exclusivity terms.",
+  categoryCompetitorList: "Competitors or categories restricted during blackout.",
+  blackoutPeriod: "Time period for exclusivity / blackout.",
+  optionalMoralsClause: "Whether a morals / reputation clause is included.",
+
+  killFeeOrProrata: "Cancellation compensation or prorated payment rules.",
+  refundOfUnearnedAdvance: "Whether unearned advance amounts must be refunded.",
+
+  governingLaw: "Jurisdiction whose law governs this agreement.",
+  disputeResolutionMethod: "Method used to resolve disputes.",
+  disputeVenue: "Venue for court proceedings, if applicable.",
+  arbitrationSeat: "Seat/location of arbitration, if applicable.",
+  attorneysFees: "How attorneys' fees are allocated in a dispute.",
+} as const;
+
 function sectionFields(keys: Array<keyof LaneAContractValues>) {
   return ALL_FIELD_DEFS.filter((field) => keys.includes(field.key));
 }
@@ -861,7 +941,7 @@ export function LaneAContractEditor({
         updated.scriptDueDate = "";
       }
 
-      if (key === "paymentStructure" && next !== "Custom Split") {
+      if (key === "paymentStructure" && next !== "Custom") {
         updated.customSplitDetails = "";
       }
 
@@ -1221,10 +1301,13 @@ function EditableControl({
   error?: string;
   onChange: (next: unknown) => void;
 }) {
+  const info = field.tooltip;
+
   if (TAG_STYLE_FIELDS.has(field.key)) {
     return (
       <FloatingTagInput
         label={field.label}
+        info={info}
         value={csvToTags(String(value || ""))}
         options={[]}
         onValueChange={(next) => onChange(tagsToCsv(next))}
@@ -1237,6 +1320,7 @@ function EditableControl({
     return (
       <LabeledTextarea
         label={field.label}
+        info={info}
         value={String(value || "")}
         placeholder={field.placeholder}
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value)}
@@ -1250,6 +1334,7 @@ function EditableControl({
     return (
       <FloatingDateInput
         label={field.label}
+        info={info}
         type="date"
         value={String(value || "")}
         onValueChange={(next) => onChange(next)}
@@ -1263,6 +1348,7 @@ function EditableControl({
     return (
       <FloatingInput
         label={field.label}
+        info={info}
         type="number"
         value={String(value || "")}
         onValueChange={(next) => onChange(next)}
@@ -1276,6 +1362,7 @@ function EditableControl({
     return (
       <FloatingSelect
         label={field.label}
+        info={info}
         value={String(value || "")}
         searchable={false}
         onValueChange={(next) => onChange(next)}
@@ -1297,6 +1384,7 @@ function EditableControl({
     return (
       <FloatingMultiSelect
         label={field.label}
+        info={info}
         value={listValue}
         options={field.options || []}
         onValueChange={(next) => onChange(next)}
@@ -1311,6 +1399,7 @@ function EditableControl({
   return (
     <FloatingInput
       label={field.label}
+      info={info}
       value={String(value || "")}
       onValueChange={(next) => onChange(next)}
       state={toControlState(error)}
@@ -1428,8 +1517,9 @@ function FieldShell({
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           {badge}
-          <span className="text-xs text-gray-400">Owner: {owner === "brand" ? "Brand" : "Influencer"}</span>
-          {tooltip ? <InfoPill text={tooltip} /> : null}
+          <span className="text-xs text-gray-400">
+            Owner: {owner === "brand" ? "Brand" : "Influencer"}
+          </span>
         </div>
       )}
 
@@ -2408,7 +2498,7 @@ export default function AppliedInfluencersPage() {
 
   const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [panelMode, setPanelMode] = useState<PanelMode>("send");
   const [selectedInf, setSelectedInf] = useState<Influencer | null>(null);
   const [selectedMeta, setSelectedMeta] = useState<ContractMeta | null>(null);
@@ -2436,6 +2526,8 @@ export default function AppliedInfluencersPage() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isSendLoading, setIsSendLoading] = useState(false);
   const [isUpdateLoading, setIsUpdateLoading] = useState(false);
+
+  const [serverPaymentType, setServerPaymentType] = useState<PaymentType>(PAYMENT_TYPE.FIXED);
 
   const [signOpen, setSignOpen] = useState(false);
   const [signTargetMeta, setSignTargetMeta] = useState<ContractMeta | null>(null);
@@ -2532,6 +2624,10 @@ export default function AppliedInfluencersPage() {
         const campaignName = data.campaignName || data.productOrServiceName || "";
         const budgetNum =
           typeof data.budget === "number" ? data.budget : Number(data.budget ?? NaN);
+
+        const resolvedPaymentType = normalizePaymentType(data.paymentType);
+        setServerPaymentType(resolvedPaymentType);
+        setContractField("campaign.paymentType", resolvedPaymentType);
 
         setServerCampaignTitle(campaignName);
         setContractField("campaign.campaignTitleOrId", campaignName);
@@ -2821,15 +2917,10 @@ export default function AppliedInfluencersPage() {
       seededDeliverable.platformHandle = inf.handle ? sanitizeHandle(inf.handle) : "";
       seededDeliverable.srNo = 1;
 
+      base.campaign.paymentType = serverPaymentType;
+
       const merged = mergeDeep(base, meta?.content || {});
-
-      const normalizedPaymentType = normalizePaymentType(
-        meta?.content?.campaign?.paymentType ||
-        (meta as any)?.paymentType ||
-        merged?.campaign?.paymentType
-      );
-
-      merged.campaign.paymentType = normalizedPaymentType;
+      merged.campaign.paymentType = serverPaymentType;
 
       const rawMilestones =
         meta?.content?.scheduleA?.commercial?.milestones ||
@@ -2845,7 +2936,7 @@ export default function AppliedInfluencersPage() {
             triggerEvent: String(row?.triggerEvent || ""),
             dueDate: String(row?.dueDate || ""),
           }))
-          : normalizedPaymentType === PAYMENT_TYPE.MILESTONE
+          : serverPaymentType === PAYMENT_TYPE.MILESTONE
             ? [createDefaultCommercialMilestone()]
             : [];
 
@@ -2880,7 +2971,7 @@ export default function AppliedInfluencersPage() {
 
       setContractForm(merged);
     },
-    [clearErrors, requestedEffDate, serverBudget, serverCampaignTitle, serverTimeline]
+    [clearErrors, requestedEffDate, serverBudget, serverCampaignTitle, serverTimeline, serverPaymentType]
   );
 
   const openSidebar = useCallback(
@@ -2925,61 +3016,62 @@ export default function AppliedInfluencersPage() {
     };
   }, [sidebarOpen]);
 
-const buildContentPayload = useCallback(() => {
-  const content = deepClone(contractForm);
-  const paymentType = normalizePaymentType(content.campaign.paymentType);
+  const buildContentPayload = useCallback(() => {
+    const content = deepClone(contractForm);
+    const paymentType = serverPaymentType;
+    content.campaign.paymentType = paymentType;
 
-  return {
-    ...content,
+    return {
+      ...content,
 
-    campaign: {
-      ...content.campaign,
-      paymentType,
-      effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
-    },
-    scheduleA: {
-      ...content.scheduleA,
-      deliverables: deliverables.map((row, index) => ({
-        srNo: index + 1,
-        platformHandle: row.platformHandle,
-        deliverableFormat: row.deliverableFormat,
-        qty: Number(row.qty || "0") || 0,
-        draftDue: row.draftDue,
-        liveDate: row.liveDate,
-      })),
-      review: {
-        ...content.scheduleA.review,
-        includedRevisionRounds:
-          Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+      campaign: {
+        ...content.campaign,
+        paymentType,
+        effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
       },
-      commercial: {
-        ...content.scheduleA.commercial,
-        totalCampaignFee:
-          paymentType === PAYMENT_TYPE.GIFTING
-            ? 0
-            : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
-        milestones:
-          paymentType === PAYMENT_TYPE.MILESTONE
-            ? content.scheduleA.commercial.milestones.map((row) => ({
+      scheduleA: {
+        ...content.scheduleA,
+        deliverables: deliverables.map((row, index) => ({
+          srNo: index + 1,
+          platformHandle: row.platformHandle,
+          deliverableFormat: row.deliverableFormat,
+          qty: Number(row.qty || "0") || 0,
+          draftDue: row.draftDue,
+          liveDate: row.liveDate,
+        })),
+        review: {
+          ...content.scheduleA.review,
+          includedRevisionRounds:
+            Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+        },
+        commercial: {
+          ...content.scheduleA.commercial,
+          totalCampaignFee:
+            paymentType === PAYMENT_TYPE.GIFTING
+              ? 0
+              : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+          milestones:
+            paymentType === PAYMENT_TYPE.MILESTONE
+              ? content.scheduleA.commercial.milestones.map((row) => ({
                 milestoneName: row.milestoneName,
                 paymentAmount: Number(row.paymentAmount || "0") || 0,
                 triggerEvent: row.triggerEvent,
                 dueDate: row.dueDate,
               }))
-            : [],
+              : [],
+        },
+        usageRights: {
+          ...content.scheduleA.usageRights,
+          rows: content.scheduleA.usageRights.rows.map((row) => ({
+            usageRight: row.usageRight,
+            selected: row.selected,
+            duration: row.duration,
+            territoryNotes: row.territoryNotes,
+          })),
+        },
       },
-      usageRights: {
-        ...content.scheduleA.usageRights,
-        rows: content.scheduleA.usageRights.rows.map((row) => ({
-          usageRight: row.usageRight,
-          selected: row.selected,
-          duration: row.duration,
-          territoryNotes: row.territoryNotes,
-        })),
-      },
-    },
-  };
-}, [contractForm, deliverables, requestedEffDate]);
+    };
+  }, [contractForm, deliverables, requestedEffDate, serverPaymentType]);
 
   const buildBrandUpdatesPayload = useCallback(() => {
     return {
@@ -3018,7 +3110,7 @@ const buildContentPayload = useCallback(() => {
 
     const feeRaw = String(contractForm.scheduleA.commercial.totalCampaignFee ?? "");
     const feeValue = Number(feeRaw);
-    const paymentType = normalizePaymentType(contractForm.campaign.paymentType);
+    const paymentType = serverPaymentType;
     const revisionRaw = String(
       contractForm.scheduleA.review.includedRevisionRounds ?? ""
     );
@@ -3119,6 +3211,7 @@ const buildContentPayload = useCallback(() => {
     requestedEffDate,
     scrollFirstErrorIntoView,
     setErr,
+    serverPaymentType
   ]);
 
   const handleGeneratePreview = useCallback(async () => {
@@ -3941,7 +4034,7 @@ const buildContentPayload = useCallback(() => {
     { value: "no", label: "No" },
   ];
 
-  const activePaymentType = normalizePaymentType(contractForm.campaign.paymentType);
+  const activePaymentType = serverPaymentType;
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -4080,9 +4173,6 @@ const buildContentPayload = useCallback(() => {
         >
           <SidebarSection title="Brand" icon={<FileText className="h-4 w-4" />}>
             <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Brand
-              </div>
 
               <FloatingInput
                 id="brand-legal-name"
@@ -4091,6 +4181,7 @@ const buildContentPayload = useCallback(() => {
                 onValueChange={(value: string) =>
                   setContractField("brand.legalName", value)
                 }
+                info={SIDEBAR_TOOLTIPS.brandLegalName}
                 state={sidebarStateFor("brand.legalName")}
                 errorText={sidebarErrorFor("brand.legalName")}
               />
@@ -4098,6 +4189,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="brand-contact-person"
                 label="Contact Person Name"
+                info={SIDEBAR_TOOLTIPS.brandContactPerson}
                 value={getAtPath(contractForm, "brand.contactPersonName")}
                 onValueChange={(value: string) =>
                   setContractField("brand.contactPersonName", value)
@@ -4107,6 +4199,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="brand-notice-email"
                 label="Notice Email"
+                info={SIDEBAR_TOOLTIPS.brandNoticeEmail}
                 value={getAtPath(contractForm, "brand.noticeEmail")}
                 onValueChange={(value: string) =>
                   setContractField("brand.noticeEmail", value)
@@ -4116,6 +4209,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="brand-notice-phone"
                 label="Notice Phone"
+                info={SIDEBAR_TOOLTIPS.brandNoticePhone}
                 value={getAtPath(contractForm, "brand.noticePhone")}
                 onValueChange={(value: string) =>
                   setContractField("brand.noticePhone", value)
@@ -4125,6 +4219,7 @@ const buildContentPayload = useCallback(() => {
               <LabeledTextarea
                 id="brand-billing-address"
                 label="Billing Address"
+                info={SIDEBAR_TOOLTIPS.brandBillingAddress}
                 value={getAtPath(contractForm, "brand.billingAddress")}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField("brand.billingAddress", e.target.value)
@@ -4141,6 +4236,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="campaign-title"
                 label="Campaign Title / ID"
+                info={SIDEBAR_TOOLTIPS.campaignTitle}
                 value={getAtPath(contractForm, "campaign.campaignTitleOrId")}
                 onValueChange={(value: string) =>
                   setContractField("campaign.campaignTitleOrId", value)
@@ -4152,6 +4248,7 @@ const buildContentPayload = useCallback(() => {
               <LabeledTextarea
                 id="campaign-products-services"
                 label="Products / Services Covered"
+                info={SIDEBAR_TOOLTIPS.campaignProductsServices}
                 value={getAtPath(contractForm, "campaign.productsServicesCovered")}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField("campaign.productsServicesCovered", e.target.value)
@@ -4159,53 +4256,38 @@ const buildContentPayload = useCallback(() => {
               />
 
               <FloatingSelect
-                label="Payment Type"
+                label="campaign-payment-type"
                 value={getAtPath(contractForm, "campaign.paymentType")}
                 onValueChange={(value) => {
                   const nextType = normalizePaymentType(value);
-
                   setContractForm((prev) => {
                     const next = deepClone(prev);
                     next.campaign.paymentType = nextType;
-
                     if (nextType === PAYMENT_TYPE.MILESTONE) {
                       if (!next.scheduleA.commercial.milestones.length) {
-                        next.scheduleA.commercial.milestones = [createDefaultCommercialMilestone()];
+                        next.scheduleA.commercial.milestones =
+                          [createDefaultCommercialMilestone()];
                       }
                       next.scheduleA.commercial.paymentStructure = "";
                     }
-
                     if (nextType === PAYMENT_TYPE.FIXED) {
                       next.scheduleA.commercial.milestones = [];
-                      if (!next.scheduleA.commercial.paymentStructure) {
-                        next.scheduleA.commercial.paymentStructure = "50% advance / 50% balance";
-                      }
+                      if (!next.scheduleA.commercial.paymentStructure) { next.scheduleA.commercial.paymentStructure = "50% advance / 50% balance"; }
                     }
-
                     if (nextType === PAYMENT_TYPE.GIFTING) {
                       next.scheduleA.commercial.milestones = [];
                       next.scheduleA.commercial.paymentStructure = "";
                       next.scheduleA.commercial.totalCampaignFee = "0";
-                    }
-
-                    return next;
+                    } return next;
                   });
-                }}
-                searchable={false}
-                state={sidebarStateFor("campaign.paymentType")}
-                errorText={sidebarErrorFor("campaign.paymentType")}
-              >
-                {PAYMENT_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
+                }} searchable={false} state={sidebarStateFor("campaign.paymentType")} errorText={sidebarErrorFor("campaign.paymentType")}              >                {PAYMENT_TYPE_OPTIONS.map((option) => (<SelectItem key={option.value} value={option.value}>                    {option.label}                  </SelectItem>))}
               </FloatingSelect>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingInput
                   id="campaign-territory"
                   label="Territory / Target Country"
+                  info={SIDEBAR_TOOLTIPS.campaignTerritory}
                   value={getAtPath(contractForm, "campaign.territoryTargetCountry")}
                   onValueChange={(value: string) =>
                     setContractField("campaign.territoryTargetCountry", value)
@@ -4215,6 +4297,7 @@ const buildContentPayload = useCallback(() => {
                 <FloatingDateInput
                   id="requested-effective-date"
                   label="Requested Effective Date"
+                  info={SIDEBAR_TOOLTIPS.requestedEffectiveDate}
                   type="date"
                   value={requestedEffDate}
                   min={todayStr}
@@ -4225,10 +4308,12 @@ const buildContentPayload = useCallback(() => {
                   state={sidebarStateFor("requestedEffDate")}
                   errorText={sidebarErrorFor("requestedEffDate")}
                 />
+
               </div>
 
               <FloatingSelect
                 label="Timezone"
+                info={SIDEBAR_TOOLTIPS.timezone}
                 value={requestedEffTz}
                 onValueChange={(value) => setRequestedEffTz(value)}
                 searchable
@@ -4291,13 +4376,12 @@ const buildContentPayload = useCallback(() => {
                     <FloatingInput
                       id={`deliverable-platform-${row.id}`}
                       label="Platform / Handle"
+                      info={SIDEBAR_TOOLTIPS.platformHandle}
                       value={row.platformHandle}
                       onValueChange={(value: string) =>
                         setDeliverables((prev) =>
                           prev.map((item) =>
-                            item.id === row.id
-                              ? { ...item, platformHandle: value }
-                              : item
+                            item.id === row.id ? { ...item, platformHandle: value } : item
                           )
                         )
                       }
@@ -4306,6 +4390,7 @@ const buildContentPayload = useCallback(() => {
                     <FloatingInput
                       id={`deliverable-qty-${row.id}`}
                       label="Qty"
+                      info={SIDEBAR_TOOLTIPS.qty}
                       type="number"
                       value={row.qty}
                       onValueChange={(value: string) =>
@@ -4320,13 +4405,12 @@ const buildContentPayload = useCallback(() => {
 
                   <FloatingSelect
                     label="Deliverable Format"
+                    info={SIDEBAR_TOOLTIPS.deliverableFormat}
                     value={row.deliverableFormat}
                     onValueChange={(value) =>
                       setDeliverables((prev) =>
                         prev.map((item) =>
-                          item.id === row.id
-                            ? { ...item, deliverableFormat: value }
-                            : item
+                          item.id === row.id ? { ...item, deliverableFormat: value } : item
                         )
                       )
                     }
@@ -4339,10 +4423,12 @@ const buildContentPayload = useCallback(() => {
                     ))}
                   </FloatingSelect>
 
+
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <FloatingDateInput
                       id={`deliverable-draft-${row.id}`}
                       label="Draft Due"
+                      info={SIDEBAR_TOOLTIPS.draftDue}
                       type="date"
                       value={row.draftDue}
                       min={todayStr}
@@ -4358,6 +4444,7 @@ const buildContentPayload = useCallback(() => {
                     <FloatingDateInput
                       id={`deliverable-live-${row.id}`}
                       label="Live Date"
+                      info={SIDEBAR_TOOLTIPS.liveDate}
                       type="date"
                       value={row.liveDate}
                       min={todayStr}
@@ -4392,6 +4479,7 @@ const buildContentPayload = useCallback(() => {
                 <LabeledTextarea
                   id="minimum-video-specs"
                   label="Minimum Video Specs"
+                  info={SIDEBAR_TOOLTIPS.minimumVideoSpecs}
                   value={getAtPath(contractForm, "scheduleA.minimumVideoSpecs")}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                     setContractField("scheduleA.minimumVideoSpecs", e.target.value)
@@ -4400,11 +4488,9 @@ const buildContentPayload = useCallback(() => {
 
                 <FloatingTagInput
                   label="Mandatory Tags / Mentions / Links / Codes"
+                  info={SIDEBAR_TOOLTIPS.mandatoryTags}
                   value={csvToTags(
-                    getAtPath(
-                      contractForm,
-                      "scheduleA.mandatoryTagsMentionsLinksCodes"
-                    )
+                    getAtPath(contractForm, "scheduleA.mandatoryTagsMentionsLinksCodes")
                   )}
                   options={[]}
                   onValueChange={(next) =>
@@ -4420,16 +4506,14 @@ const buildContentPayload = useCallback(() => {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <FloatingSelect
                   label="Pre-Shoot Script Required"
+                  info={SIDEBAR_TOOLTIPS.preShootScriptRequired}
                   value={
                     getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
                       ? "yes"
                       : "no"
                   }
                   onValueChange={(value) =>
-                    setContractField(
-                      "scheduleA.preShootScriptRequired",
-                      value === "yes"
-                    )
+                    setContractField("scheduleA.preShootScriptRequired", value === "yes")
                   }
                   searchable={false}
                 >
@@ -4443,6 +4527,7 @@ const buildContentPayload = useCallback(() => {
                 <FloatingDateInput
                   id="pre-shoot-script-due"
                   label="Pre-Shoot Script Due"
+                  info={SIDEBAR_TOOLTIPS.preShootScriptDue}
                   type="date"
                   value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
                   min={todayStr}
@@ -4454,23 +4539,14 @@ const buildContentPayload = useCallback(() => {
                 <FloatingInput
                   id="pre-shoot-review-days"
                   label="Script Review Business Days"
+                  info={SIDEBAR_TOOLTIPS.preShootReviewDays}
                   type="number"
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.preShootScriptReviewBusinessDays"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
                   onValueChange={(value: string) =>
-                    setContractField(
-                      "scheduleA.preShootScriptReviewBusinessDays",
-                      value
-                    )
+                    setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
                   }
-                  state={sidebarStateFor(
-                    "scheduleA.preShootScriptReviewBusinessDays"
-                  )}
-                  errorText={sidebarErrorFor(
-                    "scheduleA.preShootScriptReviewBusinessDays"
-                  )}
+                  state={sidebarStateFor("scheduleA.preShootScriptReviewBusinessDays")}
+                  errorText={sidebarErrorFor("scheduleA.preShootScriptReviewBusinessDays")}
                 />
               </div>
             </div>
@@ -4484,6 +4560,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="included-revision-rounds"
                 label="Included Revision Rounds"
+                info={SIDEBAR_TOOLTIPS.includedRevisionRounds}
                 type="number"
                 value={getAtPath(contractForm, "scheduleA.review.includedRevisionRounds")}
                 onValueChange={(value: string) =>
@@ -4496,6 +4573,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="additional-revision-fee"
                 label="Additional Revision Fee"
+                info={SIDEBAR_TOOLTIPS.additionalRevisionFee}
                 value={getAtPath(contractForm, "scheduleA.review.additionalRevisionFee")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.review.additionalRevisionFee", value)
@@ -4504,6 +4582,7 @@ const buildContentPayload = useCallback(() => {
 
               <FloatingSelect
                 label="Reshoot Obligation"
+                info={SIDEBAR_TOOLTIPS.reshootObligation}
                 value={getAtPath(contractForm, "scheduleA.review.reshootObligation")}
                 onValueChange={(value) =>
                   setContractField("scheduleA.review.reshootObligation", value)
@@ -4520,6 +4599,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="reshoot-fee"
                 label="Reshoot Fee"
+                info={SIDEBAR_TOOLTIPS.reshootFee}
                 value={getAtPath(contractForm, "scheduleA.review.reshootFee")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.review.reshootFee", value)
@@ -4529,6 +4609,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="minimum-live-period"
                 label="Minimum Live Period"
+                info={SIDEBAR_TOOLTIPS.minimumLivePeriod}
                 value={getAtPath(contractForm, "scheduleA.review.minimumLivePeriod")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.review.minimumLivePeriod", value)
@@ -4546,6 +4627,7 @@ const buildContentPayload = useCallback(() => {
                 <FloatingInput
                   id="total-campaign-fee"
                   label="Total Campaign Fee"
+                  info={SIDEBAR_TOOLTIPS.totalCampaignFee}
                   type="number"
                   value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
                   onValueChange={(value: string) =>
@@ -4557,6 +4639,7 @@ const buildContentPayload = useCallback(() => {
 
                 <FloatingSelect
                   label="Currency"
+                  info={SIDEBAR_TOOLTIPS.currency}
                   value={getAtPath(contractForm, "scheduleA.commercial.currency")}
                   onValueChange={(value) =>
                     setContractField("scheduleA.commercial.currency", value)
@@ -4577,6 +4660,7 @@ const buildContentPayload = useCallback(() => {
                 <>
                   <FloatingSelect
                     label="Payment Structure"
+                    info={SIDEBAR_TOOLTIPS.paymentStructure}
                     value={getAtPath(contractForm, "scheduleA.commercial.paymentStructure")}
                     onValueChange={(value) =>
                       setContractField("scheduleA.commercial.paymentStructure", value)
@@ -4590,20 +4674,20 @@ const buildContentPayload = useCallback(() => {
                     ))}
                   </FloatingSelect>
 
-                  {getAtPath(contractForm, "scheduleA.commercial.paymentStructure") === "Custom" ? (
-                    <FloatingInput
-                      id="commercial-custom-split"
-                      label="Custom Split"
-                      value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
-                      onValueChange={(value: string) =>
-                        setContractField("scheduleA.commercial.customSplit", value)
-                      }
-                    />
-                  ) : null}
+                  <FloatingInput
+                    id="commercial-custom-split"
+                    label="Custom"
+                    info={SIDEBAR_TOOLTIPS.customSplit}
+                    value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.customSplit", value)
+                    }
+                  />
 
                   <LabeledTextarea
                     id="advance-payment-trigger"
                     label="Advance Payment Trigger"
+                    info={SIDEBAR_TOOLTIPS.advancePaymentTrigger}
                     value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                       setContractField("scheduleA.commercial.advancePaymentTrigger", e.target.value)
@@ -4613,6 +4697,7 @@ const buildContentPayload = useCallback(() => {
                   <LabeledTextarea
                     id="remaining-payment-trigger"
                     label="Remaining Payment Trigger"
+                    info={SIDEBAR_TOOLTIPS.remainingPaymentTrigger}
                     value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                       setContractField("scheduleA.commercial.remainingPaymentTrigger", e.target.value)
@@ -4629,54 +4714,13 @@ const buildContentPayload = useCallback(() => {
                 />
               ) : null}
 
-              <FloatingInput
-                id="commercial-custom-split"
-                label="Custom Split"
-                value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
-                onValueChange={(value: string) =>
-                  setContractField("scheduleA.commercial.customSplit", value)
-                }
-              />
-
-              <LabeledTextarea
-                id="advance-payment-trigger"
-                label="Advance Payment Trigger"
-                value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setContractField(
-                    "scheduleA.commercial.advancePaymentTrigger",
-                    e.target.value
-                  )
-                }
-              />
-
-              <LabeledTextarea
-                id="remaining-payment-trigger"
-                label="Remaining Payment Trigger"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.commercial.remainingPaymentTrigger"
-                )}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setContractField(
-                    "scheduleA.commercial.remainingPaymentTrigger",
-                    e.target.value
-                  )
-                }
-              />
-
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingSelect
                   label="Payment Processor Fees Borne By"
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.commercial.paymentProcessorFeesBorneBy"
-                  )}
+                  info={SIDEBAR_TOOLTIPS.processorFeesBorneBy}
+                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}
                   onValueChange={(value) =>
-                    setContractField(
-                      "scheduleA.commercial.paymentProcessorFeesBorneBy",
-                      value
-                    )
+                    setContractField("scheduleA.commercial.paymentProcessorFeesBorneBy", value)
                   }
                   searchable={false}
                 >
@@ -4690,15 +4734,10 @@ const buildContentPayload = useCallback(() => {
                 <FloatingInput
                   id="processor-fees-notes"
                   label="Payment Processor Fee Notes"
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.commercial.paymentProcessorFeesNotes"
-                  )}
+                  info={SIDEBAR_TOOLTIPS.processorFeesNotes}
+                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesNotes")}
                   onValueChange={(value: string) =>
-                    setContractField(
-                      "scheduleA.commercial.paymentProcessorFeesNotes",
-                      value
-                    )
+                    setContractField("scheduleA.commercial.paymentProcessorFeesNotes", value)
                   }
                 />
               </div>
@@ -4706,15 +4745,10 @@ const buildContentPayload = useCallback(() => {
               <LabeledTextarea
                 id="lane-a-marketplace-fee-note"
                 label="Lane A Marketplace Fee Note"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.commercial.laneAMarketplaceFeeNote"
-                )}
+                info={SIDEBAR_TOOLTIPS.laneAMarketplaceFeeNote}
+                value={getAtPath(contractForm, "scheduleA.commercial.laneAMarketplaceFeeNote")}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setContractField(
-                    "scheduleA.commercial.laneAMarketplaceFeeNote",
-                    e.target.value
-                  )
+                  setContractField("scheduleA.commercial.laneAMarketplaceFeeNote", e.target.value)
                 }
               />
             </div>
@@ -4727,6 +4761,7 @@ const buildContentPayload = useCallback(() => {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <FloatingSelect
                 label="Raw / Source File Delivery"
+                info={SIDEBAR_TOOLTIPS.rawSourceFileDelivery}
                 value={getAtPath(contractForm, "scheduleA.rawFiles.rawSourceFileDelivery")}
                 onValueChange={(value) =>
                   setContractField("scheduleA.rawFiles.rawSourceFileDelivery", value)
@@ -4743,6 +4778,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="raw-files-format"
                 label="Format"
+                info={SIDEBAR_TOOLTIPS.rawFilesFormat}
                 value={getAtPath(contractForm, "scheduleA.rawFiles.format")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.rawFiles.format", value)
@@ -4752,6 +4788,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingDateInput
                 id="raw-files-delivery-due"
                 label="Delivery Due"
+                info={SIDEBAR_TOOLTIPS.rawFilesDeliveryDue}
                 type="date"
                 value={getAtPath(contractForm, "scheduleA.rawFiles.deliveryDue")}
                 min={todayStr}
@@ -4763,36 +4800,25 @@ const buildContentPayload = useCallback(() => {
               <FloatingDateInput
                 id="analytics-reporting-deadline"
                 label="Analytics Reporting Deadline"
+                info={SIDEBAR_TOOLTIPS.analyticsReportingDeadline}
                 type="date"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.rawFiles.analyticsReportingDeadline"
-                )}
+                value={getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingDeadline")}
                 min={todayStr}
                 onValueChange={(value) =>
-                  setContractField(
-                    "scheduleA.rawFiles.analyticsReportingDeadline",
-                    value
-                  )
+                  setContractField("scheduleA.rawFiles.analyticsReportingDeadline", value)
                 }
               />
 
-              <div className="md:col-span-2">
-                <FloatingTagInput
-                  label="Analytics Reporting Items"
-                  value={csvToTags(
-                    getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingItems")
-                  )}
-                  options={[]}
-                  onValueChange={(next) =>
-                    setContractField(
-                      "scheduleA.rawFiles.analyticsReportingItems",
-                      tagsToCsv(next)
-                    )
-                  }
-                  dropdownDirection="up"
-                />
-              </div>
+              <FloatingTagInput
+                label="Analytics Reporting Items"
+                info={SIDEBAR_TOOLTIPS.analyticsReportingItems}
+                value={csvToTags(getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingItems"))}
+                options={[]}
+                onValueChange={(next) =>
+                  setContractField("scheduleA.rawFiles.analyticsReportingItems", tagsToCsv(next))
+                }
+                dropdownDirection="up"
+              />
             </div>
           </SidebarSection>
 
@@ -4803,6 +4829,7 @@ const buildContentPayload = useCallback(() => {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <FloatingSelect
                 label="Product Shipping Applicable"
+                info={SIDEBAR_TOOLTIPS.productShippingApplicable}
                 value={getAtPath(contractForm, "scheduleA.shipping.productShippingApplicable")}
                 onValueChange={(value) =>
                   setContractField("scheduleA.shipping.productShippingApplicable", value)
@@ -4818,6 +4845,7 @@ const buildContentPayload = useCallback(() => {
 
               <FloatingSelect
                 label="Product Returnable"
+                info={SIDEBAR_TOOLTIPS.productReturnable}
                 value={getAtPath(contractForm, "scheduleA.shipping.productReturnable")}
                 onValueChange={(value) =>
                   setContractField("scheduleA.shipping.productReturnable", value)
@@ -4834,6 +4862,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="ship-to-name"
                 label="Ship-To Name"
+                info={SIDEBAR_TOOLTIPS.shipToName}
                 value={getAtPath(contractForm, "scheduleA.shipping.shipToName")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.shipping.shipToName", value)
@@ -4843,59 +4872,54 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="ship-to-phone"
                 label="Ship-To Phone"
+                info={SIDEBAR_TOOLTIPS.shipToPhone}
                 value={getAtPath(contractForm, "scheduleA.shipping.shipToPhone")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.shipping.shipToPhone", value)
                 }
               />
 
-              <div className="md:col-span-2">
-                <LabeledTextarea
-                  id="ship-to-address"
-                  label="Ship-To Address"
-                  value={getAtPath(contractForm, "scheduleA.shipping.shipToAddress")}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setContractField("scheduleA.shipping.shipToAddress", e.target.value)
-                  }
-                />
-              </div>
+              <LabeledTextarea
+                id="ship-to-address"
+                label="Ship-To Address"
+                info={SIDEBAR_TOOLTIPS.shipToAddress}
+                value={getAtPath(contractForm, "scheduleA.shipping.shipToAddress")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("scheduleA.shipping.shipToAddress", e.target.value)
+                }
+              />
 
               <FloatingDateInput
                 id="product-receipt-confirmation-deadline"
                 label="Product Receipt Confirmation Deadline"
+                info={SIDEBAR_TOOLTIPS.productReceiptConfirmationDeadline}
                 type="date"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.shipping.productReceiptConfirmationDeadline"
-                )}
+                value={getAtPath(contractForm, "scheduleA.shipping.productReceiptConfirmationDeadline")}
                 min={todayStr}
                 onValueChange={(value) =>
-                  setContractField(
-                    "scheduleA.shipping.productReceiptConfirmationDeadline",
-                    value
-                  )
+                  setContractField("scheduleA.shipping.productReceiptConfirmationDeadline", value)
                 }
               />
 
               <FloatingInput
                 id="return-window-method"
                 label="Return Window / Method"
+                info={SIDEBAR_TOOLTIPS.returnWindowMethod}
                 value={getAtPath(contractForm, "scheduleA.shipping.returnWindowMethod")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.shipping.returnWindowMethod", value)
                 }
               />
 
-              <div className="md:col-span-2">
-                <LabeledTextarea
-                  id="risk-of-loss-notes"
-                  label="Risk of Loss Notes"
-                  value={getAtPath(contractForm, "scheduleA.shipping.riskOfLossNotes")}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setContractField("scheduleA.shipping.riskOfLossNotes", e.target.value)
-                  }
-                />
-              </div>
+              <LabeledTextarea
+                id="risk-of-loss-notes"
+                label="Risk of Loss Notes"
+                info={SIDEBAR_TOOLTIPS.riskOfLossNotes}
+                value={getAtPath(contractForm, "scheduleA.shipping.riskOfLossNotes")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("scheduleA.shipping.riskOfLossNotes", e.target.value)
+                }
+              />
             </div>
           </SidebarSection>
 
@@ -4906,6 +4930,7 @@ const buildContentPayload = useCallback(() => {
             <div className="space-y-4">
               <FloatingMultiSelect
                 label="Granted Usage Rights"
+                info={SIDEBAR_TOOLTIPS.grantedUsageRights}
                 value={selectedUsageRights}
                 options={usageRightOptions}
                 onValueChange={(next) => setSelectedUsageRights(next)}
@@ -4929,14 +4954,13 @@ const buildContentPayload = useCallback(() => {
                         <FloatingInput
                           id={`usage-duration-${row.id}`}
                           label="Duration"
+                          info={SIDEBAR_TOOLTIPS.usageDuration}
                           value={row.duration}
                           onValueChange={(value: string) =>
                             setContractField(
                               "scheduleA.usageRights.rows",
                               contractForm.scheduleA.usageRights.rows.map((item) =>
-                                item.id === row.id
-                                  ? { ...item, duration: value }
-                                  : item
+                                item.id === row.id ? { ...item, duration: value } : item
                               )
                             )
                           }
@@ -4945,14 +4969,13 @@ const buildContentPayload = useCallback(() => {
                         <FloatingInput
                           id={`usage-territory-${row.id}`}
                           label="Territory / Notes"
+                          info={SIDEBAR_TOOLTIPS.usageTerritoryNotes}
                           value={row.territoryNotes}
                           onValueChange={(value: string) =>
                             setContractField(
                               "scheduleA.usageRights.rows",
                               contractForm.scheduleA.usageRights.rows.map((item) =>
-                                item.id === row.id
-                                  ? { ...item, territoryNotes: value }
-                                  : item
+                                item.id === row.id ? { ...item, territoryNotes: value } : item
                               )
                             )
                           }
@@ -4965,6 +4988,7 @@ const buildContentPayload = useCallback(() => {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingSelect
                   label="Attribution Requirement"
+                  info={SIDEBAR_TOOLTIPS.attributionRequirement}
                   value={getAtPath(contractForm, "scheduleA.usageRights.attributionRequirement")}
                   onValueChange={(value) =>
                     setContractField("scheduleA.usageRights.attributionRequirement", value)
@@ -4980,6 +5004,7 @@ const buildContentPayload = useCallback(() => {
 
                 <FloatingSelect
                   label="Editing Rights"
+                  info={SIDEBAR_TOOLTIPS.editingRights}
                   value={getAtPath(contractForm, "scheduleA.usageRights.editingRights")}
                   onValueChange={(value) =>
                     setContractField("scheduleA.usageRights.editingRights", value)
@@ -4997,6 +5022,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="attribution-text"
                 label="Attribution Text"
+                info={SIDEBAR_TOOLTIPS.attributionText}
                 value={getAtPath(contractForm, "scheduleA.usageRights.attributionText")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.usageRights.attributionText", value)
@@ -5005,15 +5031,10 @@ const buildContentPayload = useCallback(() => {
 
               <FloatingSelect
                 label="Music / Stock Asset Responsibility"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.usageRights.musicStockAssetResponsibility"
-                )}
+                info={SIDEBAR_TOOLTIPS.musicStockAssetResponsibility}
+                value={getAtPath(contractForm, "scheduleA.usageRights.musicStockAssetResponsibility")}
                 onValueChange={(value) =>
-                  setContractField(
-                    "scheduleA.usageRights.musicStockAssetResponsibility",
-                    value
-                  )
+                  setContractField("scheduleA.usageRights.musicStockAssetResponsibility", value)
                 }
                 searchable={false}
               >
@@ -5034,27 +5055,20 @@ const buildContentPayload = useCallback(() => {
               <LabeledTextarea
                 id="creative-brief-mandatory-talking-points"
                 label="Creative Brief / Mandatory Talking Points"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.compliance.creativeBriefMandatoryTalkingPoints"
-                )}
+                info={SIDEBAR_TOOLTIPS.creativeBrief}
+                value={getAtPath(contractForm, "scheduleA.compliance.creativeBriefMandatoryTalkingPoints")}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setContractField(
-                    "scheduleA.compliance.creativeBriefMandatoryTalkingPoints",
-                    e.target.value
-                  )
+                  setContractField("scheduleA.compliance.creativeBriefMandatoryTalkingPoints", e.target.value)
                 }
               />
 
               <LabeledTextarea
                 id="restricted-statements"
                 label="Restricted Statements"
+                info={SIDEBAR_TOOLTIPS.restrictedStatements}
                 value={getAtPath(contractForm, "scheduleA.compliance.restrictedStatements")}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setContractField(
-                    "scheduleA.compliance.restrictedStatements",
-                    e.target.value
-                  )
+                  setContractField("scheduleA.compliance.restrictedStatements", e.target.value)
                 }
               />
             </div>
@@ -5068,6 +5082,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="competitor-blackout"
                 label="Competitor Blackout"
+                info={SIDEBAR_TOOLTIPS.competitorBlackout}
                 value={getAtPath(contractForm, "scheduleA.exclusivity.competitorBlackout")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.exclusivity.competitorBlackout", value)
@@ -5076,15 +5091,11 @@ const buildContentPayload = useCallback(() => {
 
               <FloatingTagInput
                 label="Category / Competitor List"
-                value={csvToTags(
-                  getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList")
-                )}
+                info={SIDEBAR_TOOLTIPS.categoryCompetitorList}
+                value={csvToTags(getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList"))}
                 options={[]}
                 onValueChange={(next) =>
-                  setContractField(
-                    "scheduleA.exclusivity.categoryCompetitorList",
-                    tagsToCsv(next)
-                  )
+                  setContractField("scheduleA.exclusivity.categoryCompetitorList", tagsToCsv(next))
                 }
                 dropdownDirection="up"
               />
@@ -5092,6 +5103,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="blackout-period"
                 label="Blackout Period"
+                info={SIDEBAR_TOOLTIPS.blackoutPeriod}
                 value={getAtPath(contractForm, "scheduleA.exclusivity.blackoutPeriod")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.exclusivity.blackoutPeriod", value)
@@ -5100,6 +5112,7 @@ const buildContentPayload = useCallback(() => {
 
               <FloatingSelect
                 label="Optional Morals Clause"
+                info={SIDEBAR_TOOLTIPS.optionalMoralsClause}
                 value={getAtPath(contractForm, "scheduleA.exclusivity.optionalMoralsClause")}
                 onValueChange={(value) =>
                   setContractField("scheduleA.exclusivity.optionalMoralsClause", value)
@@ -5112,6 +5125,7 @@ const buildContentPayload = useCallback(() => {
                   </SelectItem>
                 ))}
               </FloatingSelect>
+
             </div>
           </SidebarSection>
 
@@ -5123,6 +5137,7 @@ const buildContentPayload = useCallback(() => {
               <LabeledTextarea
                 id="kill-fee-or-prorata"
                 label="Kill Fee / Pro-Rata"
+                info={SIDEBAR_TOOLTIPS.killFeeOrProrata}
                 value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
@@ -5132,15 +5147,10 @@ const buildContentPayload = useCallback(() => {
               <LabeledTextarea
                 id="refund-of-unearned-advance"
                 label="Refund of Unearned Advance"
-                value={getAtPath(
-                  contractForm,
-                  "scheduleA.cancellation.refundOfUnearnedAdvance"
-                )}
+                info={SIDEBAR_TOOLTIPS.refundOfUnearnedAdvance}
+                value={getAtPath(contractForm, "scheduleA.cancellation.refundOfUnearnedAdvance")}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setContractField(
-                    "scheduleA.cancellation.refundOfUnearnedAdvance",
-                    e.target.value
-                  )
+                  setContractField("scheduleA.cancellation.refundOfUnearnedAdvance", e.target.value)
                 }
               />
             </div>
@@ -5151,9 +5161,11 @@ const buildContentPayload = useCallback(() => {
             icon={<FileText className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+
               <FloatingInput
                 id="governing-law"
                 label="Governing Law"
+                info={SIDEBAR_TOOLTIPS.governingLaw}
                 value={getAtPath(contractForm, "scheduleA.dispute.governingLaw")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.dispute.governingLaw", value)
@@ -5162,6 +5174,7 @@ const buildContentPayload = useCallback(() => {
 
               <FloatingSelect
                 label="Dispute Resolution Method"
+                info={SIDEBAR_TOOLTIPS.disputeResolutionMethod}
                 value={getAtPath(contractForm, "scheduleA.dispute.disputeResolutionMethod")}
                 onValueChange={(value) =>
                   setContractField("scheduleA.dispute.disputeResolutionMethod", value)
@@ -5178,6 +5191,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="dispute-venue"
                 label="Venue"
+                info={SIDEBAR_TOOLTIPS.disputeVenue}
                 value={getAtPath(contractForm, "scheduleA.dispute.disputeVenue")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.dispute.disputeVenue", value)
@@ -5187,6 +5201,7 @@ const buildContentPayload = useCallback(() => {
               <FloatingInput
                 id="arbitration-seat"
                 label="Arbitration Seat"
+                info={SIDEBAR_TOOLTIPS.arbitrationSeat}
                 value={getAtPath(contractForm, "scheduleA.dispute.arbitrationSeat")}
                 onValueChange={(value: string) =>
                   setContractField("scheduleA.dispute.arbitrationSeat", value)
@@ -5195,6 +5210,7 @@ const buildContentPayload = useCallback(() => {
 
               <FloatingSelect
                 label="Attorneys’ Fees"
+                info={SIDEBAR_TOOLTIPS.attorneysFees}
                 value={getAtPath(contractForm, "scheduleA.dispute.attorneysFees")}
                 onValueChange={(value) =>
                   setContractField("scheduleA.dispute.attorneysFees", value)
