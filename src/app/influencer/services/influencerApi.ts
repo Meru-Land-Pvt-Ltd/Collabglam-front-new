@@ -7,6 +7,7 @@ const INFLUENCER_BASE = "/influencer";
 const CATEGORY_BASE = "/category";
 const CAMPAIGN_BASE = "/campaign";
 const MODASH_BASE = "/modash";
+const APPLY_BASE = "/apply";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -155,7 +156,7 @@ export type CountryRow = {
   _id?: string;
   id?: string;
 
-  countryName?: string; // ✅ backend returns this
+  countryName?: string;
   countryNameEn?: string;
 
   callingCode?: string;
@@ -176,23 +177,26 @@ export async function apiListCountries(params: ListQuery = {}) {
 }
 
 export async function apiListContentLanguages(params: ListQuery = {}) {
-  // returns { total, data: [...] } -> unwrap() returns the data array
   return apiGet<LangRow[]>(`/languages/all`, params);
 }
 
 /** -------------------------
- *  ✅ CATEGORY APIs  (UPDATED)
+ *  ✅ CATEGORY APIs
  *  Endpoint: GET /category/categories
  *  Response: { count, categories: [{ _id, name, subcategories: [...] }] }
- *  UI needs only category name
  *  ------------------------*/
 export type CategoryRow = { id: string; name: string };
 
-export async function apiCategoryGetAll(_input: { search?: string; page?: number; limit?: number } = {}) {
-  // keep signature so signup page doesn't change
+export async function apiCategoryGetAll(
+  _input: { search?: string; page?: number; limit?: number } = {}
+) {
   const raw = await apiGet<any>(`${CATEGORY_BASE}/categories`);
 
-  const arr: any[] = Array.isArray(raw) ? raw : Array.isArray(raw?.categories) ? raw.categories : [];
+  const arr: any[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.categories)
+      ? raw.categories
+      : [];
 
   return arr
     .map((c: any) => ({
@@ -203,7 +207,7 @@ export async function apiCategoryGetAll(_input: { search?: string; page?: number
 }
 
 /** -------------------------
- *  ✅ AUTH + SIGNUP (UPDATED)
+ *  ✅ AUTH + SIGNUP
  *  Send OTP: POST /influencer/request-otp
  *  Verify OTP: POST /influencer/verify-otp
  *  ------------------------*/
@@ -221,13 +225,8 @@ export async function apiSendInfluencerSignupOtp(input: {
   creatorName: string;
   email: string;
   password: string;
-
   countryId: string;
-
-  // signup page still uses single languageId select
   languageId?: string;
-
-  // multi-category
   categoryIds?: string[];
   categoryId?: string;
 }) {
@@ -258,7 +257,7 @@ export async function apiVerifyInfluencerOtpSignup(input: { email: string; otp: 
 }
 
 /** -------------------------
- *  ✅ SIGN IN (kept as-is)
+ *  ✅ SIGN IN
  *  ------------------------*/
 export type InfluencerSignInRoute = "page1" | "page2" | "page3" | "homepage";
 
@@ -300,10 +299,8 @@ export async function apiSaveInfluencerOnboarding(
     ispage2Skip?: boolean;
     ispage3Skip?: boolean;
     preferredPlatform?: string;
-
     profilePic?: string;
     isProfilePicSkip?: boolean;
-
     [key: string]: any;
   },
   token?: string
@@ -323,17 +320,25 @@ export async function apiSaveInfluencerOnboarding(
  *  ✅ FORGOT PASSWORD
  *  ------------------------*/
 export async function apiSendOtpForgotInfluencer(email: string) {
-  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/send-otp-forgot`, { email });
-}
-
-export async function apiVerifyOtpForgotInfluencer(email: string, otp: string) {
-  return apiPost<{ message: string; resetToken: string }>(`${INFLUENCER_BASE}/verify-otp-forgot`, {
+  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/send-otp-forgot`, {
     email,
-    otp,
   });
 }
 
-export async function apiUpdateInfluencerPasswordWithResetToken(resetToken: string, newPassword: string) {
+export async function apiVerifyOtpForgotInfluencer(email: string, otp: string) {
+  return apiPost<{ message: string; resetToken: string }>(
+    `${INFLUENCER_BASE}/verify-otp-forgot`,
+    {
+      email,
+      otp,
+    }
+  );
+}
+
+export async function apiUpdateInfluencerPasswordWithResetToken(
+  resetToken: string,
+  newPassword: string
+) {
   return apiPost<{ message: string }>(
     `${INFLUENCER_BASE}/update-password`,
     { newPassword },
@@ -342,90 +347,96 @@ export async function apiUpdateInfluencerPasswordWithResetToken(resetToken: stri
 }
 
 /** -------------------------
- *  ✅ CAMPAIGN: ACTIVE CAMPAIGNS
+ *  ✅ ACTIVE CAMPAIGNS
+ *  Backend route: POST /influencer/get-all-active
+ *  Response:
+ *  {
+ *    items: campaigns,
+ *    pagination: { total, page, limit, totalPages }
+ *  }
  *  ------------------------*/
 export type GetAllActiveCampaignsBody = {
   influencerId: string;
-
   page?: number;
   limit?: number;
   search?: string;
-
-  byAi?: 0 | 1;
-  campaignType?: string;
-
-  categoryIds?: string[];
-  categoryId?: string;
-
-  platform?: string;
-  paymentType?: string;
-
-  datePreset?: string;
-  dateFrom?: string | Date;
-  dateTo?: string | Date;
-
-  sortBy?: string;
-  sortOrder?: "asc" | "desc" | 1 | -1;
 };
 
 export type ActiveCampaignItem = {
-  campaignId: string;
-  campaignTitle: string;
+  _id?: string;
+  campaignsId?: string;
+
+  campaignTitle?: string;
   description?: string;
 
-  scheduledAt: string | null;
-  startAt: string | null;
-  endAt: string | null;
+  status?: string;
+  isActive?: number;
+  isDraft?: number;
 
-  status: string;
-  campaignBudget: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 
-  targetCountryIds: string[];
-  targetCountries: { id: string; name: string; countryCode?: string }[];
+  scheduledAt?: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
 
-  targetAgeRanges: string[];
-  targetAgeRangesDetails: { id: string; range: string }[];
+  campaignBudget?: number | null;
 
-  category: { id: string; name: string } | null;
+  targetCountryIds?: string[];
+  targetCountries?: { id: string; name: string; countryCode?: string }[];
 
-  numberOfInfluencers: number | null;
+  targetAgeRanges?: string[];
+  targetAgeRangesDetails?: { id: string; range: string }[];
 
-  contractsCount: any;
-  emailsSent: any;
+  category?: { id: string; name: string } | null;
 
-  scheduleIn: { unit: any; value: any; text: any };
-  expireIn: string;
+  numberOfInfluencers?: number | null;
 
-  platformSelection: string[];
-  productImages: string[];
+  contractsCount?: any;
+  emailsSent?: any;
+
+  scheduleIn?: { unit: any; value: any; text: any };
+  expireIn?: string;
+
+  platformSelection?: string[];
+  productImages?: string[];
 };
 
 export type ActiveCampaignsResponse = {
   items: ActiveCampaignItem[];
-  meta: { total: number; page: number; limit: number; totalPages: number };
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 };
 
-export async function apiGetAllActiveCampaigns(body: GetAllActiveCampaignsBody, token?: string) {
-  const normalizedCategoryIds =
-    Array.isArray(body.categoryIds) && body.categoryIds.length > 0
-      ? body.categoryIds
-      : body.categoryId
-        ? [body.categoryId]
-        : [];
-
+export async function apiGetAllActiveCampaigns(
+  body: GetAllActiveCampaignsBody,
+  token?: string
+) {
   const payload: AnyObj = {
-    ...body,
-    categoryIds: normalizedCategoryIds,
-    categoryId: normalizedCategoryIds[0],
+    influencerId: body.influencerId,
+    page: body.page ?? 1,
+    limit: body.limit ?? 10,
+    search: body.search ?? "",
   };
 
-  return apiPost<ActiveCampaignsResponse>(`${CAMPAIGN_BASE}/active`, payload, {
-    headers: {
-      ...authHeader(token),
-    },
-  });
+  return apiPost<ActiveCampaignsResponse>(
+    `${CAMPAIGN_BASE}/influencer/get-all-active`,
+    payload,
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
 }
 
+/** -------------------------
+ *  ✅ MODASH
+ *  ------------------------*/
 export type ModashResolveProfileInput = {
   platform: "instagram" | "youtube" | "tiktok" | string;
   handle: string;
@@ -435,7 +446,9 @@ export async function apiResolveModashProfile(
   input: ModashResolveProfileInput,
   token?: string
 ) {
-  const normalizedHandle = String(input.handle || "").trim().replace(/^@+/, "");
+  const normalizedHandle = String(input.handle || "")
+    .trim()
+    .replace(/^@+/, "");
 
   return apiPost<any>(
     `${MODASH_BASE}/resolve-profile`,
@@ -457,17 +470,21 @@ export async function apiGetAllCampaigns(influencerId: string) {
 }
 
 export const apiGetAppliedCampaigns = (influencerId: string, token?: string) => {
-  return apiPost<any[]>(`/campaign/applied`, {
-    influencerId,
-    limit: 10,
-    pagination: 1,
-    search: ""
-  }, {
-    headers: {
-      ...authHeader(token),
+  return apiPost<any[]>(
+    `/campaign/applied`,
+    {
+      influencerId,
+      limit: 10,
+      pagination: 1,
+      search: "",
     },
-  });
-}
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+};
 
 export const apiGetfetchCampaignbyId = (
   influencerId: string,
@@ -506,7 +523,36 @@ export const apiGetContractedCampaigns = (influencerId: string, token?: string) 
 };
 
 export const apiGetfetchMediaKit = (influencerId: string) => {
-  return apiPost<any>(`/media-kit/influencer`,{
-    influencerId
+  return apiPost<any>(`/media-kit/influencer`, {
+    influencerId,
   });
+};
+
+export type ApplyToCampaignResponse = {
+  message: string;
+  campaignId: string;
+  influencerId: string;
+  applicantCount: number;
+  hasApplied: number;
+};
+
+export async function apiApplyToCampaign(
+  input: {
+    campaignId: string;
+    influencerId: string;
+  },
+  token?: string
+) {
+  return apiPost<ApplyToCampaignResponse>(
+    `${APPLY_BASE}/campaign`,
+    {
+      campaignId: input.campaignId,
+      influencerId: input.influencerId,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
 }
