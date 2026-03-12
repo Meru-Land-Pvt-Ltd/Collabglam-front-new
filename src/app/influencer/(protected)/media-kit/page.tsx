@@ -27,6 +27,7 @@ import { chartsAxisHighlightClasses } from "@mui/x-charts/ChartsAxisHighlight";
 import Box from "@mui/material/Box";
 import { PieChart } from "@mui/x-charts/PieChart";
 import { BarChart } from "@mui/x-charts";
+import Swal from "sweetalert2";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -427,7 +428,7 @@ export default function CreatorProfileDashboard() {
               | undefined) ?? "—",
           payout: (row.paymentType as string | undefined) ?? "—",
           raw: item,
-          category:row.campaignCategory as string | undefined,
+          category: row.campaignCategory as string | undefined,
         };
       });
 
@@ -487,9 +488,9 @@ export default function CreatorProfileDashboard() {
   const avgEngagement =
     allReports.length > 0
       ? allReports.reduce(
-          (sum, profile) => sum + Number(profile?.engagementRate ?? 0),
-          0
-        ) / allReports.length
+        (sum, profile) => sum + Number(profile?.engagementRate ?? 0),
+        0
+      ) / allReports.length
       : Number(primaryReport?.engagementRate ?? 0);
 
   const brandCollabs = primaryReport?.sponsoredPosts?.length ?? 0;
@@ -614,20 +615,42 @@ export default function CreatorProfileDashboard() {
     (mediaKit?.reviews?.length ?? 0) > 0
       ? (mediaKit!.reviews as ReviewData[])
       : [
-          {
-            name: "Sarah Jenkins",
-            role: "Brand Manager, LuxeBeauty",
-            text: `"Incredibly professional and hit all our KPIs. The engagement on the Reels was 40% higher than our average."`,
-            rating: 5,
-          },
-          {
-            name: "Marcus Thorne",
-            role: "Head of Marketing, NextGen",
-            text: `"Great content quality. Communication was a bit slow initially but the final output was worth the wait."`,
-            rating: 4,
-          },
-        ];
+        {
+          name: "Sarah Jenkins",
+          role: "Brand Manager, LuxeBeauty",
+          text: `"Incredibly professional and hit all our KPIs. The engagement on the Reels was 40% higher than our average."`,
+          rating: 5,
+        },
+        {
+          name: "Marcus Thorne",
+          role: "Head of Marketing, NextGen",
+          text: `"Great content quality. Communication was a bit slow initially but the final output was worth the wait."`,
+          rating: 4,
+        },
+      ];
+  const handleCopy = async () => {
+    try {
+      const influencerId = localStorage.getItem("influencerId") ?? "";
+      const mediaKitUrl = `${window.location.origin}/influencer/public/media-kit/${influencerId}`;
+      await navigator.clipboard.writeText(mediaKitUrl);
 
+      Swal.fire({
+        icon: "success",
+        title: "Copied!",
+        text: "Media kit link copied to clipboard.",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      console.error("Failed to copy link:", error);
+
+      Swal.fire({
+        icon: "error",
+        title: "Copy failed",
+        text: "Unable to copy the link.",
+      });
+    }
+  };
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
@@ -660,10 +683,10 @@ export default function CreatorProfileDashboard() {
                     style={
                       primaryReport?.picture
                         ? {
-                            backgroundImage: `url(${primaryReport.picture})`,
-                            backgroundSize: "cover",
-                            backgroundPosition: "center",
-                          }
+                          backgroundImage: `url(${primaryReport.picture})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
                         : {}
                     }
                   />
@@ -812,7 +835,7 @@ export default function CreatorProfileDashboard() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800">
+                  <button onClick={handleCopy} className="inline-flex items-center justify-center gap-2 rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-zinc-800">
                     <CopyIcon className="h-4 w-4" />
                     Copy link
                   </button>
@@ -926,13 +949,13 @@ export default function CreatorProfileDashboard() {
                       {
                         data: ageData.length
                           ? ageData.map((age, i) => ({
-                              id: age.range,
-                              value: Number(age.percentage),
-                              label: age.range,
-                              color: (
-                                ["#E8654A", "#3ABFAD", "#2D5470", "#E8C040", "#e4e4e7"] as const
-                              )[i % 5],
-                            }))
+                            id: age.range,
+                            value: Number(age.percentage),
+                            label: age.range,
+                            color: (
+                              ["#E8654A", "#3ABFAD", "#2D5470", "#E8C040", "#e4e4e7"] as const
+                            )[i % 5],
+                          }))
                           : [{ id: "no-data", value: 1, label: "No data", color: "#e4e4e7" }],
                         innerRadius: 60,
                         outerRadius: 100,
@@ -1109,7 +1132,7 @@ export default function CreatorProfileDashboard() {
                   </div>
                   <div className="mt-4 flex items-center gap-1 text-zinc-900">
                     {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} className="h-4 w-4 "  color="#FBBF00" fill="#FBBF00"/>
+                      <Star key={i} className="h-4 w-4 " color="#FBBF00" fill="#FBBF00" />
                     ))}
                     <span className="ml-2 text-sm font-medium text-zinc-600">
                       Top performer
@@ -1126,44 +1149,44 @@ export default function CreatorProfileDashboard() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {galleryItems.length
                 ? galleryItems.map((item, index) => (
-                    <div
-                      key={`${item.title}-${index}`}
-                      className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${item.bg} p-4 shadow-sm`}
-                      style={
-                        item.image
-                          ? {
-                              backgroundImage: `url(${item.image})`,
-                              backgroundSize: "cover",
-                              backgroundPosition: "center",
-                            }
-                          : undefined
-                      }
-                    >
-                      <div className="absolute inset-0 transition" />
-                      <div className="relative z-10 flex h-52 items-end rounded-[1.4rem]">
-                        <div>
-                          <div className="text-lg font-semibold text-white drop-shadow-sm">
-                            {item.title}
-                          </div>
-                          <div className="text-sm text-white/85">{item.subtitle}</div>
+                  <div
+                    key={`${item.title}-${index}`}
+                    className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${item.bg} p-4 shadow-sm`}
+                    style={
+                      item.image
+                        ? {
+                          backgroundImage: `url(${item.image})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
+                        : undefined
+                    }
+                  >
+                    <div className="absolute inset-0 transition" />
+                    <div className="relative z-10 flex h-52 items-end rounded-[1.4rem]">
+                      <div>
+                        <div className="text-lg font-semibold text-white drop-shadow-sm">
+                          {item.title}
                         </div>
+                        <div className="text-sm text-white/85">{item.subtitle}</div>
                       </div>
                     </div>
-                  ))
+                  </div>
+                ))
                 : galleryFallbackBg.map((bg, index) => (
-                    <div
-                      key={index}
-                      className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${bg} p-4 shadow-sm`}
-                    >
-                      <div className="absolute inset-0 bg-black/10 opacity-0 transition group-hover:opacity-100" />
-                      <div className="flex h-52 items-end rounded-[1.4rem] border border-white/20 bg-white/10 p-4 backdrop-blur-sm">
-                        <div>
-                          <div className="text-lg font-semibold text-white drop-shadow-sm">—</div>
-                          <div className="text-sm text-white/85">—</div>
-                        </div>
+                  <div
+                    key={index}
+                    className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${bg} p-4 shadow-sm`}
+                  >
+                    <div className="absolute inset-0 bg-black/10 opacity-0 transition group-hover:opacity-100" />
+                    <div className="flex h-52 items-end rounded-[1.4rem] border border-white/20 bg-white/10 p-4 backdrop-blur-sm">
+                      <div>
+                        <div className="text-lg font-semibold text-white drop-shadow-sm">—</div>
+                        <div className="text-sm text-white/85">—</div>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                ))}
             </div>
           </section>
 
@@ -1191,7 +1214,7 @@ export default function CreatorProfileDashboard() {
                         <td className="rounded-l-2xl px-4 py-4 font-semibold text-zinc-900">
                           {row.company}
                         </td>
-                         <td className="rounded-r-2xl px-4 py-4 font-medium text-zinc-900">
+                        <td className="rounded-r-2xl px-4 py-4 font-medium text-zinc-900">
                           {row.category}
                         </td>
                         <td className="px-4 py-4">{row.brief}</td>
