@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 
 export default function MilestoneTimeline() {
-  const [activeIndex, setActiveIndex] = useState(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const milestones = [
     {

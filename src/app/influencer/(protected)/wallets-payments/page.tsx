@@ -1,7 +1,7 @@
 "use client"
 import { useState } from "react";
 import { BarChart } from "@mui/x-charts/BarChart";
-import { ArrowDownToLine, TrendingUp, Wallet, ArrowUpRight, ChevronLeft, ChevronRight, Calendar, Search, CheckCircle2, Clock, AlertCircle, Zap, CreditCard, Info } from "lucide-react";
+import { ArrowDownToLine, TrendingUp, Wallet, ArrowUpRight, ChevronLeft, ChevronRight, Calendar, Search, CheckCircle2, Clock, AlertCircle, Zap, CreditCard, Info, LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/buttonComp";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,13 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@radix-ui/react-separator";
 
 // ── Data ───────────────────────────────────────────────────────────────────────
-const transactions = [
+const transactions: { id: string; campaign: string; type: string; amount: number; date: string; status: TxStatus }[] = [
     { id: "TXN789011", campaign: "Summer Fashion Collab", type: "Credit", amount: 500, date: "2024-07-20", status: "Completed" },
-    { id: "TXN789011", campaign: "Spring Beauty Launch", type: "Credit", amount: 250, date: "2024-07-15", status: "Pending" },
+    { id: "TXN789011", campaign: "Spring Beauty Launch",  type: "Credit", amount: 250, date: "2024-07-15", status: "Pending" },
     { id: "TXN789010", campaign: "Winter Skincare Review", type: "Debit", amount: -15, date: "2024-07-10", status: "Failed" },
     { id: "TXN789009", campaign: "Autumn Lifestyle Series", type: "Credit", amount: 300, date: "2024-07-01", status: "Completed" },
-    { id: "TXN789008", campaign: "Holiday Gift Guide", type: "Credit", amount: 700, date: "2024-06-25", status: "Completed" },
-    { id: "TXN789007", campaign: "Tech Gadget Unboxing", type: "Credit", amount: 120, date: "2024-06-19", status: "Completed" },
+    { id: "TXN789008", campaign: "Holiday Gift Guide",    type: "Credit", amount: 700, date: "2024-06-25", status: "Completed" },
+    { id: "TXN789007", campaign: "Tech Gadget Unboxing",  type: "Credit", amount: 120, date: "2024-06-19", status: "Completed" },
 ];
 
 const earningsData = [
@@ -36,7 +36,14 @@ const recentPayments = [
 ];
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-const StatCard = ({ icon: Icon, iconBg, label, value, sub, trend }) => (
+const StatCard = ({ icon: Icon, iconBg, label, value, sub, trend }: {
+    icon: LucideIcon;
+    iconBg: string;
+    label: string;
+    value: string;
+    sub?: string;
+    trend?: string;
+}) => (
     <Card className="p-5 flex flex-col gap-3">
         <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 tracking-wide uppercase">{label}</span>
@@ -56,15 +63,24 @@ const StatCard = ({ icon: Icon, iconBg, label, value, sub, trend }) => (
     </Card>
 );
 
-const StatusBadge = ({ status }) => {
-    const map = {
-        Completed: { variant: "success", icon: <CheckCircle2 size={10} />, label: "Completed" },
-        Pending: { variant: "pending", icon: <Clock size={10} />, label: "Pending" },
+type TxStatus = "Completed" | "Pending" | "Failed";
+type BadgeVariant = "destructive" | "link" | "default" | "secondary" | "outline" | "ghost";
+const StatusBadge = ({ status }: { status: TxStatus }) => {
+    const map: Record<TxStatus, { variant: BadgeVariant; icon: React.ReactNode; label: string }> = {
+        Completed: { variant: "default", icon: <CheckCircle2 size={10} />, label: "Completed" },
+        Pending: { variant: "secondary", icon: <Clock size={10} />, label: "Pending" },
         Failed: { variant: "destructive", icon: <AlertCircle size={10} />, label: "Failed" },
     };
-    const { variant, icon, label } = map[status] || map.Pending;
-    return <Badge variant={variant}>{icon}{label}</Badge>;
-};
+    const { variant, icon, label } = map[status] ?? map.Pending;
+
+    // ← this entire return block was missing
+    return (
+        <Badge variant={variant} className="flex items-center gap-1">
+            {icon}
+            {label}
+        </Badge>
+    );
+}; // ← closing brace was also missing
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function WalletPage() {
@@ -199,7 +215,6 @@ export default function WalletPage() {
                                 borderRadius={6}
                                 margin={{ top: 10, right: 10, left: 30, bottom: 30 }}
                                 slotProps={{
-                                    legend: { hidden: true },
                                     bar: { rx: 6, ry: 6 },
                                 }}
                                 sx={{

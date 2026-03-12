@@ -29,11 +29,11 @@ export default function SettingsUI() {
     { id: 'payment', label: 'Payment Preferences', icon: CreditCard }
   ];
 
-  const toggleSwitch = (key) => {
+  const toggleSwitch = (key: keyof typeof toggles) => {
     setToggles(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const SettingSection = ({ title, children }) => (
+  const SettingSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
     <div className="mb-12 pb-8 border-b border-slate-200">
       <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
         <h2 className="text-2xl font-bold text-slate-900">{title}</h2>
@@ -50,19 +50,19 @@ export default function SettingsUI() {
     </div>
   );
 
-  const FormInput = ({ label, placeholder, type = 'text', value = '' }) => (
+  const FormInput = ({ label, placeholder, type = 'text', value = '' }: { label: string; placeholder: string; type?: string; value?: string }) => (
     <div>
       <label className="block text-sm font-medium text-slate-700 mb-2">{label}</label>
-      <input 
+      <input
         type={type}
-        placeholder={placeholder} 
+        placeholder={placeholder}
         defaultValue={value}
-        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-yellow-400 text-slate-900" 
+        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-yellow-400 text-slate-900"
       />
     </div>
   );
 
-  const ToggleItem = ({ label, description, toggleKey }) => (
+const ToggleItem = ({ label, description, toggleKey }: { label: string; description?: string; toggleKey: keyof typeof toggles }) => (
     <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-slate-300 bg-white">
       <div className="flex-1">
         <p className="font-medium text-slate-900">{label}</p>
@@ -167,7 +167,7 @@ export default function SettingsUI() {
                     { name: 'System', bg: 'bg-gradient-to-r from-white to-slate-900', border: 'border-2 border-slate-400' }
                   ].map(theme => (
                     <div key={theme.name} className={`h-20 rounded-lg ${theme.bg} ${theme.border} cursor-pointer hover:shadow-lg transition-shadow flex items-center justify-center`}>
-                      <span className={theme.bg === 'bg-white' ? 'text-slate-900' : 'text-white'} className="text-sm font-medium">{theme.name}</span>
+                      <span className={`text-sm font-medium ${theme.bg === 'bg-white' ? 'text-slate-900' : 'text-white'}`}>{theme.name}</span>
                     </div>
                   ))}
                 </div>
@@ -215,11 +215,10 @@ export default function SettingsUI() {
                   ].map(option => (
                     <button
                       key={option.label}
-                      className={`p-4 border-2 rounded-lg transition-all text-left ${
-                        option.active 
-                          ? 'border-yellow-400 bg-yellow-50' 
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
+                      className={`p-4 border-2 rounded-lg transition-all text-left ${option.active
+                        ? 'border-yellow-400 bg-yellow-50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -278,7 +277,7 @@ export default function SettingsUI() {
                     </div>
                     <button className="text-red-600 hover:text-red-700 font-medium text-sm">Remove</button>
                   </div>
-                  <button 
+                  <button
                     className="w-full px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg font-medium text-slate-700 hover:border-slate-400 transition-colors"
                   >
                     + Add Payment Method
