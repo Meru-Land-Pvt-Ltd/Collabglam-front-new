@@ -90,17 +90,14 @@ type Item = {
 };
 
 export type InfluencerSidebarProps = {
-  /** controlled drawer state from page/shell */
   drawerOpen?: boolean;
   setDrawerOpen?: (open: boolean) => void;
-
-  /** optional badges */
   campaignBadge?: React.ReactNode;
   appliedBadge?: React.ReactNode;
   messagesBadge?: React.ReactNode;
 };
 
-/* ------------------------------ constants (upgrade card) ------------------------------ */
+/* ------------------------------ constants ------------------------------ */
 
 const UPGRADE_REST =
   "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.30) 31%, rgba(255, 255, 255, 0.50) 100%)";
@@ -126,8 +123,6 @@ const upgradeShellStyle: React.CSSProperties = {
 /* ------------------------------ small components ------------------------------ */
 
 function PanelCaretGlyph({ dir }: { dir: "left" | "right" }) {
-  const dx = -1.1;
-
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -144,7 +139,7 @@ function PanelCaretGlyph({ dir }: { dir: "left" | "right" }) {
       {dir === "right" ? (
         <path
           d="M7.25 5.5L10.75 9L7.25 12.5"
-          transform={`translate(${-1.1} 0)`}
+          transform="translate(-1.1 0)"
           stroke="currentColor"
           strokeWidth="1.8"
           strokeLinecap="round"
@@ -153,7 +148,7 @@ function PanelCaretGlyph({ dir }: { dir: "left" | "right" }) {
       ) : (
         <path
           d="M10.75 5.5L7.25 9L10.75 12.5"
-          transform={`translate(${-1.1} 0)`}
+          transform="translate(-1.1 0)"
           stroke="currentColor"
           strokeWidth="1.8"
           strokeLinecap="round"
@@ -293,16 +288,13 @@ export default function Sidebar({
   const isShort = useMediaQuery("(max-height: 800px)");
   const vw = useViewportWidth();
 
-  // ✅ ACTIVE derives from URL (no default "campaign")
+  // state
   const [active, setActive] = useState<string>("");
-
-  // nav collapse state
   const [collapsed, setCollapsed] = useState(true);
   const [widthCollapsed, setWidthCollapsed] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
-
-  // drawer state (controlled OR internal fallback)
   const [drawerOpenInternal, setDrawerOpenInternal] = useState(false);
+
   const drawerOpen = drawerOpenProp ?? drawerOpenInternal;
 
   const setDrawerOpen = useCallback(
@@ -313,32 +305,115 @@ export default function Sidebar({
     [setDrawerOpenProp]
   );
 
-  // ✅ active from URL (includes /influencer/dashboard)
+  // ── 1. items declared FIRST so everything below can reference it ──
+  const items = useMemo<Item[]>(
+    () => [
+      {
+        key: "dashboard",
+        label: "Dashboard",
+        icon: CardsThree,
+        section: "main",
+        href: "/influencer/dashboards",
+      },
+      {
+        key: "discover-campaigns",
+        label: "Discover Campaigns",
+        icon: Megaphone,
+        section: "main",
+        href: "/influencer/discover-campaigns",
+        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+      },
+      {
+        key: "invitations",
+        label: "Invitations",
+        icon: EnvelopeSimpleIcon,
+        section: "main",
+        href: "/influencer/invitations",
+        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+      },
+      {
+        key: "my-campaigns",
+        label: "My Campaigns",
+        icon: SuitcaseIcon,
+        section: "main",
+        href: "/influencer/my-campaigns",
+        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+      },
+      // {
+      //   key: "earnings",
+      //   label: "Earnings",
+      //   icon: Money,
+      //   section: "main",
+      //   href: "/influencer/earnings",
+      // },
+      {
+        key: "messages",
+        label: "Inbox/Messages",
+        icon: ChatCenteredText,
+        section: "main",
+        href: "/influencer/messages",
+        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
+      },
+      {
+        key: "wallet-payments",
+        label: "Wallet & Payments",
+        icon: WalletIcon,
+        section: "main",
+        href: "/influencer/wallets-payments",
+      },
+      {
+        key: "media-kit",
+        label: "Media Kit",
+        icon: ImageIcon,
+        section: "main",
+        href: "/influencer/media-kit",
+      },
+      {
+        key: "profile",
+        label: "Profile & Rate card",
+        icon: UserIcon,
+        section: "main",
+        href: "/influencer/profile",
+      },
+      {
+        key: "boost-profile",
+        label: "Boost Profile",
+        icon: RocketLaunchIcon,
+        section: "main",
+        href: "/influencer/boost-profile",
+      },
+      {
+        key: "settings",
+        label: "Settings",
+        icon: Gear,
+        section: "footer",
+        href: "/influencer/settings",
+      },
+      {
+        key: "support",
+        label: "Support",
+        icon: Question,
+        section: "footer",
+        href: "/influencer/support-center",
+      },
+    ],
+    [campaignBadge, appliedBadge, messagesBadge]
+  );
+
+  // ── 2. derived from items ──
+  const mainItems = useMemo(() => items.filter((i) => i.section === "main"), [items]);
+  const footerItems = useMemo(() => items.filter((i) => i.section === "footer"), [items]);
+
+  // ── 3. useEffect that uses items ──
   useEffect(() => {
     const p = pathname || "";
+    const matched = items.find(
+      (item) => item.href === p || p.startsWith(item.href + "/")
+    );
+    setActive(matched?.key ?? "dashboard");
+  }, [pathname, items]);
 
-    if (p.startsWith("/influencer/dashboard") || p === "/influencer") {
-      setActive("dashboard");
-    } else if (p.startsWith("/influencer/messages")) {
-      setActive("messages");
-    } else if (p.startsWith("/influencer/earnings")) {
-      setActive("earnings");
-    } else if (p.startsWith("/influencer/applied")) {
-      setActive("applied");
-    } else if (p.startsWith("/influencer/settings")) {
-      setActive("settings");
-    } else if (p.startsWith("/influencer/support")) {
-      setActive("support");
-    } else if (
-      p.startsWith("/influencer/campaign") ||
-      p.startsWith("/influencer/campaigns")
-    ) {
-      setActive("campaign");
-    } else {
-      setActive("dashboard");
-    }
-  }, [pathname]);
-
+  // ── 4. desktop/mobile layout effect ──
   useEffect(() => {
     if (isDesktop) {
       setDrawerOpen(false);
@@ -354,8 +429,6 @@ export default function Sidebar({
 
   const compactUI = isDesktop ? collapsed || isClosing : false;
   const tight = isShort;
-
-  // ✅ IMPORTANT: collapse footer immediately when closing/width collapsing
   const showCollapsedFooter = isDesktop && (collapsed || isClosing || widthCollapsed);
 
   const motionTransitions = useMemo(() => {
@@ -383,140 +456,13 @@ export default function Sidebar({
     []
   );
 
-  // ✅ add Dashboard item
-  const items = useMemo<Item[]>(
-    () => [
-      {
-        key: "dashboard",
-        label: "Dashboard",
-        icon: CardsThree,
-        section: "main",
-        href: "/influencer/dashboard",
-      },
-      // {
-      //   key: "campaign",
-      //   label: "Campaigns",
-      //   icon: CardsThree,
-      //   section: "main",
-      //   href: "/influencer/campaign",
-      //   right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
-      // },
-      {
-        key: "discover-campaigns",
-        label: "Discover Campaigns",
-        icon: Megaphone,
-        section: "main",
-        href: "/influencer/discover-campaigns",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
-      },
-      {
-        key: "invitations",
-        label: "Invitations",
-        icon: EnvelopeSimpleIcon,
-        section: "main",
-        href: "/influencer/invitations",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
-      },
-      {
-        key: "my-campaigns",
-        label: "My Campaigns",
-        icon: SuitcaseIcon,
-        section: "main",
-        href: "/influencer/my-campaigns",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
-      },
-      // {
-      //   key: "deliverables",
-      //   label: "Deliverables",
-      //   icon: PackageIcon,
-      //   section: "main",
-      //   href: "/influencer/deliverables",
-      //   right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
-      // },
-      // {
-      //   key: "contracts",
-      //   label: "Contracts",
-      //   icon: HandshakeIcon,
-      //   section: "main",
-      //   href: "/influencer/contracts",
-      //   right: appliedBadge != null ? <Badge>{appliedBadge}</Badge> : undefined,
-      // },
-      {
-        key: "earnings",
-        label: "Earnings",
-        icon: Money,
-        section: "main",
-        href: "/influencer/earnings",
-      },
-      {
-        key: "messages",
-        label: "Inbox/Messages",
-        icon: ChatCenteredText,
-        section: "main",
-        href: "/influencer/messages",
-        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
-      },
-      {
-        key: "wallet-payments",
-        label: "Wallet & Payments",
-        icon: WalletIcon,
-        section: "main",
-        href: "/influencer/wallet-payments",
-        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
-      },
-       {
-        key: "media-kit",
-        label: "Media Kit",
-        icon: ImageIcon,
-        section: "main",
-        href: "/influencer/media-kit",
-        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
-      },
-      {
-        key: "profile",
-        label: "Profile & Rate card",
-        icon: UserIcon,
-        section: "main",
-        href: "/influencer/profile",
-        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
-      },
-      {
-        key: "boost-profile",
-        label: "Boost Profile",
-        icon: RocketLaunchIcon,
-        section: "main",
-        href: "/influencer/boost-profile",
-        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
-      },
-      {
-        key: "settings",
-        label: "Settings",
-        icon: Gear,
-        section: "footer",
-        href: "/influencer/settings",
-      },
-      {
-        key: "support",
-        label: "Support",
-        icon: Question,
-        section: "footer",
-        href: "/influencer/support-center",
-      },
-    ],
-    [campaignBadge, appliedBadge, messagesBadge]
-  );
-
-  const mainItems = useMemo(() => items.filter((i) => i.section === "main"), [items]);
-  const footerItems = useMemo(() => items.filter((i) => i.section === "footer"), [items]);
-
+  // ── 5. callbacks that use items ──
   const handleSetActive = useCallback(
     (key: string) => {
       const item = items.find((x) => x.key === key);
       if (!item) return;
-
       setActive(key);
       router.push(item.href);
-
       if (!isDesktop) setDrawerOpen(false);
     },
     [items, router, isDesktop, setDrawerOpen]
@@ -529,7 +475,6 @@ export default function Sidebar({
   }, []);
 
   const beginCloseDesktop = useCallback(() => {
-    // snap header/footer to rail layout immediately
     setIsClosing(true);
     setWidthCollapsed(true);
   }, []);
@@ -587,7 +532,6 @@ export default function Sidebar({
         <div
           className={cn(
             "flex w-full items-center",
-            // ✅ snap layout immediately during close too
             isDesktop && (collapsed || isClosing) ? "flex-col gap-3" : "gap-3"
           )}
         >
@@ -597,7 +541,7 @@ export default function Sidebar({
             onClick={() => {
               if (isDesktop) {
                 if (collapsed || isClosing) beginOpenDesktop();
-                else router.push("/influencer/dashboard"); // ✅ optional: clicking logo goes to dashboard
+                else router.push("/influencer/dashboard");
               } else {
                 setDrawerOpen(true);
               }
@@ -658,7 +602,6 @@ export default function Sidebar({
                 "grid h-10 w-10 flex-shrink-0 place-items-center transition rounded-lg",
                 "text-[#343330] hover:bg-[#EDEDED] hover:text-[#1a1a1a]",
                 FOCUS_RING,
-                // ✅ don't keep ml-auto while closing
                 collapsed || isClosing ? "" : "ml-auto"
               )}
             >
@@ -687,24 +630,11 @@ export default function Sidebar({
         <div
           className={cn(
             "min-h-0 flex-1 pr-1",
-            isDesktop && collapsed ? "flex flex-col items-center overflow-y-auto" : "overflow-y-auto"
+            isDesktop && collapsed
+              ? "flex flex-col items-center overflow-y-auto"
+              : "overflow-y-auto"
           )}
         >
-          <AnimatePresence initial={false}>
-            {!compactUI && (
-              <m.div
-                key="main-title"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={motionTransitions.content}
-                className="mb-4 text-[16px] font-semibold text-neutral-600 w-full"
-              >
-                Dashboard
-              </m.div>
-            )}
-          </AnimatePresence>
-
           <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "gap-2 w-full")}>
             {mainItems.map((i) => renderItem(i))}
           </div>
@@ -716,168 +646,11 @@ export default function Sidebar({
               tight ? "my-4" : ""
             )}
           />
-
-          <AnimatePresence initial={false}>
-            {!compactUI && (
-              <m.div
-                key="footer-title"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={motionTransitions.content}
-                className="mb-4 text-[16px] font-semibold text-neutral-600 w-full"
-              >
-                Manage
-              </m.div>
-            )}
-          </AnimatePresence>
-
           <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "gap-2 w-full")}>
             {footerItems.map((i) => renderItem(i))}
           </div>
         </div>
       </div>
-
-       {/* FOOTER  */}
-       {/* <div className={cn("mt-auto pt-6", tight ? "pt-4" : "")}>
-        <AnimatePresence initial={false} mode="wait">
-          {showCollapsedFooter ? (
-            <m.div
-              key="collapsed-footer"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={motionTransitions.content}
-              className="flex flex-col items-center gap-4"
-            >
-              <m.button
-                type="button"
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                transition={upgradeSpring}
-                className={cn(
-                  "grid place-items-center overflow-hidden",
-                  tight ? "h-12 w-12" : "h-14 w-14",
-                  FOCUS_RING
-                )}
-                style={{
-                  borderRadius: "8px",
-                  background: UPGRADE_COLLAPSED,
-                }}
-                aria-label="Boost Profile"
-              >
-                <Lightning size={24} className="text-[#1a1a1a]" />
-              </m.button>
-
-              <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
-
-              <div className="h-10 w-10 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
-                <img
-                  alt="Influencer"
-                  src="https://i.pravatar.cc/120?img=64"
-                  className="h-full w-full object-cover"
-                />
-              </div>
-            </m.div>
-          ) : (
-            <m.div
-              key="expanded-footer"
-              variants={fadeScale}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={motionTransitions.content}
-              className="w-full"
-            >
-              
-              <m.div
-                initial="rest"
-                animate="rest"
-                whileHover="hover"
-                transition={upgradeSpring}
-                className={cn(
-                  "relative flex w-full flex-col items-start gap-2.5 overflow-hidden p-2 cursor-pointer",
-                  FOCUS_RING
-                )}
-                style={upgradeShellStyle}
-                tabIndex={0}
-                role="button"
-                aria-label="Boost Profile"
-              >
-                <div
-                  className="pointer-events-none absolute inset-0"
-                  style={{ background: UPGRADE_REST, borderRadius: "inherit" }}
-                />
-                <m.div
-                  className="pointer-events-none absolute inset-0"
-                  style={{ background: UPGRADE_HOVER, borderRadius: "inherit" }}
-                  variants={{ rest: { opacity: 0 }, hover: { opacity: 1 } }}
-                  transition={upgradeSpring}
-                />
-
-                <div className="relative z-10 flex flex-col items-start gap-2.5">
-                  <div className="relative h-6 w-6">
-                    <m.span
-                      className="absolute inset-0 grid place-items-center"
-                      variants={{ rest: { opacity: 1 }, hover: { opacity: 0 } }}
-                      transition={upgradeSpring}
-                    >
-                      <Lightning size={24} weight="regular" className="text-[#1a1a1a]" />
-                    </m.span>
-
-                    <m.span
-                      className="absolute inset-0 grid place-items-center"
-                      variants={{ rest: { opacity: 0 }, hover: { opacity: 1 } }}
-                      transition={upgradeSpring}
-                    >
-                      <Lightning size={24} weight="fill" className="text-[#1a1a1a]" />
-                    </m.span>
-                  </div>
-
-                  <div className="text-[#1a1a1a] text-[18px] font-semibold leading-[24px]">
-                    Boost Profile
-                  </div>
-
-                  <div className="text-[#1a1a1a] font-[Inter] text-[14px] font-normal leading-[18px]">
-                    Get more campaign invites. No long-term commitment
-                  </div>
-                </div>
-              </m.div>
-
-              <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
-
-             
-              <div className="flex w-full items-center gap-3 bg-white p-3">
-                <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
-                  <img
-                    alt="Influencer"
-                    src="https://i.pravatar.cc/120?img=64"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[16px] font-semibold text-[#1a1a1a]">
-                    Influencer
-                  </div>
-                  <div className="truncate text-[12px] text-neutral-500">Creator</div>
-                </div>
-
-                <button
-                  type="button"
-                  className={cn(
-                    "flex-shrink-0 grid h-10 w-10 place-items-center rounded-xl text-[#1a1a1a] transition hover:bg-[#EDEDED]",
-                    FOCUS_RING
-                  )}
-                  aria-label="More"
-                >
-                  <DotsThree size={24} />
-                </button>
-              </div>
-            </m.div>
-          )}
-        </AnimatePresence>
-      </div>  */}
     </div>
   );
 
@@ -885,7 +658,9 @@ export default function Sidebar({
     <m.aside
       data-cg-sidebar
       id="cg-sidebar"
-      className={cn("inline-flex flex-col border border-neutral-200 bg-white select-none h-dvh")}
+      className={cn(
+        "inline-flex flex-col border border-neutral-200 bg-white select-none h-dvh"
+      )}
       style={{
         padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",
         fontFamily: "var(--Font-Family-Inter, Inter)",
