@@ -408,7 +408,7 @@ export async function apiGetAllActiveCampaigns(body: GetAllActiveCampaignsBody, 
     categoryId: normalizedCategoryIds[0],
   };
 
-  return apiPost<ActiveCampaignsResponse>(`${CAMPAIGN_BASE}/active`, payload, {
+  return apiPost<ActiveCampaignsResponse>(`${CAMPAIGN_BASE}/influencer/get-all-active`, payload, {
     headers: {
       ...authHeader(token),
     },

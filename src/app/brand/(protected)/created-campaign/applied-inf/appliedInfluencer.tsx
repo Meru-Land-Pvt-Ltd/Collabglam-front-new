@@ -22,6 +22,8 @@ import {
   type InfluencerRow,
   type PlatformType,
 } from "@/components/ui/brand/Influencertable";
+
+import AddMilestoneCard from "@/components/ui/brand/AddMilestoneCard";
 import {
   Tooltip,
   TooltipContent,
@@ -2383,6 +2385,10 @@ export default function AppliedInfluencersPage() {
   const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
   const [bulkTargets, setBulkTargets] = useState<Influencer[]>([]);
 
+  const [addMilestoneOpen, setAddMilestoneOpen] = useState(false);
+  const [milestoneTargetInf, setMilestoneTargetInf] = useState<Influencer | null>(null);
+  const [milestoneTargetMeta, setMilestoneTargetMeta] = useState<ContractMeta | null>(null);
+
   const [serverCampaignTitle, setServerCampaignTitle] = useState("");
   const [serverBudget, setServerBudget] = useState<number | null>(null);
   const [serverTimeline, setServerTimeline] = useState<{
@@ -2484,11 +2490,11 @@ export default function AppliedInfluencersPage() {
         return;
       }
 
-      router.push(
-        `/brand/milestones?mode=add&contractId=${meta.contractId}&campaignId=${campaignId}&influencerId=${inf.influencerId}`
-      );
+      setMilestoneTargetInf(inf);
+      setMilestoneTargetMeta(meta);
+      setAddMilestoneOpen(true);
     },
-    [campaignId, router]
+    []
   );
 
   const handleViewMilestone = useCallback(
@@ -3747,6 +3753,121 @@ export default function AppliedInfluencersPage() {
     );
   }
 
+  type MilestoneDropdownValue = "add-milestone" | "view-milestone";
+
+  const MILESTONE_DROPDOWN_OPTIONS: Array<{
+    value: MilestoneDropdownValue;
+    label: string;
+  }> = [
+      { value: "add-milestone", label: "Add Milestone" },
+      { value: "view-milestone", label: "View Milestone" },
+    ];
+
+  function MilestoneActionsDropdown({
+    onAddMilestone,
+    onViewMilestone,
+    canAddMilestone = true,
+    canViewMilestone = true,
+  }: {
+    onAddMilestone: () => void;
+    onViewMilestone: () => void;
+    canAddMilestone?: boolean;
+    canViewMilestone?: boolean;
+  }) {
+    const [open, setOpen] = React.useState(false);
+    const [selectedValue, setSelectedValue] =
+      React.useState<MilestoneDropdownValue | null>(null);
+
+    const items = React.useMemo(
+      () => MILESTONE_DROPDOWN_OPTIONS.map((item) => item.value),
+      []
+    );
+
+    const labelMap = React.useMemo(
+      () =>
+        MILESTONE_DROPDOWN_OPTIONS.reduce<
+          Record<MilestoneDropdownValue, string>
+        >((acc, item) => {
+          acc[item.value] = item.label;
+          return acc;
+        }, {} as Record<MilestoneDropdownValue, string>),
+      []
+    );
+
+    const isDisabled = React.useCallback(
+      (item: MilestoneDropdownValue) => {
+        if (item === "add-milestone") return !canAddMilestone;
+        if (item === "view-milestone") return !canViewMilestone;
+        return false;
+      },
+      [canAddMilestone, canViewMilestone]
+    );
+
+    const handleValueChange = React.useCallback(
+      (next: MilestoneDropdownValue | null) => {
+        setSelectedValue(next);
+
+        if (!next || isDisabled(next)) return;
+
+        if (next === "add-milestone") onAddMilestone();
+        if (next === "view-milestone") onViewMilestone();
+
+        setOpen(false);
+
+        requestAnimationFrame(() => {
+          setSelectedValue(null);
+        });
+      },
+      [isDisabled, onAddMilestone, onViewMilestone]
+    );
+
+    return (
+      <Combobox
+        items={items}
+        open={open}
+        onOpenChange={setOpen}
+        value={selectedValue}
+        onValueChange={handleValueChange}
+      >
+        <ComboboxTrigger
+          hideIcon
+          aria-label="Open milestone actions"
+          render={
+            <button
+              type="button"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+            />
+          }
+        >
+          <DotsThree size={16} weight="bold" />
+        </ComboboxTrigger>
+
+        <ComboboxContent
+          align="end"
+          side="bottom"
+          sideOffset={8}
+          className="w-52 p-2"
+        >
+          <ComboboxEmpty>No actions found.</ComboboxEmpty>
+
+          <ComboboxList className="gap-1 px-0">
+            {(item: MilestoneDropdownValue) => (
+              <ComboboxItem
+                key={item}
+                value={item}
+                showIndicator={false}
+                disabled={isDisabled(item)}
+                className="h-9 px-3 text-sm"
+              >
+                {labelMap[item]}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    );
+  }
+
   function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
     const inf = row.rawInfluencer;
     const meta = row.contractMeta;
@@ -3779,14 +3900,6 @@ export default function AppliedInfluencersPage() {
 
     const handleManageClick = () => {
       router.push(`/brand/influencers?id=${inf.influencerId}`);
-    };
-
-    const handleMoreClick = () => {
-      if (hasContract) {
-        handleViewContract(inf);
-        return;
-      }
-      openSidebar(inf, "send");
     };
 
     return (
@@ -3838,13 +3951,17 @@ export default function AppliedInfluencersPage() {
           ) : null}
         </button> */}
 
-        <button
-          type="button"
-          onClick={handleMoreClick}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
-        >
-          <DotsThree size={16} weight="bold" />
-        </button>
+        <MilestoneActionsDropdown
+          onAddMilestone={() => handleAddMilestone(inf, meta)}
+          onViewMilestone={() => handleViewMilestone(inf, meta)}
+          canAddMilestone={
+            hasContract &&
+            ([CONTRACT_STATUS.CONTRACT_SIGNED, CONTRACT_STATUS.MILESTONES_CREATED] as ContractStatus[]).includes(
+              statusStr as ContractStatus
+            )
+          }
+          canViewMilestone={hasContract}
+        />
       </div>
     );
   }
@@ -5350,6 +5467,25 @@ export default function AppliedInfluencersPage() {
                   "Could not sign contract.",
               });
             }
+          }}
+        />
+        <AddMilestoneCard
+          open={addMilestoneOpen}
+          onClose={() => {
+            setAddMilestoneOpen(false);
+            setMilestoneTargetInf(null);
+            setMilestoneTargetMeta(null);
+          }}
+          contractId={milestoneTargetMeta?.contractId || ""}
+          campaignId={campaignId || ""}
+          influencerId={milestoneTargetInf?.influencerId || ""}
+          influencerName={milestoneTargetInf?.name || ""}
+          onSubmit={() => {
+            setAddMilestoneOpen(false);
+            setMilestoneTargetInf(null);
+            setMilestoneTargetMeta(null);
+            fetchApplicants(debouncedSearch);
+            loadMetaCache(influencers);
           }}
         />
       </div>

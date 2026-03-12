@@ -600,14 +600,12 @@ export function ManualPreviewCard({
         )}
       </div>
 
-      {/* divider */}
+
       <div className="mt-6 h-px w-full bg-neutral-100 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5" />
 
-      {/* bottom row: Budget + actions */}
-      {/* bottom row: Budget + actions */}
+ 
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
-        {/* Budget */}
-        {/* Budget */}
+     
         <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
           <div className="min-w-0 flex-1">
             {budget > 0 ? (
