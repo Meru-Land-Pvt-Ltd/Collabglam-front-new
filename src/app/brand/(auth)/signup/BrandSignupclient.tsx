@@ -206,6 +206,7 @@ export default function BrandSignupPage() {
   // ✅ split loaders: send/resend vs verify
   const [isSendingOtp, setIsSendingOtp] = React.useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = React.useState(false);
+  const [passwordValid, setPasswordValid] = React.useState(false);
 
   /** -------------------------
    * Validation (match backend)
@@ -214,8 +215,16 @@ export default function BrandSignupPage() {
 
   // ✅ per your current requirement: 8–16 chars
   const pwOk = (p: string) => {
-    const len = (p ?? "").trim().length;
-    return len >= 8 && len <= 16;
+    const value = (p ?? "").trim();
+
+    return (
+      value.length >= 8 &&
+      value.length <= 16 &&
+      /\d/.test(value) &&           // number
+      /[A-Z]/.test(value) &&        // uppercase
+      /[a-z]/.test(value) &&        // lowercase
+      /[^A-Za-z0-9]/.test(value)    // special character
+    );
   };
 
   const brandNameError =
@@ -242,7 +251,7 @@ export default function BrandSignupPage() {
       ? !password.trim()
         ? "Password is required."
         : !pwOk(password)
-          ? "Password must be 8–16 characters."
+          ? "Password must be 8–16 characters and include uppercase, lowercase, number, and special character."
           : ""
       : "";
 
@@ -328,46 +337,48 @@ export default function BrandSignupPage() {
   /** -------------------------
    * Actions
    * ------------------------*/
-const handleContinueFromForm = async (e: React.FormEvent) => {
-  e.preventDefault();
+  const handleContinueFromForm = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  // show errors in UI
-  resetClearedOnSubmit();
-  setAttemptedSubmit(true);
+    // show errors in UI
+    resetClearedOnSubmit();
+    setAttemptedSubmit(true);
 
-  // ✅ validate immediately (same rules you expect)
-  const hasAnyErrorNow =
-    !brandName.trim() ||
-    !email.trim() ||
-    !emailOk(email) ||
-    !industry ||
-    !pwOk(password) ||
-    !agreed;
+    // ✅ validate immediately (same rules you expect)
+    const hasAnyErrorNow =
+      !brandName.trim() ||
+      !email.trim() ||
+      !emailOk(email) ||
+      !industry ||
+      password.trim().length < 8 ||
+      password.trim().length > 16 ||
+      !passwordValid ||
+      !agreed;
 
-  if (hasAnyErrorNow) return;
+    if (hasAnyErrorNow) return;
 
-  setIsSendingOtp(true);
-  try {
-    await sendOtp();
-    setStep("otp");
-    setOtp("");
-    setOtpError(undefined);
+    setIsSendingOtp(true);
+    try {
+      await sendOtp();
+      setStep("otp");
+      setOtp("");
+      setOtpError(undefined);
 
-    toast({
-      icon: "success",
-      title: "OTP sent",
-      text: `We sent a 6-digit code to ${email.trim()}`,
-    });
-  } catch (err) {
-    toast({
-      icon: "error",
-      title: "Failed to send OTP",
-      text: getApiErrorMessage(err, "Failed to send OTP"),
-    });
-  } finally {
-    setIsSendingOtp(false);
-  }
-};
+      toast({
+        icon: "success",
+        title: "OTP sent",
+        text: `We sent a 6-digit code to ${email.trim()}`,
+      });
+    } catch (err) {
+      toast({
+        icon: "error",
+        title: "Failed to send OTP",
+        text: getApiErrorMessage(err, "Failed to send OTP"),
+      });
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
 
   const handleVerifyOtp = async () => {
     // ✅ Frontend validation: error state only (NO toast)
@@ -586,6 +597,7 @@ const handleContinueFromForm = async (e: React.FormEvent) => {
                         if (passwordInvalid) clearFieldOnFocus("password");
                       }}
                       onFocus={() => clearFieldOnFocus("password")}
+                      onValidityChange={(valid) => setPasswordValid(valid)}
                       icon
                       size="small"
                       state={passwordInvalid ? "error" : "default"}
