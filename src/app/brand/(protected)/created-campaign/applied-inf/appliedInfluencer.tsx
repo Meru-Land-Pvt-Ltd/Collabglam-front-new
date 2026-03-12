@@ -2917,10 +2917,14 @@ export default function AppliedInfluencersPage() {
       seededDeliverable.platformHandle = inf.handle ? sanitizeHandle(inf.handle) : "";
       seededDeliverable.srNo = 1;
 
-      base.campaign.paymentType = serverPaymentType;
+      const initialPaymentType = normalizePaymentType(
+        meta?.content?.campaign?.paymentType || serverPaymentType
+      );
+
+      base.campaign.paymentType = initialPaymentType;
 
       const merged = mergeDeep(base, meta?.content || {});
-      merged.campaign.paymentType = serverPaymentType;
+      merged.campaign.paymentType = initialPaymentType;
 
       const rawMilestones =
         meta?.content?.scheduleA?.commercial?.milestones ||
@@ -2936,7 +2940,7 @@ export default function AppliedInfluencersPage() {
             triggerEvent: String(row?.triggerEvent || ""),
             dueDate: String(row?.dueDate || ""),
           }))
-          : serverPaymentType === PAYMENT_TYPE.MILESTONE
+          : initialPaymentType === PAYMENT_TYPE.MILESTONE
             ? [createDefaultCommercialMilestone()]
             : [];
 
@@ -3016,9 +3020,17 @@ export default function AppliedInfluencersPage() {
     };
   }, [sidebarOpen]);
 
+  const activePaymentType = useMemo(
+    () =>
+      normalizePaymentType(
+        contractForm.campaign.paymentType || serverPaymentType
+      ),
+    [contractForm.campaign.paymentType, serverPaymentType]
+  );
+
   const buildContentPayload = useCallback(() => {
     const content = deepClone(contractForm);
-    const paymentType = serverPaymentType;
+    const paymentType = activePaymentType;
     content.campaign.paymentType = paymentType;
 
     return {
@@ -3071,7 +3083,7 @@ export default function AppliedInfluencersPage() {
         },
       },
     };
-  }, [contractForm, deliverables, requestedEffDate, serverPaymentType]);
+  }, [contractForm, deliverables, requestedEffDate, activePaymentType]);
 
   const buildBrandUpdatesPayload = useCallback(() => {
     return {
@@ -3110,7 +3122,7 @@ export default function AppliedInfluencersPage() {
 
     const feeRaw = String(contractForm.scheduleA.commercial.totalCampaignFee ?? "");
     const feeValue = Number(feeRaw);
-    const paymentType = serverPaymentType;
+    const paymentType = activePaymentType;
     const revisionRaw = String(
       contractForm.scheduleA.review.includedRevisionRounds ?? ""
     );
@@ -3211,7 +3223,7 @@ export default function AppliedInfluencersPage() {
     requestedEffDate,
     scrollFirstErrorIntoView,
     setErr,
-    serverPaymentType
+    activePaymentType
   ]);
 
   const handleGeneratePreview = useCallback(async () => {
@@ -4033,8 +4045,6 @@ export default function AppliedInfluencersPage() {
     { value: "yes", label: "Yes" },
     { value: "no", label: "No" },
   ];
-
-  const activePaymentType = serverPaymentType;
 
   return (
     <TooltipProvider delayDuration={150}>
