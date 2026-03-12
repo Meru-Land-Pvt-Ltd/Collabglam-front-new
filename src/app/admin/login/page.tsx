@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/adminbutton";
 import { Label } from "@/components/ui/label";
 import { HiEye, HiEyeSlash } from "react-icons/hi2";
 import { post } from "@/lib/api";
+import Image from "next/image";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -54,7 +55,7 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 relative">
-            <Image src="/logo.svg" alt="Admin Logo" fill className="object-contain" />
+            <Image src="/logo.png" alt="Admin Logo" fill className="object-contain" />
           </div>
           <CardTitle className="text-2xl font-bold">Admin Sign In</CardTitle>
           <CardDescription className="text-gray-500">
@@ -110,7 +111,6 @@ export default function AdminLoginPage() {
             <Button
               type="submit"
               className="w-full py-2 text-lg"
-              variant="default"
               disabled={loading}
             >
               {loading ? "Signing in…" : "Sign In"}
