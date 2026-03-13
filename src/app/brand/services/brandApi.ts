@@ -9,6 +9,7 @@ const CAMPAIGN_BASE = "/campaign";
 const WALLET_BASE = "/wallet";
 const INVITATION_BASE = "/invitation";
 const APPLY_BASE = "/apply-campaign";
+const MILESTONE_BASE = "/milestone";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -329,7 +330,6 @@ export async function apiGetSubcategoriesByCategoryId(categoryId: string) {
 
 /** ✅ CATEGORY GET-ALL (your custom endpoint) */
 export async function apiGetAllCategories() {
-  // endpoint: /category/get-all
   return apiGet<CategoryDoc[]>(`/category/categories`);
 }
 
@@ -414,7 +414,6 @@ export type CreateCampaignManualPayload = {
 };
 
 export async function apiCampaignCreate(payload: CreateCampaignManualPayload) {
-  // backend returns { doc: enriched }
   const res = await apiPost<any>(`${CAMPAIGN_BASE}/create`, payload);
   return (res?.doc ?? res) as EnrichedCampaignDoc;
 }
@@ -439,7 +438,7 @@ export type PrefillCampaignAIPayload = {
   additionalNotes?: string;
 
   saveDraft?: boolean;
-  save?: boolean; // legacy alias
+  save?: boolean;
 };
 
 export async function apiCampaignPrefillAI(payload: PrefillCampaignAIPayload) {
@@ -468,7 +467,6 @@ export async function apiCampaignCreateAI(payload: PrefillCampaignAIPayload) {
 
 /** -------- List / Get -------- */
 export type ListCampaignsPayload = {
-  // ✅ REQUIRED (you said brand id is required)
   brandId: string;
 
   page?: number;
@@ -478,11 +476,10 @@ export type ListCampaignsPayload = {
   status?: CampaignStatus;
   byAi?: 0 | 1;
 
-  // ✅ filters used by your UI
   campaignType?: string;
-  creatorStatus?: string; // optional (backend can ignore if not supported)
-  categoryId?: string;    // single select
-  categoryIds?: string[]; // optional multi (if you add later)
+  creatorStatus?: string;
+  categoryId?: string;
+  categoryIds?: string[];
 
   dateFrom?: string;
   dateTo?: string;
@@ -495,7 +492,6 @@ export async function apiCampaignGetDrafts(payload: ListCampaignsPayload) {
   return apiPost<{ items: EnrichedCampaignDoc[]; meta: any }>(`${CAMPAIGN_BASE}/get-drafts`, payload);
 }
 
-/** ✅ This is the ONLY list API you’ll use in frontend now (NO LITE) */
 export async function apiCampaignGetByBrand(payload: ListCampaignsPayload) {
   return apiPost<{ items: CampaignRowSummary[]; meta: any }>(`${CAMPAIGN_BASE}/get-by-brand`, payload);
 }
@@ -540,7 +536,7 @@ export type EditDraftPayload = {
   startAt?: string;
   endAt?: string;
 
-  status?: CampaignStatus; // "draft" | "active" | "scheduled"
+  status?: CampaignStatus;
 };
 
 export async function apiCampaignEditDraft(payload: EditDraftPayload) {
@@ -653,43 +649,82 @@ export async function apiGetTimezonesByCountries(payload: GetTimezonesByCountrie
   return apiPost<GetTimezonesByCountriesResponse>(`/timezone/by-countries`, payload);
 }
 
-
-
 export type ViewCampaignByBrandPayload = {
   brandId: string;
   campaignId: string;
 };
 
 export async function apiCampaignViewByBrand(payload: ViewCampaignByBrandPayload) {
-  // ✅ backend endpoint: POST /campaign/view-campaign-brand
   const res = await apiPost<{ doc: any }>(`${CAMPAIGN_BASE}/view-campaign-brand`, payload);
   return (res?.doc ?? res) as EnrichedCampaignDoc;
 }
 
+/** -------------------------
+ *  ✅ WALLET APIs
+ *  ------------------------*/
+export type WalletFreezeRow = {
+  brandId: string;
+  campaignId: string;
+  influencerId?: string;
+  freezeAmount: number;
+};
+
+export type BrandWalletResponse = {
+  brandId: string;
+  walletBalance: number;
+  frozenBalance: number;
+  usableBalance: number;
+  freezes: WalletFreezeRow[];
+};
+
+export async function apiGetBrandWallet(params: { brandId: string }) {
+  return apiGet<BrandWalletResponse>(`${WALLET_BASE}`, {
+    brandId: params.brandId,
+  });
+}
+
+export type BrandWalletTopupPayload = {
+  brandId: string;
+  amount: number;
+};
+
+export type BrandWalletTopupResponse = {
+  usableBalance: number | undefined;
+  frozenBalance: number | undefined;
+  walletBalance: number | undefined;
+  message: string;
+  brandId: string;
+  amount: number;
+  publishableKey: string;
+  clientSecret: string;
+  paymentIntentId: string;
+};
+
+export async function apiBrandWalletTopup(payload: BrandWalletTopupPayload) {
+  return apiPost<BrandWalletTopupResponse>(`${WALLET_BASE}/topup`, {
+    brandId: payload.brandId,
+    amount: payload.amount,
+  });
+}
 
 export type FrozenAmountResponse = {
   brandId: string;
   campaignId: string;
+  influencerId?: string | null;
   frozenAmount: number;
 };
 
 export async function apiGetFrozenAmountForCampaign(params: {
   brandId: string;
   campaignId: string;
+  influencerId?: string;
 }) {
-  // ✅ calls: GET /wallet/freeze-amount?brandId=...&campaignId=...
   return apiGet<FrozenAmountResponse>(`${WALLET_BASE}/freeze-amount`, params);
 }
 
-
 export type RecommendedInfluencerRow = {
-  // keep legacy fields (safe)
   influencerId: string;
   name: string;
-
-  // optional: if backend now returns full influencer doc,
-  // you can gradually adopt without breaking callers
-  // [key: string]: any;
 };
 
 export type RecommendedInfluencersResponse = {
@@ -703,14 +738,14 @@ export type RecommendedInfluencersResponse = {
 };
 
 export async function apiCampaignRecommendedInfluencers(payload: {
-  brandId: string;     // ✅ NEW
-  campaignId: string;  // ✅ REQUIRED
+  brandId: string;
+  campaignId: string;
   page?: number;
   limit?: number;
 }) {
   return apiPost<RecommendedInfluencersResponse>(`${CAMPAIGN_BASE}/recommended-influencers`, {
-    brandId: payload.brandId,           // ✅ send brandId
-    campaignId: payload.campaignId,     // ✅ send campaignId
+    brandId: payload.brandId,
+    campaignId: payload.campaignId,
     page: payload.page ?? 1,
     limit: payload.limit ?? 20,
   });
@@ -727,37 +762,31 @@ export type UpdateCampaignStatusResponse = {
 };
 
 export async function apiCampaignUpdateStatus(payload: UpdateCampaignStatusPayload) {
-  // backend endpoint: POST /campaign/update-status
   return apiPost<UpdateCampaignStatusResponse>(`${CAMPAIGN_BASE}/update-status`, payload);
 }
-
-
 
 export type InviteInfluencerPayload = {
   brandId: string;
   campaignId: string;
-  influencerId: string;     // ✅ mandatory
-  modashId?: string;        // ✅ optional (ObjectId string)
+  influencerId: string;
+  modashId?: string;
 };
 
 export type InviteInfluencerResponse = {
   message: string;
-  doc: any; // Invitation bucket doc (brandId + campaignId + invites[])
+  doc: any;
 };
 
 export async function apiCampaignInviteInfluencer(payload: InviteInfluencerPayload) {
-  // backend endpoint: POST /campaign/invite
   return apiPost<InviteInfluencerResponse>(`${CAMPAIGN_BASE}/invite`, payload);
 }
-
-
 
 export type InvitedInfluencerRow = {
   inviteId: string;
   status: "invited" | "accepted" | "declined" | "cancelled";
   invitedAt: string | null;
   modashId: string | null;
-  influencer: any | null; // influencer doc (password excluded)
+  influencer: any | null;
 };
 
 export type GetInvitationListByCampaignPayload = {
@@ -773,7 +802,6 @@ export type GetInvitationListByCampaignResponse = {
 };
 
 export async function apiGetInvitationListByCampaign(payload: GetInvitationListByCampaignPayload) {
-  // backend endpoint: POST /invitation/list
   return apiPost<GetInvitationListByCampaignResponse>(`${INVITATION_BASE}/list`, {
     brandId: payload.brandId,
     campaignId: payload.campaignId,
@@ -784,7 +812,6 @@ export async function apiGetInvitationListByCampaign(payload: GetInvitationListB
 
 export type ApplicantStatus = "applied" | "shortlisted" | "undecided" | "active" | "rejected";
 
-// ✅ Apply (Influencer)
 export type ApplyCampaignPayload = {
   influencerId: string;
   campaignId: string;
@@ -800,14 +827,12 @@ export type ApplyCampaignResponse = {
 };
 
 export async function apiApplyToCampaign(payload: ApplyCampaignPayload) {
-  // backend: POST /apply-campaign/apply (influencerAuth)
   return apiPost<ApplyCampaignResponse>(`${APPLY_BASE}/apply`, payload);
 }
 
-// ✅ Get Applicants (Brand) + optional status filter
 export type GetApplicantsByCampaignPayload = {
   campaignId: string;
-  status?: ApplicantStatus; // optional filter
+  status?: ApplicantStatus;
 };
 
 export type ApplicantRow = {
@@ -828,11 +853,9 @@ export type GetApplicantsByCampaignResponse = {
 };
 
 export async function apiGetApplicantsByCampaign(payload: GetApplicantsByCampaignPayload) {
-  // backend: POST /apply-campaign/applicants (brandAuth)
   return apiPost<GetApplicantsByCampaignResponse>(`${APPLY_BASE}/applicants`, payload);
 }
 
-// ✅ Update Applicant Status (Brand)
 export type UpdateApplicantStatusPayload = {
   campaignId: string;
   influencerId: string;
@@ -847,7 +870,6 @@ export type UpdateApplicantStatusResponse = {
 };
 
 export async function apiUpdateApplicantStatus(payload: UpdateApplicantStatusPayload) {
-  // backend: POST /apply-campaign/status/update (brandAuth)
   return apiPost<UpdateApplicantStatusResponse>(`${APPLY_BASE}/status/update`, payload);
 }
 
@@ -860,4 +882,180 @@ export type UpdateCampaignManualPayload = EditDraftPayload & {
 export async function apiCampaignUpdateManual(payload: UpdateCampaignManualPayload) {
   const res = await apiPost<any>(`${CAMPAIGN_BASE}/update-manual`, payload);
   return (res?.doc ?? res?.data ?? res) as EnrichedCampaignDoc;
+}
+
+/** -------------------------
+ *  ✅ MILESTONE APIs
+ *  ------------------------*/
+export type CreateMilestonePayload = {
+  brandId: string;
+  influencerId: string;
+  campaignId: string;
+  milestoneTitle: string;
+  amount: number;
+  milestoneDescription?: string;
+};
+
+export type CreateMilestoneResponse = {
+  message: string;
+  milestoneId: string;
+  totalAmount: number;
+  entry: {
+    milestoneHistoryId: string;
+    influencerId: string;
+    campaignId: string;
+    milestoneTitle: string;
+    amount: number;
+    milestoneDescription: string;
+    released: boolean;
+    payoutStatus: "pending" | "initiated" | "paid";
+    createdAt: string;
+  };
+  wallet: {
+    walletBalance: number;
+    frozenBalance: number;
+    usableBalance: number;
+  };
+  contractStatus: string | null;
+  milestonesCreatedAt: string | null;
+};
+
+export async function apiCreateMilestone(payload: CreateMilestonePayload) {
+  return apiPost<CreateMilestoneResponse>(`${MILESTONE_BASE}/create`, {
+    brandId: payload.brandId,
+    influencerId: payload.influencerId,
+    campaignId: payload.campaignId,
+    milestoneTitle: payload.milestoneTitle,
+    amount: payload.amount,
+    milestoneDescription: payload.milestoneDescription ?? "",
+  });
+}
+
+export type MilestoneRow = {
+  _id?: string;
+  milestoneHistoryId: string;
+  influencerId: string;
+  campaignId: string;
+  milestoneTitle: string;
+  amount: number;
+  milestoneDescription: string;
+  released: boolean;
+  releasedAt?: string | null;
+  payoutStatus: "pending" | "initiated" | "paid";
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  brandId: string;
+  milestoneId: string;
+};
+
+export type BrandWalletSnapshot = {
+  walletBalance: number;
+  frozenBalance: number;
+  usableBalance: number;
+};
+
+export type GetMilestonesByBrandPayload = {
+  brandId: string;
+};
+
+export type GetMilestonesByBrandResponse = {
+  message: string;
+  wallet: BrandWalletSnapshot;
+  totalAmount: number;
+  milestones: MilestoneRow[];
+};
+
+export async function apiGetMilestonesByBrand(payload: GetMilestonesByBrandPayload) {
+  return apiPost<GetMilestonesByBrandResponse>(`${MILESTONE_BASE}/byBrand`, {
+    brandId: payload.brandId,
+  });
+}
+
+export type GetMilestoneWalletBalancePayload = {
+  brandId: string;
+};
+
+export type GetMilestoneWalletBalanceResponse = {
+  message: string;
+  brandId: string;
+  walletBalance: number;
+  frozenBalance: number;
+  usableBalance: number;
+};
+
+export async function apiGetMilestoneWalletBalance(
+  payload: GetMilestoneWalletBalancePayload
+) {
+  return apiPost<GetMilestoneWalletBalanceResponse>(`${MILESTONE_BASE}/balance`, {
+    brandId: payload.brandId,
+  });
+}
+
+export type ReleaseMilestonePayload = {
+  milestoneId: string;
+  milestoneHistoryId: string;
+};
+
+export type ReleaseMilestoneResponse = {
+  message: string;
+  releasedAmount: number;
+  payoutStatus: "initiated" | "paid" | "pending";
+  wallet: BrandWalletSnapshot;
+};
+
+export async function apiReleaseMilestone(payload: ReleaseMilestonePayload) {
+  return apiPost<ReleaseMilestoneResponse>(`${MILESTONE_BASE}/release`, {
+    milestoneId: payload.milestoneId,
+    milestoneHistoryId: payload.milestoneHistoryId,
+  });
+}
+
+
+export type CampaignMilestoneRow = {
+  _id?: string;
+  milestoneHistoryId: string;
+  influencerId: string;
+  influencerName?: string | null;
+  campaignId: string;
+  milestoneTitle: string;
+  amount: number;
+  milestoneDescription: string;
+  released: boolean;
+  releasedAt?: string | null;
+  payoutStatus: "pending" | "initiated" | "paid";
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  brandId: string;
+  milestoneId: string;
+};
+
+export type GetMilestonesByCampaignPayload = {
+  campaignId: string;
+  brandId?: string;
+};
+
+export type GetMilestonesByCampaignResponse = {
+  message: string;
+  milestones: CampaignMilestoneRow[];
+};
+
+export async function apiGetMilestonesByCampaign(
+  payload: GetMilestonesByCampaignPayload
+) {
+  const res = await apiPost<GetMilestonesByCampaignResponse>(
+    `${MILESTONE_BASE}/byCampaign`,
+    {
+      campaignId: payload.campaignId,
+      brandId: payload.brandId,
+    }
+  );
+
+  return {
+    ...res,
+    milestones: (res?.milestones || []).filter(
+      (item) => !payload.brandId || String(item.brandId) === String(payload.brandId)
+    ),
+  };
 }
