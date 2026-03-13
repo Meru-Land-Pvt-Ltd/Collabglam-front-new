@@ -476,11 +476,10 @@ function FloatingInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${
-          disabled
+        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled
             ? "border-gray-200 opacity-60 cursor-not-allowed"
             : "border-gray-200 focus:border-[#FFBF00]"
-        }`}
+          }`}
         placeholder=" "
       />
       <label
@@ -516,11 +515,10 @@ function FloatingTextarea({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${
-          disabled
+        className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled
             ? "border-gray-200 opacity-60 cursor-not-allowed"
             : "border-gray-200 focus:border-[#FFBF00]"
-        }`}
+          }`}
         placeholder=" "
       />
       <label
@@ -668,9 +666,8 @@ function SignatureModal({
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center">
       <div
-        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] ${
-          isSubmitting ? "pointer-events-none" : ""
-        }`}
+        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] ${isSubmitting ? "pointer-events-none" : ""
+          }`}
         onClick={() => !isSubmitting && onClose()}
       />
 
@@ -697,9 +694,8 @@ function SignatureModal({
               </div>
             </div>
             <button
-              className={`w-9 h-9 rounded-full bg-white/40 hover:bg-white flex items-center justify-center text-gray-800 transition ${
-                isSubmitting ? "opacity-50 cursor-not-allowed" : ""
-              }`}
+              className={`w-9 h-9 rounded-full bg-white/40 hover:bg-white flex items-center justify-center text-gray-800 transition ${isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+                }`}
               onClick={() => !isSubmitting && onClose()}
               disabled={isSubmitting}
             >
@@ -723,13 +719,12 @@ function SignatureModal({
 
           <div
             ref={dropRef}
-            className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all select-none ${
-              isSubmitting
+            className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all select-none ${isSubmitting
                 ? "opacity-60 cursor-not-allowed border-gray-300 bg-gray-50"
                 : isDragging
                   ? "cursor-pointer border-amber-400 bg-amber-50 shadow-sm"
                   : "cursor-pointer border-gray-300 bg-gray-50 hover:bg-gray-100/80"
-            }`}
+              }`}
           >
             <div className="flex flex-col items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
@@ -939,9 +934,8 @@ function RejectButton({
       {open && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center">
           <div
-            className={`absolute inset-0 backdrop-blur-sm bg-gray-900/30 ${
-              isSubmitting ? "pointer-events-none" : ""
-            }`}
+            className={`absolute inset-0 backdrop-blur-sm bg-gray-900/30 ${isSubmitting ? "pointer-events-none" : ""
+              }`}
             onClick={handleClose}
           />
 
@@ -1086,13 +1080,12 @@ function ContractActionBar({
           Contract
         </span>
         <span
-          className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
-            locked
+          className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${locked
               ? "bg-emerald-100 text-emerald-700"
               : rejected
                 ? "bg-red-100 text-red-700"
                 : "bg-yellow-100 text-yellow-700"
-          }`}
+            }`}
         >
           {statusText}
         </span>
@@ -1407,7 +1400,7 @@ function InfluencerContractModal({
   useEffect(() => {
     if (!open) return;
     if ((mode === "view" || mode === "edit") && !previewUrl && effectiveContractId) {
-      generatePreview(true).catch(() => {});
+      generatePreview(true).catch(() => { });
     }
   }, [mode, open, previewUrl, effectiveContractId, generatePreview]);
 
@@ -1576,18 +1569,16 @@ function InfluencerContractModal({
             <div className="flex items-center gap-2">
               <div className="inline-flex rounded-full border border-gray-300 overflow-hidden">
                 <button
-                  className={`px-3 py-1.5 text-sm ${
-                    mode === "view" ? "bg-white" : "bg-gray-100"
-                  } transition`}
+                  className={`px-3 py-1.5 text-sm ${mode === "view" ? "bg-white" : "bg-gray-100"
+                    } transition`}
                   onClick={() => setMode("view")}
                 >
                   View
                 </button>
                 {canEdit && (
                   <button
-                    className={`px-3 py-1.5 text-sm ${
-                      mode === "edit" ? "bg-white" : "bg-gray-100"
-                    } transition`}
+                    className={`px-3 py-1.5 text-sm ${mode === "edit" ? "bg-white" : "bg-gray-100"
+                      } transition`}
                     onClick={() => setMode("edit")}
                   >
                     Edit
@@ -1607,11 +1598,10 @@ function InfluencerContractModal({
         <div className="px-5 pt-3 flex flex-wrap gap-2 text-[11px]">
           {meta?.status && (
             <span
-              className={`px-2 py-1 rounded-full border ${
-                locked
+              className={`px-2 py-1 rounded-full border ${locked
                   ? "bg-emerald-50 border-emerald-200 text-emerald-700"
                   : "bg-yellow-50 border-yellow-200 text-yellow-700"
-              }`}
+                }`}
             >
               Status: {String(meta.status).toUpperCase()}
             </span>
@@ -1956,8 +1946,8 @@ export default function MyCampaignsPage() {
       } catch (e: any) {
         setFetchError(
           e?.response?.data?.message ||
-            e?.message ||
-            "Failed to load campaigns."
+          e?.message ||
+          "Failed to load campaigns."
         );
       } finally {
         setIsLoading(false);
@@ -2333,14 +2323,13 @@ export default function MyCampaignsPage() {
                 <TabsTrigger
                   key={tab.value}
                   value={tab.value}
-                  className={`capitalize px-6 py-2.5 rounded-lg bg-transparent text-gray-600 font-semibold text-base transition-all flex-1 ${
-                    activeTab === tab.value
+                  className={`capitalize px-6 py-2.5 rounded-lg bg-transparent text-gray-600 font-semibold text-base transition-all flex-1 ${activeTab === tab.value
                       ? "text-black"
                       : "hover:text-gray-900"
-                  }`}
+                    }`}
                   style={
                     activeTab === tab.value
-                      ? { backgroundColor: "#FFBF00" }
+                      ? { backgroundColor: "#1A1A1A", color: "#FFFFFF" }
                       : {}
                   }
                 >
@@ -2422,37 +2411,37 @@ export default function MyCampaignsPage() {
                 const contractProp =
                   campaign.isContracted === 1 && effectiveContractId
                     ? {
-                        contractId: effectiveContractId,
-                        meta: contractMeta,
-                        onReviewAccept: () =>
-                          openEditor(
-                            { ...campaign, contractId: effectiveContractId },
-                            false,
-                            "edit"
+                      contractId: effectiveContractId,
+                      meta: contractMeta,
+                      onReviewAccept: () =>
+                        openEditor(
+                          { ...campaign, contractId: effectiveContractId },
+                          false,
+                          "edit"
+                        ),
+                      onView: () =>
+                        openEditor(
+                          { ...campaign, contractId: effectiveContractId },
+                          true,
+                          "view"
+                        ),
+                      onSign: () => {
+                        openSignDirect({
+                          contractId: effectiveContractId,
+                          influencerConfirmed: hasAcceptedCurrent(
+                            contractMeta,
+                            "influencer"
                           ),
-                        onView: () =>
-                          openEditor(
-                            { ...campaign, contractId: effectiveContractId },
-                            true,
-                            "view"
+                          brandConfirmed: hasAcceptedCurrent(
+                            contractMeta,
+                            "brand"
                           ),
-                        onSign: () => {
-                          openSignDirect({
-                            contractId: effectiveContractId,
-                            influencerConfirmed: hasAcceptedCurrent(
-                              contractMeta,
-                              "influencer"
-                            ),
-                            brandConfirmed: hasAcceptedCurrent(
-                              contractMeta,
-                              "brand"
-                            ),
-                            isLocked: isLockedMeta(contractMeta),
-                            isReadyToSign: isReadyToSignMeta(contractMeta),
-                          });
-                        },
-                        onReject: () => setPendingRejectId(effectiveContractId),
-                      }
+                          isLocked: isLockedMeta(contractMeta),
+                          isReadyToSign: isReadyToSignMeta(contractMeta),
+                        });
+                      },
+                      onReject: () => setPendingRejectId(effectiveContractId),
+                    }
                     : undefined;
 
                 return (

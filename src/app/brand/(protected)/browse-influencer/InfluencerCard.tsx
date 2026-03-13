@@ -2,19 +2,17 @@
 
 import React, { useMemo, useState } from "react";
 import type { Platform } from "./filters";
-import { platformTheme } from "./utils/platform";
 import {
-  ArrowSquareOut,
+  BookmarkSimple,
   CheckCircle,
+  DotsThreeOutline,
   GlobeHemisphereWest,
   InstagramLogo,
-  LockSimple,
-  MapPin,
+  PaperPlaneTilt,
   TiktokLogo,
-  UsersThree,
   XLogo,
   YoutubeLogo,
-} from "@phosphor-icons/react/dist/ssr";
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/buttonComp";
 
 interface InfluencerCardProps {
@@ -23,22 +21,40 @@ interface InfluencerCardProps {
   onViewProfile?: (influencer: any) => void;
 }
 
-function getPlatformIcon(platform?: string) {
+function getPlatformIcon(platform?: string, size = 13) {
   const key = String(platform || "").toLowerCase();
 
   switch (key) {
     case "instagram":
-      return <InstagramLogo size={14} weight="fill" />;
+      return <InstagramLogo size={size} weight="fill" />;
     case "youtube":
-      return <YoutubeLogo size={14} weight="fill" />;
+      return <YoutubeLogo size={size} weight="fill" />;
     case "tiktok":
-      return <TiktokLogo size={14} weight="fill" />;
+      return <TiktokLogo size={size} weight="fill" />;
     case "twitter":
     case "x":
-      return <XLogo size={14} weight="fill" />;
+      return <XLogo size={size} weight="fill" />;
     default:
-      return <GlobeHemisphereWest size={14} weight="fill" />;
+      return <GlobeHemisphereWest size={size} weight="fill" />;
   }
+}
+
+function getCountryLabel(influencer: any) {
+  return (
+    influencer?.country ||
+    influencer?.location?.country ||
+    influencer?.location ||
+    ""
+  );
+}
+
+function getFlagEmoji(countryCode?: string) {
+  if (!countryCode || countryCode.length !== 2) return "🌍";
+  return countryCode
+    .toUpperCase()
+    .replace(/./g, (char) =>
+      String.fromCodePoint(127397 + char.charCodeAt(0))
+    );
 }
 
 export function InfluencerCard({
@@ -47,12 +63,9 @@ export function InfluencerCard({
   onViewProfile,
 }: InfluencerCardProps) {
   const [bgFailed, setBgFailed] = useState(false);
-  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const platformKey: Platform =
     (influencer?.platform as Platform) || platform;
-
-  const theme = platformTheme[platformKey];
 
   const username =
     influencer?.username || influencer?.handle || influencer?.name || "unknown";
@@ -82,40 +95,30 @@ export function InfluencerCard({
   const averageViews =
     influencer?.averageViews ??
     influencer?.stats?.avgViews ??
-    influencer?.stats?.views;
+    influencer?.stats?.views ??
+    0;
 
-  const bio = influencer?.bio || influencer?.description || "";
+  const bio =
+    influencer?.bio ||
+    influencer?.description ||
+    "Lorem Ipsum is simply dummy text of the printing and typesetting industry dummy text of Lorem Ipsum more...";
 
-  const country =
-    influencer?.country ||
-    influencer?.location?.country ||
+  const avatar =
+    influencer?.picture ||
+    influencer?.avatar ||
+    influencer?.profilePicUrl ||
+    influencer?.thumbnail ||
+    influencer?.profilePicture ||
     "";
 
-  const state =
-    influencer?.state ||
-    influencer?.location?.state ||
-    "";
-
-  const city =
-    influencer?.city ||
-    influencer?.location?.city ||
-    "";
-
-  const location =
-    influencer?.location && typeof influencer.location === "string"
-      ? influencer.location
-      : [city, state, country].filter(Boolean).join(", ");
-
-  const language =
-    typeof influencer?.language === "string"
-      ? influencer.language
-      : influencer?.language?.name || influencer?.language?.code || "";
+  const isVerified = Boolean(influencer?.isVerified || influencer?.verified);
+  const profileUrl = influencer?.url || "#";
 
   const categories = useMemo(() => {
     const raw = influencer?.categories;
 
     if (!Array.isArray(raw)) {
-      return influencer?.category ? [influencer.category] : [];
+      return influencer?.category ? [String(influencer.category)] : [];
     }
 
     const names = raw.flatMap((item: any) => {
@@ -129,26 +132,23 @@ export function InfluencerCard({
       ].filter(Boolean);
     });
 
-    return Array.from(new Set(names.map((x: any) => String(x).trim()).filter(Boolean))).slice(0, 3);
+    return Array.from(
+      new Set(names.map((x: any) => String(x).trim()).filter(Boolean))
+    ).slice(0, 2);
   }, [influencer]);
 
-  const avatar =
-    influencer?.picture ||
-    influencer?.avatar ||
-    influencer?.profilePicUrl ||
-    influencer?.thumbnail ||
-    influencer?.profilePicture ||
+  const country = getCountryLabel(influencer);
+  const countryCode =
+    influencer?.countryCode ||
+    influencer?.location?.countryCode ||
+    influencer?.country_code ||
     "";
-
-  const isVerified = Boolean(influencer?.isVerified || influencer?.verified);
-  const isPrivate = Boolean(influencer?.isPrivate);
-  const profileUrl = influencer?.url || "#";
 
   const formatNumber = (num?: number | null) => {
     if (num == null) return "—";
     if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)}B`;
     if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+    if (num >= 1_000) return `${(num / 1_000).toFixed(0)}K`;
     return Number(num).toLocaleString();
   };
 
@@ -158,19 +158,12 @@ export function InfluencerCard({
     return `${normalized.toFixed(2)}%`;
   };
 
-  const initials = String(displayName)
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-
   const openExternalProfile = () => {
     if (!profileUrl || profileUrl === "#") return;
     window.open(profileUrl, "_blank", "noopener,noreferrer");
   };
 
-  const handleViewProfile = () => {
+  const handlePrimaryAction = () => {
     if (onViewProfile) {
       onViewProfile(influencer);
       return;
@@ -178,180 +171,147 @@ export function InfluencerCard({
     openExternalProfile();
   };
 
+  const visiblePlatforms = Array.isArray(influencer?.platforms)
+    ? influencer.platforms.slice(0, 3)
+    : [platformKey];
+
   return (
-    <div className="group relative isolate w-full h-full min-h-[520px] overflow-hidden rounded-[30px] border border-black/5 bg-zinc-200 shadow-[0_12px_40px_rgba(15,23,42,0.14)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_20px_56px_rgba(15,23,42,0.2)]">
-      {/* Background image */}
+    <div className="group relative isolate w-full max-w-[380px] overflow-hidden rounded-[28px] bg-[#ddd1bb] shadow-[0_20px_50px_rgba(0,0,0,0.16)]">
+      {/* Background */}
       {avatar && !bgFailed ? (
         <img
           src={avatar}
           alt={displayName}
           loading="lazy"
-          className="absolute inset-0 z-0 h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-[1.04]"
           onError={() => setBgFailed(true)}
+          className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-[1.03]"
         />
-      ) : null}
-
-      {/* Fallback bg only when image missing/failed */}
-      {(!avatar || bgFailed) && (
-        <div className="absolute inset-0 z-0 bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-300" />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-[#efe7d7] via-[#dcc7af] to-[#b99a7d]" />
       )}
 
-      {/* Overlays */}
-      <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-black/15 to-black/80" />
-      <div className="absolute inset-x-0 bottom-0 z-10 h-[70%] bg-gradient-to-t from-black/85 via-black/50 to-transparent" />
+      {/* Warm overlays */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,248,235,0.18),rgba(120,75,35,0.08)_35%,rgba(92,56,30,0.18)_70%,rgba(70,42,20,0.34))]" />
+      <div className="absolute inset-0 backdrop-blur-[1.5px]" />
 
-      {/* Top chips */}
-      <div className="absolute inset-x-0 top-0 z-20 p-4 sm:p-5">
+      {/* Content */}
+      <div className="relative flex min-h-[520px] flex-col justify-between p-4 sm:p-5">
+        {/* Top row */}
         <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md ${theme?.color || "bg-zinc-900"}`}
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
-                {getPlatformIcon(platformKey)}
-              </span>
-              <span className="truncate">
-                {theme?.label || platformKey || "Platform"}
-              </span>
-            </div>
-
-            {country && (
-              <div className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-medium text-zinc-900 backdrop-blur-md">
-                <MapPin size={13} weight="fill" />
-                <span className="truncate">{country}</span>
-              </div>
-            )}
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/50 bg-white/40 px-3 py-2 text-[13px] font-medium text-zinc-900 backdrop-blur-md">
+            <span className="text-sm leading-none">
+              {getFlagEmoji(countryCode)}
+            </span>
+            <span className="max-w-[140px] truncate">
+              {country || "Worldwide"}
+            </span>
           </div>
 
-          {profileUrl !== "#" && (
-            <Button onClick={openExternalProfile}>
-              <ArrowSquareOut size={18} weight="bold" />
-            </Button>
-          )}
+          <button
+            type="button"
+            aria-label="More options"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/45 bg-white/30 text-zinc-900 backdrop-blur-md transition hover:bg-white/45"
+          >
+            <DotsThreeOutline size={18} weight="bold" />
+          </button>
         </div>
-      </div>
 
-      {/* Bottom content */}
-      <div className="absolute inset-x-0 bottom-0 z-20 p-4 sm:p-5">
-        <div className="rounded-[26px] border border-white/15 bg-white/10 p-4 sm:p-5 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="truncate text-[24px] font-semibold tracking-tight text-white">
-                  {displayName}
-                </h3>
+        {/* Middle / Bottom */}
+        <div className="mt-auto pt-10 text-white">
+          <div className="mx-auto max-w-[88%] text-center">
+            <div className="flex items-center justify-center gap-1.5">
+              <h3 className="text-[24px] font-semibold tracking-tight sm:text-[26px]">
+                {displayName}
+              </h3>
 
-                {isVerified && (
-                  <span
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500 text-white shadow-md"
-                    aria-label="Verified account"
-                    title="Verified account"
-                  >
-                    <CheckCircle size={14} weight="fill" />
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-white/75">
-                <span className="truncate">{handle}</span>
-
-                {isPrivate && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2 py-1 text-[11px] font-medium text-white/90 ring-1 ring-white/10"
-                    aria-label="Private account"
-                    title="Private account"
-                  >
-                    <LockSimple size={12} weight="fill" />
-                    Private
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/12">
-              {avatar && !avatarFailed ? (
-                <img
-                  src={avatar}
-                  alt={`${displayName} avatar`}
-                  className="h-full w-full object-cover"
-                  onError={() => setAvatarFailed(true)}
-                />
-              ) : (
-                <span className="text-sm font-semibold text-white/90">
-                  {initials || <UsersThree size={20} weight="fill" />}
+              {isVerified && (
+                <span
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#2196f3] text-white shadow"
+                  aria-label="Verified account"
+                  title="Verified account"
+                >
+                  <CheckCircle size={12} weight="fill" />
                 </span>
               )}
             </div>
-          </div>
 
-          {/* Bio */}
-          {bio && (
-            <p className="mt-3 line-clamp-2 text-sm leading-5 text-white/78">
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-sm text-white/90">
+              <span>{handle}</span>
+
+              {categories[0] && (
+                <span className="rounded-full border border-white/35 bg-white/12 px-3 py-1 text-[12px] text-white/90 backdrop-blur-sm">
+                  {categories[0]}
+                </span>
+              )}
+            </div>
+
+            <p
+              title={bio}
+              className="mt-5 line-clamp-3 text-left text-[13px] leading-6 text-white/88 sm:text-[14px]"
+            >
               {bio}
             </p>
-          )}
+          </div>
 
-          {/* Meta */}
-          {(location || language || categories.length > 0) && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {location && (
-                <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/12 px-3 py-1.5 text-[11px] font-medium text-white/90 ring-1 ring-white/10">
-                  <MapPin size={12} weight="fill" />
-                  <span className="truncate">{location}</span>
-                </span>
-              )}
-
-              {language && (
-                <span className="inline-flex rounded-full bg-white/12 px-3 py-1.5 text-[11px] font-medium text-white/90 ring-1 ring-white/10">
-                  {language}
-                </span>
-              )}
-
-              {categories.map((cat: string) => (
-                <span
-                  key={cat}
-                  className="inline-flex rounded-full bg-white/12 px-3 py-1.5 text-[11px] font-medium text-white/90 ring-1 ring-white/10"
-                >
-                  {cat}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Stats */}
-          <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/12 pt-4">
-            <div className="rounded-2xl border border-white/8 bg-white/8 px-3 py-3 text-center">
-              <p className="text-lg font-semibold tracking-tight text-white">
+          {/* Stats row */}
+          <div className="mt-8 grid grid-cols-4 items-end gap-3 text-white">
+            <div>
+              <p className="text-[14px] font-semibold sm:text-[16px]">
                 {formatNumber(followers)}
               </p>
-              <p className="mt-1 text-[11px] text-white/65">Followers</p>
+              <p className="mt-1 text-[12px] text-white/80">followers</p>
             </div>
 
-            <div className="rounded-2xl border border-white/8 bg-white/8 px-3 py-3 text-center">
-              <p className="text-lg font-semibold tracking-tight text-white">
+            <div>
+              <p className="text-[14px] font-semibold sm:text-[16px]">
                 {formatRate(engagementRate)}
               </p>
-              <p className="mt-1 text-[11px] text-white/65">Engagement</p>
+              <p className="mt-1 text-[12px] text-white/80">Avg Eng.</p>
             </div>
 
-            <div className="rounded-2xl border border-white/8 bg-white/8 px-3 py-3 text-center">
-              <p className="text-lg font-semibold tracking-tight text-white">
-                {averageViews == null ? "—" : formatNumber(averageViews)}
+            <div>
+              <p className="text-[14px] font-semibold sm:text-[16px]">
+                {formatNumber(averageViews)}
               </p>
-              <p className="mt-1 text-[11px] text-white/65">Avg. Views</p>
+              <p className="mt-1 text-[12px] text-white/80">Avg views</p>
+            </div>
+
+            <div className="justify-self-end text-right">
+              <div className="flex justify-end -space-x-1.5">
+                {visiblePlatforms.map((item: any, index: number) => (
+                  <span
+                    key={`${item}-${index}`}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/50 bg-white/85 text-zinc-900 shadow-sm"
+                  >
+                    {getPlatformIcon(
+                      typeof item === "string" ? item : item?.name || platformKey,
+                      11
+                    )}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-1 text-[12px] text-white/80">Platforms</p>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="mt-4 flex items-center gap-3">
-            <Button onClick={handleViewProfile}>View Profile</Button>
+          {/* Bottom actions */}
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handlePrimaryAction}
+              className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-[#111111] px-5 text-[15px] font-semibold text-white shadow-[0_12px_24px_rgba(0,0,0,0.22)] transition hover:translate-y-[-1px] hover:bg-black"
+            >
+              <PaperPlaneTilt size={18} weight="regular" />
+              <span>Send an Invite</span>
+            </button>
 
-            {profileUrl !== "#" && (
-              <Button onClick={openExternalProfile}>
-                <ArrowSquareOut size={18} weight="bold" />
-              </Button>
-            )}
+            <button
+              type="button"
+              aria-label="Save influencer"
+              className="inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/55 bg-white/18 text-white backdrop-blur-md transition hover:bg-white/28"
+            >
+              <BookmarkSimple size={20} weight="regular" />
+            </button>
           </div>
         </div>
       </div>

@@ -3,11 +3,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/adminbutton";
 import { Label } from "@/components/ui/label";
 import { HiEye, HiEyeSlash } from "react-icons/hi2";
 import { post } from "@/lib/api";
+import Image from "next/image";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -21,16 +30,15 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    try {
-      // Call backend and store JWT in localStorage like other roles
-      const data = await post<{
-        token: string;
-        admin: { adminId: string; email: string };
-      }>("/admin/login", { email, password });
 
-      // Use role-scoped token storage for admin
+    try {
+      const data = await post<{ token: string; admin: { _id: string; email: string } }>(
+        "/admins/login",
+        { email, password }
+      );
+
       localStorage.setItem("token", data.token);
-      localStorage.setItem("adminId", data.admin.adminId);
+      localStorage.setItem("adminId", data.admin._id);
       localStorage.setItem("userType", "admin");
       localStorage.setItem("userEmail", data.admin.email || email);
 
@@ -43,36 +51,31 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen grid place-items-center bg-[#fafafa] px-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm bg-white border border-black/10 rounded-2xl p-6 space-y-4"
-      >
-        <div>
-          <h1 className="text-xl font-semibold">Admin Login</h1>
-          <p className="text-sm text-black/60">Sign in to continue</p>
-        </div>
-
-        {error ? (
-          <div className="text-sm rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-            {error}
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center space-y-2">
+          <div className="mx-auto h-12 w-12 relative">
+            <Image src="/logo.png" alt="Admin Logo" fill className="object-contain" />
           </div>
-        ) : null}
+          <CardTitle className="text-2xl font-bold">Admin Sign In</CardTitle>
+          <CardDescription className="text-gray-500">
+            Please enter your admin credegghvhjvhjvhjvhjvhjvntials
+          </CardDescription>
+        </CardHeader>
 
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-sm">
-            Email
-          </Label>
-          <Input
-            id="email"
-            type="email"
-            className="w-full border border-black/10 rounded-lg px-3 py-2 text-sm"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@collabglam.com"
-            required
-          />
-        </div>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-6">
+            <div className="space-y-1">
+              <Label htmlFor="email">Email address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="admin@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
 
         <div className="space-y-2">
           <Label htmlFor="password" className="text-sm">
@@ -101,10 +104,20 @@ export default function AdminLoginPage() {
           </div>
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
-        </Button>
-      </form>
+            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+          </CardContent>
+
+          <CardFooter className="pt-0">
+            <Button
+              type="submit"
+              className="w-full py-2 text-lg"
+              disabled={loading}
+            >
+              {loading ? "Signing in…" : "Sign In"}
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
     </div>
   );
 }

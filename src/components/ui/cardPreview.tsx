@@ -351,7 +351,7 @@ function InviteActions({ invite }: { invite: InviteCardProps }) {
     <div className="flex items-center gap-1.5 shrink-0">
       <button
         onClick={invite.onAccept}
-        className="rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+        className="rounded-lg bg-[#1A1A1A] text-white px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
       >
         Accept Invite
       </button>

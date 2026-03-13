@@ -595,7 +595,7 @@ export default function InvitesPage() {
                                 className={[
                                     "px-4 py-2 rounded-lg text-sm font-semibold transition-all",
                                     activeTab === tab.value
-                                        ? "bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] text-gray-900 shadow-sm"
+                                        ? "bg-[#1A1A1A] text-white shadow-sm"
                                         : "text-gray-600 hover:text-gray-900 hover:bg-white/60",
                                 ].join(" ")}
                                 style={activeTab === tab.value ? {} : {}}

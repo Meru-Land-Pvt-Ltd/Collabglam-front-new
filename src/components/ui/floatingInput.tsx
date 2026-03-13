@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { X, CaretUp, CaretDown } from "@phosphor-icons/react";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { X } from "@phosphor-icons/react";
+import { FieldInfoIcon } from "@/components/ui/field-info-icon";
 
 type FieldState = "default" | "selected" | "error" | "disabled";
 type FieldSize = "small" | "large";
@@ -36,7 +36,7 @@ export type FloatingInputProps = Omit<
 
   icon?: boolean;
   filled?: boolean;
-
+  info?: React.ReactNode;
   /** ✅ NEW: left prefix like "$" */
   prefixText?: string;
   prefixClassName?: string;
@@ -73,7 +73,7 @@ export const FloatingInput = React.forwardRef<HTMLInputElement, FloatingInputPro
 
       icon = true,
       filled = false,
-
+      info,
       prefixText,
       prefixClassName,
 
@@ -656,6 +656,12 @@ export const FloatingInput = React.forwardRef<HTMLInputElement, FloatingInputPro
                 ) : null}
 
                 {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+
+                {info ? (
+                  <span className="ml-1 inline-flex pointer-events-auto">
+                    <FieldInfoIcon content={info} />
+                  </span>
+                ) : null}
               </span>
             </span>
           </label>

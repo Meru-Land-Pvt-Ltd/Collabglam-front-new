@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { X } from "@phosphor-icons/react";
 import { ChevronDownIcon, ChevronUpIcon, Search as SearchIcon } from "lucide-react";
+import { FieldInfoIcon } from "@/components/ui/field-info-icon";
 
 type FieldState = "default" | "selected" | "error" | "disabled";
 type FieldSize = "small" | "large";
@@ -402,6 +403,7 @@ type FloatingShellProps = {
   optional?: boolean;
   hint?: boolean;
   hintText?: string;
+  info?: React.ReactNode;
   errorText?: string;
   filled?: boolean;
   disabled?: boolean;
@@ -418,6 +420,7 @@ function FloatingShell({
   label,
   required = false,
   optional = false,
+  info,
   hint = false,
   hintText = "Hint text",
   errorText,
@@ -503,15 +506,23 @@ function FloatingShell({
             isFloatingNow && cn(FLOAT_TOP, "translate-y-0", LABEL_FLOAT)
           )}
         >
-          <span className={cn("inline-flex items-center", isFloatingNow && cn("px-[6px] -ml-[6px] rounded-xs", patchBg))}>
-            <span className="inline-flex items-center gap-[2px]">
-              <span>{label}</span>
-              {required ? (
-                <span className={cn("font-normal", isDisabled ? "text-neutral-400" : "text-[#E53935]")}>*</span>
-              ) : null}
-              {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
-            </span>
-          </span>
+<span className={cn("inline-flex items-center", isFloatingNow && cn("px-[6px] -ml-[6px] rounded-xs", patchBg))}>
+  <span className="inline-flex items-center gap-[2px]">
+    <span>{label}</span>
+
+    {required ? (
+      <span className={cn("font-normal", isDisabled ? "text-neutral-400" : "text-[#E53935]")}>*</span>
+    ) : null}
+
+    {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+
+    {info ? (
+      <span className="ml-1 inline-flex pointer-events-auto">
+        <FieldInfoIcon content={info} />
+      </span>
+    ) : null}
+  </span>
+</span>
         </label>
       </div>
 
@@ -546,6 +557,7 @@ export type FloatingSelectProps = React.ComponentProps<typeof SelectPrimitive.Ro
   errorText?: string;
   icon?: boolean;
   filled?: boolean;
+  info?: React.ReactNode;
   className?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -573,6 +585,7 @@ export function FloatingSelect({
   icon = true,
   filled = false,
   disabled,
+  info,
   value,
   defaultValue,
   onValueChange,
@@ -927,7 +940,7 @@ export type FloatingMultiSelectProps = {
   allLabel?: string;
 
   dropdownZIndex?: number;
-
+  info?: React.ReactNode;
   searchable?: boolean;
   searchPlaceholder?: string;
 
@@ -957,7 +970,7 @@ export function FloatingMultiSelect({
   hintText = "Hint text",
 
   errorText,
-
+  info,
   icon = true,
   filled = false,
 

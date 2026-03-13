@@ -602,7 +602,7 @@ export default function BrandSignupPage() {
                       size="small"
                       state={passwordInvalid ? "error" : "default"}
                       errorText={passwordError || undefined}
-                      showRules={attemptedSubmit}
+                      showRules
                     />
 
                     <div className="mt-xl">
