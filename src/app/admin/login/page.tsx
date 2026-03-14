@@ -76,20 +76,6 @@ export default function AdminLoginPage() {
               />
             </div>
 
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-6">
-            <div className="space-y-1">
-              <Label htmlFor="email">Email address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm">
                 Password
@@ -120,17 +106,6 @@ export default function AdminLoginPage() {
             {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           </CardContent>
 
-          <CardFooter className="pt-0">
-            <Button
-              type="submit"
-              className="w-full py-2 text-lg"
-              disabled={loading}
-            >
-              {loading ? "Signing in…" : "Sign In"}
-            </Button>
-          </CardFooter>
-        </form>
-          </CardContent>
           <CardFooter className="pt-0">
             <Button
               type="submit"
