@@ -1,7 +1,7 @@
-// File: app/admin/login/page.tsx
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -58,7 +58,7 @@ export default function AdminLoginPage() {
           </div>
           <CardTitle className="text-2xl font-bold">Admin Sign In</CardTitle>
           <CardDescription className="text-gray-500">
-            Please enter your admin credegghvhjvhjvhjvhjvhjvntials
+            Please enter your admin credentials
           </CardDescription>
         </CardHeader>
 
@@ -76,32 +76,32 @@ export default function AdminLoginPage() {
               />
             </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="password" className="text-sm">
-            Password
-          </Label>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm">
+                Password
+              </Label>
 
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              className="w-full border border-black/10 rounded-lg px-3 py-2 pr-10 text-sm"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  className="w-full border border-black/10 rounded-lg px-3 py-2 pr-10 text-sm"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
 
-            <button
-              type="button"
-              onClick={() => setShowPassword((p) => !p)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-black/40 hover:text-black/60"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <HiEyeSlash /> : <HiEye />}
-            </button>
-          </div>
-        </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((p) => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-black/40 hover:text-black/60"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <HiEyeSlash /> : <HiEye />}
+                </button>
+              </div>
+            </div>
 
             {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           </CardContent>
@@ -110,7 +110,6 @@ export default function AdminLoginPage() {
             <Button
               type="submit"
               className="w-full py-2 text-lg"
-              variant="default"
               disabled={loading}
             >
               {loading ? "Signing in…" : "Sign In"}
