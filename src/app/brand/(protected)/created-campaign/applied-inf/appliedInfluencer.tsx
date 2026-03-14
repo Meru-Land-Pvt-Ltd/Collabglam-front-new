@@ -2558,6 +2558,46 @@ export default function AppliedInfluencersPage() {
   const isFullyManagedPlan = brandPlanName === "fully_managed";
   const pageTitle = serverCampaignTitle || contractForm.campaign.campaignTitleOrId || "Unknown Campaign";
 
+  const handleOpenInboxThread = useCallback(
+    async (inf: Influencer) => {
+      if (!brandId) {
+        toast({
+          icon: "error",
+          title: "Brand not found",
+          text: "Please sign in again.",
+        });
+        return;
+      }
+
+      try {
+        const res: any = await post("/emails/threads", {
+          brandId,
+          influencerId: inf.influencerId,
+          subject: serverCampaignTitle || `Conversation with ${inf.name}`,
+        });
+
+        const threadId = res?.threadId || res?.data?.threadId;
+
+        if (!threadId) {
+          throw new Error("Thread ID not returned from server.");
+        }
+
+        router.push(`/brand/inbox/${threadId}`);
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Inbox open failed",
+          text:
+            e?.response?.data?.error ||
+            e?.response?.data?.message ||
+            e?.message ||
+            "Could not create/open the inbox thread.",
+        });
+      }
+    },
+    [brandId, router, serverCampaignTitle]
+  );
+
   const clearErrors = useCallback(() => setFormErrors({}), []);
   const setErr = useCallback((key: string, msg: string) => {
     setFormErrors((prev) => ({ ...prev, [key]: msg }));
@@ -4045,16 +4085,15 @@ export default function AppliedInfluencersPage() {
           View Influencer
         </button>
 
-        {/* <button
+        <button
           type="button"
-          onClick={() => router.push("/brand/inbox")}
+          onClick={() => handleOpenInboxThread(inf)}
           className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+          title="Open inbox"
+          aria-label="Open inbox"
         >
           <EnvelopeOpen size={16} />
-          {hasContract ? (
-            <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
-          ) : null}
-        </button> */}
+        </button>
 
         <MilestoneActionsDropdown
           onAddMilestone={() => handleAddMilestone(inf, meta)}
