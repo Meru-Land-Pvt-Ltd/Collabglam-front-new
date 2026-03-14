@@ -50,7 +50,7 @@ const ROUTES: Record<string, string> = {
   wallet: "/brand/wallet",
   notification: "/brand/notifications",
   credits: "/brand/credits",
-  help: "/brand/help",
+  help: "/brand/help-and-support",
   invite: "/brand/invite-members",
 };
 

@@ -18,6 +18,7 @@ import {
   ChevronUp,
   LogOut,
   Bell,
+  Settings as SettingsIcon,
 } from "lucide-react";
 
 const outfit = Outfit({
@@ -25,7 +26,6 @@ const outfit = Outfit({
   weight: ["400", "500", "600", "700", "800", "900"],
 });
 
-// ✅ Notifications moved AFTER Invited Influencer (same item, same route)
 const navItems = [
   { key: "notifications", label: "Notifications", href: "/admin/notifications", icon: Bell },
   { key: "brands", label: "Brands", href: "/admin/brands", icon: Home },
@@ -44,9 +44,10 @@ const navItems = [
   { key: "youtube-handle", label: "Youtube Handle", href: "/admin/youtube", icon: MailCheckIcon },
   { key: "modash-data", label: "Modash Data", href: "/admin/modash", icon: MailCheckIcon },
   { key: "invited-influencer", label: "Invited Influencer", href: "/admin/invitedInfluencer", icon: MailCheckIcon },
-  { key: "role", label: "Role", href: "/admin/role", icon: MailCheckIcon },
-  { label: "Notifications", href: "/admin/notifications", icon: Bell },
-  { label: "Influencer Data", href: "/admin/influencer-data", icon: MailCheckIcon },
+];
+
+const settingsLinks = [
+  { label: "Role", href: "/admin/role" },
 ];
 
 const documentLinks = [
@@ -64,11 +65,18 @@ export default function AdminSidebar() {
   const router = useRouter();
 
   const initialDocsOpen = pathname.startsWith("/admin/documents/");
+  const initialSettingsOpen =
+    pathname === "/admin/role" || pathname.startsWith("/admin/settings/");
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(initialDocsOpen);
+  const [settingsOpen, setSettingsOpen] = useState(initialSettingsOpen);
 
   useEffect(() => {
     if (pathname.startsWith("/admin/documents/")) setDocsOpen(true);
+    if (pathname === "/admin/role" || pathname.startsWith("/admin/settings/")) {
+      setSettingsOpen(true);
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -89,7 +97,6 @@ export default function AdminSidebar() {
     router.push("/admin/login");
   };
 
-  // ✅ Brands page vibe: clean + black hover/active + Outfit font
   const linkBase =
     "group block rounded-lg px-3 py-2 text-sm font-semibold transition focus:outline-none";
   const linkActive = "bg-black text-white";
@@ -177,6 +184,72 @@ export default function AdminSidebar() {
     );
   };
 
+  const renderSettings = (isMobile = false) => {
+    const settingsActive =
+      pathname === "/admin/role" || pathname.startsWith("/admin/settings/");
+
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((prev) => !prev)}
+          className={`${linkBase} w-full ${settingsActive ? linkActive : linkInactive}`}
+        >
+          <span className="flex items-center gap-2">
+            <SettingsIcon
+              className={`h-4 w-4 ${
+                settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
+            />
+            <span className="flex-1 text-left">Settings</span>
+            {settingsOpen ? (
+              <ChevronUp
+                className={`h-4 w-4 ${
+                  settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
+              />
+            ) : (
+              <ChevronDown
+                className={`h-4 w-4 ${
+                  settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
+              />
+            )}
+          </span>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {settingsOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="ml-3 mt-2 space-y-1 overflow-hidden"
+            >
+              {settingsLinks.map(({ label, href }) => {
+                const active = pathname === href || pathname.startsWith(href + "/");
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => {
+                      if (isMobile) setDrawerOpen(false);
+                    }}
+                    className={`${linkBase} ${
+                      active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
   const BrandHeader = ({ compact = false }: { compact?: boolean }) => (
     <div className={compact ? "px-4 py-3" : "p-5"}>
       <Link href="/admin" className="flex items-center gap-3">
@@ -221,18 +294,16 @@ export default function AdminSidebar() {
       <aside
         className={`${outfit.className} hidden md:flex md:fixed md:inset-y-0 md:left-0 w-64 border-r border-black/10 bg-white h-screen flex-col`}
       >
-        {/* Header */}
         <BrandHeader compact={false} />
 
-        {/* Middle (scrolls) */}
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           <nav className="space-y-1">
             {navItems.map((item) => renderLink(item))}
+            {renderSettings(false)}
             {renderDocuments(false)}
           </nav>
         </div>
 
-        {/* Bottom (pinned) */}
         <div className="shrink-0 p-3 border-t border-black/10">
           <button onClick={handleLogout} className={`${linkBase} w-full ${linkInactive}`}>
             <span className="flex items-center gap-2">
@@ -277,6 +348,7 @@ export default function AdminSidebar() {
               <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
                 <nav className="space-y-1">
                   {navItems.map((item) => renderLink(item, () => setDrawerOpen(false)))}
+                  {renderSettings(true)}
                   {renderDocuments(true)}
                 </nav>
               </div>

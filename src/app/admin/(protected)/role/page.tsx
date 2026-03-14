@@ -1,8 +1,21 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  BadgeCheck,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  Info,
+  RefreshCw,
+  Search,
+  Settings2,
+  Shield,
+  Users,
+} from "lucide-react";
 
 type AdminStatus = "pending" | "active" | "inactive" | "suspended";
+type PermissionLevel = "none" | "read" | "write";
 
 type AdminAccess = {
   key: string;
@@ -41,11 +54,15 @@ function normalizeKey(v: string) {
     .replace(/\s+/g, "-");
 }
 
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
 const noBlueFocus =
   "outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0";
 
-const inputBase = `border border-black/10 rounded-lg bg-white text-sm ${noBlueFocus} focus:border-black/30`;
-const selectBase = `border border-black/10 rounded-lg bg-white text-sm ${noBlueFocus} focus:border-black/30`;
+const inputBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
+const selectBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
 
 const adminNav = [
   { key: "notifications", label: "Notifications" },
@@ -64,6 +81,111 @@ const adminNav = [
   { key: "invited-influencer", label: "Invited Influencer" },
 ];
 
+const permissionSections = [
+  {
+    key: "brand-campaign",
+    title: "Brand & Campaign",
+    icon: Shield,
+    items: [
+      { key: "brands", label: "Brands" },
+      { key: "campaigns", label: "All Campaigns" },
+      { key: "youtube-handle", label: "Youtube Handle" },
+      { key: "modash-data", label: "Modash Data" },
+    ],
+  },
+  {
+    key: "influencer-management",
+    title: "Influencer Management",
+    icon: Users,
+    items: [
+      { key: "influencers", label: "Influencers" },
+      { key: "invited-influencer", label: "Invited Influencer" },
+      { key: "influencer-email", label: "Influencer-Email" },
+      { key: "missing-email", label: "Missing-Email" },
+    ],
+  },
+  {
+    key: "finance-revenue",
+    title: "Finance & Revenue",
+    icon: DollarSign,
+    items: [
+      { key: "subscriptions", label: "Subscriptions" },
+      { key: "invoice-details", label: "Invoice Details" },
+      { key: "payment-notification", label: "Payment Notification" },
+    ],
+  },
+  {
+    key: "platform-administration",
+    title: "Platform Administration",
+    icon: Settings2,
+    items: [
+      { key: "notifications", label: "Notifications" },
+      { key: "disputes", label: "Disputes" },
+      { key: "emails", label: "E-Mails" },
+    ],
+  },
+];
+
+function getPermissionLevel(
+  access: AdminAccess[] = [],
+  moduleKey: string
+): PermissionLevel {
+  const found = access.find(
+    (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
+  );
+  if (!found) return "none";
+  return found.isEdit ? "write" : "read";
+}
+
+function StatusPill({ status }: { status: AdminStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize",
+        status === "active" && "bg-black text-white",
+        status === "inactive" && "bg-black/10 text-black",
+        status === "suspended" && "bg-black/10 text-black/70",
+        status === "pending" && "bg-black/5 text-black/60"
+      )}
+    >
+      {status}
+    </span>
+  );
+}
+
+function PermissionSwitch({
+  value,
+  onChange,
+}: {
+  value: PermissionLevel;
+  onChange: (next: PermissionLevel) => void;
+}) {
+  const options: PermissionLevel[] = ["none", "read", "write"];
+
+  return (
+    <div className="inline-flex items-center rounded-full bg-black/5 p-1">
+      {options.map((option) => {
+        const active = value === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            className={cn(
+              "min-w-[64px] rounded-full px-4 py-2 text-xs font-semibold capitalize transition",
+              active
+                ? "bg-black text-white shadow-sm"
+                : "text-black/45 hover:text-black"
+            )}
+          >
+            {option}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AdminsPage() {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -76,7 +198,7 @@ export default function AdminsPage() {
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
   const [page, setPage] = useState<number>(1);
-  const limit = 10;
+  const limit = 5;
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -86,8 +208,7 @@ export default function AdminsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteErr, setInviteErr] = useState<string | null>(null);
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState<AdminRow | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editStatus, setEditStatus] = useState<AdminStatus>("pending");
@@ -104,17 +225,28 @@ export default function AdminsPage() {
     );
   }, [rows]);
 
-  const accessModules = useMemo(
-    () =>
-      adminNav.map((item) => ({
-        key: normalizeKey(item.key),
-        label: item.label,
-      })),
-    []
-  );
-
   function getToken() {
-    return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    return typeof window !== "undefined"
+      ? localStorage.getItem("token")
+      : null;
+  }
+
+  function hydrateEditor(admin: AdminRow | null) {
+    if (!admin) {
+      setSelectedId(null);
+      setEditName("");
+      setEditRole("");
+      setEditStatus("pending");
+      setEditAccess([]);
+      return;
+    }
+
+    setSelectedId(admin._id);
+    setEditName(admin.name || "");
+    setEditRole(admin.role || "");
+    setEditStatus((admin.status || "pending") as AdminStatus);
+    setEditAccess(Array.isArray(admin.access) ? admin.access : []);
+    setEditErr(null);
   }
 
   async function fetchAdmins() {
@@ -139,7 +271,12 @@ export default function AdminsPage() {
         throw new Error(data?.message || "Failed to load admins");
       }
 
-      setRows(data?.data || data || []);
+      const nextRows = data?.data || data || [];
+      setRows(nextRows);
+
+      if (nextRows.length && !selectedId) {
+        hydrateEditor(nextRows[0]);
+      }
     } catch (e: any) {
       setRows([]);
       setError(e?.message || "Failed to load admins");
@@ -157,7 +294,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/status`, {
+      const res = await fetch(`${API_BASE}/admins/update-status`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -176,6 +313,10 @@ export default function AdminsPage() {
       setRows((prev) =>
         prev.map((item) => (item._id === adminId ? { ...item, status } : item))
       );
+
+      if (selectedId === adminId) {
+        setEditStatus(status);
+      }
 
       setRowMsg(data?.message || "Status updated successfully");
     } catch (e: any) {
@@ -235,25 +376,15 @@ export default function AdminsPage() {
     }
   }
 
-  function openEdit(admin: AdminRow) {
-    setEditing(admin);
-    setEditErr(null);
-    setEditName(admin.name || "");
-    setEditRole(admin.role || "");
-    setEditStatus((admin.status || "pending") as AdminStatus);
-    setEditAccess(Array.isArray(admin.access) ? admin.access : []);
-    setEditOpen(true);
-  }
-
-  async function onSaveEdit() {
-    if (!editing) return;
-    setEditErr(null);
+  async function onSaveCurrent() {
+    if (!selectedId) return;
     setSavingEdit(true);
+    setEditErr(null);
 
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/update`, {
+      const res = await fetch(`${API_BASE}/admins/update-status`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -261,7 +392,7 @@ export default function AdminsPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          adminId: editing._id,
+          adminId: selectedId,
           name: editName.trim() || undefined,
           role: editRole.trim(),
           status: editStatus,
@@ -275,69 +406,74 @@ export default function AdminsPage() {
         throw new Error(data?.message || "Failed to update admin");
       }
 
-      setEditOpen(false);
-      setEditing(null);
       setRowMsg(data?.message || "Changes saved");
       await fetchAdmins();
     } catch (e: any) {
       setEditErr(e?.message || "Failed to update admin");
     } finally {
       setSavingEdit(false);
+      setTimeout(() => setRowMsg(null), 2500);
     }
   }
 
-  function toggleInviteAccess(moduleKey: string, label: string) {
+  function toggleInviteModuleLevel(
+    moduleKey: string,
+    label: string,
+    level: PermissionLevel
+  ) {
     setInviteAccess((prev) => {
-      const exists = prev.some((a) => normalizeKey(a.key) === moduleKey);
-      if (exists) {
-        return prev.filter((a) => normalizeKey(a.key) !== moduleKey);
+      const idx = prev.findIndex(
+        (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
+      );
+
+      if (level === "none") {
+        return prev.filter(
+          (a) => normalizeKey(a.key) !== normalizeKey(moduleKey)
+        );
       }
-      return [
-        ...prev,
-        {
-          key: moduleKey,
-          name: label,
-          isEdit: false,
-          isDelete: false,
-          isManager: false,
-        },
-      ];
+
+      const nextValue: AdminAccess = {
+        key: moduleKey,
+        name: label,
+        isEdit: level === "write",
+        isDelete: false,
+        isManager: false,
+      };
+
+      if (idx === -1) return [...prev, nextValue];
+
+      return prev.map((a, i) => (i === idx ? { ...a, ...nextValue } : a));
     });
   }
 
-  function toggleEditInviteAccess(moduleKey: string, checked: boolean) {
-    setInviteAccess((prev) =>
-      prev.map((a) =>
-        normalizeKey(a.key) === moduleKey ? { ...a, isEdit: checked } : a
-      )
-    );
-  }
-
-  function toggleAdminEditAccess(moduleKey: string, label: string) {
+  function setModuleLevel(
+    moduleKey: string,
+    label: string,
+    level: PermissionLevel
+  ) {
     setEditAccess((prev) => {
-      const exists = prev.some((a) => normalizeKey(a.key) === moduleKey);
-      if (exists) {
-        return prev.filter((a) => normalizeKey(a.key) !== moduleKey);
-      }
-      return [
-        ...prev,
-        {
-          key: moduleKey,
-          name: label,
-          isEdit: false,
-          isDelete: false,
-          isManager: false,
-        },
-      ];
-    });
-  }
+      const idx = prev.findIndex(
+        (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
+      );
 
-  function toggleAdminEditPermission(moduleKey: string, checked: boolean) {
-    setEditAccess((prev) =>
-      prev.map((a) =>
-        normalizeKey(a.key) === moduleKey ? { ...a, isEdit: checked } : a
-      )
-    );
+      if (level === "none") {
+        return prev.filter(
+          (a) => normalizeKey(a.key) !== normalizeKey(moduleKey)
+        );
+      }
+
+      const nextValue: AdminAccess = {
+        key: moduleKey,
+        name: label,
+        isEdit: level === "write",
+        isDelete: false,
+        isManager: false,
+      };
+
+      if (idx === -1) return [...prev, nextValue];
+
+      return prev.map((a, i) => (i === idx ? { ...a, ...nextValue } : a));
+    });
   }
 
   useEffect(() => {
@@ -355,7 +491,8 @@ export default function AdminsPage() {
         (r.role || "").toLowerCase().includes(q);
 
       const st = (r.status || "pending") as AdminStatus;
-      const matchesStatus = statusFilter === "all" ? true : st === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" ? true : st === statusFilter;
       const matchesRole = roleFilter === "all" ? true : r.role === roleFilter;
 
       return matchesSearch && matchesStatus && matchesRole;
@@ -366,13 +503,30 @@ export default function AdminsPage() {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const paginatedRows = filteredRows.slice((page - 1) * limit, page * limit);
 
+  const selectedAdmin = useMemo(
+    () => rows.find((r) => r._id === selectedId) || null,
+    [rows, selectedId]
+  );
+
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, roleFilter]);
 
+  useEffect(() => {
+    if (!filteredRows.length) {
+      hydrateEditor(null);
+      return;
+    }
+
+    const stillVisible = filteredRows.find((r) => r._id === selectedId);
+    if (!stillVisible) {
+      hydrateEditor(filteredRows[0]);
+    }
+  }, [filteredRows, selectedId]);
+
   if (!canViewAdmins) {
     return (
-      <div className="p-6 bg-white min-h-screen">
+      <div className="min-h-screen bg-white p-6">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
           You do not have permission to view this page.
         </div>
@@ -381,41 +535,58 @@ export default function AdminsPage() {
   }
 
   return (
-    <div className="p-6 bg-white min-h-screen">
-      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6">
+    <div className="min-h-screen bg-white px-4 py-5 md:px-6 lg:px-8">
+      <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">Admins</h1>
-          <p className="text-sm text-black/60 mt-1">
-            Manage admin accounts with role-based access
+          <h1 className="text-3xl font-semibold text-black">
+            Role & Permissions
+          </h1>
+          <p className="mt-1 text-sm text-black/60">
+            Manage admins with the same API logic, now in a role-style layout
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setInviteOpen(true);
-            setInviteErr(null);
-            setInviteEmail("");
-            setInviteName("");
-            setInviteRole("");
-            setInviteAccess([]);
-          }}
-          className="rounded-lg bg-black text-white px-4 py-2 text-sm font-medium hover:opacity-90"
-        >
-          + Invite Admin
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={fetchAdmins}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm font-medium text-black hover:bg-black/5 disabled:opacity-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setInviteOpen(true);
+              setInviteErr(null);
+              setInviteEmail("");
+              setInviteName("");
+              setInviteRole("");
+              setInviteAccess([]);
+            }}
+            className="rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            + Invite Admin
+          </button>
+        </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-3 mb-4">
-        <input
-          placeholder="Search admins..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={`${inputBase} w-full lg:w-80 px-3 py-2`}
-        />
+      <div className="mb-5 grid gap-3 lg:grid-cols-[1fr_180px_180px]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+          <input
+            placeholder="Search by name, email or role..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={`${inputBase} h-12 w-full pl-11 pr-4`}
+          />
+        </div>
 
         <select
-          className={`${selectBase} w-full lg:w-48 px-3 py-2`}
+          className={`${selectBase} h-12 w-full px-4`}
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
         >
@@ -428,7 +599,7 @@ export default function AdminsPage() {
         </select>
 
         <select
-          className={`${selectBase} w-full lg:w-44 px-3 py-2`}
+          className={`${selectBase} h-12 w-full px-4`}
           value={statusFilter}
           onChange={(e) =>
             setStatusFilter(e.target.value as "all" | AdminStatus)
@@ -440,287 +611,430 @@ export default function AdminsPage() {
           <option value="inactive">Inactive</option>
           <option value="suspended">Suspended</option>
         </select>
-
-        <button
-          type="button"
-          onClick={fetchAdmins}
-          disabled={loading}
-          className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium hover:bg-black/5 disabled:opacity-50"
-        >
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
       </div>
 
       {error ? (
-        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
 
       {rowMsg ? (
-        <div className="mb-4 rounded-xl border border-black/10 bg-white px-4 py-3 text-sm">
+        <div className="mb-4 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black">
           {rowMsg}
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-black/10 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-4 border-b border-black/10">
-          <div className="text-sm text-black/60">
-            Showing <span className="font-medium text-black">{paginatedRows.length}</span> of{" "}
-            <span className="font-medium text-black">{filteredRows.length}</span>
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <div className="px-1">
+            <p className="text-xs font-extrabold uppercase tracking-[0.22em] text-black/45">
+              System Roles
+            </p>
           </div>
 
-          <div className="text-xs text-black/50">
-            {canEditAdmins ? "You can edit admins" : "View only access"}
+          {loading ? (
+            <div className="rounded-[22px] bg-white p-5 text-sm text-black/60 border border-black/10">
+              Loading admins...
+            </div>
+          ) : paginatedRows.length === 0 ? (
+            <div className="rounded-[22px] bg-white p-5 text-sm text-black/60 border border-black/10">
+              No admins found.
+            </div>
+          ) : (
+            paginatedRows.map((admin) => {
+              const active = selectedId === admin._id;
+              const status = (admin.status || "pending") as AdminStatus;
+              const accessCount = Array.isArray(admin.access)
+                ? admin.access.length
+                : 0;
+
+              return (
+                <button
+                  key={admin._id}
+                  type="button"
+                  onClick={() => hydrateEditor(admin)}
+                  className={cn(
+                    "w-full rounded-[22px] border text-left transition-all",
+                    active
+                      ? "border-black bg-black/[0.04] shadow-[inset_4px_0_0_0_#000]"
+                      : "border-black/10 bg-white hover:border-black/20"
+                  )}
+                >
+                  <div className="p-5">
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-[28px] font-semibold tracking-[-0.03em] text-black">
+                          {admin.role || "No Role"}
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-sm leading-5 text-black/55">
+                          {admin.name || admin.email}
+                        </p>
+                      </div>
+
+                      <StatusPill status={status} />
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-2 text-sm text-black/45">
+                      <Users className="h-4 w-4" />
+                      <span>{accessCount} Modules</span>
+                    </div>
+
+                    <div className="mt-4 text-xs text-black/45">
+                      <div className="truncate">{admin.email}</div>
+                      <div className="mt-1">
+                        Last login: {formatDT(admin.lastLoginAt)}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex items-center justify-end border-t border-black/10 pt-4">
+                      <span className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white">
+                        Assign Permissions
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
+
+          {filteredRows.length > 0 ? (
+            <div className="flex items-center justify-between rounded-[20px] border border-black/10 bg-white px-4 py-3">
+              <div className="text-sm text-black/60">
+                Page <span className="font-medium text-black">{page}</span> of{" "}
+                <span className="font-medium text-black">{totalPages}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="rounded-xl border border-black/10 p-2 text-black hover:bg-black/5 disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="rounded-xl border border-black/10 p-2 text-black hover:bg-black/5 disabled:opacity-50"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="rounded-[22px] bg-black/[0.04] p-6 text-center">
+            <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/10">
+              <Info className="h-5 w-5 text-black" />
+            </div>
+            <div className="text-lg font-semibold text-black">
+              Admin Access Guide
+            </div>
+            <p className="mx-auto mt-3 max-w-[260px] text-sm leading-6 text-black/60">
+              This layout keeps your current admin APIs and maps access to none,
+              read and write using your existing access object.
+            </p>
           </div>
-        </div>
+        </aside>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-black/5">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold">Email</th>
-                <th className="text-left px-4 py-3 font-semibold">Name</th>
-                <th className="text-left px-4 py-3 font-semibold">Role</th>
-                <th className="text-left px-4 py-3 font-semibold">Access</th>
-                <th className="text-left px-4 py-3 font-semibold">Invited At</th>
-                <th className="text-left px-4 py-3 font-semibold">Last Login</th>
-                <th className="text-left px-4 py-3 font-semibold">Status</th>
-                <th className="text-left px-4 py-3 font-semibold">Action</th>
-              </tr>
-            </thead>
+        <section className="rounded-[28px] border border-black/10 bg-[#f7f7f7] p-5 md:p-7 lg:p-8">
+          {!selectedAdmin ? (
+            <div className="rounded-2xl bg-white p-6 text-black/60">
+              Select an admin from the left to manage permissions.
+            </div>
+          ) : (
+            <>
+              <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5">
+                      <Shield className="h-4 w-4 text-black" />
+                    </div>
+                    <h2 className="text-[34px] font-semibold tracking-[-0.03em] text-black">
+                      Permissions for {editRole || selectedAdmin.role || "Admin"}
+                    </h2>
+                  </div>
+                  <p className="mt-2 text-base text-black/55">
+                    Configure exactly what this admin can see and do across the
+                    platform.
+                  </p>
+                </div>
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-6 text-black/60">
-                    Loading admins...
-                  </td>
-                </tr>
-              ) : paginatedRows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-6 text-black/60">
-                    No admins found.
-                  </td>
-                </tr>
-              ) : (
-                paginatedRows.map((admin) => {
-                  const status = (admin.status || "pending") as AdminStatus;
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <StatusPill status={editStatus} />
+                  <div className="text-xs text-black/50">
+                    Invited: {formatDT(selectedAdmin.invitedAt)}
+                  </div>
+                </div>
+              </div>
+
+              {editErr ? (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {editErr}
+                </div>
+              ) : null}
+
+              <div className="mb-8 grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Full Name
+                  </label>
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20"
+                    placeholder="Admin name"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Role Name
+                  </label>
+                  <input
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value)}
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20"
+                    placeholder="Role"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Status
+                  </label>
+                  <select
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20"
+                    value={editStatus}
+                    onChange={(e) => {
+                      const next = e.target.value as AdminStatus;
+                      setEditStatus(next);
+                    }}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mb-6 rounded-[20px] border border-black/10 bg-white px-5 py-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                      Email
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-black">
+                      {selectedAdmin.email}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                      Last Login
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-black">
+                      {formatDT(selectedAdmin.lastLoginAt)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                      Quick Status API
+                    </div>
+                    <button
+                      type="button"
+                      disabled={updatingId === selectedAdmin._id}
+                      onClick={() =>
+                        updateStatus(selectedAdmin._id, editStatus)
+                      }
+                      className="mt-1 rounded-xl border border-black/10 px-3 py-2 text-sm font-medium hover:bg-black/5 disabled:opacity-50"
+                    >
+                      {updatingId === selectedAdmin._id
+                        ? "Updating..."
+                        : "Update Status Only"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-[24px] border border-black/10 bg-white/80">
+                {permissionSections.map((section) => {
+                  const SectionIcon = section.icon;
 
                   return (
-                    <tr key={admin._id} className="border-t border-black/10">
-                      <td className="px-4 py-3">{admin.email}</td>
-                      <td className="px-4 py-3">{admin.name || "—"}</td>
-                      <td className="px-4 py-3">{admin.role}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {Array.isArray(admin.access) && admin.access.length > 0 ? (
-                            admin.access.slice(0, 2).map((a) => (
-                              <span
-                                key={`${admin._id}-${a.key}`}
-                                className="inline-flex rounded-full bg-black/5 px-2 py-1 text-xs font-medium"
-                              >
-                                {a.name || a.key}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-black/50">—</span>
-                          )}
-                          {Array.isArray(admin.access) && admin.access.length > 2 ? (
-                            <span className="inline-flex rounded-full border border-black/10 px-2 py-1 text-xs font-medium">
-                              +{admin.access.length - 2}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">{formatDT(admin.invitedAt)}</td>
-                      <td className="px-4 py-3">{formatDT(admin.lastLoginAt)}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                            status === "active"
-                              ? "bg-green-50 text-green-700"
-                              : status === "inactive"
-                              ? "bg-red-50 text-red-700"
-                              : status === "suspended"
-                              ? "bg-yellow-50 text-yellow-700"
-                              : "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {status}
+                    <div
+                      key={section.key}
+                      className="border-b border-black/10 last:border-b-0"
+                    >
+                      <div className="flex items-center gap-2 bg-black/[0.03] px-4 py-3">
+                        <SectionIcon className="h-4 w-4 text-black" />
+                        <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-black/55">
+                          {section.title}
                         </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {canEditAdmins ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(admin)}
-                              className="rounded-lg border border-black/10 px-3 py-2 text-xs font-medium hover:bg-black/5"
-                            >
-                              Edit
-                            </button>
+                      </div>
 
-                            <select
-                              value={status}
-                              onChange={(e) =>
-                                updateStatus(admin._id, e.target.value as AdminStatus)
-                              }
-                              disabled={updatingId === admin._id}
-                              className={`${selectBase} px-3 py-2`}
-                            >
-                              <option value="pending">pending</option>
-                              <option value="active">active</option>
-                              <option value="inactive">inactive</option>
-                              <option value="suspended">suspended</option>
-                            </select>
-
-                            {updatingId === admin._id ? (
-                              <span className="text-xs text-black/50">Updating...</span>
-                            ) : null}
+                      {section.items.map((item) => (
+                        <div
+                          key={item.key}
+                          className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div className="text-base font-medium text-black">
+                            {item.label}
                           </div>
-                        ) : (
-                          <span className="text-xs text-black/50">No edit access</span>
-                        )}
-                      </td>
-                    </tr>
+
+                          <PermissionSwitch
+                            value={getPermissionLevel(editAccess, item.key)}
+                            onChange={(next) =>
+                              setModuleLevel(item.key, item.label, next)
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </div>
 
-        {!loading && filteredRows.length > 0 ? (
-          <div className="flex items-center justify-between px-4 py-4 border-t border-black/10">
-            <div className="text-sm text-black/60">
-              Page <span className="font-medium text-black">{page}</span> of{" "}
-              <span className="font-medium text-black">{totalPages}</span>
-            </div>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => hydrateEditor(selectedAdmin)}
+                  className="rounded-2xl border border-black/10 px-5 py-3 text-sm font-semibold text-black hover:bg-black/5"
+                >
+                  Reset
+                </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="rounded-lg border border-black/10 px-3 py-2 text-sm hover:bg-black/5 disabled:opacity-50"
-              >
-                Prev
-              </button>
-
-              <button
-                type="button"
-                disabled={page === totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="rounded-lg border border-black/10 px-3 py-2 text-sm hover:bg-black/5 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        ) : null}
+                <button
+                  type="button"
+                  onClick={onSaveCurrent}
+                  disabled={savingEdit || !editRole.trim()}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                >
+                  <BadgeCheck className="h-4 w-4" />
+                  {savingEdit ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </>
+          )}
+        </section>
       </div>
 
       {inviteOpen ? (
-        <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4">
-          <div className="w-full max-w-2xl bg-white rounded-2xl border border-black/10 shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-black/10 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-black/10 bg-[#f7f7f7] shadow-2xl">
+            <div className="shrink-0 flex items-center justify-between border-b border-black/10 px-6 py-5">
               <div>
-                <div className="font-semibold text-lg">Invite Admin</div>
-                <div className="text-sm text-black/60">
-                  Invite a new admin and assign access
+                <div className="text-xl font-semibold text-black">
+                  Invite Admin
+                </div>
+                <div className="mt-1 text-sm text-black/55">
+                  Invite a new admin and pre-assign permissions
                 </div>
               </div>
               <button
-                className="text-sm text-black/60 hover:text-black"
+                className="rounded-xl border border-black/10 px-3 py-2 text-sm text-black/60 hover:bg-black/5 hover:text-black"
                 onClick={() => setInviteOpen(false)}
               >
                 Close
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="flex-1 space-y-5 overflow-y-auto p-6">
               {inviteErr ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {inviteErr}
                 </div>
               ) : null}
 
-              <div>
-                <label className="text-sm font-medium">Email</label>
-                <input
-                  className={`${inputBase} mt-1 w-full px-3 py-2`}
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="name@domain.com"
-                />
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Email
+                  </label>
+                  <input
+                    className={`${inputBase} h-12 w-full px-4`}
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="name@domain.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Full Name
+                  </label>
+                  <input
+                    className={`${inputBase} h-12 w-full px-4`}
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="Jane Doe"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Role
+                  </label>
+                  <input
+                    className={`${inputBase} h-12 w-full px-4`}
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    placeholder="Manager"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-sm font-medium">Full Name</label>
-                <input
-                  className={`${inputBase} mt-1 w-full px-3 py-2`}
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  placeholder="Jane Doe"
-                />
-              </div>
+              <div className="overflow-hidden rounded-[24px] border border-black/10 bg-white">
+                {permissionSections.map((section) => {
+                  const SectionIcon = section.icon;
 
-              <div>
-                <label className="text-sm font-medium">Admin Role</label>
-                <input
-                  className={`${inputBase} mt-1 w-full px-3 py-2`}
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
-                  placeholder="Manager"
-                />
-              </div>
+                  return (
+                    <div
+                      key={section.key}
+                      className="border-b border-black/10 last:border-b-0"
+                    >
+                      <div className="flex items-center gap-2 bg-black/[0.03] px-4 py-3">
+                        <SectionIcon className="h-4 w-4 text-black" />
+                        <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-black/55">
+                          {section.title}
+                        </span>
+                      </div>
 
-              <div>
-                <label className="text-sm font-medium">Module Access</label>
-                <div className="mt-2 border border-black/10 rounded-xl max-h-72 overflow-y-auto">
-                  {accessModules.map((mod) => {
-                    const selected = inviteAccess.find(
-                      (a) => normalizeKey(a.key) === mod.key
-                    );
+                      {section.items.map((item) => (
+                        <div
+                          key={item.key}
+                          className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div className="text-base font-medium text-black">
+                            {item.label}
+                          </div>
 
-                    return (
-                      <div
-                        key={mod.key}
-                        className="flex items-center justify-between px-3 py-3 border-b border-black/5 last:border-b-0"
-                      >
-                        <label className="flex items-center gap-3 text-sm font-medium">
-                          <input
-                            type="checkbox"
-                            checked={!!selected}
-                            onChange={() => toggleInviteAccess(mod.key, mod.label)}
-                          />
-                          <span>{mod.label}</span>
-                        </label>
-
-                        <label className="flex items-center gap-2 text-xs text-black/60">
-                          <span>Edit</span>
-                          <input
-                            type="checkbox"
-                            checked={!!selected?.isEdit}
-                            disabled={!selected}
-                            onChange={(e) =>
-                              toggleEditInviteAccess(mod.key, e.target.checked)
+                          <PermissionSwitch
+                            value={getPermissionLevel(inviteAccess, item.key)}
+                            onChange={(next) =>
+                              toggleInviteModuleLevel(
+                                item.key,
+                                item.label,
+                                next
+                              )
                             }
                           />
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="px-5 py-4 border-t border-black/10 flex justify-end gap-2">
+            <div className="shrink-0 flex justify-end gap-2 border-t border-black/10 bg-[#f7f7f7] px-6 py-5">
               <button
                 type="button"
                 onClick={() => setInviteOpen(false)}
-                className="rounded-lg border border-black/10 px-4 py-2 text-sm hover:bg-black/5"
+                className="rounded-2xl border border-black/10 px-5 py-3 text-sm font-medium hover:bg-black/5"
               >
                 Cancel
               </button>
@@ -728,138 +1042,9 @@ export default function AdminsPage() {
                 type="button"
                 onClick={onInvite}
                 disabled={inviting || !inviteEmail.trim() || !inviteRole.trim()}
-                className="rounded-lg bg-black text-white px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                className="rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 {inviting ? "Sending..." : "Send Invite"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {editOpen ? (
-        <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4">
-          <div className="w-full max-w-2xl bg-white rounded-2xl border border-black/10 shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-black/10 flex items-center justify-between">
-              <div>
-                <div className="font-semibold text-lg">Edit Admin</div>
-                <div className="text-sm text-black/60">
-                  Update role, status and access
-                </div>
-              </div>
-              <button
-                className="text-sm text-black/60 hover:text-black"
-                onClick={() => setEditOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              {editErr ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {editErr}
-                </div>
-              ) : null}
-
-              <div>
-                <label className="text-sm font-medium">Email</label>
-                <input
-                  className={`${inputBase} mt-1 w-full px-3 py-2 bg-black/5`}
-                  value={editing?.email || ""}
-                  disabled
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Full Name</label>
-                <input
-                  className={`${inputBase} mt-1 w-full px-3 py-2`}
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Jane Doe"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Admin Role</label>
-                <input
-                  className={`${inputBase} mt-1 w-full px-3 py-2`}
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
-                  placeholder="Manager"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Status</label>
-                <select
-                  className={`${selectBase} mt-1 w-full px-3 py-2`}
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as AdminStatus)}
-                >
-                  <option value="active">active</option>
-                  <option value="inactive">inactive</option>
-                  <option value="pending">pending</option>
-                  <option value="suspended">suspended</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Access Permissions</label>
-                <div className="mt-2 border border-black/10 rounded-xl max-h-72 overflow-y-auto">
-                  {accessModules.map((mod) => {
-                    const selected = editAccess.find(
-                      (a) => normalizeKey(a.key) === mod.key
-                    );
-
-                    return (
-                      <div
-                        key={mod.key}
-                        className="flex items-center justify-between px-3 py-3 border-b border-black/5 last:border-b-0"
-                      >
-                        <label className="flex items-center gap-3 text-sm font-medium">
-                          <input
-                            type="checkbox"
-                            checked={!!selected}
-                            onChange={() => toggleAdminEditAccess(mod.key, mod.label)}
-                          />
-                          <span>{mod.label}</span>
-                        </label>
-
-                        <label className="flex items-center gap-2 text-xs text-black/60">
-                          <span>Edit</span>
-                          <input
-                            type="checkbox"
-                            checked={!!selected?.isEdit}
-                            disabled={!selected}
-                            onChange={(e) =>
-                              toggleAdminEditPermission(mod.key, e.target.checked)
-                            }
-                          />
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="px-5 py-4 border-t border-black/10 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                className="rounded-lg border border-black/10 px-4 py-2 text-sm hover:bg-black/5"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={onSaveEdit}
-                disabled={savingEdit || !editRole.trim()}
-                className="rounded-lg bg-black text-white px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
-              >
-                {savingEdit ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>

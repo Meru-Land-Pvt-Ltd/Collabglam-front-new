@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { post, postFormData } from "@/lib/api";
+import { get, postFormData } from "@/lib/api";
 import {
   Search,
   MessageSquareText,
@@ -43,21 +43,12 @@ type ActionCardProps = {
   onClick?: () => void;
 };
 
-type AppliedCampaign = {
-  _id?: string;
-  campaignId?: string;
+type Campaign = {
+  _id: string;
+  campaignsId?: string;
+  campaignTitle?: string;
+  productOrServiceName?: string;
   campaignName?: string;
-  brandId?: string;
-  brandName?: string;
-  isActive?: number;
-  applicantCount?: number;
-  hasApplied?: number;
-  isDraft?: number;
-  createdAt?: string;
-  isContracted?: number;
-  isAccepted?: number;
-  contractId?: string | null;
-  contractStatus?: string | null;
 };
 
 type SelectOption = {
@@ -87,19 +78,19 @@ const faqSections: FAQSection[] = [
     icon: <Megaphone className="h-4 w-4" />,
     items: [
       {
-        question: "How do I apply to a campaign?",
+        question: "How do I create a campaign?",
         answer:
-          "Browse campaigns in the marketplace, open the campaign brief, check eligibility, then click Apply to submit your application for brand review.",
+          "To create a campaign, navigate to the Campaigns tab in the sidebar and click the Create New button. Follow the step-by-step flow to define your objectives, budget, timeline, and influencer requirements.",
       },
       {
-        question: "How do I receive campaign invitations?",
+        question: "How do I invite influencers?",
         answer:
-          "Brands may invite influencers directly. You’ll receive a dashboard notification and email. Open the invitation, review the brief, and accept.",
+          "Open your campaign, go to the influencer selection area, and choose creators from your shortlist. You can send individual invites or bulk invitations depending on your workflow.",
       },
       {
         question: "Can I edit a campaign after publishing?",
         answer:
-          "Influencers cannot edit campaigns. Only brands manage campaign details. Influencers can update deliverables or communicate with brands if changes are needed.",
+          "Yes. Most campaign details can be updated after publishing, though certain live campaign settings may be restricted once creators have already accepted or work has started.",
       },
     ],
   },
@@ -110,12 +101,12 @@ const faqSections: FAQSection[] = [
       {
         question: "How do I review influencer deliverables?",
         answer:
-          "Open the active campaign, go to the Deliverables section, upload your content or link, then submit it for brand review.",
+          "Go to the relevant campaign and open the deliverables section. From there, you can review submissions, compare them with the brief, and approve or request revisions.",
       },
       {
         question: "Can I request revisions?",
         answer:
-          "Yes. If brands request revisions, update the deliverable according to feedback and resubmit the content through the Deliverables section.",
+          "Yes. If a submission does not match the campaign brief, you can leave feedback and request changes before approving the deliverable.",
       },
     ],
   },
@@ -126,12 +117,12 @@ const faqSections: FAQSection[] = [
       {
         question: "When are payments released?",
         answer:
-          "Payments are released after deliverables are approved and any platform holding period is completed, depending on campaign payment terms.",
+          "Payments are generally released after deliverables are approved and any platform-specific holding period is completed. Exact timing can vary based on the campaign setup.",
       },
       {
         question: "How do milestone payments work?",
         answer:
-          "Milestone payments are released after completing specific campaign stages like draft approval, content submission, or final campaign completion.",
+          "Milestone payments divide the total campaign amount into stages. Funds are released as each milestone is completed and approved according to the agreement.",
       },
     ],
   },
@@ -142,17 +133,17 @@ const faqSections: FAQSection[] = [
       {
         question: "How do I raise an issue?",
         answer:
-          "Open the campaign, navigate to the dispute section, click Raise Issue, provide details and evidence, and submit for review.",
+          "Use the Raise an Issue option at the top of this page. Provide campaign details, a clear explanation of the problem, and any supporting material so the support team can review it faster.",
       },
       {
         question: "What evidence should I provide?",
         answer:
-          "Provide screenshots, content links, campaign brief references, communication records, or proof of submission supporting your dispute claim.",
+          "Include screenshots, submission links, timeline details, approval history, payment references, and any message context that helps explain the issue clearly.",
       },
       {
         question: "How long does dispute resolution take?",
         answer:
-          "Disputes are typically reviewed within 3–7 business days depending on complexity, evidence provided, and responses from both influencer and brand.",
+          "Resolution time depends on complexity, but straightforward cases are usually reviewed faster when all supporting information is included from the start.",
       },
     ],
   },
@@ -388,8 +379,8 @@ function ContactSupportSection({
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [influencerId, setInfluencerId] = useState<string | null>(null);
-  const [campaigns, setCampaigns] = useState<AppliedCampaign[]>([]);
+  const [brandId, setBrandId] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
 
   const [category, setCategory] = useState("");
@@ -402,25 +393,22 @@ function ContactSupportSection({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const storedInfluencerId = localStorage.getItem("influencerId");
-    setInfluencerId(storedInfluencerId);
+    const storedBrandId = localStorage.getItem("brandId");
+    setBrandId(storedBrandId);
   }, []);
 
   useEffect(() => {
     const loadCampaigns = async () => {
-      if (!influencerId) return;
+      if (!brandId) return;
 
       setLoadingCampaigns(true);
       try {
-        const data = await post<{ campaigns?: AppliedCampaign[] }>(
-          "/dispute/influencer/applied",
-          {
-            influencerId,
-            page: 1,
-            limit: 1000,
-          }
-        );
-        setCampaigns(data?.campaigns || []);
+        const data = await get<{ data: Campaign[] }>("/campaign/active", {
+          brandId,
+          page: 1,
+          limit: 1000,
+        });
+        setCampaigns(data?.data || []);
       } catch {
         setCampaigns([]);
       } finally {
@@ -429,21 +417,28 @@ function ContactSupportSection({
     };
 
     loadCampaigns();
-  }, [influencerId]);
+  }, [brandId]);
 
   const campaignOptions: SelectOption[] = useMemo(() => {
     const usable = campaigns.filter((campaign) => {
-      const id = String(campaign.campaignId || campaign._id || "").trim();
-      const label = String(campaign.campaignName || "").trim();
-      return id !== "" && label !== "";
+      const label =
+        campaign.productOrServiceName ||
+        campaign.campaignTitle ||
+        campaign.campaignName ||
+        "";
+      return String(campaign._id || "").trim() !== "" && label.trim() !== "";
     });
 
     return [
       { label: "No related campaign", value: "" },
       ...usable.map((campaign) => ({
-        key: `campaign-${campaign.campaignId || campaign._id}`,
-        value: String(campaign.campaignId || campaign._id),
-        label: String(campaign.campaignName).trim(),
+        key: `campaign-${campaign._id}`,
+        value: String(campaign._id),
+        label:
+          campaign.productOrServiceName ||
+          campaign.campaignTitle ||
+          campaign.campaignName ||
+          "",
       })),
     ];
   }, [campaigns]);
@@ -497,8 +492,8 @@ function ContactSupportSection({
   const handleSubmit = async () => {
     setError(null);
 
-    if (!influencerId) {
-      const message = "Missing influencer id. Please log in again.";
+    if (!brandId) {
+      const message = "Missing brand id. Please log in again.";
       setError(message);
       onError(message);
       return;
@@ -521,7 +516,7 @@ function ContactSupportSection({
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.append("influencerId", influencerId);
+      form.append("brandId", brandId);
       form.append("category", category);
       form.append("description", description.trim());
 
@@ -534,7 +529,7 @@ function ContactSupportSection({
       });
 
       const response = await postFormData<{ ticketId?: string }>(
-        "/support/influencer/create",
+        "/support/brand/create",
         form
       );
 
@@ -602,11 +597,10 @@ function ContactSupportSection({
             <div className="mt-14 rounded-[28px] border border-white/10 bg-white/5 p-6">
               <p className="text-lg italic leading-8 text-white/80">
                 “The resolution time was much faster than expected. The team
-                understood my issue clearly and kept the process smooth from
-                start to finish.”
+                really understood the nuances of my creator campaign dispute.”
               </p>
               <p className="mt-6 text-sm font-semibold text-white">
-                — Ava Martin, Creator
+                — Marcus Lee, Brand Manager
               </p>
             </div>
           </div>
@@ -781,8 +775,8 @@ function SearchParamsHandler({
       params.delete("ticket");
 
       const nextUrl = params.toString()
-        ? `/influencer/support-centre?${params.toString()}`
-        : "/influencer/support-centre";
+        ? `/brand/help-and-support?${params.toString()}`
+        : "/brand/help-and-support";
 
       router.replace(nextUrl, { scroll: false });
     }

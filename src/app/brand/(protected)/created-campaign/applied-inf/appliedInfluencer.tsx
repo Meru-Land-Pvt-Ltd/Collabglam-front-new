@@ -2613,6 +2613,33 @@ export default function AppliedInfluencersPage() {
 
   const handleAddMilestone = useCallback(
     (inf: Influencer, meta: ContractMeta | null) => {
+      if (!brandId) {
+        toast({
+          icon: "error",
+          title: "Brand not found",
+          text: "Brand ID is missing.",
+        });
+        return;
+      }
+
+      if (!campaignId) {
+        toast({
+          icon: "error",
+          title: "Campaign not found",
+          text: "Campaign ID is missing.",
+        });
+        return;
+      }
+
+      if (!inf?.influencerId) {
+        toast({
+          icon: "error",
+          title: "Influencer not found",
+          text: "Influencer ID is missing.",
+        });
+        return;
+      }
+
       if (!meta?.contractId) {
         toast({
           icon: "error",
@@ -2626,7 +2653,7 @@ export default function AppliedInfluencersPage() {
       setMilestoneTargetMeta(meta);
       setAddMilestoneOpen(true);
     },
-    []
+    [brandId, campaignId]
   );
 
   const handleViewMilestone = useCallback(
@@ -2641,10 +2668,10 @@ export default function AppliedInfluencersPage() {
       }
 
       router.push(
-        `/brand/milestones?mode=view&contractId=${meta.contractId}&campaignId=${campaignId}&influencerId=${inf.influencerId}`
+        `/brand/created-campaign/applied-inf/view-milestone?contractId=${meta.contractId}&campaignId=${campaignId || ""}&influencerId=${inf.influencerId || ""}&brandId=${brandId || ""}`
       );
     },
-    [campaignId, router]
+    [brandId, campaignId, router]
   );
 
   useEffect(() => {
@@ -5541,6 +5568,7 @@ export default function AppliedInfluencersPage() {
             setMilestoneTargetInf(null);
             setMilestoneTargetMeta(null);
           }}
+          brandId={brandId || ""}
           contractId={milestoneTargetMeta?.contractId || ""}
           campaignId={campaignId || ""}
           influencerId={milestoneTargetInf?.influencerId || ""}
