@@ -114,9 +114,8 @@ export default function AdminSidebar() {
         <span className="flex items-center gap-2">
           {Icon ? (
             <Icon
-              className={`h-4 w-4 ${
-                active ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
+              className={`h-4 w-4 ${active ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
             />
           ) : null}
           <span className="whitespace-nowrap flex-1">{label}</span>
@@ -136,22 +135,19 @@ export default function AdminSidebar() {
         >
           <span className="flex items-center gap-2">
             <FileText
-              className={`h-4 w-4 ${
-                docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
+              className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
             />
             <span className="flex-1 text-left">Documents</span>
             {docsOpen ? (
               <ChevronUp
-                className={`h-4 w-4 ${
-                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                  }`}
               />
             ) : (
               <ChevronDown
-                className={`h-4 w-4 ${
-                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                  }`}
               />
             )}
           </span>
@@ -166,6 +162,71 @@ export default function AdminSidebar() {
               className="ml-3 mt-2 space-y-1 overflow-hidden"
             >
               {documentLinks.map(({ label, href }) => {
+                const active = pathname === href || pathname.startsWith(href + "/");
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => {
+                      if (isMobile) setDrawerOpen(false);
+                    }}
+                    className={`${linkBase} ${active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
+                      }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+  const renderSettings = (isMobile = false) => {
+    const settingsActive =
+      pathname === "/admin/role" || pathname.startsWith("/admin/settings/");
+
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((prev) => !prev)}
+          className={`${linkBase} w-full ${settingsActive ? linkActive : linkInactive}`}
+        >
+          <span className="flex items-center gap-2">
+            <SettingsIcon
+              className={`h-4 w-4 ${
+                settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
+            />
+            <span className="flex-1 text-left">Settings</span>
+            {settingsOpen ? (
+              <ChevronUp
+                className={`h-4 w-4 ${
+                  settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
+              />
+            ) : (
+              <ChevronDown
+                className={`h-4 w-4 ${
+                  settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
+              />
+            )}
+          </span>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {settingsOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="ml-3 mt-2 space-y-1 overflow-hidden"
+            >
+              {settingsLinks.map(({ label, href }) => {
                 const active = pathname === href || pathname.startsWith(href + "/");
                 return (
                   <Link

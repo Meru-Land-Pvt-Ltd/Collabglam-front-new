@@ -1618,7 +1618,7 @@ function CreateManualScreen({
 
         if (status === "active") {
           resetForm();
-          router.replace(`/brand/influencer-invitation?q=active&campaignId=${encodeURIComponent(cid || "")}`);
+          router.replace(`/brand/created-campaign`);
           onAfterPublish?.();
           return;
         }

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/adminbutton";
 import { Label } from "@/components/ui/label";
 import { HiEye, HiEyeSlash } from "react-icons/hi2";
 import { post } from "@/lib/api";
+import Image from "next/image";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -54,13 +55,27 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 relative">
-            <Image src="/logo.svg" alt="Admin Logo" fill className="object-contain" />
+            <Image src="/logo.png" alt="Admin Logo" fill className="object-contain" />
           </div>
           <CardTitle className="text-2xl font-bold">Admin Sign In</CardTitle>
           <CardDescription className="text-gray-500">
             Please enter your admin credentials
           </CardDescription>
         </CardHeader>
+
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-6">
+            <div className="space-y-1">
+              <Label htmlFor="email">Email address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="admin@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
 
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6">
@@ -103,6 +118,20 @@ export default function AdminLoginPage() {
               </div>
             </div>
 
+            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+          </CardContent>
+
+          <CardFooter className="pt-0">
+            <Button
+              type="submit"
+              className="w-full py-2 text-lg"
+              disabled={loading}
+            >
+              {loading ? "Signing in…" : "Sign In"}
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
             {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           </CardContent>
 

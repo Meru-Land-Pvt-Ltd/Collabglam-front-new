@@ -12,8 +12,9 @@
 // app/brand/(protected)/browse-influencer/page.tsx
 
 "use client";
-import { Suspense } from 'react';
-import ModashDashboard from './ModashDashboard';
+
+import { Suspense } from "react";
+import ModashDashboard from "./ModashDashboard";
 
 export default function BrowseInfluencerPage() {
   return (

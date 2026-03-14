@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { FieldInfoIcon } from "@/components/ui/field-info-icon";
 
 type FieldState = "default" | "selected" | "error" | "disabled";
 
@@ -15,7 +16,7 @@ export interface LabeledTextareaProps
   /** Optional label helpers (like your other fields) */
   required?: boolean;
   optional?: boolean;
-
+info?: React.ReactNode;
   /** Helper row */
   hint?: boolean; // default false
   hintText?: string; // default "Hint text"
@@ -67,7 +68,7 @@ const LabeledTextarea = React.forwardRef<HTMLTextAreaElement, LabeledTextareaPro
       state,
       required = false,
       optional = false,
-
+info,
       hint = false,
       hintText = "Hint text",
       errorText,
@@ -205,30 +206,36 @@ const LabeledTextarea = React.forwardRef<HTMLTextAreaElement, LabeledTextareaPro
             )}
           >
             <label
-              htmlFor={textareaId}
-              className={cn(
-                "min-w-0 truncate",
-                isInvalid ? "text-error-500" : "text-[color:var(--Light-Text-Secondary,#969696)]",
-                "text-[16px] leading-[24px] font-normal",
-                "font-[var(--Font-Family-Inter,Inter)]",
-                labelClassName
-              )}
-            >
-              <span className="inline-flex items-center gap-[0.125rem]">
-                <span>{label}</span>
+  htmlFor={textareaId}
+  className={cn(
+    "min-w-0 truncate",
+    isInvalid ? "text-error-500" : "text-[color:var(--Light-Text-Secondary,#969696)]",
+    "text-[16px] leading-[24px] font-normal",
+    "font-[var(--Font-Family-Inter,Inter)]",
+    labelClassName
+  )}
+>
+  <span className="inline-flex items-center gap-[0.125rem] min-w-0">
+    <span className="truncate">{label}</span>
 
-                {required ? (
-                  <span
-                    className={cn("font-normal", isDisabled ? "text-neutral-400" : "text-[#E53935]")}
-                    aria-hidden="true"
-                  >
-                    *
-                  </span>
-                ) : null}
+    {required ? (
+      <span
+        className={cn("font-normal", isDisabled ? "text-neutral-400" : "text-[#E53935]")}
+        aria-hidden="true"
+      >
+        *
+      </span>
+    ) : null}
 
-                {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
-              </span>
-            </label>
+    {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+
+    {info ? (
+      <span className="ml-1 inline-flex shrink-0">
+        <FieldInfoIcon content={info} />
+      </span>
+    ) : null}
+  </span>
+</label>
 
             {showAttachment ? (
               <div className="flex items-center gap-2 shrink-0">

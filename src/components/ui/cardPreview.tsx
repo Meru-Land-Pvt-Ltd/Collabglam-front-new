@@ -351,7 +351,7 @@ function InviteActions({ invite }: { invite: InviteCardProps }) {
     <div className="flex items-center gap-1.5 shrink-0">
       <button
         onClick={invite.onAccept}
-        className="rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+        className="rounded-lg bg-[#1A1A1A] text-white px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
       >
         Accept Invite
       </button>
@@ -404,14 +404,14 @@ function ContractActions({ contract }: { contract: ContractCardProps }) {
         </Button>
       )}
 
-      {/* View */}
+      {/* View
       <Button
-        onClick={() => router.push(`/influencer/my-campaigns/1`)}
+        onClick={() => router.push(`/influencer/my-campaigns/${contract.campaignId}`)}
         className="flex items-center gap-1 rounded-lg border border-neutral-200 px-3 py-2 text-[12px] bg-black text-white font-medium text-neutral-700 transition "
       >
         <Eye className="h-3 w-3" />
         View
-      </Button>
+      </Button> */}
 
       {/* Reject */}
       {canReject && (
@@ -484,7 +484,7 @@ export function ManualPreviewCard({
   return (
     <div
       className={[
-        "w-full max-w-[26.25rem] rounded-[1.625rem] bg-white p-5",
+        "w-full max-w-[26.25rem] rounded-[1.625rem] bg-white p-5 border border-[#D6D6D6]",
         "[@media_(max-width:80rem)_and_(max-height:48.75rem)]:max-w-[23.75rem]",
         "[@media_(max-width:80rem)_and_(max-height:48.75rem)]:p-4",
         className,
@@ -600,14 +600,12 @@ export function ManualPreviewCard({
         )}
       </div>
 
-      {/* divider */}
+
       <div className="mt-6 h-px w-full bg-neutral-100 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5" />
 
-      {/* bottom row: Budget + actions */}
-      {/* bottom row: Budget + actions */}
+ 
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
-        {/* Budget */}
-        {/* Budget */}
+     
         <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
           <div className="min-w-0 flex-1">
             {budget > 0 ? (
@@ -648,7 +646,7 @@ export function ManualPreviewCardStack({
   meta?: PreviewMeta;
 }) {
   return (
-    <div className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-contain">
+    <div className="h-full min-h-0 w-full  overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="min-h-full flex items-center justify-center px-6 py-10 [@media_(max-height:50rem)]:items-start [@media_(max-height:50rem)]:py-6">
         <div
           className="
