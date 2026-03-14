@@ -621,7 +621,9 @@ export type HashtagRow = { _id?: string; tag?: string };
 export type GoalRow = { _id?: string; goal?: string };
 export type AgeRow = { _id?: string; range?: string };
 export type FormatRow = { _id?: string; format?: string };
-export type LangRow = { _id?: string; code?: string; name?: string };
+export type LangRow = {
+  id: string | undefined; _id?: string; code?: string; name?: string 
+};
 
 export async function apiListCountries(params: ListQuery = {}) {
   return apiGet<CountryRow[]>(`${LIST_BASE}/countries`, params);
