@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { post, postFormData } from "@/lib/api";
 import {
@@ -761,26 +761,20 @@ function ContactSupportSection({
   );
 }
 
-export default function SupportPage() {
+function SearchParamsHandler({
+  onDisputeCreated,
+}: {
+  onDisputeCreated: (ticket: string | null) => void;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  const [isRaiseIssueOpen, setIsRaiseIssueOpen] = useState(false);
-  const [popup, setPopup] = useState<SupportPopupState | null>(null);
 
   useEffect(() => {
     const disputeCreated = searchParams.get("disputeCreated");
     const ticket = searchParams.get("ticket");
 
     if (disputeCreated === "1") {
-      setPopup({
-        open: true,
-        type: "success",
-        title: "Issue submitted successfully",
-        message: ticket
-          ? `Your dispute has been created successfully. Ticket ID: ${ticket}.`
-          : "Your dispute has been created successfully. Our team will review it shortly.",
-      });
+      onDisputeCreated(ticket);
 
       const params = new URLSearchParams(searchParams.toString());
       params.delete("disputeCreated");
@@ -792,7 +786,14 @@ export default function SupportPage() {
 
       router.replace(nextUrl, { scroll: false });
     }
-  }, [searchParams, router]);
+  }, [searchParams, router, onDisputeCreated]);
+
+  return null;
+}
+
+export default function SupportPage() {
+  const [isRaiseIssueOpen, setIsRaiseIssueOpen] = useState(false);
+  const [popup, setPopup] = useState<SupportPopupState | null>(null);
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -803,6 +804,21 @@ export default function SupportPage() {
 
   return (
     <>
+      <Suspense fallback={null}>
+        <SearchParamsHandler
+          onDisputeCreated={(ticket) => {
+            setPopup({
+              open: true,
+              type: "success",
+              title: "Issue submitted successfully",
+              message: ticket
+                ? `Your dispute has been created successfully. Ticket ID: ${ticket}.`
+                : "Your dispute has been created successfully. Our team will review it shortly.",
+            });
+          }}
+        />
+      </Suspense>
+
       <div className="min-h-screen bg-white text-slate-900">
         <div className="mx-auto max-w-7xl px-6 py-14 md:px-10 lg:px-12">
           <section>

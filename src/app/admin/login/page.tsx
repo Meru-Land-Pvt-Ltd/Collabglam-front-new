@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/adminbutton";
 import { Label } from "@/components/ui/label";
 import { HiEye, HiEyeSlash } from "react-icons/hi2";
 import { post } from "@/lib/api";
-import Image from "next/image";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -131,10 +130,7 @@ export default function AdminLoginPage() {
             </Button>
           </CardFooter>
         </form>
-      </Card>
-            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           </CardContent>
-
           <CardFooter className="pt-0">
             <Button
               type="submit"
