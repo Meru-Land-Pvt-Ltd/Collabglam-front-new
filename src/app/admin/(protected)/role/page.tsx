@@ -79,6 +79,7 @@ const adminNav = [
   { key: "youtube-handle", label: "Youtube Handle" },
   { key: "modash-data", label: "Modash Data" },
   { key: "invited-influencer", label: "Invited Influencer" },
+  { key: "employees", label: "Employees" },
 ];
 
 const permissionSections = [
@@ -122,6 +123,7 @@ const permissionSections = [
       { key: "notifications", label: "Notifications" },
       { key: "disputes", label: "Disputes" },
       { key: "emails", label: "E-Mails" },
+      { key: "employees", label: "Employees" },
     ],
   },
 ];
