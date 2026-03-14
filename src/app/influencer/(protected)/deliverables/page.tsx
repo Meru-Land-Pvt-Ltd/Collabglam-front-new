@@ -1,568 +1,316 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
-import { ManualPreviewCard } from "@/components/ui/cardPreview";
-import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+import { Button } from "@/components/ui/button";
 import {
-  LayoutGrid, Clock, TrendingDown, TrendingUp, ArrowUpDown,
-  FileVideo, FileImage, BookImage, Layers, Link2, Upload, X, LucideIcon,
-} from "lucide-react";
-import { Button } from "@/components/ui/buttonComp";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
+  apiListDeliverablesByCampaign,
+  getApiErrorMessage,
+  type DeliverableItem,
+} from "@/app/influencer/services/influencerApi";
 
-/* ─────────────────────────────────────────────
-   Types
-   ───────────────────────────────────────────── */
-type ApprovalStatus =
-  | "Pending Approval"
-  | "Under Review"
-  | "Revision Needed"
-  | "Approved"
-  | "Completed";
-
-type SubmissionStatus =
-  | "Pending Submission"
-  | "Under Review"
-  | "Revision Requested"
-  | "Approved"
-  | "Completed";
-
-type DeliverableType = "Reel" | "Post" | "Story" | "Video";
-
-type Tab =
-  | "Pending Submission"
-  | "Under Review"
-  | "Revision Requested"
-  | "Approved"
-  | "Completed";
-
-interface Deliverable {
-  id: number;
-  brand: string;
-  campaign: string;
-  type: DeliverableType;
-  approvalStatus: ApprovalStatus;
-  submissionStatus: SubmissionStatus;
-  overdueDays: number | null;
-  milestone: number;
-  totalMilestones: number;
-  tab: Tab;
-  location: string;
-}
-
-interface PreviewForm {
-  title: string;
-  description: string;
-  categoryName: string;
-  targetAgeGroups: string[];
-  goals: string[];
-  targetCountry: string[];
-  campaignBudget: number;
-}
-
-interface PreviewMeta {
-  ageMap: Record<string, string>;
-  goalsMap: Record<string, string>;
-  countryMap: Record<string, string>;
-  campaignBudget: number;
-}
-
-interface DeliverablePreview {
-  form: PreviewForm;
-  meta: PreviewMeta;
-}
-
-interface FilterOption {
-  value: string;
+type DeliverableUrl = {
   label: string;
-  icon: LucideIcon;
-}
+  url: string;
+};
 
-/* ─────────────────────────────────────────────
-   Mock deliverables data
-   ───────────────────────────────────────────── */
-const mockDeliverables: Deliverable[] = [
-  {
-    id: 1,
-    brand: "Radiant Beauty Co.",
-    campaign: "Summer Glow",
-    type: "Reel",
-    approvalStatus: "Pending Approval",
-    submissionStatus: "Pending Submission",
-    overdueDays: 567,
-    milestone: 1,
-    totalMilestones: 3,
-    tab: "Pending Submission",
-    location: "Remote",
-  },
-  {
-    id: 2,
-    brand: "Sparkle Jewels",
-    campaign: "Timeless",
-    type: "Post",
-    approvalStatus: "Pending Approval",
-    submissionStatus: "Pending Submission",
-    overdueDays: 558,
-    milestone: 1,
-    totalMilestones: 2,
-    tab: "Pending Submission",
-    location: "New York",
-  },
-  {
-    id: 3,
-    brand: "FitLife Co.",
-    campaign: "30-Day Challenge",
-    type: "Story",
-    approvalStatus: "Under Review",
-    submissionStatus: "Under Review",
-    overdueDays: null,
-    milestone: 2,
-    totalMilestones: 3,
-    tab: "Under Review",
-    location: "Remote",
-  },
-  {
-    id: 4,
-    brand: "Brew Haven",
-    campaign: "Morning Ritual",
-    type: "Video",
-    approvalStatus: "Revision Needed",
-    submissionStatus: "Revision Requested",
-    overdueDays: 12,
-    milestone: 1,
-    totalMilestones: 2,
-    tab: "Revision Requested",
-    location: "Los Angeles",
-  },
-  {
-    id: 5,
-    brand: "HealthyBite",
-    campaign: "Snack Reviews",
-    type: "Post",
-    approvalStatus: "Approved",
-    submissionStatus: "Approved",
-    overdueDays: null,
-    milestone: 3,
-    totalMilestones: 3,
-    tab: "Approved",
-    location: "Remote",
-  },
-  {
-    id: 6,
-    brand: "Fashion Nova",
-    campaign: "Summer Collection",
-    type: "Reel",
-    approvalStatus: "Completed",
-    submissionStatus: "Completed",
-    overdueDays: null,
-    milestone: 2,
-    totalMilestones: 2,
-    tab: "Completed",
-    location: "Miami",
-  },
-];
+type Deliverable = DeliverableItem;
 
-/* ─────────────────────────────────────────────
-   Map a deliverable → ManualPreviewCard form + meta
-   ───────────────────────────────────────────── */
-function deliverableToPreview(d: Deliverable): DeliverablePreview {
-  const overdueText =
-    d.overdueDays != null ? `⚠ Overdue by ${d.overdueDays} days` : null;
+const formatDateTime = (dateStr?: string) => {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
-  const description = [d.campaign, overdueText].filter(Boolean).join(" · ");
+const badgeClass = (status?: string) => {
+  const s = (status || "").toLowerCase();
 
-  const milestoneKey = `m_${d.milestone}_${d.totalMilestones}`;
-  const milestoneLabel = `Milestone ${d.milestone} of ${d.totalMilestones}`;
+  if (s === "approved" || s === "paid") {
+    return "border border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
 
-  const locationKey = d.location;
+  if (s === "pending") {
+    return "border border-amber-200 bg-amber-50 text-amber-700";
+  }
 
-  return {
-    form: {
-      title: d.brand,
-      description,
-      categoryName: d.type,
-      targetAgeGroups: [milestoneKey],
-      goals: [d.approvalStatus],
-      targetCountry: [locationKey],
-      campaignBudget: 0,
-    },
-    meta: {
-      ageMap: { [milestoneKey]: milestoneLabel },
-      goalsMap: { [d.approvalStatus]: d.approvalStatus },
-      countryMap: { [locationKey]: locationKey },
-      campaignBudget: 0,
-    },
-  };
-}
+  if (s === "revision") {
+    return "border border-sky-200 bg-sky-50 text-sky-700";
+  }
 
-/* ─────────────────────────────────────────────
-   Filter / sort option lists
-   ───────────────────────────────────────────── */
-const campaignOptions: FilterOption[] = [
-  { value: "all", label: "All Campaigns", icon: LayoutGrid },
-  ...["Summer Glow", "Timeless", "30-Day Challenge", "Morning Ritual", "Snack Reviews", "Summer Collection"]
-    .map((c): FilterOption => ({ value: c, label: c, icon: LayoutGrid })),
-];
+  return "border border-slate-200 bg-slate-50 text-slate-700";
+};
 
-const typeOptions: FilterOption[] = [
-  { value: "all",   label: "All Types", icon: Layers },
-  { value: "Reel",  label: "Reel",      icon: FileVideo },
-  { value: "Post",  label: "Post",      icon: FileImage },
-  { value: "Story", label: "Story",     icon: BookImage },
-  { value: "Video", label: "Video",     icon: FileVideo },
-];
+type RawDeliverableUrl = string | { label?: string; url?: string };
 
-const statusOptions: FilterOption[] = [
-  { value: "all",              label: "All Statuses",     icon: LayoutGrid },
-  { value: "Pending Approval", label: "Pending Approval", icon: Clock },
-  { value: "Under Review",     label: "Under Review",     icon: Clock },
-  { value: "Revision Needed",  label: "Revision Needed",  icon: TrendingDown },
-  { value: "Approved",         label: "Approved",         icon: TrendingUp },
-  { value: "Completed",        label: "Completed",        icon: TrendingUp },
-];
+const getDeliverableLinks = (row: Deliverable): DeliverableUrl[] => {
+  const urls: RawDeliverableUrl[] = Array.isArray(row.url) ? row.url : [];
 
-const deadlineOptions: FilterOption[] = [
-  { value: "all",     label: "Anytime", icon: Clock },
-  { value: "overdue", label: "Overdue", icon: Clock },
-];
+  const normalized = urls
+    .map((item, index): DeliverableUrl | null => {
+      if (typeof item === "string" && item.trim()) {
+        return {
+          label: `Open link ${index + 1}`,
+          url: item.trim(),
+        };
+      }
 
-const sortOptions: FilterOption[] = [
-  { value: "latest", label: "Latest", icon: ArrowUpDown },
-  { value: "oldest", label: "Oldest", icon: ArrowUpDown },
-];
+      if (
+        item &&
+        typeof item === "object" &&
+        typeof item.url === "string" &&
+        item.url.trim()
+      ) {
+        return {
+          label:
+            typeof item.label === "string" && item.label.trim()
+              ? item.label.trim()
+              : `Open link ${index + 1}`,
+          url: item.url.trim(),
+        };
+      }
 
-/* ─────────────────────────────────────────────
-   Submit Deliverable Modal
-   ───────────────────────────────────────────── */
-interface SubmitDeliverableModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
+      return null;
+    })
+    .filter((item): item is DeliverableUrl => Boolean(item));
 
-function SubmitDeliverableModal({ open, onOpenChange }: SubmitDeliverableModalProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [externalLink, setExternalLink] = useState<string>("");
-  const [caption, setCaption] = useState<string>("");
-  const [isDragging, setIsDragging] = useState<boolean>(false);
+  if (normalized.length) return normalized;
 
-  const handleFile = (f: File | undefined): void => {
-    if (f) setFile(f);
-  };
+  const fallback: DeliverableUrl[] = [];
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>): void => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFile(e.dataTransfer.files?.[0]);
-  };
+  if (typeof (row as any).link === "string" && (row as any).link.trim()) {
+    fallback.push({ label: "Open link", url: (row as any).link.trim() });
+  }
 
-  const handleClose = (): void => {
-    setFile(null);
-    setExternalLink("");
-    setCaption("");
-    onOpenChange(false);
-  };
+  if (typeof (row as any).fileUrl === "string" && (row as any).fileUrl.trim()) {
+    fallback.push({ label: "Open file", url: (row as any).fileUrl.trim() });
+  }
 
+  return fallback;
+};
+
+const getRowKey = (row: Deliverable, index: number) => {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] rounded-2xl p-8 gap-0">
-        <DialogHeader className="mb-5">
-          <DialogTitle className="text-xl font-bold text-gray-900">
-            Submit Deliverable
-          </DialogTitle>
-          <DialogDescription className="text-sm text-gray-500 mt-1">
-            Upload your content or provide an external link along with any notes.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5">
-          {/* File Upload */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">
-              Content File (Image/Video/Document)
-            </label>
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-              className={[
-                "relative flex flex-col items-center justify-center gap-2",
-                "border-2 border-dashed rounded-xl cursor-pointer px-6 py-8 transition-colors",
-                isDragging
-                  ? "border-[#FFBF00] bg-[#FFF9E6]"
-                  : "border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100",
-              ].join(" ")}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*,.pdf,.doc,.docx"
-                className="hidden"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  handleFile(e.target.files?.[0])
-                }
-              />
-              {file ? (
-                <>
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
-                    <Upload className="h-4 w-4 text-[#FFBF00]" />
-                    <span className="truncate max-w-[260px]">{file.name}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                      e.stopPropagation();
-                      setFile(null);
-                    }}
-                    className="absolute top-2.5 right-3 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <span className="text-xs text-gray-400">
-                    {(file.size / 1024 / 1024).toFixed(2)} MB
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Upload className="h-6 w-6 text-gray-400" />
-                  <p className="text-sm text-gray-500">
-                    <span className="font-medium text-gray-700">Click to upload</span>{" "}
-                    or drag and drop
-                  </p>
-                  <p className="text-xs text-gray-400">Image, Video, or Document</p>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* External Link */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">External Link</label>
-            <div className="relative">
-              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="https://your-content-link.com"
-                value={externalLink}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setExternalLink(e.target.value)
-                }
-                className="pl-9 rounded-xl"
-              />
-            </div>
-          </div>
-
-          {/* Caption / Notes */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">Caption / Notes</label>
-            <Textarea
-              placeholder="Add any specific captions, hashtags, or notes for the brand..."
-              value={caption}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                setCaption(e.target.value)
-              }
-              className="rounded-xl resize-none min-h-[100px]"
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center gap-3 mt-7">
-          <Button variant="outline" className="flex-1 rounded-lg" onClick={handleClose}>
-            Cancel
-          </Button>
-          <Button className="flex-1 rounded-lg !bg-[#FFBF00] !text-[#1A1A1A]" onClick={handleClose}>
-            Submit
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    row._id ||
+    [
+      row.campaignId,
+      row.influencerId,
+      row.milestoneHistoryId,
+      row.title,
+      row.createdAt,
+      index,
+    ]
+      .filter(Boolean)
+      .join("-")
   );
-}
+};
 
-/* ─────────────────────────────────────────────
-   TABS
-   ───────────────────────────────────────────── */
-const TABS: Tab[] = [
-  "Pending Submission",
-  "Under Review",
-  "Revision Requested",
-  "Approved",
-  "Completed",
-];
-
-/* ─────────────────────────────────────────────
-   PAGE
-   ───────────────────────────────────────────── */
 export default function DeliverablesPage() {
-  const [modalOpen, setModalOpen] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<Tab>("Pending Submission");
-  const [campaign,  setCampaign]  = useState<string>("all");
-  const [delivType, setDelivType] = useState<string>("all");
-  const [status,    setStatus]    = useState<string>("all");
-  const [deadline,  setDeadline]  = useState<string>("all");
-  const [sortBy,    setSortBy]    = useState<string>("latest");
+  const searchParams = useSearchParams();
 
-  const filtered = useMemo<Deliverable[]>(() => {
-    let list = mockDeliverables.filter((d) => d.tab === activeTab);
-    if (campaign  !== "all")    list = list.filter((d) => d.campaign       === campaign);
-    if (delivType !== "all")    list = list.filter((d) => d.type           === delivType);
-    if (status    !== "all")    list = list.filter((d) => d.approvalStatus === status);
-    if (deadline === "overdue") list = list.filter((d) => d.overdueDays    != null);
-    if (sortBy === "oldest")    list = [...list].reverse();
-    return list;
-  }, [activeTab, campaign, delivType, status, deadline, sortBy]);
+  const campaignId = searchParams.get("campaignId") || "";
+  const statusFilter = searchParams.get("status") || "";
 
-  const tabCount = (tab: Tab): number =>
-    mockDeliverables.filter((d) => d.tab === tab).length;
+  const [rows, setRows] = useState<Deliverable[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDeliverables = useCallback(async () => {
+    if (!campaignId) {
+      setError("Missing campaignId in URL. Example: ?campaignId=xxxx");
+      setRows([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await apiListDeliverablesByCampaign(campaignId, {
+        ...(statusFilter ? { status: statusFilter } : {}),
+      });
+
+      setRows(Array.isArray(res?.data) ? res.data : []);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to fetch deliverables"));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [campaignId, statusFilter]);
+
+  useEffect(() => {
+    fetchDeliverables();
+  }, [fetchDeliverables]);
 
   return (
-    <TooltipProvider>
-      <div className="min-h-screen">
-        <SubmitDeliverableModal open={modalOpen} onOpenChange={setModalOpen} />
-        <div className="max-w-[1400px] mx-auto px-6 py-10 space-y-0">
-
-          {/* ── HEADER ── */}
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between pb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Deliverables</h1>
-              <p className="text-gray-500 text-sm mt-1">
-                Submit content, track approvals, and manage deadlines.
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-6">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between md:p-6">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                Deliverables
+              </h1>
+              <p className="text-sm text-slate-500">
+                View submitted deliverables and their current status.
               </p>
             </div>
-            <Button className="!bg-[#FFBF00] !text-[#1A1A1A]" onClick={() => setModalOpen(true)}>
-              Submit Deliverable
-            </Button>
-          </div>
 
-          <div className="h-px w-full bg-gray-200" />
+            <div className="flex flex-wrap items-center gap-2">
+              {statusFilter && (
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                  Filter: {statusFilter}
+                </span>
+              )}
 
-          {/* ── TABS ── */}
-          <div className="flex overflow-x-auto border-b border-gray-200">
-            {TABS.map((tab) => {
-              const active = tab === activeTab;
-              const count  = tabCount(tab);
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={[
-                    "flex items-center gap-2 px-5 py-4 text-sm whitespace-nowrap border-b-4 transition-colors",
-                    active
-                      ? "border-[#FFBF00] font-bold text-[#FFBF00]"
-                      : "border-transparent font-medium text-[#1A1A1A]",
-                  ].join(" ")}
-                >
-                  {tab}
-                  {count > 0 && (
-                    <span
-                      className={[
-                        "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                        active
-                          ? "bg-[#FFF9E6] border border-[#FFBF00] text-amber-700"
-                          : "bg-gray-100 border border-gray-200 text-gray-500",
-                      ].join(" ")}
-                    >
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ── FILTERS ── */}
-          <div className="flex items-end justify-between gap-4 py-6 flex-wrap">
-            <div className="flex items-end gap-3 flex-wrap">
-              {(
-                [
-                  { label: "Campaign",          value: campaign,  onChange: setCampaign,  options: campaignOptions,  searchable: true,  width: "w-[200px]" },
-                  { label: "Deliverable Type",  value: delivType, onChange: setDelivType, options: typeOptions,      searchable: false, width: "w-[180px]" },
-                  { label: "Status",            value: status,    onChange: setStatus,    options: statusOptions,    searchable: false, width: "w-[180px]" },
-                  { label: "Deadline Proximity",value: deadline,  onChange: setDeadline,  options: deadlineOptions,  searchable: false, width: "w-[180px]" },
-                ] as {
-                  label: string;
-                  value: string;
-                  onChange: (v: string) => void;
-                  options: FilterOption[];
-                  searchable: boolean;
-                  width: string;
-                }[]
-              ).map(({ label, value, onChange, options, searchable, width }) => (
-                <div key={label} className={`${width} shrink-0`}>
-                  <FloatingSelect
-                    label={label}
-                    value={value}
-                    onValueChange={onChange}
-                    searchable={searchable}
-                    size="small"
-                  >
-                    {options.map((o) => {
-                      const Icon = o.icon;
-                      return (
-                        <SelectItem key={o.value} value={o.value}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="h-4 w-4 text-gray-400" />
-                            {o.label}
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </FloatingSelect>
-                </div>
-              ))}
-            </div>
-
-            {/* Right: Sort By */}
-            <div className="w-[160px] shrink-0">
-              <FloatingSelect
-                label="Sort By"
-                value={sortBy}
-                onValueChange={setSortBy}
-                searchable={false}
-                size="small"
+              <Button
+                variant="outline"
+                className="border-slate-300 text-slate-700 hover:bg-slate-100"
+                onClick={fetchDeliverables}
+                disabled={loading}
               >
-                {sortOptions.map((o) => {
-                  const Icon = o.icon;
-                  return (
-                    <SelectItem key={o.value} value={o.value}>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-gray-400" />
-                        {o.label}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </FloatingSelect>
+                {loading ? "Refreshing..." : "Refresh"}
+              </Button>
             </div>
           </div>
-
-          {/* ── CARD GRID ── */}
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-gray-400 gap-3">
-              <span className="text-5xl">📭</span>
-              <p className="text-base font-semibold text-gray-500">No deliverables found</p>
-              <p className="text-sm">Try adjusting your filters or switching tabs.</p>
-            </div>
-          ) : (
-            <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
-              {filtered.map((item) => {
-                const { form, meta } = deliverableToPreview(item);
-                return <ManualPreviewCard key={item.id} form={form} meta={meta} />;
-              })}
-            </div>
-          )}
-
         </div>
+
+        {loading && (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="text-sm font-medium text-slate-700">
+              Loading deliverables...
+            </div>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="rounded-3xl border border-red-200 bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold text-red-600">{error}</p>
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                className="border-red-300 text-red-600 hover:bg-red-50"
+                onClick={fetchDeliverables}
+              >
+                Retry
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && rows.length === 0 && (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-sm text-slate-600">No deliverables found.</p>
+          </div>
+        )}
+
+        {!loading && !error && rows.length > 0 && (
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="px-5 py-4 text-left font-semibold">Deliverable</th>
+                    <th className="px-5 py-4 text-left font-semibold">Milestone</th>
+                    <th className="px-5 py-4 text-left font-semibold">Status</th>
+                    <th className="px-5 py-4 text-left font-semibold">Links</th>
+                    <th className="px-5 py-4 text-left font-semibold">Created</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {rows.map((row, index) => {
+                    const rowKey = getRowKey(row, index);
+                    const links = getDeliverableLinks(row);
+
+                    return (
+                      <tr
+                        key={rowKey}
+                        className="transition-colors hover:bg-slate-50/80"
+                      >
+                        <td className="px-5 py-4 align-top">
+                          <div className="space-y-1">
+                            <div className="font-semibold text-slate-900">
+                              {row.title || "-"}
+                            </div>
+
+                            <div className="max-w-[340px] text-slate-600 line-clamp-2">
+                              {row.description || "-"}
+                            </div>
+
+                            {row.influencerName ? (
+                              <div className="text-xs text-slate-500">
+                                Influencer: {row.influencerName}
+                              </div>
+                            ) : null}
+
+                            {row.comments ? (
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                <span className="font-semibold text-slate-700">
+                                  Comment:
+                                </span>{" "}
+                                {row.comments}
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 align-top text-slate-700">
+                          <div className="max-w-[220px] line-clamp-2">
+                            {row.milestoneTitle || "-"}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 align-top">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass(
+                              row.status
+                            )}`}
+                          >
+                            {row.status || "-"}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex max-w-[220px] flex-col gap-2">
+                            {links.length === 0 ? (
+                              <span className="text-slate-400">-</span>
+                            ) : (
+                              links.map((link, idx) => (
+                                <a
+                                  key={`${rowKey}-link-${idx}`}
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="truncate text-sm font-medium text-slate-900 underline underline-offset-4 hover:text-slate-600"
+                                >
+                                  {link.label}
+                                </a>
+                              ))
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 align-top text-slate-600">
+                          {formatDateTime(row.createdAt)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
-    </TooltipProvider>
+    </div>
   );
 }

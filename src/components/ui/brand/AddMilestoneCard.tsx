@@ -165,19 +165,19 @@ function WalletTopupModal({
               <div className="rounded-xl border border-[#ECECEC] bg-[#FAFAFA] px-3 py-3">
                 <div className="text-[11px] text-[#777777]">Wallet</div>
                 <div className="mt-1 text-sm font-semibold text-[#1A1A1A]">
-                  ${Number(walletInfo.walletBalance || 0).toFixed(2)}
+                  ₹{Number(walletInfo.walletBalance || 0).toFixed(2)}
                 </div>
               </div>
               <div className="rounded-xl border border-[#ECECEC] bg-[#FAFAFA] px-3 py-3">
                 <div className="text-[11px] text-[#777777]">Frozen</div>
                 <div className="mt-1 text-sm font-semibold text-[#1A1A1A]">
-                  ${Number(walletInfo.frozenBalance || 0).toFixed(2)}
+                  ₹{Number(walletInfo.frozenBalance || 0).toFixed(2)}
                 </div>
               </div>
               <div className="rounded-xl border border-[#ECECEC] bg-[#FAFAFA] px-3 py-3">
                 <div className="text-[11px] text-[#777777]">Usable</div>
                 <div className="mt-1 text-sm font-semibold text-[#1A1A1A]">
-                  ${Number(walletInfo.usableBalance || 0).toFixed(2)}
+                  ₹{Number(walletInfo.usableBalance || 0).toFixed(2)}
                 </div>
               </div>
             </div>
@@ -282,22 +282,16 @@ export default function AddMilestoneCard({
     return `for ${influencerName}`;
   }, [influencerName]);
 
-  const primaryButtonLabel = submitting ? "Creating..." : "Create Milestone";
-
-  const openTopupModalFromShortfall = () => {
-    if (!walletShortfall) return;
-    setWalletModalOpen(true);
-  };
+  const primaryButtonLabel = submitting
+    ? "Creating..."
+    : walletShortfall
+    ? "Add Wallet Balance"
+    : "Create Milestone";
 
   const handleCreateMilestone = async () => {
     try {
       setError("");
       setTopupSuccess("");
-
-      if (walletShortfall) {
-        openTopupModalFromShortfall();
-        return;
-      }
 
       if (!brandId) {
         setError("Brand ID is missing.");
@@ -362,6 +356,15 @@ export default function AddMilestoneCard({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handlePrimaryButtonClick = () => {
+    if (walletShortfall) {
+      setWalletModalOpen(true);
+      return;
+    }
+
+    handleCreateMilestone();
   };
 
   const handleWalletTopupSuccess = (payload: {
@@ -491,7 +494,7 @@ export default function AddMilestoneCard({
 
             <Button
               type="button"
-              onClick={handleCreateMilestone}
+              onClick={handlePrimaryButtonClick}
               disabled={submitting}
               className="h-10 w-full rounded-lg bg-[#1A1A1A] px-4 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
