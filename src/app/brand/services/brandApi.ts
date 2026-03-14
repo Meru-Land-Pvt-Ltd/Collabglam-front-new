@@ -10,6 +10,7 @@ const WALLET_BASE = "/wallet";
 const INVITATION_BASE = "/invitation";
 const APPLY_BASE = "/apply-campaign";
 const MILESTONE_BASE = "/milestone";
+const DELIVERABLE_BASE = "/deliverable";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -1058,4 +1059,86 @@ export async function apiGetMilestonesByCampaign(
       (item) => !payload.brandId || String(item.brandId) === String(payload.brandId)
     ),
   };
+}
+
+/** -------------------------
+ *  ✅ DELIVERABLE APIs
+ *  ------------------------*/
+/** -------------------------
+ *  ✅ DELIVERABLE APIs
+ *  ------------------------*/
+export type DeliverableStatus =
+  | "pending"
+  | "submitted"
+  | "approved"
+  | "revision";
+
+export type ApprovedRole = "Brand" | "Admin";
+
+export type DeliverableInfluencer = {
+  _id: string;
+  name: string;
+};
+
+export type DeliverableRow = {
+  _id?: string;
+  deliverableId?: string;
+  delieverableApprovalId?: string; // keep legacy typo if backend ever sends it
+  campaignId: string;
+  influencerId: string;
+  milestoneId?: string;
+  milestoneHistoryId?: string;
+
+  title?: string;
+  description?: string;
+  fileUrl?: string;
+  link?: string;
+
+  status?: DeliverableStatus | string;
+  comments?: string;
+  approvalId?: string;
+  approvedRole?: ApprovedRole;
+
+  createdAt?: string;
+  updatedAt?: string;
+
+  milestoneTitle?: string;
+  influencerName?: string;
+  influencer?: DeliverableInfluencer | null;
+
+  [key: string]: any;
+};
+
+export async function apiListDeliverablesByCampaign(params: {
+  campaignId: string;
+  status?: string;
+}) {
+  return apiGet<DeliverableRow[]>(
+    `${DELIVERABLE_BASE}/campaign/${params.campaignId}`,
+    {
+      status: params.status,
+    }
+  );
+}
+
+export type UpdateDeliverableApprovalStatusPayload = {
+  deliverableId: string;
+  status: "approved" | "revision";
+  comments?: string;
+  approvedRole?: ApprovedRole;
+  approvalId?: string;
+};
+
+export async function apiUpdateDeliverableApprovalStatus(
+  payload: UpdateDeliverableApprovalStatusPayload
+) {
+  return apiPost<DeliverableRow>(
+    `${DELIVERABLE_BASE}/deliverables/${payload.deliverableId}/approval-status`,
+    {
+      status: payload.status,
+      comments: payload.comments,
+      approvedRole: payload.approvedRole,
+      approvalId: payload.approvalId,
+    }
+  );
 }

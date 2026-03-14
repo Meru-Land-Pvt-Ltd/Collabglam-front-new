@@ -21,10 +21,12 @@ import CampaignFilter, {
   DEFAULT_DATE_FILTER,
   type DateFilterValue,
 } from "@/components/ui/brand/CampaignFilter";
+
 import {
   apiGetAllCampaigns,
   apiGetAppliedCampaigns,
   apiGetContractedCampaigns,
+  apiGetMyCampaigns,
 } from "../../services/influencerApi";
 
 /* ─────────────────────────── Toast / Confirm ─────────────────────────── */
@@ -477,8 +479,8 @@ function FloatingInput({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled
-            ? "border-gray-200 opacity-60 cursor-not-allowed"
-            : "border-gray-200 focus:border-[#FFBF00]"
+          ? "border-gray-200 opacity-60 cursor-not-allowed"
+          : "border-gray-200 focus:border-[#FFBF00]"
           }`}
         placeholder=" "
       />
@@ -516,8 +518,8 @@ function FloatingTextarea({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled
-            ? "border-gray-200 opacity-60 cursor-not-allowed"
-            : "border-gray-200 focus:border-[#FFBF00]"
+          ? "border-gray-200 opacity-60 cursor-not-allowed"
+          : "border-gray-200 focus:border-[#FFBF00]"
           }`}
         placeholder=" "
       />
@@ -720,10 +722,10 @@ function SignatureModal({
           <div
             ref={dropRef}
             className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all select-none ${isSubmitting
-                ? "opacity-60 cursor-not-allowed border-gray-300 bg-gray-50"
-                : isDragging
-                  ? "cursor-pointer border-amber-400 bg-amber-50 shadow-sm"
-                  : "cursor-pointer border-gray-300 bg-gray-50 hover:bg-gray-100/80"
+              ? "opacity-60 cursor-not-allowed border-gray-300 bg-gray-50"
+              : isDragging
+                ? "cursor-pointer border-amber-400 bg-amber-50 shadow-sm"
+                : "cursor-pointer border-gray-300 bg-gray-50 hover:bg-gray-100/80"
               }`}
           >
             <div className="flex flex-col items-center gap-2">
@@ -1081,10 +1083,10 @@ function ContractActionBar({
         </span>
         <span
           className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${locked
-              ? "bg-emerald-100 text-emerald-700"
-              : rejected
-                ? "bg-red-100 text-red-700"
-                : "bg-yellow-100 text-yellow-700"
+            ? "bg-emerald-100 text-emerald-700"
+            : rejected
+              ? "bg-red-100 text-red-700"
+              : "bg-yellow-100 text-yellow-700"
             }`}
         >
           {statusText}
@@ -1599,8 +1601,8 @@ function InfluencerContractModal({
           {meta?.status && (
             <span
               className={`px-2 py-1 rounded-full border ${locked
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                  : "bg-yellow-50 border-yellow-200 text-yellow-700"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                : "bg-yellow-50 border-yellow-200 text-yellow-700"
                 }`}
             >
               Status: {String(meta.status).toUpperCase()}
@@ -1923,6 +1925,16 @@ export default function MyCampaignsPage() {
 
         if (tab === "applied") {
           res = await apiGetAppliedCampaigns(id, token);
+        } else if (tab === "active") {
+          res = await apiGetMyCampaigns(
+            {
+              influencerId: id,
+              page: 1,
+              limit: 10,
+              search: searchInput || "",
+            },
+            token
+          );
         } else if (tab === "Contracted") {
           res = await apiGetContractedCampaigns(id, token);
         } else {
@@ -1953,7 +1965,7 @@ export default function MyCampaignsPage() {
         setIsLoading(false);
       }
     },
-    [activeTab]
+    [activeTab, searchInput]
   );
 
   useEffect(() => {
@@ -2132,8 +2144,7 @@ export default function MyCampaignsPage() {
       const matchesTab = (() => {
         if (activeTab === "all") return true;
         if (activeTab === "applied") return campaign.hasApplied === 1;
-        if (activeTab === "active")
-          return campaign.status?.toLowerCase() === "active";
+        if (activeTab === "active") return true;
         if (activeTab === "Contracted") return campaign.isContracted === 1;
         if (activeTab === "Rejected")
           return contractStatus === CONTRACT_STATUS.REJECTED;
@@ -2324,8 +2335,8 @@ export default function MyCampaignsPage() {
                   key={tab.value}
                   value={tab.value}
                   className={`capitalize px-6 py-2.5 rounded-lg bg-transparent text-gray-600 font-semibold text-base transition-all flex-1 ${activeTab === tab.value
-                      ? "text-black"
-                      : "hover:text-gray-900"
+                    ? "text-black"
+                    : "hover:text-gray-900"
                     }`}
                   style={
                     activeTab === tab.value
@@ -2449,7 +2460,17 @@ export default function MyCampaignsPage() {
                     key={campaign.id}
                     form={form}
                     meta={previewMeta}
-                    contract={contractProp}
+                    contract={activeTab === "active" ? undefined : contractProp}
+                    showViewMilestone={activeTab === "active"}
+                    onViewMilestone={() =>
+                      router.push(
+                        `/influencer/my-campaigns/view-milestone?campaignId=${encodeURIComponent(
+                          campaign.id
+                        )}&contractId=${encodeURIComponent(
+                          effectiveContractId || ""
+                        )}`
+                      )
+                    }
                     onViewClick={() =>
                       router.push(`/influencer/my-campaigns/${campaign.id}`)
                     }
