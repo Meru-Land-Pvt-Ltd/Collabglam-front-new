@@ -11,6 +11,7 @@ const APPLY_BASE = "/apply";
 const LIST_BASE = "/list";
 const MILESTONE_BASE = "/milestone";
 const DELEVERABLE_BASE = "/deliverable";
+const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -884,6 +885,139 @@ export async function apiGetMilestonesByInfluencer(
   return apiPost<MilestonesByInfluencerResponse>(
     `${MILESTONE_BASE}/byInfluencer`,
     { influencerId },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+export type CampaignInvitationItem = {
+  _id?: string;
+  brandId?: string;
+  influencerId?: string;
+  campaignId?: string;
+
+  status?: string;
+
+  createdAt?: string;
+  updatedAt?: string;
+
+  campaign?: any;
+  brandName?: string;
+  influencerName?: string;
+
+  [key: string]: any;
+};
+
+export type GetInvitationsByInfluencerResponse = {
+  status: "success" | "error";
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+  influencerId: string;
+  invitations: CampaignInvitationItem[];
+};
+
+export type GetInvitationsByInfluencerParams = {
+  influencerId: string;
+  page?: number;
+  limit?: number;
+  status?: string;
+  brandId?: string;
+};
+
+export async function apiGetInvitationsByInfluencer(
+  params: GetInvitationsByInfluencerParams,
+  token?: string
+) {
+  const influencerId = String(params.influencerId || "").trim();
+
+  if (!influencerId) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiGet<GetInvitationsByInfluencerResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/influencer/${influencerId}`,
+    {
+      page: params.page ?? 1,
+      limit: params.limit ?? 25,
+      status: params.status,
+      brandId: params.brandId,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+export type GetAllInvitationsByInfluencerResponse = {
+  status: "success" | "error";
+  total: number;
+  influencerId: string;
+  filter?: {
+    status?: string;
+  };
+  invitations: CampaignInvitationItem[];
+};
+
+export type GetAllInvitationsByInfluencerParams = {
+  influencerId: string;
+  status?: string;
+};
+
+export async function apiGetAllInvitationsByInfluencer(
+  params: GetAllInvitationsByInfluencerParams,
+  token?: string
+) {
+  const influencerId = String(params.influencerId || "").trim();
+
+  if (!influencerId) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiGet<GetAllInvitationsByInfluencerResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/influencer/${influencerId}/all`,
+    {
+      status: params.status,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+export type UpdateInvitationStatusInput = {
+  campaignId: string;
+  invitationId: string;
+  status: "sent" | "accepted" | "reject" | "failed";
+  failReason?: string;
+};
+
+export type UpdateInvitationStatusResponse = {
+  status: "success" | "error";
+  message: string;
+  invitation?: CampaignInvitationItem;
+};
+
+export async function apiUpdateInvitationStatus(
+  input: UpdateInvitationStatusInput,
+  token?: string
+) {
+  return apiPost<UpdateInvitationStatusResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/update-status`,
+    {
+      campaignId: input.campaignId,
+      invitationId: input.invitationId,
+      status: input.status,
+      failReason: input.failReason,
+    },
     {
       headers: {
         ...authHeader(token),

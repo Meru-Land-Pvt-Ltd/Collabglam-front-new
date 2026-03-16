@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   AlertCircle,
   BarChart3,
   Send,
-  MessageSquare,
+  ChevronDown,
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 import { ProfileHeader } from './detail-panel/ProfileHeader';
 import { StatsChart } from './detail-panel/StatsChart';
 import { ContentBreakdown } from './detail-panel/ContentBreakdown';
@@ -20,6 +19,22 @@ import { BrandAffinity } from './detail-panel/BrandAffinity';
 import { MiniUserSection } from './detail-panel/MiniUserSection';
 import type { ReportResponse, StatHistoryEntry, Platform } from './types';
 import { post, post2 } from '@/lib/api';
+import {
+  apiGetAllCampaigns,
+  apiCreateCampaignInvitation,
+  type GetAllCampaignsRow,
+} from '@/app/brand/services/brandApi';
+
+/**
+ * Change this import path to your actual toast file path
+ * Example: '@/components/ui/toast' or '@/lib/toast'
+ */
+import { toast } from '@/components/ui/toast';
+
+interface CampaignOption {
+  id: string;
+  name: string;
+}
 
 interface DetailPanelProps {
   open: boolean;
@@ -47,68 +62,12 @@ type EmailStatusResponse =
     }
   | { status: 'error'; message?: string };
 
-/** /emails/invitation response shape */
-type InvitationResponse =
-  | {
-      status: 'success';
-      message: string;
-      isExistingInfluencer: true;
-      influencerId: string;
-      influencerName: string;
-      brandName: string;
-      emailSent: boolean;
-      emailMeta?: {
-        recipientEmail: string;
-        threadId: string;
-        messageId: string;
-        subject: string;
-        campaignId: string | null;
-      };
-      // no roomId here anymore – no chat room creation
-    }
-  | {
-      status: 'success';
-      message: string;
-      isExistingInfluencer: false;
-      brandName: string;
-      invitationId: string; // still useful if you want to open /brand/email
-      emailSent: boolean;
-      emailMeta?: {
-        recipientEmail: string;
-        threadId: string;
-        messageId: string;
-        subject: string;
-        campaignId: string | null;
-      };
-      isNewInvitation?: boolean;
-    }
-  | {
-      status: 'error';
-      message: string;
-    };
-
 /** /admin/checkstatus response shape */
 type AdminCheckStatusResponse = {
   status: 0 | 1;
   handle?: string;
   email?: string | null;
   platform?: Platform | string;
-  message?: string;
-};
-
-/** /invitation/create response shape */
-type InvitationCreateResp = {
-  status: 'saved' | 'exists';
-  data?: {
-    invitationId: string;
-    handle: string;
-    platform: 'youtube' | 'instagram' | 'tiktok';
-    brandId: string;
-    campaignId?: string | null;
-    status: 'invited' | 'available';
-    createdAt: string;
-    updatedAt: string;
-  };
   message?: string;
 };
 
@@ -126,6 +85,48 @@ type CreateMissingResp = {
   message?: string;
 };
 
+/** /newinvitations/create response shape */
+type InvitationCreateResp = {
+  status: 'saved' | 'exists';
+  data?: {
+    invitationId: string;
+    handle: string;
+    platform: 'youtube' | 'instagram' | 'tiktok';
+    brandId: string;
+    campaignId?: string | null;
+    status: 'invited' | 'available';
+    createdAt: string;
+    updatedAt: string;
+  };
+  message?: string;
+};
+
+/** /modash/saved response */
+type SavedModashInfluencer = {
+  _id: string;
+  userId?: string | number | null;
+  provider?: Platform | string | null;
+  handle?: string | null;
+  username?: string | null;
+  influencerId?: string | null;
+};
+
+type SavedModashResponse = {
+  page: number;
+  limit: number;
+  total: number;
+  results: SavedModashInfluencer[];
+};
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+
+const normalizeHandleValue = (value?: string | null) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, '');
+
 export const DetailPanel = React.memo<DetailPanelProps>(
   ({
     open,
@@ -136,34 +137,39 @@ export const DetailPanel = React.memo<DetailPanelProps>(
     raw,
     platform,
     emailExists,
-    onChangeCalc,
     brandId,
     handle,
     lastFetchedAt,
     onRefreshReport,
   }) => {
     const router = useRouter();
-    const searchParams = useSearchParams();
-    const campaignId = searchParams?.get('campaignId') || '';
-    // used for both "Message Now" + "Send Invitation" actions
+
     const [sendingInvite, setSendingInvite] = useState(false);
-
-    // refresh state
     const [refreshing, setRefreshing] = useState(false);
-
-    // local copy of last updated time (ISO string)
     const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(
       lastFetchedAt || null
     );
 
-    // NEW: combined email presence from /email/status + /admin/checkstatus
     const [hasAnyEmail, setHasAnyEmail] = useState<boolean | null>(null);
-    const [checkingEmail, setCheckingEmail] = useState(false);
 
-    // keep in sync with parent when prop changes
+    const [savedCreatorMatch, setSavedCreatorMatch] =
+      useState<SavedModashInfluencer | null>(null);
+    const [checkingSavedCreator, setCheckingSavedCreator] = useState(false);
+
+    const [showCampaignDropdown, setShowCampaignDropdown] = useState(false);
+    const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
+    const [campaignListLoading, setCampaignListLoading] = useState(false);
+    const [campaignList, setCampaignList] = useState<CampaignOption[]>([]);
+
     useEffect(() => {
       setLastUpdatedAt(lastFetchedAt || null);
     }, [lastFetchedAt]);
+
+    useEffect(() => {
+      if (!open) {
+        setShowCampaignDropdown(false);
+      }
+    }, [open]);
 
     const formattedLastUpdated = lastUpdatedAt
       ? new Date(lastUpdatedAt).toLocaleString()
@@ -174,11 +180,35 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       return hist?.slice(-12);
     }, [data]);
 
-    /* ------------------------------------------------------------------ */
-    /*                    Helpers for email resolution                    */
-    /* ------------------------------------------------------------------ */
+    const headerProfile = data?.profile?.profile;
 
-    // type guard for /email/status success branch
+    const resolvedHandle =
+      handle ||
+      headerProfile?.handle ||
+      headerProfile?.username ||
+      '';
+
+    const normalizedResolvedHandle = normalizeHandleValue(resolvedHandle);
+
+    const displayName =
+      headerProfile?.fullname ||
+      headerProfile?.username ||
+      headerProfile?.handle ||
+      handle ||
+      'Creator profile';
+
+    const displayHandle =
+      headerProfile?.handle ||
+      headerProfile?.username ||
+      (handle && (handle.startsWith('@') ? handle : `@${handle}`)) ||
+      '';
+
+    const toggleCampaignSelection = (id: string) => {
+      setSelectedCampaignIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      );
+    };
+
     const isEmailStatusSuccess = (
       resp: EmailStatusResponse
     ): resp is {
@@ -190,11 +220,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       return typeof (resp as any)?.status === 'number';
     };
 
-    /**
-     * resolveCreatorEmail
-     * - Calls BOTH /email/status (post2) and /admin/checkstatus (post) in parallel
-     * - Returns the best email we can find + info where it came from
-     */
     const resolveCreatorEmail = async (
       safeHandle: string,
       normalizedPlatform: Platform
@@ -213,20 +238,26 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       let emailFromStatus: string | null = null;
       let emailFromAdmin: string | null = null;
 
-      // /email/status result
       if (statusResult.status === 'fulfilled') {
         const statusResp = statusResult.value;
-        if (isEmailStatusSuccess(statusResp) && statusResp.status === 1 && statusResp.email) {
+        if (
+          isEmailStatusSuccess(statusResp) &&
+          statusResp.status === 1 &&
+          statusResp.email
+        ) {
           emailFromStatus = statusResp.email;
         }
       } else {
         console.error('Error calling /email/status:', statusResult.reason);
       }
 
-      // /admin/checkstatus result
       if (adminResult.status === 'fulfilled') {
         const adminResp = adminResult.value;
-        if (typeof adminResp.status === 'number' && adminResp.status === 1 && adminResp.email) {
+        if (
+          typeof adminResp.status === 'number' &&
+          adminResp.status === 1 &&
+          adminResp.email
+        ) {
           emailFromAdmin = adminResp.email;
         }
       } else {
@@ -248,11 +279,7 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       return { email: null, source: 'none' };
     };
 
-    /* ------------------------------------------------------------------ */
-    /*           Pre-check: is this handle present in ANY email DB?       */
-    /* ------------------------------------------------------------------ */
     useEffect(() => {
-      // don't run when panel closed
       if (!open) {
         setHasAnyEmail(null);
         return;
@@ -267,9 +294,8 @@ export const DetailPanel = React.memo<DetailPanelProps>(
         return;
       }
 
-      const rawHandle = handle ? String(handle).trim() : '';
-      const safeHandle = rawHandle
-        ? '@' + rawHandle.replace(/^@/, '').trim().toLowerCase()
+      const safeHandle = normalizedResolvedHandle
+        ? `@${normalizedResolvedHandle}`
         : '';
 
       if (!safeHandle || !/^[A-Za-z0-9._-]+$/.test(safeHandle.replace(/^@/, ''))) {
@@ -278,22 +304,17 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       }
 
       let cancelled = false;
-      setCheckingEmail(true);
 
       (async () => {
         try {
           const { email } = await resolveCreatorEmail(safeHandle, normalizedPlatform);
           if (!cancelled) {
-            setHasAnyEmail(!!email); // true if ANY status api returns email
+            setHasAnyEmail(!!email);
           }
         } catch (err) {
           console.error('Failed to pre-check email status', err);
           if (!cancelled) {
             setHasAnyEmail(null);
-          }
-        } finally {
-          if (!cancelled) {
-            setCheckingEmail(false);
           }
         }
       })();
@@ -301,41 +322,161 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       return () => {
         cancelled = true;
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, handle, platform]); // we intentionally don't include resolveCreatorEmail to avoid re-creating loop
+    }, [open, normalizedResolvedHandle, platform]);
+
+    useEffect(() => {
+      if (!open) {
+        setSavedCreatorMatch(null);
+        setShowCampaignDropdown(false);
+        return;
+      }
+
+      const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
+      const targetHandle = normalizedResolvedHandle;
+      const targetUserId = String(data?.profile?.userId || raw?.userId || '').trim();
+
+      if (
+        !targetHandle ||
+        !targetUserId ||
+        !normalizedPlatform ||
+        !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)
+      ) {
+        setSavedCreatorMatch(null);
+        return;
+      }
+
+      let cancelled = false;
+      setCheckingSavedCreator(true);
+
+      (async () => {
+        try {
+          const url = `${API_BASE_URL}/modash/saved?q=${encodeURIComponent(
+            targetHandle
+          )}&provider=${encodeURIComponent(normalizedPlatform)}`;
+
+          const res = await fetch(url);
+          if (!res.ok) {
+            throw new Error('Failed to check saved influencer');
+          }
+
+          const json: SavedModashResponse = await res.json();
+
+          const match =
+            json.results?.find((item) => {
+              const providerMatch =
+                String(item.provider || '').toLowerCase() === normalizedPlatform;
+
+              const handleMatch =
+                normalizeHandleValue(item.handle || item.username) === targetHandle;
+
+              const userIdMatch =
+                String(item.userId || '').trim() === targetUserId;
+
+              return providerMatch && handleMatch && userIdMatch;
+            }) || null;
+
+          if (!cancelled) {
+            setSavedCreatorMatch(match);
+          }
+        } catch (err) {
+          console.error('Failed to fetch /modash/saved', err);
+          if (!cancelled) {
+            setSavedCreatorMatch(null);
+          }
+        } finally {
+          if (!cancelled) {
+            setCheckingSavedCreator(false);
+          }
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [
+      open,
+      normalizedResolvedHandle,
+      platform,
+      data?.profile?.userId,
+      raw?.userId,
+    ]);
+
+    useEffect(() => {
+      if (!open || !brandId) {
+        setCampaignList([]);
+        return;
+      }
+
+      let cancelled = false;
+      setCampaignListLoading(true);
+
+      (async () => {
+        try {
+          const res = await apiGetAllCampaigns({
+            brandId,
+            page: 1,
+            limit: 100,
+          });
+
+          const mapped: CampaignOption[] = (res?.data || [])
+            .map((item: GetAllCampaignsRow) => ({
+              id: String(item._id || item.id || item.campaignId || ''),
+              name: String(
+                item.campaignTitle || item.title || item.name || 'Untitled Campaign'
+              ),
+            }))
+            .filter((x) => x.id);
+
+          if (!cancelled) {
+            setCampaignList(mapped);
+          }
+        } catch (err) {
+          console.error('Failed to fetch campaigns', err);
+          if (!cancelled) {
+            setCampaignList([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setCampaignListLoading(false);
+          }
+        }
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [open, brandId]);
 
     if (!open) return null;
 
-    const hasUserId = Boolean(data?.profile?.userId);
-    const canAct = hasUserId && !loading && !sendingInvite && !refreshing;
+    const influencerId = String(savedCreatorMatch?.influencerId || '').trim();
 
-    // ✅ use merged knowledge: if ANY status api says email present, treat as "has email"
+    const modashUserId =
+      String(
+        data?.profile?.userId || raw?.userId || savedCreatorMatch?.userId || ''
+      ).trim() || undefined;
+
+    // important fix:
+    // if creator is NOT in modash/saved, old invitation flow should still work
+    const hasActionTarget = Boolean(
+      brandId &&
+        platform &&
+        normalizedResolvedHandle
+    );
+
+    const canAct = hasActionTarget && !loading && !sendingInvite && !refreshing;
+
     const effectiveHasEmail =
       hasAnyEmail !== null ? hasAnyEmail : emailExists === true;
 
-    const ctaTitle = hasUserId
-      ? effectiveHasEmail
-        ? 'Message this creator'
-        : 'Send invitation to collect email'
-      : 'Profile not ready';
+    const hasMatchedSavedInfluencer = Boolean(savedCreatorMatch?.influencerId);
 
-    const headerProfile = data?.profile?.profile;
-    const displayName =
-      headerProfile?.fullname ||
-      headerProfile?.username ||
-      headerProfile?.handle ||
-      handle ||
-      'Creator profile';
+    const shouldShowCampaignSelector = hasMatchedSavedInfluencer;
 
-    const displayHandle =
-      headerProfile?.handle ||
-      headerProfile?.username ||
-      (handle && (handle.startsWith('@') ? handle : `@${handle}`)) ||
-      '';
+    const ctaTitle = shouldShowCampaignSelector
+      ? 'Select campaign'
+      : 'Send invitation';
 
-    /* ------------------------------------------------------------------ */
-    /*                          Refresh Modash data                       */
-    /* ------------------------------------------------------------------ */
     const handleRefreshData = async (e: React.MouseEvent) => {
       e.preventDefault();
       if (!onRefreshReport || refreshing) return;
@@ -345,27 +486,42 @@ export const DetailPanel = React.memo<DetailPanelProps>(
         await onRefreshReport();
       } catch (err: any) {
         console.error(err);
-        await Swal.fire(
-          'Refresh failed',
-          err?.message || 'Failed to refresh data',
-          'error'
-        );
+        toast({
+          icon: 'error',
+          title: 'Refresh failed',
+          text: err?.message || 'Failed to refresh data',
+        });
       } finally {
         setRefreshing(false);
       }
     };
 
-    const handleMessageNow = async (e: React.MouseEvent) => {
-      e.preventDefault();
-      if (!canAct) return;
-
+    const createCampaignInvitations = async (campaignIds: string[]) => {
       if (!brandId) {
-        await Swal.fire(
-          'Missing brand',
-          'Missing brandId. Please provide brandId to DetailPanel.',
-          'warning'
-        );
-        return;
+        toast({
+          icon: 'warning',
+          title: 'Missing brand',
+          text: 'brandId is required.',
+        });
+        return false;
+      }
+
+      if (!influencerId) {
+        toast({
+          icon: 'warning',
+          title: 'Missing influencer',
+          text: 'influencerId is required.',
+        });
+        return false;
+      }
+
+      if (!campaignIds.length) {
+        toast({
+          icon: 'warning',
+          title: 'Select campaign',
+          text: 'Please select at least one campaign.',
+        });
+        return false;
       }
 
       const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
@@ -373,236 +529,186 @@ export const DetailPanel = React.memo<DetailPanelProps>(
         !normalizedPlatform ||
         !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)
       ) {
-        await Swal.fire(
-          'Unsupported platform',
-          'Unsupported or missing platform.',
-          'warning'
-        );
-        return;
+        toast({
+          icon: 'warning',
+          title: 'Unsupported platform',
+          text: 'Unsupported or missing platform.',
+        });
+        return false;
       }
 
-      const rawHandle = handle ? String(handle).trim() : '';
-      const safeHandle = rawHandle
-        ? '@' + rawHandle.replace(/^@/, '').trim().toLowerCase()
+      const safeHandle = normalizedResolvedHandle
+        ? `@${normalizedResolvedHandle}`
         : '';
-
-      if (!safeHandle || !/^[A-Za-z0-9._-]+$/.test(safeHandle.replace(/^@/, ''))) {
-        await Swal.fire(
-          'Invalid handle',
-          'Invalid or missing handle to lookup contact email.',
-          'warning'
-        );
-        return;
-      }
 
       try {
         setSendingInvite(true);
 
-        // 1) Resolve email from both DBs
-        const { email: creatorEmail } = await resolveCreatorEmail(
-          safeHandle,
-          normalizedPlatform
-        );
+        let emailTo: string | undefined = undefined;
 
-        if (!creatorEmail) {
-          await Swal.fire(
-            'No email found',
-            'We could not find a contact email for this creator. Try sending an invitation or adding the email manually.',
-            'warning'
-          );
-          return;
+        if (effectiveHasEmail && safeHandle) {
+          const emailResult = await resolveCreatorEmail(safeHandle, normalizedPlatform);
+          if (emailResult.email) {
+            emailTo = emailResult.email;
+          }
         }
 
-        // 2) Call /emails/invitation → backend now ONLY sends email (no chat room)
-        const resp = await post<InvitationResponse>('/emails/invitation', {
-          email: creatorEmail,
+        const res = await apiCreateCampaignInvitation({
           brandId,
-          campaignId: campaignId || undefined,
-          handle: safeHandle,
+          influencerId,
+          campaignIds,
           platform: normalizedPlatform,
+          handle: safeHandle || undefined,
+          modashUserId,
+          emailTo,
         });
 
-        if (!resp) {
-          await Swal.fire(
-            'Error',
-            'No response from server while sending invitation.',
-            'error'
-          );
-          return;
+        if (res.status !== 'success') {
+          toast({
+            icon: 'error',
+            title: 'Error',
+            text: res.message || 'Failed to create invitations.',
+          });
+          return false;
         }
 
-        // 3) Handle error branch from backend
-        if (resp.status === 'error') {
-          await Swal.fire('Error', resp.message || 'Failed to send email.', 'error');
-          return;
-        }
+        toast({
+          icon: 'success',
+          title: 'Invitation sent',
+          text: res.message || 'Invitations created successfully.',
+        });
 
-        // 4) Success → friendly, high-level messages only
-        const successTitle = resp.isExistingInfluencer
-          ? 'Message sent'
-          : 'Invitation sent';
-
-        const successText = resp.isExistingInfluencer
-          ? 'We’ve emailed this creator. They can reply directly and continue the conversation with your brand.'
-          : 'We’ve sent your invitation to this creator. They’ll see it and can reply soon if they’re interested.';
-
-        await Swal.fire(successTitle, successText, 'success');
+        setShowCampaignDropdown(false);
+        setSelectedCampaignIds([]);
+        return true;
       } catch (err: any) {
         console.error(err);
-        await Swal.fire(
-          'Error',
-          err?.response?.data?.message ||
+        toast({
+          icon: 'error',
+          title: 'Error',
+          text:
+            err?.response?.data?.message ||
             err?.message ||
-            'Failed to send invitation email. Please try again.',
-          'error'
-        );
+            'Failed to create invitations.',
+        });
+        return false;
       } finally {
         setSendingInvite(false);
       }
     };
 
-    /* ------------------------------------------------------------------ */
-    /*                Send Invitation (no email anywhere)                 */
-    /*      → NOW also writes to /invitation/create (status=invited)      */
-    /* ------------------------------------------------------------------ */
-    const handleSendInvitation = async (e: React.MouseEvent) => {
-      e.preventDefault();
+    // old flow stays exactly for influencers not present in modash/saved
+    const sendInvitationWithoutEmail = async () => {
       if (!canAct || sendingInvite) return;
 
-      const rawHandle = handle ? String(handle).trim() : '';
-      const safeHandle = rawHandle
-        ? rawHandle.startsWith('@')
-          ? rawHandle
-          : `@${rawHandle}`
+      const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
+      const safeHandle = normalizedResolvedHandle
+        ? `@${normalizedResolvedHandle}`
         : '';
 
       if (!brandId) {
-        await Swal.fire(
-          'Missing brand',
-          'Missing brandId. Please provide brandId to DetailPanel.',
-          'warning'
-        );
+        toast({
+          icon: 'warning',
+          title: 'Missing brand',
+          text: 'Missing brandId. Please provide brandId to DetailPanel.',
+        });
         return;
       }
-      const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
+
       if (
         !normalizedPlatform ||
         !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)
       ) {
-        await Swal.fire(
-          'Unsupported platform',
-          'Unsupported or missing platform.',
-          'warning'
-        );
+        toast({
+          icon: 'warning',
+          title: 'Unsupported platform',
+          text: 'Unsupported or missing platform.',
+        });
         return;
       }
+
       if (!safeHandle || !/^[A-Za-z0-9._-]+$/.test(safeHandle.replace(/^@/, ''))) {
-        await Swal.fire(
-          'Invalid handle',
-          'Invalid or missing handle to send invitation.',
-          'warning'
-        );
+        toast({
+          icon: 'warning',
+          title: 'Invalid handle',
+          text: 'Invalid or missing handle to send invitation.',
+        });
         return;
       }
 
       try {
         setSendingInvite(true);
 
-        const invitationPayload: {
-          handle: string;
-          platform: Platform;
-          brandId: string;
-          status: 'invited' | 'available';
-          campaignId?: string;
-        } = {
+        await post2<CreateMissingResp>('/missing/create', {
+          handle: safeHandle,
+          platform: normalizedPlatform,
+          brandId,
+        });
+
+        await post<InvitationCreateResp>('/newinvitations/create', {
           handle: safeHandle,
           platform: normalizedPlatform,
           brandId,
           status: 'invited',
-        };
+        });
 
-        if (campaignId) {
-          invitationPayload.campaignId = campaignId; // ⬅️ only send if present
-        }
-
-        const [missingResult, invitationResult] = await Promise.allSettled([
-          post2<CreateMissingResp>('/missing/create', {
-            handle: safeHandle,
-            platform: normalizedPlatform,
-            brandId,
-          }),
-          post<InvitationCreateResp>('/newinvitations/create', invitationPayload),
-        ]);
-
-        // Log /missing/create outcome but don't surface "Missing" to the brand
-        if (missingResult.status === 'fulfilled') {
-          console.log('Missing/create result', missingResult.value);
-        } else {
-          console.error('Missing/create failed', missingResult.reason);
-        }
-
-        // Handle /invitation/create outcome in a user-friendly way
-        let invitationStatus: InvitationCreateResp['status'] | 'error' = 'error';
-
-        if (invitationResult.status === 'fulfilled') {
-          const resp = invitationResult.value;
-          if (resp?.status === 'saved' || resp?.status === 'exists') {
-            invitationStatus = resp.status;
-          } else {
-            invitationStatus = 'error';
-          }
-        } else {
-          console.error('Invitation/create failed', invitationResult.reason);
-          invitationStatus = 'error';
-        }
-
-        if (invitationStatus === 'error') {
-          await Swal.fire(
-            'Something went wrong',
-            'We couldn’t send the invitation. Please try again in a moment.',
-            'error'
-          );
-          return;
-        }
-
-        if (invitationStatus === 'saved') {
-          await Swal.fire(
-            'Invitation sent',
+        toast({
+          icon: 'success',
+          title: 'Invitation sent',
+          text:
             'We’ve sent an invitation to this creator. They’ll see it and can reply soon.',
-            'success'
-          );
-        } else {
-          // status === 'exists'
-          await Swal.fire(
-            'Already invited',
-            'You’ve already sent an invitation to this creator. They’ll be able to reply once they see it.',
-            'info'
-          );
-        }
+        });
 
-        // After clicking OK (or closing), redirect to brand/invited
         router.push('/brand/invited');
       } catch (err: any) {
         const msg =
           err?.response?.data?.message ||
           err?.message ||
           'Failed to send invitation';
+
         console.error(err);
-        await Swal.fire('Error', msg, 'error');
+
+        toast({
+          icon: 'error',
+          title: 'Error',
+          text: msg,
+        });
       } finally {
         setSendingInvite(false);
       }
     };
 
-    const showRefreshButton = Boolean(onRefreshReport);
+    const handleDefaultAction = async (e: React.MouseEvent) => {
+      e.preventDefault();
+
+      if (shouldShowCampaignSelector) {
+        setShowCampaignDropdown((prev) => !prev);
+        return;
+      }
+
+      await sendInvitationWithoutEmail();
+    };
+
+    const handleCampaignSend = async (e: React.MouseEvent) => {
+      e.preventDefault();
+
+      if (!selectedCampaignIds.length) {
+        toast({
+          icon: 'warning',
+          title: 'Select campaign',
+          text: 'Please select at least one campaign first.',
+        });
+        return;
+      }
+
+      await createCampaignInvitations(selectedCampaignIds);
+    };
 
     return (
       <div className="fixed inset-0 z-[90]">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
         <div className="absolute top-0 right-0 h-full w-full md:w-[50vw] bg-white shadow-2xl border-l rounded-none md:rounded-l-3xl overflow-y-auto">
-          {/* Top Bar */}
           <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
-            {/* Left: Close + creator summary */}
             <button
               onClick={onClose}
               className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors flex-shrink-0"
@@ -621,6 +727,7 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                   </span>
                 )}
               </div>
+
               <div className="flex flex-wrap items-center gap-2">
                 {platform && (
                   <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-700">
@@ -630,9 +737,7 @@ export const DetailPanel = React.memo<DetailPanelProps>(
               </div>
             </div>
 
-            {/* Right: controls */}
             <div className="ml-auto flex flex-col items-end gap-1 sm:flex-row sm:items-center">
-              {/* last updated + refresh + CTA */}
               <div className="flex flex-col items-end gap-1 sm:items-end sm:ml-3">
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col items-end">
@@ -644,7 +749,7 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                     </span>
                   </div>
 
-                  {showRefreshButton && (
+                  {Boolean(onRefreshReport) && (
                     <button
                       type="button"
                       onClick={handleRefreshData}
@@ -659,35 +764,113 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                   )}
                 </div>
 
-                {/* CTA row */}
-                <div className="flex items-center gap-2">
-                  {effectiveHasEmail ? (
-                    <button
-                      onClick={handleMessageNow}
-                      disabled={!canAct}
-                      title={ctaTitle}
-                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
-                        ${
-                          canAct
-                            ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
-                            : 'bg-gray-300 cursor-not-allowed opacity-70'
-                        }`}
-                    >
-                      {sendingInvite ? (
-                        <>
-                          <MessageSquare className="h-4 w-4 animate-pulse" />
-                          Sending…
-                        </>
-                      ) : (
-                        <>
-                          <MessageSquare className="h-4 w-4" />
-                          Send Invitation
-                        </>
+                <div className="relative flex items-center gap-2">
+                  {shouldShowCampaignSelector ? (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowCampaignDropdown((prev) => !prev)}
+                        disabled={!canAct || checkingSavedCreator}
+                        className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
+                          ${
+                            canAct && !checkingSavedCreator
+                              ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
+                              : 'bg-gray-300 cursor-not-allowed opacity-70'
+                          }`}
+                      >
+                        <ChevronDown
+                          className={`h-4 w-4 transition-transform ${
+                            showCampaignDropdown ? 'rotate-180' : ''
+                          }`}
+                        />
+                        {checkingSavedCreator ? 'Checking…' : 'Select Campaign'}
+                      </button>
+
+                      {showCampaignDropdown && (
+                        <div className="absolute right-0 mt-2 w-[340px] rounded-2xl border border-gray-200 bg-white p-3 shadow-2xl z-30">
+                          <div className="mb-2">
+                            <div className="text-sm font-semibold text-gray-900">
+                              Select Campaign
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              You can select multiple campaigns
+                            </div>
+                          </div>
+
+                          <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                            {campaignListLoading ? (
+                              <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-xs text-gray-500">
+                                Loading campaigns...
+                              </div>
+                            ) : campaignList.length > 0 ? (
+                              campaignList.map((campaign) => (
+                                <label
+                                  key={campaign.id}
+                                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-100 px-3 py-2 hover:bg-gray-50"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCampaignIds.includes(campaign.id)}
+                                    onChange={() => toggleCampaignSelection(campaign.id)}
+                                    className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                                  />
+                                  <span className="text-sm text-gray-700">
+                                    {campaign.name}
+                                  </span>
+                                </label>
+                              ))
+                            ) : (
+                              <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-4 text-xs text-gray-500">
+                                No campaigns available
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className="text-xs text-gray-500">
+                              {selectedCampaignIds.length} selected
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={handleCampaignSend}
+                              disabled={
+                                !canAct ||
+                                sendingInvite ||
+                                campaignListLoading ||
+                                campaignList.length === 0 ||
+                                selectedCampaignIds.length === 0
+                              }
+                              className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
+                                ${
+                                  canAct &&
+                                  !sendingInvite &&
+                                  !campaignListLoading &&
+                                  campaignList.length > 0 &&
+                                  selectedCampaignIds.length > 0
+                                    ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
+                                    : 'bg-gray-300 cursor-not-allowed opacity-70'
+                                }`}
+                            >
+                              {sendingInvite ? (
+                                <>
+                                  <Send className="h-4 w-4 animate-pulse" />
+                                  Sending…
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="h-4 w-4" />
+                                  Send Invitation
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       )}
-                    </button>
+                    </div>
                   ) : (
                     <button
-                      onClick={handleSendInvitation}
+                      onClick={handleDefaultAction}
                       disabled={!canAct}
                       title={ctaTitle}
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
@@ -715,15 +898,13 @@ export const DetailPanel = React.memo<DetailPanelProps>(
             </div>
           </div>
 
-          {/* Body */}
           <div className="p-5">
             {loading && <LoadingState />}
             {error && <ErrorState error={error} />}
 
             {!loading && !error && !data && (
               <div className="mb-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-xs text-gray-600">
-                No report data yet. Try refreshing data or selecting another
-                creator.
+                No report data yet. Try refreshing data or selecting another creator.
               </div>
             )}
 
@@ -731,16 +912,17 @@ export const DetailPanel = React.memo<DetailPanelProps>(
               <div className="space-y-6">
                 <ProfileHeader profile={data.profile} platform={platform} />
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Left Column */}
                   <div className="lg:col-span-2 space-y-6">
                     <StatsChart statHistory={statHistory} />
                     <ContentBreakdown data={data} platform={platform} />
+
                     {data.profile.popularPosts &&
                       data.profile.popularPosts.length > 0 && (
                         <PopularPosts
                           posts={data.profile.popularPosts.slice(0, 12)}
                         />
                       )}
+
                     {data.profile.notableUsers &&
                       data.profile.notableUsers.length > 0 && (
                         <MiniUserSection
@@ -774,7 +956,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                       )}
                   </div>
 
-                  {/* Right Column */}
                   <div className="space-y-6">
                     <AboutSection profile={data.profile} />
                     <AudienceDistribution audience={data.profile.audience} />

@@ -11,6 +11,7 @@ const INVITATION_BASE = "/invitation";
 const APPLY_BASE = "/apply-campaign";
 const MILESTONE_BASE = "/milestone";
 const DELIVERABLE_BASE = "/deliverable";
+const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -1139,6 +1140,136 @@ export async function apiUpdateDeliverableApprovalStatus(
       comments: payload.comments,
       approvedRole: payload.approvedRole,
       approvalId: payload.approvalId,
+    }
+  );
+}
+
+export type GetAllCampaignsParams = {
+  brandId?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type GetAllCampaignsRow = {
+  _id?: string;
+  id?: string;
+  campaignId?: string;
+  campaignTitle?: string;
+  title?: string;
+  name?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type GetAllCampaignsResponse = {
+  data: GetAllCampaignsRow[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+};
+
+export async function apiGetAllCampaigns(params: GetAllCampaignsParams = {}) {
+  const res = await apiGet<any>(`${CAMPAIGN_BASE}/getAll`, {
+    brandId: params.brandId,
+    page: params.page ?? 1,
+    limit: params.limit ?? 100,
+  });
+
+  if (Array.isArray(res)) {
+    return {
+      data: res,
+      pagination: {
+        total: res.length,
+        page: params.page ?? 1,
+        limit: params.limit ?? 100,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+    } as GetAllCampaignsResponse;
+  }
+
+  return res as GetAllCampaignsResponse;
+}
+
+export type CreateCampaignInvitationPayload = {
+  brandId: string;
+  influencerId: string;
+  campaignIds: string[];
+  platform?: "youtube" | "instagram" | "tiktok";
+  handle?: string;
+  modashUserId?: string;
+  emailTo?: string;
+};
+
+export type CampaignInvitationRow = {
+  _id?: string;
+  brandId: string;
+  campaignId: string;
+  influencerId: string;
+  status?: string;
+  sentAt?: string;
+  failedAt?: string | null;
+  failReason?: string | null;
+  platform?: string;
+  handle?: string;
+  modashUserId?: string;
+  emailTo?: string | null;
+  [key: string]: any;
+};
+
+export type CreateCampaignInvitationResponse = {
+  status: "success" | "error";
+  message: string;
+  requestedCampaigns?: number;
+  created?: number;
+  missingCampaignIds?: string[];
+  invitations?: CampaignInvitationRow[];
+};
+
+export async function apiCreateCampaignInvitation(
+  payload: CreateCampaignInvitationPayload
+) {
+  return apiPost<CreateCampaignInvitationResponse>(`${CAMPAIGN_INVITATION_BASE}/create`, payload);
+}
+
+
+/** -------- Campaign Invitation List by Brand (NEW) -------- */
+export type GetCampaignInvitationsByBrandParams = {
+  brandId: string;
+  page?: number;
+  limit?: number;
+  status?: string;
+  influencerId?: string;
+};
+
+export type CampaignInvitationListResponse = {
+  status: "success" | "error";
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+  brandId: string;
+  invitations: CampaignInvitationRow[];
+};
+
+export async function apiGetCampaignInvitationsByBrand(
+  params: GetCampaignInvitationsByBrandParams
+) {
+  const { brandId, page = 1, limit = 25, status, influencerId } = params;
+
+  return apiGet<CampaignInvitationListResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/brand/${brandId}`,
+    {
+      page,
+      limit,
+      status,
+      influencerId,
     }
   );
 }
