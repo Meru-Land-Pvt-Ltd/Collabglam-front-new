@@ -36,6 +36,7 @@ const navItems = [
   { key: "disputes", label: "Disputes", href: "/admin/disputes", icon: FileText },
   { key: "emails", label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
   { key: "influencer-email", label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
+  { key: "inbound-emails", label: "Inbound Emails", href: "/admin/inbound-emails", icons: MailCheckIcon },
   { key: "missing-email", label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },
   { key: "invoice-details", label: "Invoice Details", href: "/admin/invoiceDetails", icon: DollarSign },
   { key: "payment-notification", label: "Payment Notification", href: "/admin/payment", icon: Bell },
@@ -169,9 +170,8 @@ export default function AdminSidebar() {
         <span className="flex items-center gap-2">
           {Icon ? (
             <Icon
-              className={`h-4 w-4 ${
-                active ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
+              className={`h-4 w-4 ${active ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
             />
           ) : null}
           <span className="whitespace-nowrap flex-1">{label}</span>
@@ -194,22 +194,19 @@ export default function AdminSidebar() {
         >
           <span className="flex items-center gap-2">
             <FileText
-              className={`h-4 w-4 ${
-                docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
+              className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
             />
             <span className="flex-1 text-left">Documents</span>
             {docsOpen ? (
               <ChevronUp
-                className={`h-4 w-4 ${
-                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                  }`}
               />
             ) : (
               <ChevronDown
-                className={`h-4 w-4 ${
-                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                  }`}
               />
             )}
           </span>
@@ -232,9 +229,8 @@ export default function AdminSidebar() {
                     onClick={() => {
                       if (isMobile) setDrawerOpen(false);
                     }}
-                    className={`${linkBase} ${
-                      active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
-                    }`}
+                    className={`${linkBase} ${active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
+                      }`}
                   >
                     {label}
                   </Link>
@@ -262,22 +258,19 @@ export default function AdminSidebar() {
         >
           <span className="flex items-center gap-2">
             <SettingsIcon
-              className={`h-4 w-4 ${
-                settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
+              className={`h-4 w-4 ${settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
             />
             <span className="flex-1 text-left">Settings</span>
             {settingsOpen ? (
               <ChevronUp
-                className={`h-4 w-4 ${
-                  settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+                className={`h-4 w-4 ${settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                  }`}
               />
             ) : (
               <ChevronDown
-                className={`h-4 w-4 ${
-                  settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+                className={`h-4 w-4 ${settingsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                  }`}
               />
             )}
           </span>
@@ -300,9 +293,8 @@ export default function AdminSidebar() {
                     onClick={() => {
                       if (isMobile) setDrawerOpen(false);
                     }}
-                    className={`${linkBase} ${
-                      active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
-                    }`}
+                    className={`${linkBase} ${active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
+                      }`}
                   >
                     {label}
                   </Link>

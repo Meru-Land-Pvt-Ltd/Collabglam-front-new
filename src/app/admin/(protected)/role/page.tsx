@@ -75,6 +75,7 @@ const adminNav = [
   { key: "influencer-email", label: "Influencer-Email" },
   { key: "missing-email", label: "Missing-Email" },
   { key: "invoice-details", label: "Invoice Details" },
+  { key: "inbound-emails", label: "Inbound Emails" },
   { key: "payment-notification", label: "Payment Notification" },
   { key: "youtube-handle", label: "Youtube Handle" },
   { key: "modash-data", label: "Modash Data" },
@@ -124,6 +125,7 @@ const permissionSections = [
       { key: "disputes", label: "Disputes" },
       { key: "emails", label: "E-Mails" },
       { key: "employees", label: "Employees" },
+        { key: "inbound-emails", label: "Inbound Emails" },
     ],
   },
 ];
@@ -258,7 +260,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/list`, {
+      const res = await fetch(`${API_BASE}admins/list`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -296,7 +298,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/update-status`, {
+      const res = await fetch(`${API_BASE}admins/update-status`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -343,7 +345,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/invite`, {
+      const res = await fetch(`${API_BASE}admins/invite`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -386,7 +388,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/update-status`, {
+      const res = await fetch(`${API_BASE}admins/update-status`, {
         method: "PUT",
         credentials: "include",
         headers: {
