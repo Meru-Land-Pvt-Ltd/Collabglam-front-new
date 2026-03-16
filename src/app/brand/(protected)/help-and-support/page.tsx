@@ -824,7 +824,7 @@ export default function SupportPage() {
               related to your campaigns and payments.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:flex-row">
+            {/* <div className="mt-8 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-3 shadow-sm sm:flex-row">
               <div className="flex min-h-[56px] flex-1 items-center gap-3 rounded-2xl bg-white px-4">
                 <Search className="h-5 w-5 text-black" />
                 <input
@@ -836,7 +836,7 @@ export default function SupportPage() {
               <button className="rounded-2xl bg-black px-8 py-4 text-base font-semibold text-white transition hover:bg-slate-800">
                 Search
               </button>
-            </div>
+            </div> */}
           </section>
 
           <section className="mt-16">

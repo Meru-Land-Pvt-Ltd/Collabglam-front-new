@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Outfit } from "next/font/google";
+import { api } from "@/lib/adminapi";
 import {
   Home,
   Users,
@@ -33,31 +34,29 @@ const navItems = [
   { key: "campaigns", label: "All Campaigns", href: "/admin/campaigns", icon: List },
   { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: DollarSign },
   { key: "disputes", label: "Disputes", href: "/admin/disputes", icon: FileText },
-
   { key: "emails", label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
   { key: "influencer-email", label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
   { key: "missing-email", label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },
-
   { key: "invoice-details", label: "Invoice Details", href: "/admin/invoiceDetails", icon: DollarSign },
   { key: "payment-notification", label: "Payment Notification", href: "/admin/payment", icon: Bell },
-
   { key: "youtube-handle", label: "Youtube Handle", href: "/admin/youtube", icon: MailCheckIcon },
   { key: "modash-data", label: "Modash Data", href: "/admin/modash", icon: MailCheckIcon },
   { key: "invited-influencer", label: "Invited Influencer", href: "/admin/invitedInfluencer", icon: MailCheckIcon },
 ];
 
 const settingsLinks = [
-  { label: "Role", href: "/admin/role" },
+  { key: "role", label: "Role", href: "/admin/role" },
+  { key: "employees", label: "Employees", href: "/admin/employees" },
 ];
 
 const documentLinks = [
-  { label: "Contact US Page Email", href: "/admin/documents/contact-us" },
-  { label: "FAQs", href: "/admin/documents/faqs" },
-  { label: "Privacy Policy", href: "/admin/documents/privacy-policy" },
-  { label: "Terms of Service", href: "/admin/documents/terms-of-service" },
-  { label: "Cookie Policy", href: "/admin/documents/cookie-policy" },
-  { label: "Shipping & Delivery Policy", href: "/admin/documents/shipping-delivery" },
-  { label: "Returns Policy", href: "/admin/documents/return-policy" },
+  { key: "contact-us-page-email", label: "Contact US Page Email", href: "/admin/documents/contact-us" },
+  { key: "faqs", label: "FAQs", href: "/admin/documents/faqs" },
+  { key: "privacy-policy", label: "Privacy Policy", href: "/admin/documents/privacy-policy" },
+  { key: "terms-of-service", label: "Terms of Service", href: "/admin/documents/terms-of-service" },
+  { key: "cookie-policy", label: "Cookie Policy", href: "/admin/documents/cookie-policy" },
+  { key: "shipping-delivery-policy", label: "Shipping & Delivery Policy", href: "/admin/documents/shipping-delivery" },
+  { key: "returns-policy", label: "Returns Policy", href: "/admin/documents/return-policy" },
 ];
 
 export default function AdminSidebar() {
@@ -72,6 +71,9 @@ export default function AdminSidebar() {
   const [docsOpen, setDocsOpen] = useState(initialDocsOpen);
   const [settingsOpen, setSettingsOpen] = useState(initialSettingsOpen);
 
+  const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+
   useEffect(() => {
     if (pathname.startsWith("/admin/documents/")) setDocsOpen(true);
     if (pathname === "/admin/role" || pathname.startsWith("/admin/settings/")) {
@@ -81,7 +83,57 @@ export default function AdminSidebar() {
 
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [drawerOpen]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchPermissions() {
+      try {
+        const meRes = await api.get("/admins/me");
+
+        const permissions = meRes.data?.permissions || [];
+        const keys = permissions.map((p: any) => p?.key).filter(Boolean);
+
+        if (isMounted) {
+          setPermissionKeys(keys);
+        }
+      } catch (error) {
+        console.error("Failed to fetch permissions", error);
+        if (isMounted) {
+          setPermissionKeys([]);
+        }
+      } finally {
+        if (isMounted) {
+          setPermissionsLoading(false);
+        }
+      }
+    }
+
+    fetchPermissions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const allowedNavItems = useMemo(() => {
+    return navItems.filter((item) => permissionKeys.includes(item.key));
+  }, [permissionKeys]);
+
+  const allowedSettingsLinks = useMemo(() => {
+    return settingsLinks.filter((item) => permissionKeys.includes(item.key));
+  }, [permissionKeys]);
+
+  const allowedDocumentLinks = useMemo(() => {
+    return documentLinks.filter((item) => permissionKeys.includes(item.key));
+  }, [permissionKeys]);
+
+  const showSettings = allowedSettingsLinks.length > 0;
+  const showDocuments = allowedDocumentLinks.length > 0;
 
   const drawerVariants = {
     hidden: { x: "-100%" },
@@ -102,7 +154,10 @@ export default function AdminSidebar() {
   const linkActive = "bg-black text-white";
   const linkInactive = "text-black/80 hover:bg-black hover:text-white";
 
-  const renderLink = ({ label, href, icon: Icon }: any, onClick?: () => void) => {
+  const renderLink = (
+    { label, href, icon: Icon }: { label: string; href: string; icon?: React.ElementType },
+    onClick?: () => void
+  ) => {
     const active = pathname === href || pathname.startsWith(href + "/");
     return (
       <Link
@@ -114,8 +169,9 @@ export default function AdminSidebar() {
         <span className="flex items-center gap-2">
           {Icon ? (
             <Icon
-              className={`h-4 w-4 ${active ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+              className={`h-4 w-4 ${
+                active ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
             />
           ) : null}
           <span className="whitespace-nowrap flex-1">{label}</span>
@@ -125,7 +181,10 @@ export default function AdminSidebar() {
   };
 
   const renderDocuments = (isMobile = false) => {
+    if (!showDocuments) return null;
+
     const docsActive = pathname.startsWith("/admin/documents/");
+
     return (
       <div>
         <button
@@ -135,19 +194,22 @@ export default function AdminSidebar() {
         >
           <span className="flex items-center gap-2">
             <FileText
-              className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+              className={`h-4 w-4 ${
+                docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
             />
             <span className="flex-1 text-left">Documents</span>
             {docsOpen ? (
               <ChevronUp
-                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                  }`}
+                className={`h-4 w-4 ${
+                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
               />
             ) : (
               <ChevronDown
-                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                  }`}
+                className={`h-4 w-4 ${
+                  docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
               />
             )}
           </span>
@@ -161,7 +223,7 @@ export default function AdminSidebar() {
               exit={{ height: 0, opacity: 0 }}
               className="ml-3 mt-2 space-y-1 overflow-hidden"
             >
-              {documentLinks.map(({ label, href }) => {
+              {allowedDocumentLinks.map(({ label, href }) => {
                 const active = pathname === href || pathname.startsWith(href + "/");
                 return (
                   <Link
@@ -170,8 +232,9 @@ export default function AdminSidebar() {
                     onClick={() => {
                       if (isMobile) setDrawerOpen(false);
                     }}
-                    className={`${linkBase} ${active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
-                      }`}
+                    className={`${linkBase} ${
+                      active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
+                    }`}
                   >
                     {label}
                   </Link>
@@ -185,6 +248,8 @@ export default function AdminSidebar() {
   };
 
   const renderSettings = (isMobile = false) => {
+    if (!showSettings) return null;
+
     const settingsActive =
       pathname === "/admin/role" || pathname.startsWith("/admin/settings/");
 
@@ -226,7 +291,7 @@ export default function AdminSidebar() {
               exit={{ height: 0, opacity: 0 }}
               className="ml-3 mt-2 space-y-1 overflow-hidden"
             >
-              {settingsLinks.map(({ label, href }) => {
+              {allowedSettingsLinks.map(({ label, href }) => {
                 const active = pathname === href || pathname.startsWith(href + "/");
                 return (
                   <Link
@@ -266,9 +331,12 @@ export default function AdminSidebar() {
     </div>
   );
 
+  if (permissionsLoading) {
+    return null;
+  }
+
   return (
     <>
-      {/* Mobile Topbar */}
       <header
         className={`${outfit.className} md:hidden fixed inset-x-0 top-0 z-50 h-12 bg-white border-b border-black/10 flex items-center px-4`}
       >
@@ -290,7 +358,6 @@ export default function AdminSidebar() {
         </div>
       </header>
 
-      {/* Desktop Sidebar */}
       <aside
         className={`${outfit.className} hidden md:flex md:fixed md:inset-y-0 md:left-0 w-64 border-r border-black/10 bg-white h-screen flex-col`}
       >
@@ -298,7 +365,7 @@ export default function AdminSidebar() {
 
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           <nav className="space-y-1">
-            {navItems.map((item) => renderLink(item))}
+            {allowedNavItems.map((item) => renderLink(item))}
             {renderSettings(false)}
             {renderDocuments(false)}
           </nav>
@@ -314,7 +381,6 @@ export default function AdminSidebar() {
         </div>
       </aside>
 
-      {/* Mobile Drawer */}
       <AnimatePresence>
         {drawerOpen && (
           <>
@@ -347,7 +413,7 @@ export default function AdminSidebar() {
 
               <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
                 <nav className="space-y-1">
-                  {navItems.map((item) => renderLink(item, () => setDrawerOpen(false)))}
+                  {allowedNavItems.map((item) => renderLink(item, () => setDrawerOpen(false)))}
                   {renderSettings(true)}
                   {renderDocuments(true)}
                 </nav>
