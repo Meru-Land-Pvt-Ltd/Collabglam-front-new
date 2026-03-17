@@ -1,0 +1,596 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+
+import BrandCampaignCard, {
+  BrandCampaignCardSkeleton,
+} from "@/components/ui/brand/card";
+import { Button } from "@/components/ui/buttonComp";
+import { PencilSimple } from "@phosphor-icons/react";
+
+import type {
+  CampaignStatus,
+  CategoryDoc,
+  EnrichedCampaignDoc,
+} from "@/app/brand/services/brandApi";
+import {
+  apiCampaignGetByBrand,
+  getApiErrorMessage,
+  apiGetAllCategories,
+} from "@/app/brand/services/brandApi";
+
+import { scheduleOrExpiryText, statusLabel, statusToVariant } from "@/utils/campaignUi";
+import ListCardView, {
+  MetricIcons,
+  type ListCardViewItem,
+} from "@/components/ui/brand/list";
+
+import CampaignFilter, {
+  DEFAULT_DATE_FILTER,
+  type DateFilterValue,
+  type SelectOption,
+} from "./CampaignFilter";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Props = {
+  title: string;
+  fixedStatus?: CampaignStatus;
+};
+
+type ViewMode = "grid" | "list";
+type DateField = "createdAt" | "updatedAt" | "startAt" | "endAt" | "publishedAt";
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function formatDDMMYYYY(d: Date) {
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+/** Accepts dd/mm/yyyy, yyyy-mm-dd, or iso datetime strings */
+function parseLooseDate(s: string): Date | undefined {
+  if (!s) return undefined;
+  const cleaned = String(s).trim();
+  if (!cleaned) return undefined;
+
+  const isoMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    const out = new Date(y, m - 1, d);
+    return isNaN(out.getTime()) ? undefined : out;
+  }
+
+  const parts = cleaned.split(/[\/-]/).map(Number);
+  if (parts.length === 3) {
+    const [a, b, c] = parts;
+    const out = a > 31 ? new Date(a, b - 1, c) : new Date(c, b - 1, a);
+    return isNaN(out.getTime()) ? undefined : out;
+  }
+
+  return undefined;
+}
+
+function firstImage(c: any): string | undefined {
+  if (c?.productImage) return c.productImage;
+  const arr = c?.productImages;
+  if (!Array.isArray(arr) || !arr[0]) return undefined;
+  const v = arr[0];
+  if (typeof v === "string") return v;
+  return v?.url ?? v?.src ?? v?.image ?? v?.dataUrl ?? v?.data?.url ?? undefined;
+}
+
+function normalizeMongoId(id: any): string {
+  if (id == null) return "";
+  if (typeof id === "string" || typeof id === "number") return String(id);
+  if (typeof id === "object") {
+    if (typeof (id as any).toHexString === "function") return (id as any).toHexString();
+    if (typeof (id as any).$oid === "string") return (id as any).$oid;
+    if (typeof (id as any).oid === "string") return (id as any).oid;
+    if (typeof (id as any).id !== "undefined") return String((id as any).id);
+    if (typeof (id as any).value !== "undefined") return String((id as any).value);
+    if ((id as any)._id != null) return normalizeMongoId((id as any)._id);
+    if (typeof (id as any).toString === "function") {
+      const s = (id as any).toString();
+      if (s && s !== "[object Object]") return s;
+    }
+  }
+  return "";
+}
+
+/**
+ * Convert UI DateFilterValue into backend payload fields:
+ * Supported backend presets:
+ * today, last7days, last30days, thisweek, thismonth, launchingSoon
+ */
+function resolveDateParams(df: DateFilterValue): {
+  datePreset?: string;
+  dateField?: DateField;
+  dateFrom?: string;
+  dateTo?: string;
+} {
+  switch (df.quickFilter) {
+    case "launching_soon":
+      return { datePreset: "launchingSoon" };
+
+    case "today":
+      return { dateField: "createdAt", datePreset: "today" };
+
+    case "this_week":
+      return { dateField: "createdAt", datePreset: "thisweek" };
+
+    case "this_month":
+      return { dateField: "createdAt", datePreset: "thismonth" };
+
+    case "recently_edited":
+      return { dateField: "updatedAt", datePreset: "last7days" };
+
+    default:
+      break;
+  }
+
+  const presetMap: Record<string, string> = {
+    last_7: "last7days",
+    last_30: "last30days",
+  };
+
+  if (df.allDatesOption && df.allDatesOption !== "all" && presetMap[df.allDatesOption]) {
+    return { dateField: "updatedAt", datePreset: presetMap[df.allDatesOption] };
+  }
+
+  if (df.startDate || df.endDate) {
+    const from = df.startDate ? parseLooseDate(df.startDate) : undefined;
+    const to = df.endDate ? parseLooseDate(df.endDate) : undefined;
+
+    return {
+      dateField: "createdAt",
+      dateFrom: from ? formatDDMMYYYY(from) : undefined,
+      dateTo: to ? formatDDMMYYYY(to) : undefined,
+    };
+  }
+
+  return {};
+}
+
+// ─── Layout constants ─────────────────────────────────────────────────────────
+
+const GRID_WRAP = "mx-auto w-full max-w-[100vw]";
+const CARD_GRID =
+  "grid w-full min-w-0 gap-[clamp(12px,2vw,24px)] " +
+  "[grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]";
+
+// ─── CampaignListPage ─────────────────────────────────────────────────────────
+
+export default function CampaignListPage({ title, fixedStatus }: Props) {
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [brandId, setBrandId] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id =
+      window.localStorage.getItem("brandId") ||
+      window.localStorage.getItem("brandID") ||
+      window.localStorage.getItem("brand_id") ||
+      "";
+    setBrandId(id);
+  }, []);
+
+  // ── Filter state ──
+  const [campaignType, setCampaignType] = useState<string>("");
+  const [creatorStatus, setCreatorStatus] = useState<string>("");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(DEFAULT_DATE_FILTER);
+  const [aiCreated, setAiCreated] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // ── Category options ──
+  const [categoryOptions, setCategoryOptions] = useState<SelectOption[]>([]);
+  const [catLoading, setCatLoading] = useState(false);
+
+  // ── Pagination + data ──
+  const [items, setItems] = useState<EnrichedCampaignDoc[]>([]);
+  const [page, setPage] = useState(1);
+  const limit = 20;
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [errMsg, setErrMsg] = useState<string>("");
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  // ── Debounce search ──
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // ── Load categories ──
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      setCatLoading(true);
+      try {
+        const cats: CategoryDoc[] = await apiGetAllCategories();
+        if (cancelled) return;
+
+        const opts = (cats ?? [])
+          .map((c) => {
+            const rawId = (c as any)?._id ?? (c as any)?.id ?? (c as any)?.categoryId;
+            const value = normalizeMongoId(rawId);
+            return { value, label: String((c as any)?.name ?? "") };
+          })
+          .filter(
+            (o) =>
+              o.value &&
+              o.value !== "[object Object]" &&
+              o.value !== "undefined" &&
+              o.value !== "null"
+          );
+
+        const deduped: SelectOption[] = [];
+        const seen = new Set<string>();
+        for (const o of opts) {
+          if (seen.has(o.value)) continue;
+          seen.add(o.value);
+          deduped.push(o);
+        }
+
+        setCategoryOptions(deduped);
+      } catch {
+        if (!cancelled) setCategoryOptions([]);
+      } finally {
+        if (!cancelled) setCatLoading(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ── Reset pagination when filters change ──
+  const dateFilterKey = [
+    dateFilter.quickFilter,
+    dateFilter.allDatesOption,
+    dateFilter.startDate,
+    dateFilter.endDate,
+  ].join("|");
+
+  useEffect(() => {
+    setItems([]);
+    setPage(1);
+    setTotalPages(1);
+    setHasMore(true);
+    setErrMsg("");
+    setHasLoadedOnce(false);
+  }, [
+    brandId,
+    fixedStatus,
+    searchQuery,
+    campaignType,
+    creatorStatus,
+    aiCreated,
+    categoryIds.join(","),
+    dateFilterKey,
+  ]);
+
+  const dateParams = useMemo(() => resolveDateParams(dateFilter), [dateFilter]);
+
+  // ── Build API payload ──
+  const payload = useMemo(() => {
+    const base: any = {
+      brandId,
+      page,
+      limit,
+      search: searchQuery || undefined,
+      status: fixedStatus,
+      byAi: aiCreated ? 1 : undefined,
+    };
+
+    if (dateParams.datePreset) base.datePreset = dateParams.datePreset;
+    if (dateParams.dateField) base.dateField = dateParams.dateField;
+    if (dateParams.dateFrom) base.dateFrom = dateParams.dateFrom;
+    if (dateParams.dateTo) base.dateTo = dateParams.dateTo;
+
+    if (campaignType && campaignType !== "all") base.campaignType = campaignType;
+    if (creatorStatus && creatorStatus !== "all") base.creatorStatus = creatorStatus;
+    if (categoryIds.length === 1) base.categoryId = categoryIds[0];
+    if (categoryIds.length > 1) base.categoryIds = categoryIds;
+
+    return base;
+  }, [
+    brandId,
+    page,
+    limit,
+    searchQuery,
+    fixedStatus,
+    campaignType,
+    creatorStatus,
+    categoryIds,
+    aiCreated,
+    dateParams,
+  ]);
+
+  // ── Fetch campaigns ──
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchData = async () => {
+      if (!brandId) {
+        setErrMsg("Brand ID is required.");
+        setHasLoadedOnce(true);
+        setItems([]);
+        setHasMore(false);
+        return;
+      }
+
+      const isFirstPage = page === 1;
+      if (isFirstPage) setLoading(true);
+      else setLoadingMore(true);
+      setErrMsg("");
+
+      try {
+        const res = await apiCampaignGetByBrand(payload);
+        if (cancelled) return;
+
+        setHasLoadedOnce(true);
+        const nextItems = (res?.items ?? []) as EnrichedCampaignDoc[];
+        const tp = res?.meta?.totalPages;
+
+        if (typeof tp === "number" && tp > 0) {
+          setTotalPages(tp);
+          setHasMore(page < tp);
+        } else {
+          setHasMore(nextItems.length === limit);
+        }
+
+        setItems((prev) => {
+          if (isFirstPage) return nextItems;
+          const existing = new Set(
+            prev.map((x: any) => normalizeMongoId(x.campaignId ?? x._id ?? x.id))
+          );
+          return [
+            ...prev,
+            ...nextItems.filter(
+              (x: any) => !existing.has(normalizeMongoId(x.campaignId ?? x._id ?? x.id))
+            ),
+          ];
+        });
+      } catch (e) {
+        if (cancelled) return;
+        setHasLoadedOnce(true);
+        setErrMsg(getApiErrorMessage(e, "Failed to load campaigns"));
+        if (page === 1) setItems([]);
+      } finally {
+        if (cancelled) return;
+        if (page === 1) setLoading(false);
+        else setLoadingMore(false);
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [payload, brandId, page, limit]);
+
+  // ── Render helpers ──
+
+  const renderGridCard = (c: any) => {
+    const footerText = scheduleOrExpiryText(
+      c.status,
+      c.startAt ?? null,
+      c.endAt ?? null
+    );
+
+    const campaignId = normalizeMongoId(c.campaignId ?? c._id ?? c.id);
+    const campaignTitle = c.campaignTitle ?? "Untitled Campaign";
+
+    const handleView = () => {
+      if (typeof window !== "undefined") {
+        window.location.href = `/brand/campaign/${campaignTitle}?id=${campaignId}`;
+      }
+    };
+
+    const handleEdit = () => {
+      if (typeof window !== "undefined") {
+        window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(campaignId)}`;
+      }
+    };
+
+    return (
+      <BrandCampaignCard
+        key={campaignId}
+        className="min-w-0"
+        size="md"
+        logoUrl={firstImage(c)}
+        logoUrls={(c.productImages ?? []) as any[]}
+        logoAriaLabel="Product image"
+        name={c.campaignTitle}
+        statusLabel={statusLabel(c.status)}
+        statusVariant={statusToVariant(c.status)}
+        tags={[c.category?.name || "No Category"]}
+        stats={[
+          { label: "Platform", value: ((c.platformSelection ?? []) as string[]).length },
+          { label: "Contract", value: c.contractsCount ?? 0 },
+          { label: "Influencer", value: c.numberOfInfluencers ?? 0 },
+          { label: "Accepted", value: c.acceptedContracts ?? 0 },
+        ]}
+        footer={
+          <>
+            <div className="flex w-full items-center gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-[0.75rem] border-border shadow-none"
+                onClick={handleView}
+              >
+                View Campaign
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-[2.85rem] w-[2.65rem] rounded-[0.75rem] border-border px-0 shadow-none"
+                onClick={handleEdit}
+                aria-label="Edit campaign"
+              >
+                <PencilSimple size={18} weight="regular" />
+              </Button>
+            </div>
+            <div className="text-xs text-muted-foreground">{footerText}</div>
+          </>
+        }
+      />
+    );
+  };
+
+  const listItems: ListCardViewItem[] = useMemo(() => {
+    return items.map((c: any) => {
+      const platforms = (c.platformSelection ?? []) as string[];
+      const campaignId = normalizeMongoId(c.campaignId ?? c._id ?? c.id);
+
+      const handleView = () => {
+        if (typeof window !== "undefined") {
+          window.location.href = `/brand/campaign/${campaignId}`;
+        }
+      };
+
+      const handleEdit = () => {
+        if (typeof window !== "undefined") {
+          window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(campaignId)}`;
+        }
+      };
+
+      return {
+        key: campaignId,
+        logoSrc: firstImage(c),
+        logoAlt: "Product image",
+        name: c.campaignTitle,
+        categoryTag: c.category?.name || "No Category",
+        metrics: [
+          { id: "platform", label: "Platform", value: platforms.length, icon: MetricIcons.Platform },
+          { id: "contract", label: "Contract", value: c.contractsCount ?? 0, icon: MetricIcons.Contract },
+          { id: "influencer", label: "Influencer", value: c.numberOfInfluencers ?? 0, icon: MetricIcons.Influencer },
+          { id: "accepted", label: "Accepted", value: c.acceptedContracts ?? 0, icon: MetricIcons.Email },
+        ],
+        statusLabel: statusLabel(c.status),
+        statusVariant: (statusToVariant(c.status) as any) ?? "draft",
+        showStatusChevron: true,
+        actionSlot: (
+          <Button
+            variant="outline"
+            className="min-w-0 w-full truncate whitespace-nowrap rounded-[0.5rem] border-border shadow-none
+               max-[520px]:h-9 max-[520px]:px-3 max-[520px]:text-[0.85rem]
+               min-[981px]:w-auto"
+            onClick={handleView}
+          >
+            View Campaign
+          </Button>
+        ),
+        menuSlot: (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-[2.85rem] w-[2.78rem] !ml-0 rounded-[0.5rem] border-border p-0 shadow-none"
+              onClick={handleEdit}
+              aria-label="Edit campaign"
+            >
+              <PencilSimple size={18} weight="regular" />
+            </Button>
+          </div>
+        ),
+        secondaryText: scheduleOrExpiryText(
+          c.status,
+          c.startAt ?? null,
+          c.endAt ?? null
+        ),
+      };
+    });
+  }, [items]);
+
+  const showInitialSkeleton = !hasLoadedOnce;
+  const showEmptyState = hasLoadedOnce && !loading && items.length === 0 && !errMsg;
+
+  return (
+    <div className="w-full min-w-0 px-4 sm:px-6 md:px-10 lg:px-12 py-6">
+      <CampaignFilter
+        campaignType={campaignType}
+        setCampaignType={setCampaignType}
+        creatorStatus={creatorStatus}
+        setCreatorStatus={setCreatorStatus}
+        categoryIds={categoryIds}
+        setCategoryIds={setCategoryIds}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
+        aiCreated={aiCreated}
+        setAiCreated={setAiCreated}
+        searchInput={searchInput}
+        setSearchInput={setSearchInput}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        categoryOptions={categoryOptions}
+        catLoading={catLoading}
+      />
+
+      {errMsg && <div className="mt-4 text-sm text-red-600">{errMsg}</div>}
+
+      <div className="mt-6">
+        {showInitialSkeleton ? (
+          viewMode === "list" ? (
+            <div className="space-y-4" />
+          ) : (
+            <div className={GRID_WRAP}>
+              <div className={CARD_GRID}>
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <BrandCampaignCardSkeleton key={i} />
+                ))}
+              </div>
+            </div>
+          )
+        ) : showEmptyState ? (
+          <div className="text-sm text-gray-500">No campaigns found.</div>
+        ) : (
+          <>
+            {viewMode === "list" ? (
+              <ListCardView items={listItems} />
+            ) : (
+              <div className={GRID_WRAP}>
+                <div className={CARD_GRID}>{items.map(renderGridCard)}</div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <footer className="mt-auto flex justify-center pb-6 pt-6">
+        {hasMore ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading || loadingMore}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            {loadingMore ? "Loading..." : "Load more"}
+          </Button>
+        ) : hasLoadedOnce && items.length > 0 ? (
+          <div
+            className="text-center text-sm"
+            style={{ color: "var(--Light-Text-Subtle, #8C8C8C)" }}
+          >
+            You've reached the end.
+          </div>
+        ) : null}
+      </footer>
+    </div>
+  );
+}

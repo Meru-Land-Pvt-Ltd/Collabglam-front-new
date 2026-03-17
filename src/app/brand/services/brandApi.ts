@@ -339,40 +339,49 @@ export async function apiGetAllCategories() {
  *  ✅ CAMPAIGN APIs
  *  ------------------------*/
 export type Platform = "youtube" | "instagram" | "tiktok";
-export type CampaignStatus = "draft" | "scheduled" | "active" | "paused" | "completed";
+export type CampaignStatus = "draft" | "scheduled" | "active" | "paused" | "completed" | "archived";
 
 /** Your controller returns enriched docs; keep it flexible */
 export type EnrichedCampaignDoc = any;
 
 /** ✅ Dashboard/List Summary Row (NEW) */
 export type TimeMeta = {
-  unit: "minutes" | "hours" | "days" | null;
+  unit: "minutes" | "hours" | "days" | "expired" | null;
   value: number | null;
   text: string | null;
 };
 
 export type CampaignRowSummary = {
+  campaignId: string;
   campaignTitle: string;
+  status: CampaignStatus;
 
-  scheduledAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  publishedAt: string | null;
   startAt: string | null;
   endAt: string | null;
-
-  status: CampaignStatus;
-  campaignId: string;
 
   category: { id: string; name: string } | null;
 
   numberOfInfluencers: number | null;
-  contractsCount: number;
-  emailsSent: number;
+  campaignBudget: number;
 
-  scheduleIn: TimeMeta;
+  contractsCount: number;
+  acceptedContracts: number;
+  assignedContracts: number;
+
+  startIn: TimeMeta;
   expireIn: TimeMeta;
 
   platformSelection: Platform[];
   productImages: any[];
+
+  byAi: 0 | 1;
+  isActive: 0 | 1;
+  isDraft: 0 | 1;
 };
+
 
 export type CreateCampaignManualPayload = {
   brandId: string;
@@ -479,23 +488,49 @@ export type ListCampaignsPayload = {
   byAi?: 0 | 1;
 
   campaignType?: string;
-  creatorStatus?: string;
+
   categoryId?: string;
   categoryIds?: string[];
+
+  subcategoryId?: string;
+  subcategoryIds?: string[];
+
+  dateField?: "createdAt" | "updatedAt" | "startAt" | "endAt" | "publishedAt";
+  datePreset?:
+    | "today"
+    | "last7days"
+    | "last30days"
+    | "thisweek"
+    | "thismonth"
+    | "launchingSoon";
 
   dateFrom?: string;
   dateTo?: string;
 
-  sortBy?: "createdAt" | "updatedAt" | "scheduledAt" | "startAt" | "endAt";
+  sortBy?:
+    | "createdAt"
+    | "updatedAt"
+    | "startAt"
+    | "endAt"
+    | "publishedAt"
+    | "campaignTitle"
+    | "campaignBudget"
+    | "numberOfInfluencers"
+    | "status";
+
   sortOrder?: "asc" | "desc";
 };
+
 
 export async function apiCampaignGetDrafts(payload: ListCampaignsPayload) {
   return apiPost<{ items: EnrichedCampaignDoc[]; meta: any }>(`${CAMPAIGN_BASE}/get-drafts`, payload);
 }
 
 export async function apiCampaignGetByBrand(payload: ListCampaignsPayload) {
-  return apiPost<{ items: CampaignRowSummary[]; meta: any }>(`${CAMPAIGN_BASE}/get-by-brand`, payload);
+  return apiPost<{ items: CampaignRowSummary[]; meta: any }>(
+    `${CAMPAIGN_BASE}/get-by-brand`,
+    payload
+  );
 }
 
 export async function apiCampaignGetById(payload: { campaignId: string; brandId?: string }) {
@@ -540,7 +575,6 @@ export type EditDraftPayload = {
 
   status?: CampaignStatus;
 };
-
 export async function apiCampaignEditDraft(payload: EditDraftPayload) {
   return apiPost<EnrichedCampaignDoc>(`${CAMPAIGN_BASE}/edit-draft`, payload);
 }
@@ -630,21 +664,50 @@ export type TimezonesTargetCountry = {
   flag?: string;
   timezones: TimezoneItem[];
 };
+export type TimezoneTarget = {
+  id: string;
+  countryCode: string;
+  countryName: string;
+  callingCode?: string;
+  flag?: string;
+  timezones: Array<{
+    timezone: string;
+    isValid?: boolean;
+    nowLocal?: string;
+    offsetMinutes?: number;
+    offsetMinutesFromCurrent?: number;
+  }>;
+  timezoneMeta?: {
+    selected?: string;
+    selectedBy?: string;
+    availableCount?: number;
+  };
+};
 
 export type GetTimezonesByCountriesResponse = {
-  current: {
-    ip?: string;
-    countryCode?: string;
-    timezone: string;
-    nowLocal: string | null;
-    nowUtc: string;
+  success: boolean;
+  data: {
+    current: {
+      timezone: string;
+      nowLocal: string;
+      nowUtc: string;
+    };
+    targets: TimezoneTarget[];
+    meta?: {
+      requested?: {
+        ids?: number;
+        codes?: number;
+      };
+      resolved?: {
+        countries?: number;
+      };
+      invalid?: {
+        countryIds?: string[];
+        countryCodes?: string[];
+      };
+    };
   };
-  targets: TimezonesTargetCountry[];
-  meta: {
-    requested: { ids: number; codes: number };
-    resolved: { countries: number };
-    invalid: { countryIds: string[]; countryCodes: string[] };
-  };
+  requestId?: string;
 };
 
 export async function apiGetTimezonesByCountries(payload: GetTimezonesByCountriesPayload) {
@@ -1273,3 +1336,97 @@ export async function apiGetCampaignInvitationsByBrand(
     }
   );
 }
+
+/** -------- Campaign History -------- */
+export type CampaignHistoryTimelineState = "none" | "running" | "expired";
+
+export type CampaignHistorySortBy =
+  | "createdAt"
+  | "budget"
+  | "applicantCount"
+  | "campaignStatus"
+  | "statusUpdatedAt"
+  | "productOrServiceName"
+  | "isActive";
+
+export type CampaignHistorySortOrder = "asc" | "desc";
+
+export type CampaignHistoryPayload = {
+  brandId: string;
+
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: CampaignHistorySortBy;
+  sortOrder?: CampaignHistorySortOrder;
+  includeDescription?: 0 | 1;
+
+  campaignStatus?: "open" | "paused";
+  timelineState?: CampaignHistoryTimelineState;
+  goal?: string;
+  minBudget?: number | string;
+  maxBudget?: number | string;
+
+  campaignType?: string;
+  creatorStatus?: "all" | "invited" | "applied" | "approved";
+  categoryIds?: string[];
+  aiCreated?: boolean | 0 | 1 | "true" | "false";
+
+  quickFilter?:
+  | "recently_edited"
+  | "launching_soon"
+  | "today"
+  | "this_week"
+  | "this_month";
+
+  allDatesOption?:
+  | "all"
+  | "last_7"
+  | "last_15"
+  | "last_30"
+  | "last_90"
+  | "last_365"
+  | "last_month"
+  | "last_quarter";
+
+  startDate?: string;
+  endDate?: string;
+};
+
+export type CampaignHistoryRow = EnrichedCampaignDoc & {
+  computedIsActive?: boolean;
+  timelineState?: CampaignHistoryTimelineState;
+  hasTimeline?: boolean;
+  influencerWorking?: boolean;
+};
+
+export type CampaignHistoryResponse = {
+  data: CampaignHistoryRow[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+};
+
+export async function apiCampaignHistory(payload: CampaignHistoryPayload) {
+  const client = resolveClient();
+
+  if (typeof client?.request === "function") {
+    const res = await client.request({
+      method: "POST",
+      url: `${CAMPAIGN_BASE}/history`,
+      data: payload,
+    });
+    return res?.data as CampaignHistoryResponse;
+  }
+
+  if (typeof client?.post === "function") {
+    const res = await client.post(`${CAMPAIGN_BASE}/history`, payload);
+    return res?.data as CampaignHistoryResponse;
+  }
+
+  throw new Error("No compatible API client found in @/lib/api");
+}
+
