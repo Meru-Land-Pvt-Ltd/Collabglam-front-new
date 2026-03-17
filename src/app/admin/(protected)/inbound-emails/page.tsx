@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Search,
   Send,
@@ -12,8 +12,6 @@ import {
   Filter,
   Clock3,
   Sparkles,
-  CheckCircle2,
-  AlertCircle,
   Eye,
   UserCircle2,
   Inbox,
@@ -21,6 +19,9 @@ import {
   PanelLeft,
   LayoutGrid,
   X,
+  Upload,
+  FileSpreadsheet,
+  Trash2,
 } from "lucide-react";
 import EmailEditor from "@/components/ui/EmailEditor";
 
@@ -38,6 +39,7 @@ type Recipient = {
   status: RecipientStatus;
   tags: string[];
   lastContact?: string;
+  createdAt: number;
 };
 
 type Message = {
@@ -52,6 +54,7 @@ type Message = {
 type Thread = {
   id: string;
   subject: string;
+  recipientId: string;
   recipientName: string;
   recipientEmail: string;
   audience: AudienceType;
@@ -63,7 +66,15 @@ type Thread = {
   messages: Message[];
 };
 
-export type EmailEditorAttachment = {
+type UploadSummary = {
+  fileName: string;
+  totalRows: number;
+  importedRows: number;
+  duplicateRows: number;
+  invalidRows: number;
+};
+
+type EmailEditorAttachment = {
   filename: string;
   contentType: string;
   size: number;
@@ -82,222 +93,20 @@ const roleConfig: Record<
 > = {
   IME: {
     title: "Influencer Marketing Executive",
-    subtitle: "Manage influencer outreach, replies, and follow-ups from one streamlined workspace.",
+    subtitle:
+      "Import creator CSV lists, build recipient segments, and send bulk outreach from one workspace.",
     audience: "Influencers",
-    primaryMetric: "Influencer outreach",
+    primaryMetric: "Influencer recipients",
     deskEmail: "ime@collabglam.com",
   },
   BME: {
     title: "Brand Marketing Executive",
-    subtitle: "Coordinate brand partnerships, proposals, and campaign communication in one place.",
+    subtitle:
+      "Import brand CSV lists, manage outreach groups, and send partnership emails in bulk.",
     audience: "Brands",
-    primaryMetric: "Brand outreach",
+    primaryMetric: "Brand recipients",
     deskEmail: "bme@collabglam.com",
   },
-};
-
-const recipientsByRole: Record<ExecutiveRole, Recipient[]> = {
-  IME: [
-    {
-      id: "inf-1",
-      name: "Aanya Kapoor",
-      email: "aanya@creatorhub.com",
-      niche: "Beauty",
-      status: "Replied",
-      tags: ["YouTube", "High Engagement"],
-      lastContact: "2h ago",
-    },
-    {
-      id: "inf-2",
-      name: "Rohan Vlogs",
-      email: "rohan@creatormail.com",
-      niche: "Travel",
-      status: "Pending",
-      tags: ["Instagram", "Campaign Fit"],
-      lastContact: "Yesterday",
-    },
-    {
-      id: "inf-3",
-      name: "Sana Tech",
-      email: "hello@sanatech.in",
-      niche: "Tech",
-      status: "Active",
-      tags: ["UGC", "Shortlist"],
-      lastContact: "3d ago",
-    },
-    {
-      id: "inf-4",
-      name: "FitWithIshita",
-      email: "team@fitwithishita.com",
-      niche: "Fitness",
-      status: "Bounced",
-      tags: ["Recheck Email"],
-      lastContact: "5d ago",
-    },
-  ],
-  BME: [
-    {
-      id: "br-1",
-      name: "Glowary Labs",
-      email: "marketing@glowary.com",
-      company: "Glowary Labs",
-      status: "Replied",
-      tags: ["Skincare", "Hot Lead"],
-      lastContact: "1h ago",
-    },
-    {
-      id: "br-2",
-      name: "Voltify",
-      email: "partnerships@voltify.io",
-      company: "Voltify",
-      status: "Pending",
-      tags: ["Tech", "Outbound"],
-      lastContact: "Today",
-    },
-    {
-      id: "br-3",
-      name: "Nexa Wear",
-      email: "brand@nexawear.com",
-      company: "Nexa Wear",
-      status: "Active",
-      tags: ["Fashion", "Priority"],
-      lastContact: "2d ago",
-    },
-    {
-      id: "br-4",
-      name: "Healthy Spoon",
-      email: "collab@healthyspoon.in",
-      company: "Healthy Spoon",
-      status: "Pending",
-      tags: ["Food", "New"],
-      lastContact: "4d ago",
-    },
-  ],
-};
-
-const threadsByRole: Record<ExecutiveRole, Thread[]> = {
-  IME: [
-    {
-      id: "th-1",
-      subject: "Collaboration opportunity for April launch",
-      recipientName: "Aanya Kapoor",
-      recipientEmail: "aanya@creatorhub.com",
-      audience: "Influencers",
-      executive: "IME",
-      status: "Replied",
-      unread: 2,
-      lastMessageAt: "10 min ago",
-      tags: ["Beauty", "Priority"],
-      messages: [
-        {
-          id: "m-1",
-          sender: "IME Desk",
-          email: "ime@collabglam.com",
-          role: "executive",
-          body:
-            "Hi Aanya, we would love to explore a paid collaboration for an upcoming skincare launch. Sharing the brief and expected deliverables.",
-          time: "09:10 AM",
-        },
-        {
-          id: "m-2",
-          sender: "Aanya Kapoor",
-          email: "aanya@creatorhub.com",
-          role: "recipient",
-          body:
-            "Thanks for reaching out. This sounds interesting. Please share the budget range and preferred posting timeline.",
-          time: "09:42 AM",
-        },
-        {
-          id: "m-3",
-          sender: "Aanya Kapoor",
-          email: "aanya@creatorhub.com",
-          role: "recipient",
-          body: "Also, is the campaign exclusive within the skincare category?",
-          time: "09:44 AM",
-        },
-      ],
-    },
-    {
-      id: "th-2",
-      subject: "UGC creator shortlist for product demo",
-      recipientName: "Sana Tech",
-      recipientEmail: "hello@sanatech.in",
-      audience: "Influencers",
-      executive: "IME",
-      status: "Waiting",
-      unread: 0,
-      lastMessageAt: "Yesterday",
-      tags: ["Tech", "UGC"],
-      messages: [
-        {
-          id: "m-4",
-          sender: "IME Desk",
-          email: "ime@collabglam.com",
-          role: "executive",
-          body:
-            "Hi Sana, we are shortlisting creators for a hands-on demo campaign and would love to see your latest UGC rates.",
-          time: "Yesterday",
-        },
-      ],
-    },
-  ],
-  BME: [
-    {
-      id: "th-3",
-      subject: "Influencer partnership proposal for Q2",
-      recipientName: "Glowary Labs",
-      recipientEmail: "marketing@glowary.com",
-      audience: "Brands",
-      executive: "BME",
-      status: "Replied",
-      unread: 1,
-      lastMessageAt: "18 min ago",
-      tags: ["Warm Lead", "Skincare"],
-      messages: [
-        {
-          id: "m-5",
-          sender: "BME Desk",
-          email: "bme@collabglam.com",
-          role: "executive",
-          body:
-            "Hello team, sharing a curated influencer collaboration plan tailored to your upcoming seasonal campaign.",
-          time: "11:00 AM",
-        },
-        {
-          id: "m-6",
-          sender: "Glowary Labs",
-          email: "marketing@glowary.com",
-          role: "recipient",
-          body:
-            "This looks relevant. Can you send us estimated creator mix by tier and expected content outputs?",
-          time: "11:27 AM",
-        },
-      ],
-    },
-    {
-      id: "th-4",
-      subject: "Creator sourcing support for festive campaign",
-      recipientName: "Voltify",
-      recipientEmail: "partnerships@voltify.io",
-      audience: "Brands",
-      executive: "BME",
-      status: "Open",
-      unread: 0,
-      lastMessageAt: "2 days ago",
-      tags: ["Tech", "Outbound"],
-      messages: [
-        {
-          id: "m-7",
-          sender: "BME Desk",
-          email: "bme@collabglam.com",
-          role: "executive",
-          body:
-            "Hi Voltify, reaching out to discuss influencer sourcing, outreach execution, and full campaign handling under one dashboard.",
-          time: "2 days ago",
-        },
-      ],
-    },
-  ],
 };
 
 const statusPillClass: Record<ThreadStatus | RecipientStatus, string> = {
@@ -314,14 +123,111 @@ function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+function makeId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function formatRelativeNow() {
+  return new Date().toLocaleString([], {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function normalizeHeader(value: string) {
+  return value.trim().toLowerCase().replace(/[_\-\s]+/g, " ");
+}
+
+function parseCsvLine(line: string) {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells.map((cell) => cell.replace(/^"|"$/g, "").trim());
+}
+
+function parseCsv(text: string) {
+  const lines = text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .filter((line) => line.trim().length > 0);
+
+  if (lines.length === 0) return { headers: [], rows: [] as string[][] };
+
+  const headers = parseCsvLine(lines[0]);
+  const rows = lines.slice(1).map(parseCsvLine);
+  return { headers, rows };
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function extractCell(
+  row: string[],
+  headerMap: Map<string, number>,
+  fallbacks: string[]
+) {
+  for (const key of fallbacks) {
+    const idx = headerMap.get(key);
+    if (idx != null && row[idx] != null) return row[idx].trim();
+  }
+  return "";
+}
+
+function recipientsToCsv(recipients: Recipient[]) {
+  const header = ["name", "email", "company", "niche", "status", "tags"];
+  const lines = recipients.map((item) =>
+    [
+      item.name,
+      item.email,
+      item.company || "",
+      item.niche || "",
+      item.status,
+      item.tags.join(" | "),
+    ]
+      .map((value) => `"${String(value).replaceAll('"', '""')}"`)
+      .join(",")
+  );
+
+  return [header.join(","), ...lines].join("\n");
+}
+
 export default function Page() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [role, setRole] = useState<ExecutiveRole>("IME");
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
-    threadsByRole.IME[0]?.id ?? null
-  );
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSending, setEditorSending] = useState(false);
   const [editorMode, setEditorMode] = useState<"bulk" | "reply">("bulk");
@@ -333,10 +239,22 @@ export default function Page() {
     initialBody: "",
     toAvatar: "",
   });
+  const [uploadSummary, setUploadSummary] = useState<Record<ExecutiveRole, UploadSummary | null>>({
+    IME: null,
+    BME: null,
+  });
+  const [recipientsByDesk, setRecipientsByDesk] = useState<Record<ExecutiveRole, Recipient[]>>({
+    IME: [],
+    BME: [],
+  });
+  const [threadsByDesk, setThreadsByDesk] = useState<Record<ExecutiveRole, Thread[]>>({
+    IME: [],
+    BME: [],
+  });
 
   const config = roleConfig[role];
-  const recipients = recipientsByRole[role];
-  const threads = threadsByRole[role];
+  const recipients = recipientsByDesk[role];
+  const threads = threadsByDesk[role];
 
   const filteredRecipients = useMemo(() => {
     return recipients.filter((item) => {
@@ -381,6 +299,7 @@ export default function Page() {
   const pendingCount = recipients.filter((r) => r.status === "Pending").length;
   const unreadCount = threads.reduce((acc, t) => acc + t.unread, 0);
   const activeSelectionCount = selectedRecipients.length;
+  const summary = uploadSummary[role];
 
   const toggleRecipient = (id: string) => {
     setSelectedRecipientIds((prev) =>
@@ -402,9 +321,104 @@ export default function Page() {
   const handleRoleChange = (item: ExecutiveRole) => {
     setRole(item);
     setSelectedRecipientIds([]);
-    setSelectedThreadId(threadsByRole[item][0]?.id ?? null);
+    setSelectedThreadId(threadsByDesk[item][0]?.id ?? null);
     setSearch("");
     setStatusFilter("All");
+  };
+
+  const handleCsvUpload = async (file: File) => {
+    const text = await file.text();
+    const { headers, rows } = parseCsv(text);
+
+    if (!headers.length) return;
+
+    const headerMap = new Map(headers.map((header, index) => [normalizeHeader(header), index]));
+
+    const nextRecipients: Recipient[] = [];
+    let invalidRows = 0;
+    let duplicateRows = 0;
+
+    setRecipientsByDesk((prev) => {
+      const existingEmails = new Set(prev[role].map((item) => item.email.toLowerCase()));
+
+      for (const row of rows) {
+        const email = extractCell(row, headerMap, ["email", "e mail", "mail"]).toLowerCase();
+        const name = extractCell(row, headerMap, ["name", "full name", "fullname"]);
+        const company = extractCell(row, headerMap, ["company", "brand", "organization", "organisation"]);
+        const niche = extractCell(row, headerMap, ["niche", "category", "industry"]);
+        const rawTags = extractCell(row, headerMap, ["tags", "tag"]);
+
+        if (!email || !isValidEmail(email)) {
+          invalidRows += 1;
+          continue;
+        }
+
+        if (existingEmails.has(email)) {
+          duplicateRows += 1;
+          continue;
+        }
+
+        existingEmails.add(email);
+
+        nextRecipients.push({
+          id: makeId("recipient"),
+          name: name || email.split("@")[0],
+          email,
+          company: company || undefined,
+          niche: niche || undefined,
+          status: "Active",
+          tags: rawTags
+            ? rawTags
+              .split(/[|,]/)
+              .map((item) => item.trim())
+              .filter(Boolean)
+            : [],
+          createdAt: Date.now(),
+        });
+      }
+
+      return {
+        ...prev,
+        [role]: [...prev[role], ...nextRecipients],
+      };
+    });
+
+    setUploadSummary((prev) => ({
+      ...prev,
+      [role]: {
+        fileName: file.name,
+        totalRows: rows.length,
+        importedRows: nextRecipients.length,
+        duplicateRows,
+        invalidRows,
+      },
+    }));
+  };
+
+  const onFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await handleCsvUpload(file);
+    event.target.value = "";
+  };
+
+  const clearRecipientsForRole = () => {
+    setRecipientsByDesk((prev) => ({ ...prev, [role]: [] }));
+    setThreadsByDesk((prev) => ({ ...prev, [role]: [] }));
+    setUploadSummary((prev) => ({ ...prev, [role]: null }));
+    setSelectedRecipientIds([]);
+    setSelectedThreadId(null);
+  };
+
+  const exportRecipientsForRole = () => {
+    if (!recipients.length) return;
+    const blob = new Blob([recipientsToCsv(recipients)], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${role.toLowerCase()}-recipients.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const openBulkEditor = () => {
@@ -419,7 +433,7 @@ export default function Page() {
       initialBody:
         role === "IME"
           ? "Hi {{name}},\n\nWe would love to connect with you regarding an upcoming campaign collaboration. Sharing the brief and next steps below.\n\nRegards,\nTeam CollabGlam"
-          : "Hi {{brand_name}},\n\nWe would love to discuss how CollabGlam can support your upcoming influencer marketing requirements. Sharing more details below.\n\nRegards,\nTeam CollabGlam",
+          : "Hi {{name}},\n\nWe would love to discuss how CollabGlam can support your upcoming influencer marketing requirements. Sharing more details below.\n\nRegards,\nTeam CollabGlam",
       toAvatar: "",
     });
     setEditorOpen(true);
@@ -431,25 +445,141 @@ export default function Page() {
     setEditorPayload({
       toLabel: selectedThread.recipientEmail,
       subject: `Re: ${selectedThread.subject}`,
-      initialBody:
-        role === "IME"
-          ? "Hi,\n\nThanks for your reply. Sharing the details you requested below.\n\nBest,\nIME Team"
-          : "Hi,\n\nThanks for your interest. Please find the requested campaign and creator plan details below.\n\nBest,\nBME Team",
-      toAvatar:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop",
+      initialBody: "Hi,\n\nThanks for your reply. Sharing the requested details below.\n\nBest,\nTeam CollabGlam",
+      toAvatar: "",
     });
     setEditorOpen(true);
   };
 
-  const handleEditorSend = async () => {
+  const handleEditorSend = async (payload: {
+    to: string;
+    cc: string;
+    bcc: string;
+    subject: string;
+    body: string;
+    htmlBody: string;
+    attachments: EmailEditorAttachment[];
+  }) => {
     setEditorSending(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    const nowLabel = formatRelativeNow();
+
+    if (editorMode === "bulk") {
+      const targetIds = new Set(selectedRecipientIds);
+
+      setRecipientsByDesk((prev) => ({
+        ...prev,
+        [role]: prev[role].map((item) =>
+          targetIds.has(item.id)
+            ? {
+              ...item,
+              status: "Pending",
+              lastContact: nowLabel,
+            }
+            : item
+        ),
+      }));
+
+      setThreadsByDesk((prev) => {
+        const existing = prev[role];
+        const next = [...existing];
+
+        for (const recipient of selectedRecipients) {
+          const existingIndex = next.findIndex((thread) => thread.recipientId === recipient.id);
+          const sentMessage: Message = {
+            id: makeId("message"),
+            sender: role,
+            email: config.deskEmail,
+            role: "executive",
+            body: payload.body,
+            time: nowLabel,
+          };
+
+          if (existingIndex >= 0) {
+            const current = next[existingIndex];
+            next[existingIndex] = {
+              ...current,
+              subject: payload.subject,
+              status: "Waiting",
+              lastMessageAt: nowLabel,
+              messages: [...current.messages, sentMessage],
+            };
+          } else {
+            next.unshift({
+              id: makeId("thread"),
+              subject: payload.subject,
+              recipientId: recipient.id,
+              recipientName: recipient.name,
+              recipientEmail: recipient.email,
+              audience: config.audience,
+              executive: role,
+              status: "Waiting",
+              unread: 0,
+              lastMessageAt: nowLabel,
+              tags: recipient.tags,
+              messages: [sentMessage],
+            });
+          }
+        }
+
+        return {
+          ...prev,
+          [role]: next,
+        };
+      });
+
+      if (!selectedThreadId && selectedRecipients[0]) {
+        setTimeout(() => {
+          setThreadsByDesk((current) => {
+            const firstThread = current[role].find((item) => item.recipientId === selectedRecipients[0].id);
+            if (firstThread) setSelectedThreadId(firstThread.id);
+            return current;
+          });
+        }, 0);
+      }
+
+      setSelectedRecipientIds([]);
+    } else if (selectedThread) {
+      setThreadsByDesk((prev) => ({
+        ...prev,
+        [role]: prev[role].map((thread) =>
+          thread.id === selectedThread.id
+            ? {
+              ...thread,
+              status: "Waiting",
+              lastMessageAt: nowLabel,
+              messages: [
+                ...thread.messages,
+                {
+                  id: makeId("message"),
+                  sender: role,
+                  email: config.deskEmail,
+                  role: "executive",
+                  body: payload.body,
+                  time: nowLabel,
+                },
+              ],
+            }
+            : thread
+        ),
+      }));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
     setEditorSending(false);
     setEditorOpen(false);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={onFileChange}
+      />
+
       <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-[260px] shrink-0 rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur xl:flex xl:flex-col">
           <div>
@@ -458,9 +588,7 @@ export default function Page() {
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
-                <div className="text-sm font-semibold tracking-wide text-slate-900">
-                  CollabGlam
-                </div>
+                <div className="text-sm font-semibold tracking-wide text-slate-900">CollabGlam</div>
                 <div className="text-xs text-slate-500">Outreach Command Center</div>
               </div>
             </div>
@@ -488,9 +616,9 @@ export default function Page() {
               Today’s pulse
             </div>
             <div className="space-y-2 text-sm text-slate-600">
-              <MetricRow label="Bulk emails sent" value="148" />
-              <MetricRow label="Open threads" value="12" />
-              <MetricRow label="Follow-ups due" value="27" />
+              <MetricRow label="Imported recipients" value={String(totalRecipients)} />
+              <MetricRow label="Open threads" value={String(threads.length)} />
+              <MetricRow label="Selected to send" value={String(activeSelectionCount)} />
             </div>
           </div>
         </aside>
@@ -503,13 +631,13 @@ export default function Page() {
                   <div className="max-w-3xl">
                     <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur">
                       <Sparkles className="h-3.5 w-3.5" />
-                      Professional outreach workspace
+                      CSV powered outreach workflow
                     </div>
                     <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl xl:text-[2rem]">
                       Admin Outreach Console
                     </h1>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                      Manage bulk campaigns, monitor live conversations, and reply faster with a clean, fully responsive executive dashboard.
+                      Upload CSV files with recipient names and emails, review the imported list, select contacts, and send one shared email template in bulk.
                     </p>
                   </div>
 
@@ -523,9 +651,7 @@ export default function Page() {
                             onClick={() => handleRoleChange(item)}
                             className={cn(
                               "rounded-xl px-4 py-2 text-sm font-medium transition",
-                              active
-                                ? "bg-white text-slate-950 shadow-sm"
-                                : "text-slate-200 hover:bg-white/10"
+                              active ? "bg-white text-slate-950 shadow-sm" : "text-slate-200 hover:bg-white/10"
                             )}
                           >
                             {item}
@@ -559,25 +685,25 @@ export default function Page() {
                   icon={<Users className="h-5 w-5" />}
                   label={config.primaryMetric}
                   value={String(totalRecipients)}
-                  hint={`Total ${config.audience.toLowerCase()} in workspace`}
+                  hint={`Recipients loaded for ${role}`}
                 />
                 <StatCard
                   icon={<Mail className="h-5 w-5" />}
                   label="Pending outreach"
                   value={String(pendingCount)}
-                  hint="Recipients awaiting follow-up"
+                  hint="Recipients recently emailed"
                 />
                 <StatCard
                   icon={<MessageSquare className="h-5 w-5" />}
                   label="Replies received"
                   value={String(repliedCount)}
-                  hint="Active conversations in progress"
+                  hint="Ready for API integration later"
                 />
                 <StatCard
                   icon={<Inbox className="h-5 w-5" />}
-                  label="Unread messages"
-                  value={String(unreadCount)}
-                  hint="Needs executive attention"
+                  label="Open threads"
+                  value={String(threads.length)}
+                  hint="Local message history from sent emails"
                 />
               </div>
             </section>
@@ -587,10 +713,10 @@ export default function Page() {
                 <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
-                      Bulk email workspace
+                      CSV import and bulk email workspace
                     </h2>
                     <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                      Select recipients, refine the list with search and status filters, then open a shared editor for personalized email outreach.
+                      Import a CSV with at least <span className="font-semibold text-slate-700">name</span> and <span className="font-semibold text-slate-700">email</span> columns. Optional columns like company, niche, and tags are also supported.
                     </p>
                   </div>
 
@@ -609,53 +735,155 @@ export default function Page() {
                   </div>
                 </div>
 
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.95fr)]">
-                  <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                    <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="mb-5 grid gap-4 xl:grid-cols-[1.15fr_minmax(320px,0.85fr)]">
+                  <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <h3 className="font-semibold text-slate-900">Recipients</h3>
+                        <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                          <FileSpreadsheet className="h-3.5 w-3.5" />
+                          CSV import
+                        </div>
+                        <h3 className="mt-3 text-lg font-semibold text-slate-900">Upload recipient file</h3>
                         <p className="mt-1 text-sm text-slate-500">
-                          Search, filter, and manage recipient selection.
+                          Accepted headers: name, email, company, niche, tags.
                         </p>
                       </div>
+
                       <button
-                        onClick={toggleSelectAllVisible}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-100"
                       >
-                        {filteredRecipients.length > 0 &&
-                        filteredRecipients.every((item) => selectedRecipientIds.includes(item.id))
-                          ? "Clear visible"
-                          : "Select visible"}
+                        <Upload className="h-4 w-4" />
+                        Upload CSV
                       </button>
                     </div>
 
-                    <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
-                      <label className="relative block">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <input
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                          placeholder={`Search ${config.audience.toLowerCase()}`}
-                          className="h-11 w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
-                        />
-                      </label>
+                    {summary ? (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <InfoCard title="File" value={summary.fileName} />
+                        <InfoCard title="Rows read" value={String(summary.totalRows)} />
+                        <InfoCard title="Imported" value={String(summary.importedRows)} />
+                        <InfoCard title="Skipped" value={String(summary.invalidRows + summary.duplicateRows)} />
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                        No CSV uploaded for {role} yet.
+                      </div>
+                    )}
+                  </div>
 
-                      <label className="relative block">
-                        <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        <select
-                          value={statusFilter}
-                          onChange={(e) => setStatusFilter(e.target.value)}
-                          className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
-                        >
-                          <option>All</option>
-                          <option>Active</option>
-                          <option>Pending</option>
-                          <option>Replied</option>
-                          <option>Bounced</option>
-                        </select>
-                      </label>
+                  <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold text-slate-900">Current list actions</h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Manage the current imported list before sending.
+                        </p>
+                      </div>
+                      <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+                        <Eye className="h-4 w-4" />
+                        Preview
+                      </button>
                     </div>
 
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <FeaturePill text="CSV based recipients" />
+                      <FeaturePill text="Bulk template sending" />
+                      <FeaturePill text="Shared email editor" />
+                      <FeaturePill text="Local draft saving" />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={exportRecipientsForRole}
+                        disabled={!recipients.length}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Export CSV
+                      </button>
+                      <button
+                        onClick={clearRecipientsForRole}
+                        disabled={!recipients.length}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Clear list
+                      </button>
+                    </div>
+
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <div className="mb-2 text-sm font-semibold text-slate-800">Selected recipients</div>
+                      {selectedRecipients.length === 0 ? (
+                        <div className="text-sm text-slate-500">No recipients selected yet.</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {selectedRecipients.map((item) => (
+                            <span
+                              key={item.id}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm"
+                            >
+                              {item.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Recipients</h3>
+                      <p className="mt-1 text-sm text-slate-500">Search, filter, and manage imported recipients.</p>
+                    </div>
+                    <button
+                      onClick={toggleSelectAllVisible}
+                      disabled={!filteredRecipients.length}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {filteredRecipients.length > 0 &&
+                        filteredRecipients.every((item) => selectedRecipientIds.includes(item.id))
+                        ? "Clear visible"
+                        : "Select visible"}
+                    </button>
+                  </div>
+
+                  <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                    <label className="relative block">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder={`Search ${config.audience.toLowerCase()}`}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
+                      />
+                    </label>
+
+                    <label className="relative block">
+                      <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
+                      >
+                        <option>All</option>
+                        <option>Active</option>
+                        <option>Pending</option>
+                        <option>Replied</option>
+                        <option>Bounced</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {!filteredRecipients.length ? (
+                    <EmptyState
+                      icon={<Users className="h-6 w-6" />}
+                      title="No recipients available"
+                      description="Upload a CSV to populate the recipient table for this desk."
+                    />
+                  ) : (
                     <div className="space-y-3 max-xl:max-h-[560px] max-xl:overflow-y-auto xl:max-h-[640px] xl:overflow-y-auto xl:pr-1">
                       {filteredRecipients.map((recipient) => {
                         const checked = selectedRecipientIds.includes(recipient.id);
@@ -685,12 +913,8 @@ export default function Page() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                   <div className="min-w-0">
-                                    <div className="truncate font-semibold text-slate-900">
-                                      {recipient.name}
-                                    </div>
-                                    <div className="truncate text-sm text-slate-500">
-                                      {recipient.email}
-                                    </div>
+                                    <div className="truncate font-semibold text-slate-900">{recipient.name}</div>
+                                    <div className="truncate text-sm text-slate-500">{recipient.email}</div>
                                   </div>
 
                                   <span
@@ -704,94 +928,42 @@ export default function Page() {
                                 </div>
 
                                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                                  <span>
-                                    {recipient.company || recipient.niche || config.audience.slice(0, -1)}
-                                  </span>
-                                  <span className="text-slate-300">•</span>
-                                  <span>{recipient.lastContact || "No recent contact"}</span>
+                                  <span>{recipient.company || recipient.niche || config.audience.slice(0, -1)}</span>
+                                  {recipient.lastContact ? (
+                                    <>
+                                      <span className="text-slate-300">•</span>
+                                      <span>{recipient.lastContact}</span>
+                                    </>
+                                  ) : null}
                                 </div>
 
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {recipient.tags.map((tag) => (
-                                    <span
-                                      key={tag}
-                                      className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600"
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
+                                {recipient.tags.length > 0 && (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {recipient.tags.map((tag) => (
+                                      <span
+                                        key={tag}
+                                        className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600"
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </button>
                         );
                       })}
                     </div>
-                  </div>
-
-                  <div className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold text-slate-900">Send flow preview</h3>
-                        <p className="mt-1 text-sm text-slate-500">
-                          Shared editor experience for outreach and replies.
-                        </p>
-                      </div>
-                      <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
-                        <Eye className="h-4 w-4" />
-                        Preview
-                      </button>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                      <InfoCard title="Audience" value={`${config.title} · ${config.audience}`} />
-                      <InfoCard title="Sending desk" value={config.deskEmail} />
-                    </div>
-
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
-                      <div className="text-sm font-semibold text-slate-800">Editor capabilities</div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        <FeaturePill text="Rich text formatting" />
-                        <FeaturePill text="Attachments + inline images" />
-                        <FeaturePill text="Cc / Bcc support" />
-                        <FeaturePill text="Draft saving" />
-                        <FeaturePill text="Reply flow reuse" />
-                        <FeaturePill text="Confidential mode" />
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <div className="mb-2 text-sm font-semibold text-slate-800">
-                        Selected recipients
-                      </div>
-                      {selectedRecipients.length === 0 ? (
-                        <div className="text-sm text-slate-500">No recipients selected yet.</div>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {selectedRecipients.map((item) => (
-                            <span
-                              key={item.id}
-                              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm"
-                            >
-                              {item.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
               <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-                      Quick actions
-                    </h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Common actions for executive workflows.
-                    </p>
+                    <h2 className="text-lg font-semibold tracking-tight text-slate-900">Quick actions</h2>
+                    <p className="mt-1 text-sm text-slate-500">Useful controls while preparing a send.</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-500">
                     <Plus className="h-5 w-5" />
@@ -800,24 +972,31 @@ export default function Page() {
 
                 <div className="space-y-3">
                   <QuickAction
-                    icon={<Mail className="h-4 w-4" />}
-                    title="Create new bulk sequence"
-                    subtitle="Prepare campaign-specific outreach"
+                    icon={<Upload className="h-4 w-4" />}
+                    title="Import recipient CSV"
+                    subtitle="Load recipients into the active desk"
+                    onClick={() => fileInputRef.current?.click()}
                   />
                   <QuickAction
-                    icon={<CheckCircle2 className="h-4 w-4" />}
-                    title="Mark replied leads"
-                    subtitle="Move active conversations to priority"
+                    icon={<Send className="h-4 w-4" />}
+                    title="Open bulk email editor"
+                    subtitle="Use one shared template for all selected recipients"
+                    onClick={openBulkEditor}
+                    disabled={!selectedRecipients.length}
                   />
                   <QuickAction
-                    icon={<AlertCircle className="h-4 w-4" />}
-                    title="Review bounced emails"
-                    subtitle="Clean recipient list before next blast"
+                    icon={<FileSpreadsheet className="h-4 w-4" />}
+                    title="Export current list"
+                    subtitle="Download the imported recipients as CSV"
+                    onClick={exportRecipientsForRole}
+                    disabled={!recipients.length}
                   />
                   <QuickAction
-                    icon={<Building2 className="h-4 w-4" />}
-                    title="Assign to executive"
-                    subtitle="Distribute threads between IME and BME"
+                    icon={<Trash2 className="h-4 w-4" />}
+                    title="Clear current desk"
+                    subtitle="Reset imported recipients and local threads"
+                    onClick={clearRecipientsForRole}
+                    disabled={!recipients.length}
                   />
                 </div>
 
@@ -827,9 +1006,9 @@ export default function Page() {
                     Activity summary
                   </div>
                   <div className="space-y-3 text-sm text-slate-600">
-                    <MetricRow label="Bulk emails sent today" value="148" />
-                    <MetricRow label="Open reply threads" value="12" />
-                    <MetricRow label="Awaiting follow-up" value="27" />
+                    <MetricRow label="Imported recipients" value={String(totalRecipients)} />
+                    <MetricRow label="Sent threads" value={String(threads.length)} />
+                    <MetricRow label="Pending recipients" value={String(pendingCount)} />
                   </div>
                 </div>
               </div>
@@ -840,10 +1019,8 @@ export default function Page() {
                 <div className="border-b border-slate-200 px-5 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-lg font-semibold">Conversations</h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Replies and follow-ups from {config.audience.toLowerCase()}
-                      </p>
+                      <h2 className="text-lg font-semibold">Threads</h2>
+                      <p className="mt-1 text-sm text-slate-500">Local message history from sent emails</p>
                     </div>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                       {filteredThreads.length} threads
@@ -852,49 +1029,52 @@ export default function Page() {
                 </div>
 
                 <div className="max-h-[760px] overflow-y-auto p-3">
-                  {filteredThreads.map((thread) => {
-                    const active = selectedThread?.id === thread.id;
-                    return (
-                      <button
-                        key={thread.id}
-                        onClick={() => setSelectedThreadId(thread.id)}
-                        className={cn(
-                          "mb-2 w-full rounded-2xl border p-4 text-left transition",
-                          active
-                            ? "border-slate-900 bg-slate-50"
-                            : "border-transparent hover:border-slate-200 hover:bg-slate-50"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="mb-1 flex items-center gap-2">
-                              <div className="truncate font-semibold text-slate-900">
-                                {thread.recipientName}
-                              </div>
-                              {thread.unread > 0 && (
-                                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white">
-                                  {thread.unread}
-                                </span>
-                              )}
-                            </div>
-                            <div className="truncate text-sm text-slate-500">{thread.subject}</div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                              <span
-                                className={cn(
-                                  "rounded-full px-2.5 py-1 font-medium",
-                                  statusPillClass[thread.status]
+                  {!filteredThreads.length ? (
+                    <div className="p-3">
+                      <EmptyState
+                        icon={<Inbox className="h-6 w-6" />}
+                        title="No threads yet"
+                        description="Threads will appear here after you send a bulk email or reply from the editor."
+                      />
+                    </div>
+                  ) : (
+                    filteredThreads.map((thread) => {
+                      const active = selectedThread?.id === thread.id;
+                      return (
+                        <button
+                          key={thread.id}
+                          onClick={() => setSelectedThreadId(thread.id)}
+                          className={cn(
+                            "mb-2 w-full rounded-2xl border p-4 text-left transition",
+                            active
+                              ? "border-slate-900 bg-slate-50"
+                              : "border-transparent hover:border-slate-200 hover:bg-slate-50"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="mb-1 flex items-center gap-2">
+                                <div className="truncate font-semibold text-slate-900">{thread.recipientName}</div>
+                                {thread.unread > 0 && (
+                                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white">
+                                    {thread.unread}
+                                  </span>
                                 )}
-                              >
-                                {thread.status}
-                              </span>
-                              <span>{thread.lastMessageAt}</span>
+                              </div>
+                              <div className="truncate text-sm text-slate-500">{thread.subject}</div>
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                <span className={cn("rounded-full px-2.5 py-1 font-medium", statusPillClass[thread.status])}>
+                                  {thread.status}
+                                </span>
+                                <span>{thread.lastMessageAt}</span>
+                              </div>
                             </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
                           </div>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -905,15 +1085,8 @@ export default function Page() {
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">
-                              {selectedThread.subject}
-                            </h2>
-                            <span
-                              className={cn(
-                                "rounded-full px-2.5 py-1 text-xs font-medium",
-                                statusPillClass[selectedThread.status]
-                              )}
-                            >
+                            <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">{selectedThread.subject}</h2>
+                            <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", statusPillClass[selectedThread.status])}>
                               {selectedThread.status}
                             </span>
                           </div>
@@ -939,10 +1112,7 @@ export default function Page() {
                       {selectedThread.messages.map((message) => {
                         const isExecutive = message.role === "executive";
                         return (
-                          <div
-                            key={message.id}
-                            className={cn("flex", isExecutive ? "justify-end" : "justify-start")}
-                          >
+                          <div key={message.id} className={cn("flex", isExecutive ? "justify-end" : "justify-start")}>
                             <div
                               className={cn(
                                 "max-w-[92%] rounded-[24px] px-4 py-3 shadow-sm sm:max-w-[78%]",
@@ -957,9 +1127,7 @@ export default function Page() {
                                 <span>•</span>
                                 <span>{message.time}</span>
                               </div>
-                              <p className="whitespace-pre-wrap text-sm leading-6">
-                                {message.body}
-                              </p>
+                              <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
                             </div>
                           </div>
                         );
@@ -970,9 +1138,7 @@ export default function Page() {
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                           <h3 className="font-semibold text-slate-900">Reply composer</h3>
-                          <p className="mt-1 text-sm text-slate-500">
-                            Continue the conversation using the shared email editor.
-                          </p>
+                          <p className="mt-1 text-sm text-slate-500">Continue the conversation using the shared email editor.</p>
                         </div>
                         <button
                           onClick={openReplyEditor}
@@ -982,22 +1148,15 @@ export default function Page() {
                           Open reply editor
                         </button>
                       </div>
-
-                      <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                        Replying as <span className="font-semibold text-slate-900">{role}</span> to{" "}
-                        <span className="font-semibold text-slate-900">
-                          {selectedThread.recipientName}
-                        </span>
-                        . Open the editor to format text, add attachments, insert links, and save drafts.
-                      </div>
                     </div>
                   </>
                 ) : (
-                  <div className="flex min-h-[520px] items-center justify-center p-8 text-center text-slate-500">
-                    <div>
-                      <MessageSquare className="mx-auto mb-3 h-8 w-8 text-slate-300" />
-                      <p className="text-sm">No conversation selected.</p>
-                    </div>
+                  <div className="p-6 sm:p-8">
+                    <EmptyState
+                      icon={<MessageSquare className="h-7 w-7" />}
+                      title="No thread selected"
+                      description="Send a bulk email first. Each recipient you send to will appear here as a local thread entry."
+                    />
                   </div>
                 )}
               </div>
@@ -1006,68 +1165,71 @@ export default function Page() {
         </main>
       </div>
 
-      <MobileDrawer
-        open={mobileRecipientsOpen}
-        onClose={() => setMobileRecipientsOpen(false)}
-        title="Recipients"
-      >
+      <MobileDrawer open={mobileRecipientsOpen} onClose={() => setMobileRecipientsOpen(false)} title="Recipients">
         <div className="space-y-3">
-          {filteredRecipients.map((recipient) => {
-            const checked = selectedRecipientIds.includes(recipient.id);
-            return (
-              <button
-                key={recipient.id}
-                onClick={() => toggleRecipient(recipient.id)}
-                className={cn(
-                  "w-full rounded-2xl border bg-white p-4 text-left transition",
-                  checked ? "border-slate-900 bg-slate-50" : "border-slate-200"
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold text-slate-900">{recipient.name}</div>
-                    <div className="truncate text-sm text-slate-500">{recipient.email}</div>
+          {!filteredRecipients.length ? (
+            <EmptyState
+              icon={<Users className="h-6 w-6" />}
+              title="No recipients"
+              description="Upload a CSV to populate this view."
+            />
+          ) : (
+            filteredRecipients.map((recipient) => {
+              const checked = selectedRecipientIds.includes(recipient.id);
+              return (
+                <button
+                  key={recipient.id}
+                  onClick={() => toggleRecipient(recipient.id)}
+                  className={cn(
+                    "w-full rounded-2xl border bg-white p-4 text-left transition",
+                    checked ? "border-slate-900 bg-slate-50" : "border-slate-200"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-slate-900">{recipient.name}</div>
+                      <div className="truncate text-sm text-slate-500">{recipient.email}</div>
+                    </div>
+                    <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", statusPillClass[recipient.status])}>
+                      {recipient.status}
+                    </span>
                   </div>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-1 text-xs font-medium",
-                      statusPillClass[recipient.status]
-                    )}
-                  >
-                    {recipient.status}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })
+          )}
         </div>
       </MobileDrawer>
 
-      <MobileDrawer
-        open={mobileThreadsOpen}
-        onClose={() => setMobileThreadsOpen(false)}
-        title="Conversations"
-      >
+      <MobileDrawer open={mobileThreadsOpen} onClose={() => setMobileThreadsOpen(false)} title="Threads">
         <div className="space-y-3">
-          {filteredThreads.map((thread) => {
-            const active = selectedThreadId === thread.id;
-            return (
-              <button
-                key={thread.id}
-                onClick={() => {
-                  setSelectedThreadId(thread.id);
-                  setMobileThreadsOpen(false);
-                }}
-                className={cn(
-                  "w-full rounded-2xl border p-4 text-left transition",
-                  active ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"
-                )}
-              >
-                <div className="font-semibold text-slate-900">{thread.recipientName}</div>
-                <div className="mt-1 truncate text-sm text-slate-500">{thread.subject}</div>
-              </button>
-            );
-          })}
+          {!filteredThreads.length ? (
+            <EmptyState
+              icon={<Inbox className="h-6 w-6" />}
+              title="No threads"
+              description="Threads will appear after sending emails."
+            />
+          ) : (
+            filteredThreads.map((thread) => {
+              const active = selectedThreadId === thread.id;
+              return (
+                <button
+                  key={thread.id}
+                  onClick={() => {
+                    setSelectedThreadId(thread.id);
+                    setMobileThreadsOpen(false);
+                  }}
+                  className={cn(
+                    "w-full rounded-2xl border p-4 text-left transition",
+                    active ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"
+                  )}
+                >
+                  <div className="font-semibold text-slate-900">{thread.recipientName}</div>
+                  <div className="mt-1 truncate text-sm text-slate-500">{thread.subject}</div>
+                </button>
+              );
+            })
+          )}
         </div>
       </MobileDrawer>
 
@@ -1084,9 +1246,7 @@ export default function Page() {
         onSend={handleEditorSend}
         onSaveDraft={async (payload) => {
           localStorage.setItem(
-            editorMode === "bulk"
-              ? "collabglam-bulk-mail-draft"
-              : "collabglam-thread-reply-draft",
+            editorMode === "bulk" ? "collabglam-bulk-mail-draft" : "collabglam-thread-reply-draft",
             JSON.stringify(payload)
           );
         }}
@@ -1132,13 +1292,9 @@ function StatCard({
 }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm">
-      <div className="mb-3 inline-flex rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-700 shadow-sm">
-        {icon}
-      </div>
+      <div className="mb-3 inline-flex rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-700 shadow-sm">{icon}</div>
       <div className="text-sm font-medium text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.75rem]">
-        {value}
-      </div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.75rem]">{value}</div>
       <div className="mt-1 text-xs leading-5 text-slate-500">{hint}</div>
     </div>
   );
@@ -1148,13 +1304,21 @@ function QuickAction({
   icon,
   title,
   subtitle,
+  onClick,
+  disabled,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle: string;
+  onClick?: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <button className="flex w-full items-start gap-3 rounded-2xl border border-slate-200 p-4 text-left transition hover:border-slate-300 hover:bg-slate-50">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-start gap-3 rounded-2xl border border-slate-200 p-4 text-left transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+    >
       <div className="rounded-xl bg-slate-100 p-2 text-slate-700">{icon}</div>
       <div>
         <div className="font-semibold text-slate-900">{title}</div>
@@ -1166,9 +1330,7 @@ function QuickAction({
 
 function FeaturePill({ text }: { text: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
-      {text}
-    </div>
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">{text}</div>
   );
 }
 
@@ -1176,7 +1338,7 @@ function InfoCard({ title, value }: { title: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="text-sm font-medium text-slate-500">{title}</div>
-      <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
+      <div className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</div>
     </div>
   );
 }
@@ -1186,6 +1348,24 @@ function MetricRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between gap-3">
       <span>{label}</span>
       <span className="font-semibold text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
+      <div className="mb-3 rounded-2xl bg-slate-100 p-3 text-slate-500">{icon}</div>
+      <div className="text-base font-semibold text-slate-900">{title}</div>
+      <p className="mt-1 max-w-md text-sm leading-6 text-slate-500">{description}</p>
     </div>
   );
 }

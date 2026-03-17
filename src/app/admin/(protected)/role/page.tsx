@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   DollarSign,
+  GitBranch,
   Info,
   RefreshCw,
   Search,
@@ -16,6 +17,7 @@ import {
 
 type AdminStatus = "pending" | "active" | "inactive" | "suspended";
 type PermissionLevel = "none" | "read" | "write";
+type AdminRole = "super_admin" | "revenue_head" | "ime" | "bme";
 
 type AdminAccess = {
   key: string;
@@ -25,20 +27,56 @@ type AdminAccess = {
   isManager?: boolean;
 };
 
+type AdminMini = {
+  _id: string;
+  name?: string;
+  email?: string;
+  role?: string;
+};
+
 type AdminRow = {
   _id: string;
   email: string;
   name?: string;
-  role: string;
+  role: AdminRole | string;
   status?: AdminStatus;
   invitedAt?: string;
   lastLoginAt?: string;
   createdAt?: string;
   updatedAt?: string;
   access?: AdminAccess[];
+  parentAdmin?: string | AdminMini | null;
+  rootAdmin?: string | AdminMini | null;
+  createdBy?: string | AdminMini | null;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+type MeResponse = {
+  _id: string;
+  email: string;
+  name?: string;
+  role: AdminRole | string;
+  status?: AdminStatus;
+  permissions?: AdminAccess[];
+  access?: AdminAccess[];
+  parentAdmin?: string | AdminMini | null;
+  rootAdmin?: string | AdminMini | null;
+};
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/";
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: "Super Admin",
+  revenue_head: "Revenue Head",
+  ime: "IME",
+  bme: "BME",
+};
+
+const ROLE_OPTIONS: Array<{ value: AdminRole; label: string }> = [
+  { value: "super_admin", label: "Super Admin" },
+  { value: "revenue_head", label: "Revenue Head" },
+  { value: "ime", label: "IME" },
+  { value: "bme", label: "BME" },
+];
 
 function formatDT(v?: string) {
   if (!v) return "—";
@@ -58,30 +96,27 @@ function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+function toApiUrl(path: string) {
+  const base = API_BASE.endsWith("/") ? API_BASE : `${API_BASE}/`;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${base}${cleanPath}`;
+}
+
+function getRoleLabel(role?: string) {
+  return ROLE_LABELS[String(role || "").toLowerCase()] || role || "—";
+}
+
+function getParentName(parent?: string | AdminMini | null) {
+  if (!parent) return "—";
+  if (typeof parent === "string") return "Assigned";
+  return parent.name || parent.email || "Assigned";
+}
+
 const noBlueFocus =
   "outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0";
 
 const inputBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
 const selectBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
-
-const adminNav = [
-  { key: "notifications", label: "Notifications" },
-  { key: "brands", label: "Brands" },
-  { key: "influencers", label: "Influencers" },
-  { key: "campaigns", label: "All Campaigns" },
-  { key: "subscriptions", label: "Subscriptions" },
-  { key: "disputes", label: "Disputes" },
-  { key: "emails", label: "E-Mails" },
-  { key: "influencer-email", label: "Influencer-Email" },
-  { key: "missing-email", label: "Missing-Email" },
-  { key: "invoice-details", label: "Invoice Details" },
-  { key: "inbound-emails", label: "Inbound Emails" },
-  { key: "payment-notification", label: "Payment Notification" },
-  { key: "youtube-handle", label: "Youtube Handle" },
-  { key: "modash-data", label: "Modash Data" },
-  { key: "invited-influencer", label: "Invited Influencer" },
-  { key: "employees", label: "Employees" },
-];
 
 const permissionSections = [
   {
@@ -125,7 +160,7 @@ const permissionSections = [
       { key: "disputes", label: "Disputes" },
       { key: "emails", label: "E-Mails" },
       { key: "employees", label: "Employees" },
-        { key: "inbound-emails", label: "Inbound Emails" },
+      { key: "inbound-emails", label: "Inbound Emails" },
     ],
   },
 ];
@@ -139,6 +174,33 @@ function getPermissionLevel(
   );
   if (!found) return "none";
   return found.isEdit ? "write" : "read";
+}
+
+function getAllowedInviteRoles(currentRole?: string): AdminRole[] {
+  const role = String(currentRole || "").toLowerCase();
+  if (role === "super_admin") {
+    return ["revenue_head", "ime", "bme"];
+  }
+  if (role === "revenue_head") {
+    return ["ime", "bme"];
+  }
+  return [];
+}
+
+function roleCanEdit(currentRole?: string) {
+  const role = String(currentRole || "").toLowerCase();
+  return role === "super_admin" || role === "revenue_head";
+}
+
+function roleCanInvite(currentRole?: string) {
+  return getAllowedInviteRoles(currentRole).length > 0;
+}
+
+function needsParentRevenueHead(inviterRole?: string, targetRole?: string) {
+  return (
+    String(inviterRole || "").toLowerCase() === "super_admin" &&
+    ["ime", "bme"].includes(String(targetRole || "").toLowerCase())
+  );
 }
 
 function StatusPill({ status }: { status: AdminStatus }) {
@@ -160,9 +222,11 @@ function StatusPill({ status }: { status: AdminStatus }) {
 function PermissionSwitch({
   value,
   onChange,
+  disabled,
 }: {
   value: PermissionLevel;
   onChange: (next: PermissionLevel) => void;
+  disabled?: boolean;
 }) {
   const options: PermissionLevel[] = ["none", "read", "write"];
 
@@ -174,12 +238,14 @@ function PermissionSwitch({
           <button
             key={option}
             type="button"
-            onClick={() => onChange(option)}
+            onClick={() => !disabled && onChange(option)}
+            disabled={disabled}
             className={cn(
               "min-w-[64px] rounded-full px-4 py-2 text-xs font-semibold capitalize transition",
               active
                 ? "bg-black text-white shadow-sm"
-                : "text-black/45 hover:text-black"
+                : "text-black/45 hover:text-black",
+              disabled && "cursor-not-allowed opacity-50"
             )}
           >
             {option}
@@ -192,7 +258,10 @@ function PermissionSwitch({
 
 export default function AdminsPage() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [me, setMe] = useState<MeResponse | null>(null);
+
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingMe, setLoadingMe] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [rowMsg, setRowMsg] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -207,32 +276,48 @@ export default function AdminsPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState("");
+  const [inviteRole, setInviteRole] = useState<AdminRole | "">("");
+  const [inviteParentAdmin, setInviteParentAdmin] = useState("");
   const [inviteAccess, setInviteAccess] = useState<AdminAccess[]>([]);
   const [inviting, setInviting] = useState(false);
   const [inviteErr, setInviteErr] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editRole, setEditRole] = useState("");
+  const [editRole, setEditRole] = useState<AdminRole | "">("");
   const [editStatus, setEditStatus] = useState<AdminStatus>("pending");
   const [editAccess, setEditAccess] = useState<AdminAccess[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editErr, setEditErr] = useState<string | null>(null);
 
+  const currentRole = String(me?.role || "").toLowerCase();
   const canViewAdmins = true;
-  const canEditAdmins = true;
+  const canEditAdmins = roleCanEdit(currentRole);
+  const canInviteAdmins = roleCanInvite(currentRole);
+
+  const inviteRoleOptions = useMemo(
+    () =>
+      ROLE_OPTIONS.filter((item) =>
+        getAllowedInviteRoles(currentRole).includes(item.value)
+      ),
+    [currentRole]
+  );
+
+  const revenueHeadOptions = useMemo(() => {
+    return rows.filter((r) => String(r.role).toLowerCase() === "revenue_head");
+  }, [rows]);
 
   const roleOptions = useMemo(() => {
-    return Array.from(
-      new Set(rows.map((r) => String(r.role || "").trim()).filter(Boolean))
-    );
+    const visible = rows
+      .map((r) => String(r.role || "").trim())
+      .filter(Boolean)
+      .map((r) => normalizeKey(r));
+
+    return Array.from(new Set(visible));
   }, [rows]);
 
   function getToken() {
-    return typeof window !== "undefined"
-      ? localStorage.getItem("token")
-      : null;
+    return typeof window !== "undefined" ? localStorage.getItem("token") : null;
   }
 
   function hydrateEditor(admin: AdminRow | null) {
@@ -247,10 +332,39 @@ export default function AdminsPage() {
 
     setSelectedId(admin._id);
     setEditName(admin.name || "");
-    setEditRole(admin.role || "");
+    setEditRole((String(admin.role || "").toLowerCase() as AdminRole) || "");
     setEditStatus((admin.status || "pending") as AdminStatus);
     setEditAccess(Array.isArray(admin.access) ? admin.access : []);
     setEditErr(null);
+  }
+
+  async function fetchMe() {
+    setLoadingMe(true);
+    try {
+      const token = getToken();
+
+      const res = await fetch(toApiUrl("admins/me"), {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Failed to load current admin");
+      }
+
+      setMe(data?.data || data);
+    } catch (e: any) {
+      setMe(null);
+      setError(e?.message || "Failed to load current admin");
+    } finally {
+      setLoadingMe(false);
+    }
   }
 
   async function fetchAdmins() {
@@ -260,7 +374,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}admins/list`, {
+      const res = await fetch(toApiUrl("admins/list"), {
         method: "GET",
         credentials: "include",
         headers: {
@@ -275,7 +389,11 @@ export default function AdminsPage() {
         throw new Error(data?.message || "Failed to load admins");
       }
 
-      const nextRows = data?.data || data || [];
+      const nextRows = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data)
+        ? data
+        : [];
       setRows(nextRows);
 
       if (nextRows.length && !selectedId) {
@@ -289,6 +407,10 @@ export default function AdminsPage() {
     }
   }
 
+  async function refreshAll() {
+    await Promise.all([fetchMe(), fetchAdmins()]);
+  }
+
   async function updateStatus(adminId: string, status: AdminStatus) {
     if (!canEditAdmins) return;
 
@@ -298,8 +420,8 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}admins/update-status`, {
-        method: "PUT",
+      const res = await fetch(toApiUrl("admins/status"), {
+        method: "PATCH",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -335,29 +457,42 @@ export default function AdminsPage() {
     setInviteErr(null);
 
     const email = inviteEmail.trim().toLowerCase();
-    const role = inviteRole.trim();
+    const role = String(inviteRole || "").trim().toLowerCase() as AdminRole;
 
     if (!email) return setInviteErr("Email is required");
     if (!role) return setInviteErr("Role is required");
+
+    if (
+      needsParentRevenueHead(currentRole, role) &&
+      !inviteParentAdmin.trim()
+    ) {
+      return setInviteErr("Please select a Revenue Head");
+    }
 
     setInviting(true);
 
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}admins/invite`, {
+      const payload: Record<string, any> = {
+        email,
+        name: inviteName.trim() || undefined,
+        role,
+        access: inviteAccess,
+      };
+
+      if (needsParentRevenueHead(currentRole, role)) {
+        payload.parentAdmin = inviteParentAdmin;
+      }
+
+      const res = await fetch(toApiUrl("admins/invite"), {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          email,
-          name: inviteName.trim() || undefined,
-          role,
-          access: inviteAccess,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -370,6 +505,7 @@ export default function AdminsPage() {
       setInviteEmail("");
       setInviteName("");
       setInviteRole("");
+      setInviteParentAdmin("");
       setInviteAccess([]);
       setRowMsg(data?.message || "Invite sent successfully");
       await fetchAdmins();
@@ -388,8 +524,8 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}admins/update-status`, {
-        method: "PUT",
+      const res = await fetch(toApiUrl("admins/status"), {
+        method: "PATCH",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -398,7 +534,7 @@ export default function AdminsPage() {
         body: JSON.stringify({
           adminId: selectedId,
           name: editName.trim() || undefined,
-          role: editRole.trim(),
+          role: editRole || undefined,
           status: editStatus,
           access: editAccess,
         }),
@@ -481,36 +617,8 @@ export default function AdminsPage() {
   }
 
   useEffect(() => {
-    fetchAdmins();
+    refreshAll();
   }, []);
-
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    return rows.filter((r) => {
-      const matchesSearch =
-        !q ||
-        r.email?.toLowerCase().includes(q) ||
-        (r.name || "").toLowerCase().includes(q) ||
-        (r.role || "").toLowerCase().includes(q);
-
-      const st = (r.status || "pending") as AdminStatus;
-      const matchesStatus =
-        statusFilter === "all" ? true : st === statusFilter;
-      const matchesRole = roleFilter === "all" ? true : r.role === roleFilter;
-
-      return matchesSearch && matchesStatus && matchesRole;
-    });
-  }, [rows, search, statusFilter, roleFilter]);
-
-  const total = filteredRows.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const paginatedRows = filteredRows.slice((page - 1) * limit, page * limit);
-
-  const selectedAdmin = useMemo(
-    () => rows.find((r) => r._id === selectedId) || null,
-    [rows, selectedId]
-  );
 
   useEffect(() => {
     setPage(1);
@@ -526,7 +634,40 @@ export default function AdminsPage() {
     if (!stillVisible) {
       hydrateEditor(filteredRows[0]);
     }
-  }, [filteredRows, selectedId]);
+  }, [selectedId, rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return rows.filter((r) => {
+      const matchesSearch =
+        !q ||
+        r.email?.toLowerCase().includes(q) ||
+        (r.name || "").toLowerCase().includes(q) ||
+        String(r.role || "").toLowerCase().includes(q);
+
+      const st = (r.status || "pending") as AdminStatus;
+      const matchesStatus = statusFilter === "all" ? true : st === statusFilter;
+      const normalizedRole = normalizeKey(String(r.role || ""));
+      const matchesRole =
+        roleFilter === "all" ? true : normalizedRole === normalizeKey(roleFilter);
+
+      return matchesSearch && matchesStatus && matchesRole;
+    });
+  }, [rows, search, statusFilter, roleFilter]);
+
+  const total = filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = filteredRows.slice(
+    (safePage - 1) * limit,
+    safePage * limit
+  );
+
+  const selectedAdmin = useMemo(
+    () => rows.find((r) => r._id === selectedId) || null,
+    [rows, selectedId]
+  );
 
   if (!canViewAdmins) {
     return (
@@ -546,35 +687,44 @@ export default function AdminsPage() {
             Role & Permissions
           </h1>
           <p className="mt-1 text-sm text-black/60">
-            Manage admins with the same API logic, now in a role-style layout
+            Hierarchy-based RBAC: Super Admin → Revenue Head → IME / BME
           </p>
+          {!loadingMe && me ? (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-black/70">
+              <Shield className="h-3.5 w-3.5" />
+              Logged in as {me.name || me.email} · {getRoleLabel(me.role)}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={fetchAdmins}
-            disabled={loading}
+            onClick={refreshAll}
+            disabled={loading || loadingMe}
             className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-2 text-sm font-medium text-black hover:bg-black/5 disabled:opacity-50"
           >
             <RefreshCw className="h-4 w-4" />
-            {loading ? "Refreshing..." : "Refresh"}
+            {loading || loadingMe ? "Refreshing..." : "Refresh"}
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setInviteOpen(true);
-              setInviteErr(null);
-              setInviteEmail("");
-              setInviteName("");
-              setInviteRole("");
-              setInviteAccess([]);
-            }}
-            className="rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-          >
-            + Invite Admin
-          </button>
+          {canInviteAdmins ? (
+            <button
+              type="button"
+              onClick={() => {
+                setInviteOpen(true);
+                setInviteErr(null);
+                setInviteEmail("");
+                setInviteName("");
+                setInviteRole("");
+                setInviteParentAdmin("");
+                setInviteAccess([]);
+              }}
+              className="rounded-2xl bg-black px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            >
+              + Invite Admin
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -597,7 +747,7 @@ export default function AdminsPage() {
           <option value="all">All Roles</option>
           {roleOptions.map((role) => (
             <option key={role} value={role}>
-              {role}
+              {getRoleLabel(role)}
             </option>
           ))}
         </select>
@@ -633,16 +783,16 @@ export default function AdminsPage() {
         <aside className="space-y-4">
           <div className="px-1">
             <p className="text-xs font-extrabold uppercase tracking-[0.22em] text-black/45">
-              System Roles
+              Visible Admin Tree
             </p>
           </div>
 
           {loading ? (
-            <div className="rounded-[22px] bg-white p-5 text-sm text-black/60 border border-black/10">
+            <div className="rounded-[22px] border border-black/10 bg-white p-5 text-sm text-black/60">
               Loading admins...
             </div>
           ) : paginatedRows.length === 0 ? (
-            <div className="rounded-[22px] bg-white p-5 text-sm text-black/60 border border-black/10">
+            <div className="rounded-[22px] border border-black/10 bg-white p-5 text-sm text-black/60">
               No admins found.
             </div>
           ) : (
@@ -668,8 +818,8 @@ export default function AdminsPage() {
                   <div className="p-5">
                     <div className="mb-2 flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-[28px] font-semibold tracking-[-0.03em] text-black">
-                          {admin.role || "No Role"}
+                        <div className="truncate text-[24px] font-semibold tracking-[-0.03em] text-black">
+                          {getRoleLabel(admin.role)}
                         </div>
                         <p className="mt-1 line-clamp-2 text-sm leading-5 text-black/55">
                           {admin.name || admin.email}
@@ -684,6 +834,13 @@ export default function AdminsPage() {
                       <span>{accessCount} Modules</span>
                     </div>
 
+                    <div className="mt-2 flex items-center gap-2 text-sm text-black/45">
+                      <GitBranch className="h-4 w-4" />
+                      <span className="truncate">
+                        Parent: {getParentName(admin.parentAdmin)}
+                      </span>
+                    </div>
+
                     <div className="mt-4 text-xs text-black/45">
                       <div className="truncate">{admin.email}</div>
                       <div className="mt-1">
@@ -693,7 +850,7 @@ export default function AdminsPage() {
 
                     <div className="mt-5 flex items-center justify-end border-t border-black/10 pt-4">
                       <span className="rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white">
-                        Assign Permissions
+                        Manage
                       </span>
                     </div>
                   </div>
@@ -705,14 +862,14 @@ export default function AdminsPage() {
           {filteredRows.length > 0 ? (
             <div className="flex items-center justify-between rounded-[20px] border border-black/10 bg-white px-4 py-3">
               <div className="text-sm text-black/60">
-                Page <span className="font-medium text-black">{page}</span> of{" "}
-                <span className="font-medium text-black">{totalPages}</span>
+                Page <span className="font-medium text-black">{safePage}</span>{" "}
+                of <span className="font-medium text-black">{totalPages}</span>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={page === 1}
+                  disabled={safePage === 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   className="rounded-xl border border-black/10 p-2 text-black hover:bg-black/5 disabled:opacity-50"
                 >
@@ -720,7 +877,7 @@ export default function AdminsPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={page === totalPages}
+                  disabled={safePage === totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   className="rounded-xl border border-black/10 p-2 text-black hover:bg-black/5 disabled:opacity-50"
                 >
@@ -735,11 +892,11 @@ export default function AdminsPage() {
               <Info className="h-5 w-5 text-black" />
             </div>
             <div className="text-lg font-semibold text-black">
-              Admin Access Guide
+              Hierarchy Rules
             </div>
             <p className="mx-auto mt-3 max-w-[260px] text-sm leading-6 text-black/60">
-              This layout keeps your current admin APIs and maps access to none,
-              read and write using your existing access object.
+              Revenue Head sees only their IME and BME. IME and BME see only
+              their own records. Super Admin sees everything.
             </p>
           </div>
         </aside>
@@ -758,12 +915,13 @@ export default function AdminsPage() {
                       <Shield className="h-4 w-4 text-black" />
                     </div>
                     <h2 className="text-[34px] font-semibold tracking-[-0.03em] text-black">
-                      Permissions for {editRole || selectedAdmin.role || "Admin"}
+                      Permissions for{" "}
+                      {getRoleLabel(editRole || selectedAdmin.role || "admin")}
                     </h2>
                   </div>
                   <p className="mt-2 text-base text-black/55">
-                    Configure exactly what this admin can see and do across the
-                    platform.
+                    Configure what this admin can access inside their allowed
+                    hierarchy scope.
                   </p>
                 </div>
 
@@ -789,21 +947,35 @@ export default function AdminsPage() {
                   <input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20"
+                    disabled={!canEditAdmins}
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20 disabled:opacity-60"
                     placeholder="Admin name"
                   />
                 </div>
 
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
-                    Role Name
+                    Role
                   </label>
-                  <input
+                  <select
                     value={editRole}
-                    onChange={(e) => setEditRole(e.target.value)}
-                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20"
-                    placeholder="Role"
-                  />
+                    onChange={(e) => setEditRole(e.target.value as AdminRole)}
+                    disabled={!canEditAdmins}
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20 disabled:opacity-60"
+                  >
+                    <option value="">Select role</option>
+                    {inviteRoleOptions.length
+                      ? inviteRoleOptions.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))
+                      : ROLE_OPTIONS.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                  </select>
                 </div>
 
                 <div>
@@ -811,8 +983,9 @@ export default function AdminsPage() {
                     Status
                   </label>
                   <select
-                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20"
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20 disabled:opacity-60"
                     value={editStatus}
+                    disabled={!canEditAdmins}
                     onChange={(e) => {
                       const next = e.target.value as AdminStatus;
                       setEditStatus(next);
@@ -827,7 +1000,7 @@ export default function AdminsPage() {
               </div>
 
               <div className="mb-6 rounded-[20px] border border-black/10 bg-white px-5 py-4">
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-4">
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Email
@@ -836,6 +1009,16 @@ export default function AdminsPage() {
                       {selectedAdmin.email}
                     </div>
                   </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                      Parent
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-black">
+                      {getParentName(selectedAdmin.parentAdmin)}
+                    </div>
+                  </div>
+
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Last Login
@@ -844,13 +1027,14 @@ export default function AdminsPage() {
                       {formatDT(selectedAdmin.lastLoginAt)}
                     </div>
                   </div>
+
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Quick Status API
                     </div>
                     <button
                       type="button"
-                      disabled={updatingId === selectedAdmin._id}
+                      disabled={updatingId === selectedAdmin._id || !canEditAdmins}
                       onClick={() =>
                         updateStatus(selectedAdmin._id, editStatus)
                       }
@@ -861,6 +1045,20 @@ export default function AdminsPage() {
                         : "Update Status Only"}
                     </button>
                   </div>
+                </div>
+              </div>
+
+              <div className="mb-5 rounded-[20px] border border-black/10 bg-white px-5 py-4">
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                  Visibility Scope
+                </div>
+                <div className="mt-2 text-sm text-black/70">
+                  {String(selectedAdmin.role).toLowerCase() === "super_admin" &&
+                    "Can view everything across the system."}
+                  {String(selectedAdmin.role).toLowerCase() === "revenue_head" &&
+                    "Can view only their own IME and BME team data."}
+                  {["ime", "bme"].includes(String(selectedAdmin.role).toLowerCase()) &&
+                    "Can view only their own records."}
                 </div>
               </div>
 
@@ -891,6 +1089,7 @@ export default function AdminsPage() {
 
                           <PermissionSwitch
                             value={getPermissionLevel(editAccess, item.key)}
+                            disabled={!canEditAdmins}
                             onChange={(next) =>
                               setModuleLevel(item.key, item.label, next)
                             }
@@ -914,7 +1113,7 @@ export default function AdminsPage() {
                 <button
                   type="button"
                   onClick={onSaveCurrent}
-                  disabled={savingEdit || !editRole.trim()}
+                  disabled={savingEdit || !editRole.trim() || !canEditAdmins}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
                 >
                   <BadgeCheck className="h-4 w-4" />
@@ -935,7 +1134,7 @@ export default function AdminsPage() {
                   Invite Admin
                 </div>
                 <div className="mt-1 text-sm text-black/55">
-                  Invite a new admin and pre-assign permissions
+                  Invite according to RBAC hierarchy
                 </div>
               </div>
               <button
@@ -952,6 +1151,11 @@ export default function AdminsPage() {
                   {inviteErr}
                 </div>
               ) : null}
+
+              <div className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70">
+                <span className="font-semibold text-black">Allowed roles:</span>{" "}
+                {inviteRoleOptions.map((r) => r.label).join(", ") || "None"}
+              </div>
 
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
@@ -982,14 +1186,43 @@ export default function AdminsPage() {
                   <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
                     Role
                   </label>
-                  <input
-                    className={`${inputBase} h-12 w-full px-4`}
+                  <select
+                    className={`${selectBase} h-12 w-full px-4`}
                     value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value)}
-                    placeholder="Manager"
-                  />
+                    onChange={(e) => {
+                      setInviteRole(e.target.value as AdminRole | "");
+                      setInviteParentAdmin("");
+                    }}
+                  >
+                    <option value="">Select role</option>
+                    {inviteRoleOptions.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
+
+              {needsParentRevenueHead(currentRole, inviteRole) ? (
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Assign Revenue Head
+                  </label>
+                  <select
+                    className={`${selectBase} h-12 w-full px-4`}
+                    value={inviteParentAdmin}
+                    onChange={(e) => setInviteParentAdmin(e.target.value)}
+                  >
+                    <option value="">Select Revenue Head</option>
+                    {revenueHeadOptions.map((admin) => (
+                      <option key={admin._id} value={admin._id}>
+                        {(admin.name || admin.email) + " · " + getRoleLabel(admin.role)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
 
               <div className="overflow-hidden rounded-[24px] border border-black/10 bg-white">
                 {permissionSections.map((section) => {
