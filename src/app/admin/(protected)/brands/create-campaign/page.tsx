@@ -346,7 +346,7 @@ export default function AdminCreateCampaignPage() {
         if (!resolvedBrandId) return;
         setBrandLoading(true);
         try {
-            const candidates = `/brand?id=${resolvedBrandId}`;
+            const candidates = `/admin/brand/getById?id=${resolvedBrandId}`;
             let data: any = null;
             try {
                 data = await get<any>(candidates);

@@ -326,7 +326,7 @@ export default function EmployeesPage() {
 
   async function fetchPermissionCatalog() {
     try {
-      const res = await fetch(`${API_BASE}/admins/me`, {
+      const res = await fetch(`${API_BASE}admins/me`, {
         method: "GET",
         credentials: "include",
         headers: getAuthHeaders(),
@@ -356,7 +356,7 @@ export default function EmployeesPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/admins/list`, {
+      const res = await fetch(`${API_BASE}admins/list`, {
         method: "GET",
         credentials: "include",
         headers: getAuthHeaders(),
@@ -387,7 +387,7 @@ export default function EmployeesPage() {
     setRowMsg(null);
 
     try {
-      const res = await fetch(`${API_BASE}/admins/update-status`, {
+      const res = await fetch(`${API_BASE}admins/update-status`, {
         method: "PUT",
         credentials: "include",
         headers: getAuthHeaders(),
@@ -424,7 +424,7 @@ export default function EmployeesPage() {
     setEditErr(null);
 
     try {
-      const res = await fetch(`${API_BASE}/admins/update-status`, {
+      const res = await fetch(`${API_BASE}admins/update-status`, {
         method: "PUT",
         credentials: "include",
         headers: getAuthHeaders(),

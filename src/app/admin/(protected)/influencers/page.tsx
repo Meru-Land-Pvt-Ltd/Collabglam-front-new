@@ -14,7 +14,7 @@ import {
   HiOutlineClipboardList,
 } from "react-icons/hi";
 import { Instagram, Youtube } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +40,7 @@ interface GetListResponse {
 }
 
 interface Influencer {
-  influencerId: string;
+  _id: string;
   name: string;
   email: string;
   phone?: string;
@@ -55,23 +55,23 @@ const API_ENDPOINT = "/admin/influencer/list"; // unified backend path
 
 const HEADERS: {
   key:
-    | keyof Influencer
-    | "status"
-    | "planName"
-    | "expiresAt"
-    | "primaryPlatform"
-    | "name"
-    | "email"
+  | keyof Influencer
+  | "status"
+  | "planName"
+  | "expiresAt"
+  | "primaryPlatform"
+  | "name"
+  | "email"
   label: string;
   sortable?: boolean;
 }[] = [
-  { key: "name", label: "Name", sortable: true },
-  { key: "email", label: "Email", sortable: true },
-  { key: "primaryPlatform", label: "Platform", sortable: true },
-  { key: "planName", label: "Plan", sortable: true },
-  { key: "expiresAt", label: "Expires", sortable: true },
-  { key: "status", label: "Status", sortable: false },
-];
+    { key: "name", label: "Name", sortable: true },
+    { key: "email", label: "Email", sortable: true },
+    { key: "primaryPlatform", label: "Platform", sortable: true },
+    { key: "planName", label: "Plan", sortable: true },
+    { key: "expiresAt", label: "Expires", sortable: true },
+    { key: "status", label: "Status", sortable: false },
+  ];
 
 function formatDate(d?: string | null) {
   if (!d) return "-";
@@ -209,244 +209,246 @@ const AdminInfluencersPage = () => {
   ]);
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Influencers</h1>
-          <p className="text-sm text-muted-foreground">
-            Admin overview of all creators, plans, and statuses.
-          </p>
+    <TooltipProvider>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Influencers</h1>
+            <p className="text-sm text-muted-foreground">
+              Admin overview of all creators, plans, and statuses.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Search by name, email, platform..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-[280px]"
+            />
+            <Button variant="outline" onClick={fetchData} disabled={loading}>
+              <HiOutlineRefresh className={loading ? "animate-spin" : ""} />
+              <span className="ml-2">Refresh</span>
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder="Search by name, email, platform..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-[280px]"
-          />
-          <Button variant="outline" onClick={fetchData} disabled={loading}>
-            <HiOutlineRefresh className={loading ? "animate-spin" : ""} />
-            <span className="ml-2">Refresh</span>
-          </Button>
-        </div>
-      </div>
 
-      {/* Table */}
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {HEADERS.map(({ key, label, sortable }) => (
-                  <TableHead
-                    key={String(key)}
-                    onClick={() =>
-                      toggleSort(
-                        String(key),
-                        !!sortable && ALLOWED_SORT.has(String(key))
-                      )
-                    }
-                    className={cn(
-                      "select-none",
-                      sortable && ALLOWED_SORT.has(String(key))
-                        ? "cursor-pointer"
-                        : ""
-                    )}
-                  >
-                    <div className="flex items-center justify-center">
-                      {label}
-                      {sortBy === key && sortable && (
-                        sortOrder === "asc" ? (
-                          <HiChevronUp className="ml-1" />
-                        ) : (
-                          <HiChevronDown className="ml-1" />
-                        )
-                      )}
-                    </div>
-                  </TableHead>
-                ))}
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: Math.min(limit, 10) }).map((_, rowIdx) => (
-                  <TableRow key={rowIdx}>
-                    {Array(HEADERS.length + 1)
-                      .fill(0)
-                      .map((_, cellIdx) => (
-                        <TableCell key={cellIdx}>
-                          <div className="h-4 w-full bg-muted rounded animate-pulse" />
-                        </TableCell>
-                      ))}
-                  </TableRow>
-                ))
-              ) : rows.length === 0 ? (
+        {/* Table */}
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell
-                    colSpan={HEADERS.length + 1}
-                    className="text-center py-10 text-muted-foreground"
-                  >
-                    No influencers match the criteria.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((inf) => {
-                  const expired = !!inf.subscriptionExpired;
-                  const dLeft = daysUntil(inf.expiresAt);
-                  return (
-                    <TableRow
-                      key={inf.influencerId}
-                      className={expired ? "bg-red-50/30" : undefined}
+                  {HEADERS.map(({ key, label, sortable }) => (
+                    <TableHead
+                      key={String(key)}
+                      onClick={() =>
+                        toggleSort(
+                          String(key),
+                          !!sortable && ALLOWED_SORT.has(String(key))
+                        )
+                      }
+                      className={cn(
+                        "select-none",
+                        sortable && ALLOWED_SORT.has(String(key))
+                          ? "cursor-pointer"
+                          : ""
+                      )}
                     >
-                      <TableCell className="font-medium">
-                        {inf.name || "—"}
-                      </TableCell>
-                      <TableCell>{inf.email || "—"}</TableCell>
-                      <TableCell className="items-center justify-center">
-                        <PlatformBadge platform={inf.primaryPlatform} />
-                      </TableCell>
-                      <TableCell>
-                        {inf.planName ? (
-                          <Badge className="rounded-full px-3 bg-primary text-primary-foreground">
-                            {inf.planName}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
+                      <div className="flex items-center justify-center">
+                        {label}
+                        {sortBy === key && sortable && (
+                          sortOrder === "asc" ? (
+                            <HiChevronUp className="ml-1" />
+                          ) : (
+                            <HiChevronDown className="ml-1" />
+                          )
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>{formatDate(inf.expiresAt)}</span>
-                          {typeof dLeft === "number" && (
-                            <span
-                              className={cn(
-                                "text-xs",
-                                dLeft < 0
-                                  ? "text-red-600"
-                                  : dLeft <= 7
-                                  ? "text-amber-600"
-                                  : "text-muted-foreground"
-                              )}
-                            >
-                              {dLeft < 0
-                                ? `${Math.abs(dLeft)} days ago`
-                                : dLeft === 0
-                                ? "today"
-                                : `in ${dLeft} days`}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge expired={expired} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1 items-center justify-center">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Link
-                                href={`/admin/influencers/view?influencerId=${inf.influencerId}`}
-                              >
-                                <Button variant="ghost" size="icon">
-                                  <HiOutlineEye />
-                                </Button>
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent>View details</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Link
-                                href={`/admin/influencers/campaigns?influencerId=${inf.influencerId}`}
-                              >
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="item-center"
-                                >
-                                  <HiOutlineClipboardList />
-                                </Button>
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent>Campaigns</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </TableCell>
+                      </div>
+                    </TableHead>
+                  ))}
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: Math.min(limit, 10) }).map((_, rowIdx) => (
+                    <TableRow key={rowIdx}>
+                      {Array(HEADERS.length + 1)
+                        .fill(0)
+                        .map((_, cellIdx) => (
+                          <TableCell key={cellIdx}>
+                            <div className="h-4 w-full bg-muted rounded animate-pulse" />
+                          </TableCell>
+                        ))}
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                  ))
+                ) : rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={HEADERS.length + 1}
+                      className="text-center py-10 text-muted-foreground"
+                    >
+                      No influencers match the criteria.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((inf) => {
+                    const expired = !!inf.subscriptionExpired;
+                    const dLeft = daysUntil(inf.expiresAt);
+                    return (
+                      <TableRow
+                        key={inf._id}
+                        className={expired ? "bg-red-50/30" : undefined}
+                      >
+                        <TableCell className="font-medium">
+                          {inf.name || "—"}
+                        </TableCell>
+                        <TableCell>{inf.email || "—"}</TableCell>
+                        <TableCell className="items-center justify-center">
+                          <PlatformBadge platform={inf.primaryPlatform} />
+                        </TableCell>
+                        <TableCell>
+                          {inf.planName ? (
+                            <Badge className="rounded-full px-3 bg-primary text-primary-foreground">
+                              {inf.planName}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span>{formatDate(inf.expiresAt)}</span>
+                            {typeof dLeft === "number" && (
+                              <span
+                                className={cn(
+                                  "text-xs",
+                                  dLeft < 0
+                                    ? "text-red-600"
+                                    : dLeft <= 7
+                                      ? "text-amber-600"
+                                      : "text-muted-foreground"
+                                )}
+                              >
+                                {dLeft < 0
+                                  ? `${Math.abs(dLeft)} days ago`
+                                  : dLeft === 0
+                                    ? "today"
+                                    : `in ${dLeft} days`}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge expired={expired} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 items-center justify-center">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link
+                                  href={`/admin/influencers/view?influencerId=${inf._id}`}
+                                >
+                                  <Button variant="ghost" size="icon">
+                                    <HiOutlineEye />
+                                  </Button>
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>View details</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Link
+                                  href={`/admin/influencers/campaigns?influencerId=${inf._id}`}
+                                >
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="item-center"
+                                  >
+                                    <HiOutlineClipboardList />
+                                  </Button>
+                                </Link>
+                              </TooltipTrigger>
+                              <TooltipContent>Campaigns</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
-        {/* Pagination */}
-        {!loading && rows.length > 0 && (
-          <div className="flex items-center justify-between p-4">
-            <div className="text-sm text-muted-foreground">
-              Page <span className="font-medium">{page}</span> of {totalPages}
+          {/* Pagination */}
+          {!loading && rows.length > 0 && (
+            <div className="flex items-center justify-between p-4">
+              <div className="text-sm text-muted-foreground">
+                Page <span className="font-medium">{page}</span> of {totalPages}
+              </div>
+              <div className="space-x-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <HiChevronLeft />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <HiChevronRight />
+                </Button>
+              </div>
             </div>
-            <div className="space-x-2">
-              <Button
-                variant="outline"
-                size="icon"
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <HiChevronLeft />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                <HiChevronRight />
-              </Button>
+          )}
+        </Card>
+
+        <Card className="p-4 flex items-center justify-between gap-4 whitespace-nowrap overflow-x-auto">
+          <div className="text-sm text-muted-foreground shrink-0">
+            Showing{" "}
+            <span className="font-medium">
+              {(page - 1) * limit + (rows.length ? 1 : 0)}
+            </span>
+            –
+            <span className="font-medium">
+              {Math.min(page * limit, total)}
+            </span>{" "}
+            of <span className="font-medium">{total}</span>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-sm text-muted-foreground">Rows per page</span>
+            <div className="flex items-center gap-1">
+              {[10, 20, 50, 100].map((n) => (
+                <Button
+                  key={n}
+                  size="sm"
+                  variant={limit === n ? "default" : "outline"}
+                  className={limit === n ? "bg-[#ef2f5b] text-white" : ""}
+                  onClick={() => {
+                    setLimit(n);
+                    setPage(1);
+                  }}
+                >
+                  {n}
+                </Button>
+              ))}
             </div>
           </div>
-        )}
-      </Card>
-
-      <Card className="p-4 flex items-center justify-between gap-4 whitespace-nowrap overflow-x-auto">
-        <div className="text-sm text-muted-foreground shrink-0">
-          Showing{" "}
-          <span className="font-medium">
-            {(page - 1) * limit + (rows.length ? 1 : 0)}
-          </span>
-          –
-          <span className="font-medium">
-            {Math.min(page * limit, total)}
-          </span>{" "}
-          of <span className="font-medium">{total}</span>
-        </div>
-
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-sm text-muted-foreground">Rows per page</span>
-          <div className="flex items-center gap-1">
-            {[10, 20, 50, 100].map((n) => (
-              <Button
-                key={n}
-                size="sm"
-                variant={limit === n ? "default" : "outline"}
-                className={limit === n ? "bg-[#ef2f5b] text-white" : ""}
-                onClick={() => {
-                  setLimit(n);
-                  setPage(1);
-                }}
-              >
-                {n}
-              </Button>
-            ))}
-          </div>
-        </div>
-      </Card>
-    </div>
+        </Card>
+      </div>
+    </TooltipProvider>
   );
 };
 

@@ -94,7 +94,7 @@ interface BrandDetail {
 }
 
 interface Campaign {
-  campaignsId: string;
+  _id: string;
   productOrServiceName: string;
   goal?: string;
   timeline?: {
@@ -1013,7 +1013,7 @@ export default function ViewBrandPage() {
                       <TableBody>
                         {campaigns.map((c) => (
                           <TableRow
-                            key={c.campaignsId}
+                            key={c._id}
                             className="border-b border-black/5 hover:bg-black/[0.02]"
                           >
                             <TableCell
@@ -1049,7 +1049,7 @@ export default function ViewBrandPage() {
                             <TableCell className="py-4 text-right">
                               <Button
                                 onClick={() =>
-                                  router.push(`/admin/campaigns/view?id=${c.campaignsId}`)
+                                  router.push(`/admin/campaigns/view?id=${c._id}`)
                                 }
                                 className="h-9 rounded-full bg-black text-white hover:bg-black/90 px-4 text-[13px] font-extrabold"
                                 size="sm"
