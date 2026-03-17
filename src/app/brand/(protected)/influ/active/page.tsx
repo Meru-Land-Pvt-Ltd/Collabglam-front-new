@@ -1,8 +1,6 @@
-// app/brand/influencer/page.tsx
+// app/brand/influ/shortlisted/page.tsx
+import InfluencerList from "../InfluencerList";
+
 export default function Page() {
-  return (
-    <main className="p-6">
-      <h1 className="text-2xl font-semibold text-neutral-900">Hello world</h1>
-    </main>
-  );
+  return <InfluencerList />;
 }
