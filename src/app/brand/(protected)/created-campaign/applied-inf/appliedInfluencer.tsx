@@ -22,7 +22,13 @@ import {
   type InfluencerRow,
   type PlatformType,
 } from "@/components/ui/brand/Influencertable";
-
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import AddMilestoneCard from "@/components/ui/brand/AddMilestoneCard";
 import {
   Tooltip,
@@ -65,7 +71,8 @@ import {
 import { LabeledTextarea } from "@/components/ui/textAreaComp";
 import { FloatingDateInput } from "@/components/ui/date";
 import { FloatingTagInput } from "@/components/ui/tagInput";
-
+import { apiListCountries } from "@/app/brand/services/brandApi";
+import { apiGetfetchBulkInfleuncerId } from "@/app/influencer/services/influencerApi";
 export type Party = "brand" | "influencer";
 export type CampaignType = "fixed_payment" | "milestone_based" | "product_gifting";
 
@@ -237,11 +244,14 @@ const PLATFORM_OPTIONS: Option[] = [
   { value: "TikTok", label: "TikTok" },
   { value: "YouTube", label: "YouTube" },
 ];
-
+const YES_NO_BOOL_OPTIONS = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+];
 const CAMPAIGN_TYPE_OPTIONS: Option[] = [
   { value: "fixed_payment", label: "Fixed Payment" },
   { value: "milestone_based", label: "Milestone-Based" },
-  { value: "product_gifting", label: "Product Gifting" },
+  // { value: "product_gifting", label: "Product Gifting" },
 ];
 
 const DELIVERABLE_FORMAT_OPTIONS: Option[] = [
@@ -385,7 +395,7 @@ const ANALYTICS_ITEMS_OPTIONS: Option[] = [
 const PAYMENT_TYPE_OPTIONS: Option[] = [
   { value: "fixed_payment", label: "Fixed Payment" },
   { value: "milestone_based", label: "Milestone Based" },
-  { value: "product_gifting", label: "Product Gifting" },
+  // { value: "product_gifting", label: "Product Gifting" },
 ];
 
 const PAYMENT_STRUCTURE_OPTIONS: Option[] = [
@@ -434,7 +444,7 @@ const ALL_FIELD_DEFS: FieldDef[] = [
   { key: "scriptDueDate", label: "Script Due Date", owner: "brand", kind: "date", tooltip: "Deadline for the influencer to submit the pre-approved script.", required: (v) => v.preShootScriptRequired === "Yes", showWhen: (v) => v.preShootScriptRequired === "Yes" },
   { key: "reshootObligation", label: "Reshoot Obligation?", owner: "brand", kind: "radio", options: RESHOOT_OPTIONS, tooltip: "Under what circumstances must the influencer reshoot content?" },
 
-  { key: "fixedTotalCampaignFee", label: "Total Campaign Fee", owner: "brand", kind: "text", placeholder: "e.g. $2,500 USD", tooltip: "Total fixed amount the brand will pay for all deliverables.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedTotalCampaignFee", label: "Total Budget", owner: "brand", kind: "text", placeholder: "e.g. $2,500 USD", tooltip: "Total fixed amount the brand will pay for all deliverables.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
   { key: "paymentStructure", label: "Payment Structure", owner: "brand", kind: "select", options: PAYMENT_STRUCTURE_OPTIONS, tooltip: "How payment is split between advance and balance.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
   { key: "customSplitDetails", label: "Custom Details", owner: "brand", kind: "text", placeholder: "e.g. 30% on signing, 70% on post", tooltip: "Exact payment split percentages and triggers.", required: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom", showWhen: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom" },
   { key: "advancePaymentTrigger", label: "Advance Payment Trigger", owner: "brand", kind: "select", options: ADVANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the advance payment released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
@@ -445,7 +455,7 @@ const ALL_FIELD_DEFS: FieldDef[] = [
   { key: "fixedPayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for the influencer's payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
   { key: "fixedTaxId", label: "Tax ID (if applicable)", owner: "influencer", kind: "text", placeholder: "e.g. EIN / SSN last 4 / VAT", tooltip: "May be required for processing above IRS thresholds. PRIVATE.", private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
 
-  { key: "milestoneTotalCampaignFee", label: "Total Campaign Fee (All Milestones)", owner: "brand", kind: "text", placeholder: "e.g. $5,000 USD", tooltip: "Total gross amount across all milestones combined.", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneTotalCampaignFee", label: "Total Budget (All Milestones)", owner: "brand", kind: "text", placeholder: "e.g. $5,000 USD", tooltip: "Total gross amount across all milestones combined.", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
   { key: "milestoneProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges per milestone?", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
   { key: "milestoneKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. Completed milestones non-refundable", tooltip: "Compensation if brand cancels mid-campaign.", showWhen: (v) => v.campaignType === "milestone_based" },
   { key: "milestonePayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive each milestone payment. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
@@ -673,99 +683,193 @@ export function validateLaneAContract(values: LaneAContractValues, scope: Party)
     }
   });
 
-  if (scope === "brand" && values.campaignType === "milestone_based") {
-    if (!values.milestones.length) {
-      errors.milestones = "At least one milestone row is required.";
-    }
-    values.milestones.forEach((row, index) => {
-      if (!row.milestoneName.trim()) errors[`ms_${row.id}_milestoneName`] = `Milestone ${index + 1}: name is required.`;
-      if (!row.paymentAmount.trim()) errors[`ms_${row.id}_paymentAmount`] = `Milestone ${index + 1}: payment amount is required.`;
-      if (!row.triggerEvent.trim()) errors[`ms_${row.id}_triggerEvent`] = `Milestone ${index + 1}: trigger event is required.`;
-      if (!row.dueDate.trim()) errors[`ms_${row.id}_dueDate`] = `Milestone ${index + 1}: due date is required.`;
-    });
-  }
+  // if (scope === "brand" && values.campaignType === "milestone_based") {
+  //   if (!values.milestones.length) {
+  //     errors.milestones = "At least one milestone row is required.";
+  //   }
+  //   values.milestones.forEach((row, index) => {
+  //     if (!row.milestoneName.trim()) errors[`ms_${row.id}_milestoneName`] = `Milestone ${index + 1}: name is required.`;
+  //     // if (!row.paymentAmount.trim()) errors[`ms_${row.id}_paymentAmount`] = `Milestone ${index + 1}: payment amount is required.`;
+  //     // if (!row.triggerEvent.trim()) errors[`ms_${row.id}_triggerEvent`] = `Milestone ${index + 1}: trigger event is required.`;
+  //     if (!row.dueDate.trim()) errors[`ms_${row.id}_dueDate`] = `Milestone ${index + 1}: due date is required.`;
+  //   });
+  // }
 
   return errors;
 }
 
 const SIDEBAR_TOOLTIPS = {
-  brandLegalName: "Full registered legal name of the brand signing this agreement.",
-  brandContactPerson: "Primary brand contact responsible for campaign coordination and approvals.",
-  brandNoticeEmail: "Official email for notices, updates, and legal communication.",
-  brandNoticePhone: "Phone number for urgent campaign or contract communication.",
-  brandBillingAddress: "Official billing address used for invoicing and records.",
+  // ── Brand ──────────────────────────────────────────────────────────────────
+  brandLegalName:
+    "Full registered legal name of the brand signing this agreement.",
+  brandContactPerson:
+    "Primary brand contact responsible for campaign coordination and approvals.",
+  brandNoticeEmail:
+    "Official email for notices, updates, and legal communication.",
+  brandNoticePhone:
+    "Phone number for urgent campaign or contract communication.",
+  brandBillingAddress:
+    "Official billing address used for invoicing and records.",
 
-  campaignTitle: "Internal or external campaign title / ID used to identify this agreement.",
+  // ── Campaign ───────────────────────────────────────────────────────────────
+  campaignTitle:
+    "Internal or external campaign title / ID used to identify this agreement.",
   campaignProductsServices: "Products or services covered by this contract.",
-  campaignTerritory: "Territory where content will be distributed or targeted.",
-  requestedEffectiveDate: "Date the agreement is intended to become effective.",
-  timezone: "Timezone used for the requested effective date and scheduling references.",
+  campaignTerritory:
+    "Territory where content will be distributed or targeted.",
+  requestedEffectiveDate:
+    "Date the agreement is intended to become effective.",
+  timezone:
+    "Timezone used for the requested effective date and scheduling references.",
 
-  platformHandle: "Social platform and creator handle where the content will be posted.",
+  // ✅ NEW
+  paymentType:
+    "Payment model for this campaign. Fixed = single lump-sum fee; Milestone = staged payments tied to deliverable events; Gifting = product-only compensation. Set at the campaign level and shared across all influencers.",
+
+  // ── Deliverables ───────────────────────────────────────────────────────────
+  platformHandle:
+    "Social platform where the content will be published (e.g. Instagram, TikTok, YouTube).",
+
+  // ✅ NEW
+  handle:
+    "The influencer's public username on the selected platform (e.g. @janeglow). This identifies the posting account in the contract.",
+
   qty: "Number of content units for this deliverable.",
   deliverableFormat: "Content format required for this deliverable.",
   draftDue: "Deadline for draft submission.",
   liveDate: "Date the deliverable must go live.",
-  minimumVideoSpecs: "Format, duration, resolution, or aspect-ratio requirements.",
-  mandatoryTags: "Required mentions, hashtags, affiliate links, tracking links, or promo codes.",
-  preShootScriptRequired: "Whether brand approval is required before filming.",
-  preShootScriptDue: "Deadline for script submission.",
-  preShootReviewDays: "How many business days the brand gets to review the script.",
+  minimumVideoSpecs:
+    "Format, duration, resolution, or aspect-ratio requirements.",
+  mandatoryTags:
+    "Required mentions, hashtags, affiliate links, tracking links, or promo codes.",
+  preShootScriptRequired:
+    "Whether brand approval of a script is required before filming begins.",
+  preShootScriptDue: "Deadline for the influencer to submit the script.",
+  preShootReviewDays:
+    "How many business days the brand gets to review and approve the script.",
 
-  includedRevisionRounds: "Number of revision rounds included without extra charge.",
-  additionalRevisionFee: "Fee charged for each extra revision round.",
-  reshootObligation: "When a reshoot is required.",
-  reshootFee: "Fee applicable when a reshoot is requested.",
-  minimumLivePeriod: "Minimum time the content must stay live.",
+  // ── Review / Revisions / Reshoots ──────────────────────────────────────────
+  includedRevisionRounds:
+    "Number of revision rounds included in the fee without extra charge.",
+  additionalRevisionFee:
+    "Fee charged for each revision round beyond the included number.",
+  reshootObligation:
+    "Circumstances under which the influencer is required to reshoot content.",
+  // ✅ UPDATED — added context
+  reshootFee:
+    "Fee applicable when a reshoot is requested beyond the included reshoot obligation.",
+  // ✅ UPDATED — added context
+  minimumLivePeriod:
+    "Minimum duration the content must remain live before the influencer may archive or delete it.",
 
-  totalCampaignFee: "Total compensation for the campaign.",
-  currency: "Currency in which compensation is denominated.",
-  paymentStructure: "How payment is split across milestones or stages.",
-  customSplit: "Custom breakdown of the payment structure.",
-  advancePaymentTrigger: "Condition that triggers advance payment.",
-  remainingPaymentTrigger: "Condition that triggers the remaining payment.",
-  processorFeesBorneBy: "Who bears payment processing fees.",
-  processorFeesNotes: "Extra notes about processor fee treatment.",
-  laneAMarketplaceFeeNote: "Marketplace fee wording included in the agreement.",
+  // ── Commercial ─────────────────────────────────────────────────────────────
+  totalCampaignFee: "Total gross compensation for the influencer.",
+  currency: "Currency in which all compensation figures are denominated.",
+  paymentStructure:
+    "How the total fee is split across stages (e.g. 50% advance / 50% on completion).",
+  customSplit:
+    "Custom breakdown of the payment structure — specify exact percentages and trigger conditions.",
+  advancePaymentTrigger:
+    "The event or condition that triggers the advance payment to be released.",
+  remainingPaymentTrigger:
+    "The event or condition that triggers the remaining balance to be released.",
+  processorFeesBorneBy:
+    "Who bears payment processing fees (e.g. PayPal / Wise / ACH transaction charges).",
+  processorFeesNotes:
+    "Additional context or percentage details about processor fee treatment.",
+  laneAMarketplaceFeeNote:
+    "Platform marketplace fee language that will appear verbatim in the signed contract.",
 
-  rawSourceFileDelivery: "Whether raw or source files must be delivered.",
-  rawFilesFormat: "Expected format for delivered raw/source files.",
-  rawFilesDeliveryDue: "Deadline to provide raw/source files.",
-  analyticsReportingDeadline: "Deadline for providing analytics after publishing.",
-  analyticsReportingItems: "Specific performance metrics or reports required.",
+  // ✅ NEW — shared by Fixed, Milestone, and Gifting cash sections
+  payoutMethod:
+    "How the influencer prefers to receive payment (PayPal, Bank Transfer / ACH, Wise, Payoneer, or CollabGlam Wallet). This field is private — the brand cannot see it.",
+  payoutAccountId:
+    "Email address or account ID tied to the selected payout method (e.g. jane@paypal.com or a bank reference). This field is private — the brand cannot see it.",
+  taxId:
+    "Tax identification number (EIN, SSN last 4, or VAT) required for payments above IRS or local reporting thresholds. This field is private — the brand cannot see it.",
 
-  productShippingApplicable: "Whether this campaign includes shipment of product.",
-  productReturnable: "Whether products are gifted or must be returned.",
-  shipToName: "Name to receive the shipment.",
-  shipToPhone: "Phone number for shipping coordination.",
-  shipToAddress: "Shipping destination for campaign products.",
-  productReceiptConfirmationDeadline: "Deadline for acknowledging product receipt.",
-  returnWindowMethod: "Return timeline and method.",
-  riskOfLossNotes: "Notes about delivery risk, damage, or responsibility.",
+  // ✅ NEW — contextual kill-fee tooltips per payment type
+  killFeeFixed:
+    "Cancellation compensation owed to the influencer if the brand cancels the campaign without cause after production has begun.",
+  killFeeMilestone:
+    "Compensation terms if the brand cancels a milestone-based campaign mid-execution (e.g. completed milestones are non-refundable).",
 
-  grantedUsageRights: "Ways the brand is allowed to use the creator's content.",
-  usageDuration: "Duration of granted usage rights.",
-  usageTerritoryNotes: "Territory or limitations for the selected usage right.",
-  attributionRequirement: "Whether creator attribution is required when content is reused.",
-  editingRights: "Editing rights granted to the brand.",
-  attributionText: "Specific attribution wording, if required.",
-  musicStockAssetResponsibility: "Who is responsible for music / stock asset clearance.",
+  // ── Raw files & reporting ──────────────────────────────────────────────────
+  rawSourceFileDelivery:
+    "Whether the influencer must deliver unedited raw footage or original source files to the brand.",
+  rawFilesFormat:
+    "Expected file format for delivered raw/source files (e.g. .mp4 4K, .psd, .ai).",
+  rawFilesDeliveryDue:
+    "Deadline to provide raw/source files after the content goes live.",
+  analyticsReportingDeadline:
+    "Deadline for the influencer to submit post-campaign performance data.",
+  analyticsReportingItems:
+    "Specific metrics or evidence required (e.g. screenshots, reach, watch time, native insights access).",
 
-  creativeBrief: "Mandatory talking points, claims, and content instructions.",
-  restrictedStatements: "Statements or claims the creator must avoid.",
-  competitorBlackout: "Competitor blackout or exclusivity terms.",
-  categoryCompetitorList: "Competitors or categories restricted during blackout.",
-  blackoutPeriod: "Time period for exclusivity / blackout.",
-  optionalMoralsClause: "Whether a morals / reputation clause is included.",
+  // ── Shipping & returns ─────────────────────────────────────────────────────
+  productShippingApplicable:
+    "Whether this campaign includes shipment of a physical product to the influencer.",
+  productReturnable:
+    "Whether the gifted product is kept by the influencer or is a loaner that must be returned.",
+  shipToName:
+    "Name to appear on the shipping label — may differ from the influencer's legal name.",
+  shipToPhone:
+    "Phone number for the carrier to use if there are delivery issues.",
+  shipToAddress: "Full street address where the product should be shipped.",
+  productReceiptConfirmationDeadline:
+    "How quickly (in business days) the influencer must confirm receipt after delivery.",
+  returnWindowMethod:
+    "Timeframe and method the influencer must follow to return the product.",
+  riskOfLossNotes:
+    "Clarifies who is responsible if the product is lost or damaged during transit.",
 
-  killFeeOrProrata: "Cancellation compensation or prorated payment rules.",
-  refundOfUnearnedAdvance: "Whether unearned advance amounts must be refunded.",
+  // ── Usage rights ───────────────────────────────────────────────────────────
+  grantedUsageRights:
+    "All permitted ways the brand may use the influencer's content after delivery.",
+  usageDuration:
+    "How long the brand may exercise the selected usage right (e.g. 12 months, perpetual).",
+  usageTerritoryNotes:
+    "Geographic or channel limitations that apply to this specific usage right.",
+  attributionRequirement:
+    "Whether the influencer must be credited when the brand repurposes or republishes the content.",
+  editingRights:
+    "Level of editing the brand is permitted to make to the original content.",
+  attributionText:
+    "Exact attribution wording required when the brand uses the content (e.g. 'Content by @janeglow').",
+  musicStockAssetResponsibility:
+    "Identifies who obtains commercial licenses for background music or stock assets used in the content.",
 
-  governingLaw: "Jurisdiction whose law governs this agreement.",
-  disputeResolutionMethod: "Method used to resolve disputes.",
-  disputeVenue: "Venue for court proceedings, if applicable.",
-  arbitrationSeat: "Seat/location of arbitration, if applicable.",
-  attorneysFees: "How attorneys' fees are allocated in a dispute.",
+  // ── Compliance & brand safety ──────────────────────────────────────────────
+  creativeBrief:
+    "Mandatory talking points, approved product claims, and content guidelines the influencer must follow.",
+  restrictedStatements:
+    "Statements, claims, or topics the influencer must never include in the content.",
+  competitorBlackout:
+    "Whether the influencer is restricted from promoting competitor brands during a defined window.",
+  categoryCompetitorList:
+    "Specific brand names or product categories the influencer must avoid during the exclusivity period.",
+  blackoutPeriod:
+    "The calendar window during which the competitor exclusivity restriction applies.",
+  optionalMoralsClause:
+    "Allows either party to terminate the agreement if the other commits a serious act of misconduct or reputational harm.",
+
+  // ── Cancellation & refunds ─────────────────────────────────────────────────
+  killFeeOrProrata:
+    "Compensation owed to either party in the event of early termination or campaign cancellation.",
+  refundOfUnearnedAdvance:
+    "Whether the influencer must refund any advance payment that was not yet earned through completed deliverables.",
+
+  // ── Dispute & notices ──────────────────────────────────────────────────────
+  governingLaw:
+    "The jurisdiction (state or country) whose laws govern interpretation and enforcement of this agreement.",
+  disputeResolutionMethod:
+    "The method used to resolve disputes — state/federal courts, AAA arbitration, or another mechanism.",
+  disputeVenue:
+    "City and state where court proceedings would be held if disputes escalate to litigation.",
+  arbitrationSeat:
+    "Official seat or location for any arbitration proceedings (relevant when AAA arbitration is selected).",
+  attorneysFees:
+    "Determines who pays legal fees if a dispute escalates — prevailing party recovers, or each bears their own.",
 } as const;
 
 function sectionFields(keys: Array<keyof LaneAContractValues>) {
@@ -1738,9 +1842,11 @@ type ContractMilestone = {
 type ScheduleADeliverable = {
   id: string;
   srNo: number;
-  platformHandle: string;
+  platform: string;
+  Handle: string[];
   deliverableFormat: string;
   qty: string;
+  isDraftRequired: boolean;
   draftDue: string;
   liveDate: string;
 };
@@ -1797,6 +1903,9 @@ type ContractFormState = {
       paymentProcessorFeesNotes: string;
       laneAMarketplaceFeeNote: string;
       milestones: ContractMilestone[];
+      payoutMethod: string;
+      payoutAccountId: string;
+      taxId: string;
     };
     rawFiles: {
       rawSourceFileDelivery: string;
@@ -2021,9 +2130,11 @@ const createDefaultScheduleDeliverable = (
 ): ScheduleADeliverable => ({
   id: `deliverable-${index}`,
   srNo: index,
-  platformHandle: "",
+  platform: "",
+  Handle: [],
   deliverableFormat: "",
   qty: "1",
+  isDraftRequired: false,
   draftDue: "",
   liveDate: "",
 });
@@ -2059,7 +2170,7 @@ const createDefaultContractForm = (): ContractFormState => ({
     preShootScriptReviewBusinessDays: "2",
     mandatoryTagsMentionsLinksCodes: "",
     review: {
-      includedRevisionRounds: "1",
+      includedRevisionRounds: "",
       additionalRevisionFee: "",
       reshootObligation:
         "No reshoot required except for material failure to follow approved brief",
@@ -2078,6 +2189,9 @@ const createDefaultContractForm = (): ContractFormState => ({
       laneAMarketplaceFeeNote:
         "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
       milestones: [createDefaultCommercialMilestone()],
+      payoutMethod: "",
+      payoutAccountId: "",
+      taxId: "",
     },
     rawFiles: {
       rawSourceFileDelivery: "Not included",
@@ -2087,12 +2201,12 @@ const createDefaultContractForm = (): ContractFormState => ({
       analyticsReportingItems: "",
     },
     shipping: {
-      productShippingApplicable: "No",
+      productShippingApplicable: "",
       shipToName: "",
       shipToAddress: "",
       shipToPhone: "",
       productReceiptConfirmationDeadline: "",
-      productReturnable: "Gift / keep product",
+      productReturnable: "",
       returnWindowMethod: "",
       riskOfLossNotes: "",
     },
@@ -2109,22 +2223,22 @@ const createDefaultContractForm = (): ContractFormState => ({
       restrictedStatements: "",
     },
     exclusivity: {
-      competitorBlackout: "None",
+      competitorBlackout: "",
       categoryCompetitorList: "",
       blackoutPeriod: "",
-      optionalMoralsClause: "Not included",
+      optionalMoralsClause: "",
     },
     cancellation: {
-      killFeeOrProrata: "None",
+      killFeeOrProrata: "",
       refundOfUnearnedAdvance:
-        "Yes — on material non-performance / uncured breach",
+        "",
     },
     dispute: {
-      governingLaw: "Nevada, USA",
-      disputeResolutionMethod: "AAA arbitration",
+      governingLaw: "",
+      disputeResolutionMethod: "",
       disputeVenue: "",
-      arbitrationSeat: "Las Vegas, Nevada, USA",
-      attorneysFees: "Each Party bears own fees",
+      arbitrationSeat: "",
+      attorneysFees: "",
     },
   },
 });
@@ -2217,7 +2331,13 @@ function toInputDate(v?: string | Date | null) {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
-
+function addOneDay(dateStr?: string | null) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + 1);
+  return toInputDate(d);
+}
 function formatCompactAudience(n: number) {
   if (!n && n !== 0) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -2467,25 +2587,30 @@ function getRejectReasonFromMeta(meta: ContractMeta | null): string | null {
 export default function AppliedInfluencersPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-
+  const campaignPayoutTypeRef = useRef<string>("");
   const campaignId = searchParams.get("id");
   const influencerId = searchParams.get("infId");
   const createdPage = searchParams.get("createdPage") === "true";
-
+  const [countryOptions, setCountryOptions] = useState<{ value: string; label: string }[]>([]);
   const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
   const [bulkTargets, setBulkTargets] = useState<Influencer[]>([]);
-
+  const [bulkInfluencerNames, setBulkInfluencerNames] = useState<string[]>([]);
+  const hasInitialPreviewRunRef = useRef(false);
   const [addMilestoneOpen, setAddMilestoneOpen] = useState(false);
   const [milestoneTargetInf, setMilestoneTargetInf] = useState<Influencer | null>(null);
   const [milestoneTargetMeta, setMilestoneTargetMeta] = useState<ContractMeta | null>(null);
-
+  console.log("selectedBulkIds", selectedBulkIds)
   const [serverCampaignTitle, setServerCampaignTitle] = useState("");
   const [serverBudget, setServerBudget] = useState<number | null>(null);
   const [serverTimeline, setServerTimeline] = useState<{
     startDate?: string | Date;
     endDate?: string | Date;
   } | null>(null);
-
+  const [campaignPayoutType, setCampaignPayoutType] = React.useState<string>("");
+  const [isPayoutTypeDialogOpen, setIsPayoutTypeDialogOpen] = useState(false);
+  const [payoutDialogMode, setPayoutDialogMode] = useState<"bulk" | "single" | null>(null);
+  const [pendingInfluencerForContract, setPendingInfluencerForContract] =
+    useState<Influencer | null>(null);
   const [influencers, setInfluencers] = useState<Influencer[]>([]);
   const [meta, setMeta] = useState<Meta>({
     total: 0,
@@ -2509,7 +2634,8 @@ export default function AppliedInfluencersPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortValue, setSortValue] = useState("Priority");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-
+  const autoPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isAutoPreviewLoading, setIsAutoPreviewLoading] = useState(false);
   const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -2570,6 +2696,33 @@ export default function AppliedInfluencersPage() {
   const isBulkSelectable = useCallback((row: AppliedInfluencerRow) => {
     return !row.hasContract || row.rejected;
   }, []);
+
+
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedType = localStorage.getItem("campaignPayoutType") || "";
+    if (savedType) {
+      const normalized = normalizePaymentType(savedType);
+      campaignPayoutTypeRef.current = normalized; // ← sync ref
+      setCampaignPayoutType(normalized);
+      setContractField("campaign.paymentType", normalized);
+    }
+  }, [setContractField]);
+
+  const openBulkPayoutTypeDialog = useCallback(() => {
+    setPayoutDialogMode("bulk");
+    setPendingInfluencerForContract(null);
+    setIsPayoutTypeDialogOpen(true);
+  }, []);
+
+  const openSinglePayoutTypeDialog = useCallback((influencer: Influencer) => {
+    setPayoutDialogMode("single");
+    setPendingInfluencerForContract(influencer);
+    setIsPayoutTypeDialogOpen(true);
+  }, []);
+
+
 
   const handleAddMilestone = useCallback(
     (inf: Influencer, meta: ContractMeta | null) => {
@@ -2854,6 +3007,18 @@ export default function AppliedInfluencersPage() {
     fetchApplicants(debouncedSearch);
   }, [fetchApplicants, debouncedSearch]);
 
+  useEffect(() => {
+    apiListCountries().then((res: any) => {
+      const list = res?.data?.data || res?.data || res || [];
+      setCountryOptions(
+        list.map((c: any) => ({
+          value: c.countryName,
+          label: `${c.flag} ${c.countryName}`,
+        }))
+      );
+    }).catch(() => { });
+  }, []);
+
   const getLatestContractFor = useCallback(
     async (inf: Influencer): Promise<ContractMeta | null> => {
       const activeBrandId =
@@ -2940,12 +3105,36 @@ export default function AppliedInfluencersPage() {
     });
   }, []);
 
-  useEffect(() => {
-    clearPreview();
-  }, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
+  // useEffect(() => {
+  //   clearPreview();
+  // }, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
 
+  useEffect(() => {
+    if (!sidebarOpen) return;
+
+    if (autoPreviewTimerRef.current) {
+      clearTimeout(autoPreviewTimerRef.current);
+    }
+
+    setIsAutoPreviewLoading(true);
+
+    autoPreviewTimerRef.current = setTimeout(() => {
+      generatePreviewSilently();
+    }, 1200); // 1.2s debounce — fast enough to feel live, slow enough to avoid hammering
+
+    return () => {
+      if (autoPreviewTimerRef.current) {
+        clearTimeout(autoPreviewTimerRef.current);
+      }
+    };
+  }, [contractForm, deliverables, requestedEffDate, requestedEffTz, sidebarOpen]);
+  // NOTE: intentionally omit generatePreviewSilently from deps to avoid re-triggering loop
   const prefillFormFor = useCallback(
-    (inf: Influencer, meta?: ContractMeta | null) => {
+    (
+      inf: Influencer,
+      meta?: ContractMeta | null,
+      forcedPaymentType?: PaymentType
+    ) => {
       clearErrors();
 
       const base = createDefaultContractForm();
@@ -2970,9 +3159,7 @@ export default function AppliedInfluencersPage() {
       base.campaign.territoryTargetCountry = "Worldwide";
       base.campaign.effectiveDate = requestedEffDate || toInputDate(new Date());
 
-      base.scheduleA.commercial.totalCampaignFee = String(
-        serverBudget ?? inf.feeAmount ?? 0
-      );
+      base.scheduleA.commercial.totalCampaignFee = "";
 
       if (serverTimeline?.startDate) {
         const start = toInputDate(serverTimeline.startDate);
@@ -2981,9 +3168,11 @@ export default function AppliedInfluencersPage() {
           setRequestedEffDate(start);
         }
       }
+
       if (meta?.requestedEffectiveDate) {
         setRequestedEffDate(toInputDate(meta.requestedEffectiveDate));
       }
+
       if (meta?.requestedEffectiveDateTimezone) {
         setRequestedEffTz(meta.requestedEffectiveDateTimezone || DEFAULT_TIMEZONE);
       } else {
@@ -2991,12 +3180,17 @@ export default function AppliedInfluencersPage() {
       }
 
       const seededDeliverable = createDefaultScheduleDeliverable();
-      seededDeliverable.platformHandle = inf.handle ? sanitizeHandle(inf.handle) : "";
+      seededDeliverable.platform = inf.primaryPlatform || "";
+      seededDeliverable.Handle = inf.handle ? [inf.handle] : [];
       seededDeliverable.srNo = 1;
 
-      const initialPaymentType = normalizePaymentType(
-        meta?.content?.campaign?.paymentType || serverPaymentType
-      );
+      const initialPaymentType =
+        forcedPaymentType ||
+        normalizePaymentType(
+          meta?.content?.campaign?.paymentType ||
+          campaignPayoutTypeRef.current ||   // ← ref, not state
+          serverPaymentType
+        );
 
       base.campaign.paymentType = initialPaymentType;
 
@@ -3040,23 +3234,41 @@ export default function AppliedInfluencersPage() {
           ? deliverablesFromMeta.map((row, index) => ({
             id: createRowId(),
             srNo: Number(row?.srNo ?? index + 1),
-            platformHandle: String(row?.platformHandle || ""),
+            platform: row?.platform || "",
+            Handle:
+              Array.isArray(row?.Handle) && row.Handle.length
+                ? row.Handle
+                : row?.platform
+                  ? [row.platform]
+                  : [],
             deliverableFormat: String(row?.deliverableFormat || ""),
             qty: String(row?.qty ?? "1"),
+            isDraftRequired: Boolean(row?.isDraftRequired),
             draftDue: String(row?.draftDue || ""),
             liveDate: String(row?.liveDate || ""),
           }))
           : [seededDeliverable]
       );
 
-
       setContractForm(merged);
     },
-    [clearErrors, requestedEffDate, serverBudget, serverCampaignTitle, serverTimeline, serverPaymentType]
+    [
+
+      clearErrors,
+      requestedEffDate,
+      serverBudget,
+      serverCampaignTitle,
+      serverTimeline,
+      serverPaymentType,
+    ]
   );
 
   const openSidebar = useCallback(
-    async (inf: Influencer, mode: PanelMode) => {
+    async (
+      inf: Influencer,
+      mode: PanelMode,
+      forcedPaymentType?: PaymentType
+    ) => {
       if (isFullyManagedPlan) {
         toast({
           icon: "info",
@@ -3065,29 +3277,95 @@ export default function AppliedInfluencersPage() {
         });
         return;
       }
-
+      hasInitialPreviewRunRef.current = false;
       setSelectedInf(inf);
       setPanelMode(mode);
+
       const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
       setSelectedMeta(meta || null);
-      prefillFormFor(inf, meta || null);
+      // await apiListCountries()
+      prefillFormFor(inf, meta || null, forcedPaymentType);
       clearPreview();
       setSidebarOpen(true);
     },
-    [clearPreview, getLatestContractFor, isFullyManagedPlan, metaCache, prefillFormFor]
+    [
+      clearPreview,
+      getLatestContractFor,
+      isFullyManagedPlan,
+      metaCache,
+      prefillFormFor,
+    ]
+  );
+  const openBulkSidebar = useCallback(
+    async (forcedPaymentType?: PaymentType) => {
+      const targets = filteredRows
+        .filter((row) => selectedBulkIds.includes(row.rawInfluencer.influencerId))
+        .filter((row) => isBulkSelectable(row))
+        .map((row) => row.rawInfluencer);
+
+      if (!targets.length) {
+        toast({ icon: "info", title: "No influencers selected", text: "Select at least one eligible influencer." });
+        return;
+      }
+
+      hasInitialPreviewRunRef.current = false;
+      setBulkTargets(targets);
+      setPanelMode("bulk-send");
+      setSelectedInf(targets[0]);
+      setSelectedMeta(null);
+      prefillFormFor(targets[0], null, forcedPaymentType);
+      clearPreview();
+      clearErrors();
+      setSidebarOpen(true);
+
+      // Fetch names for the header
+      try {
+        const res: any = await apiGetfetchBulkInfleuncerId(selectedBulkIds);
+        const list: Influencer[] = res?.influencers || res?.data?.influencers || res?.data || [];
+        setBulkInfluencerNames(list.map((inf) => inf.name).filter(Boolean));
+      } catch {
+        // fallback to names already in targets
+        setBulkInfluencerNames(targets.map((t) => t.name).filter(Boolean));
+      }
+    },
+    [clearErrors, clearPreview, isBulkSelectable, prefillFormFor, selectedBulkIds]
   );
 
   const closeSidebar = useCallback(() => {
+    hasInitialPreviewRunRef.current = false;
     setSidebarOpen(false);
     clearPreview();
     setSelectedInf(null);
     setSelectedMeta(null);
     setBulkTargets([]);
+    setBulkInfluencerNames([]); // ← add this
     setIsPreviewLoading(false);
     setIsSendLoading(false);
     setIsUpdateLoading(false);
   }, [clearPreview]);
 
+
+  const handleSelectPayoutType = useCallback(
+    (type: PaymentType) => {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("campaignPayoutType", type);
+      }
+      campaignPayoutTypeRef.current = type; // ← sync ref
+      setCampaignPayoutType(type);
+      setContractField("campaign.paymentType", type);
+      setIsPayoutTypeDialogOpen(false);
+
+      if (payoutDialogMode === "bulk") {
+        openBulkSidebar(type);
+      } else if (payoutDialogMode === "single" && pendingInfluencerForContract) {
+        openSidebar(pendingInfluencerForContract, "send", type);
+      }
+
+      setPendingInfluencerForContract(null);
+      setPayoutDialogMode(null);
+    },
+    [openBulkSidebar, openSidebar, payoutDialogMode, pendingInfluencerForContract, setContractField]
+  );
   useEffect(() => {
     if (!sidebarOpen) return;
     const prev = document.body.style.overflow;
@@ -3122,7 +3400,8 @@ export default function AppliedInfluencersPage() {
         ...content.scheduleA,
         deliverables: deliverables.map((row, index) => ({
           srNo: index + 1,
-          platformHandle: row.platformHandle,
+          platform: row.platform,
+          Handle: row.Handle,
           deliverableFormat: row.deliverableFormat,
           qty: Number(row.qty || "0") || 0,
           draftDue: row.draftDue,
@@ -3168,6 +3447,7 @@ export default function AppliedInfluencersPage() {
     };
   }, [buildContentPayload]);
 
+
   const buildBulkContentPayload = useCallback(() => {
     const content = buildContentPayload();
 
@@ -3184,6 +3464,174 @@ export default function AppliedInfluencersPage() {
     };
   }, [buildContentPayload]);
 
+  const generatePreviewSilently = useCallback(async () => {
+    if (!sidebarOpen) return;
+    if (!selectedInf || !campaignId || !brandId) {
+      setIsAutoPreviewLoading(false);
+      return;
+    }
+
+    const hasMinFields =
+      String(contractForm.brand.legalName ?? "").trim() &&
+      String(contractForm.influencer.legalName ?? "").trim() &&
+      String(contractForm.campaign.campaignTitleOrId ?? "").trim() &&
+      requestedEffDate;
+
+    if (!hasMinFields) {
+      setIsAutoPreviewLoading(false);
+      return;
+    }
+
+    setIsAutoPreviewLoading(true);
+
+    try {
+      let res: any;
+
+      if (panelMode === "send") {
+        res = await api.post(
+          "/contract/initiate",
+          {
+            brandId,
+            campaignId,
+            influencerId: selectedInf.influencerId,
+            content: buildContentPayload(),
+            requestedEffectiveDate: requestedEffDate,
+            requestedEffectiveDateTimezone: requestedEffTz,
+            preview: true,
+          },
+          { responseType: "blob" }
+        );
+      } else if (panelMode === "bulk-send") {
+        const sampleInf = bulkTargets[0];
+        if (!sampleInf) {
+          setIsAutoPreviewLoading(false);
+          return;
+        }
+
+        res = await api.post(
+          "/contract/initiate",
+          {
+            brandId,
+            campaignId,
+            influencerId: sampleInf.influencerId,
+            content: buildBulkContentPayload(),
+            requestedEffectiveDate: requestedEffDate,
+            requestedEffectiveDateTimezone: requestedEffTz,
+            preview: true,
+          },
+          { responseType: "blob" }
+        );
+      } else {
+        if (!selectedMeta?.contractId) {
+          setIsAutoPreviewLoading(false);
+          return;
+        }
+
+        if (isRejectedMeta(selectedMeta)) {
+          res = await api.post(
+            "/contract/resend",
+            {
+              contractId: selectedMeta.contractId,
+              content: buildContentPayload(),
+              requestedEffectiveDate: requestedEffDate,
+              requestedEffectiveDateTimezone: requestedEffTz,
+              preview: true,
+            },
+            { responseType: "blob" }
+          );
+        } else {
+          res = await api.post(
+            "/contract/brand/update",
+            {
+              contractId: selectedMeta.contractId,
+              brandId,
+              preview: true,
+              brandUpdates: buildBrandUpdatesPayload(),
+              requestedEffectiveDate: requestedEffDate,
+              requestedEffectiveDateTimezone: requestedEffTz,
+            },
+            { responseType: "blob" }
+          );
+        }
+      }
+
+      setPdfUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(res.data);
+      });
+    } catch {
+      // silent fail
+    } finally {
+      setIsAutoPreviewLoading(false);
+    }
+  }, [
+    sidebarOpen,
+    selectedInf,
+    campaignId,
+    brandId,
+    contractForm,
+    requestedEffDate,
+    requestedEffTz,
+    panelMode,
+    bulkTargets,
+    selectedMeta,
+    buildContentPayload,
+    buildBulkContentPayload,
+    buildBrandUpdatesPayload,
+  ]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    if (hasInitialPreviewRunRef.current) return;
+    if (!selectedInf || !campaignId || !brandId) return;
+
+    const hasMinFields =
+      String(contractForm.brand.legalName ?? "").trim() &&
+      String(contractForm.influencer.legalName ?? "").trim() &&
+      String(contractForm.campaign.campaignTitleOrId ?? "").trim() &&
+      requestedEffDate;
+
+    if (!hasMinFields) return;
+
+    hasInitialPreviewRunRef.current = true;
+    generatePreviewSilently();
+  }, [
+    sidebarOpen,
+    selectedInf,
+    campaignId,
+    brandId,
+    requestedEffDate,
+    contractForm.brand.legalName,
+    contractForm.influencer.legalName,
+    contractForm.campaign.campaignTitleOrId,
+    generatePreviewSilently,
+  ]);
+  //for later edits 
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    if (!hasInitialPreviewRunRef.current) return;
+
+    if (autoPreviewTimerRef.current) {
+      clearTimeout(autoPreviewTimerRef.current);
+    }
+
+    autoPreviewTimerRef.current = setTimeout(() => {
+      generatePreviewSilently();
+    }, 1200);
+
+    return () => {
+      if (autoPreviewTimerRef.current) {
+        clearTimeout(autoPreviewTimerRef.current);
+      }
+    };
+  }, [
+    contractForm,
+    deliverables,
+    requestedEffDate,
+    requestedEffTz,
+    sidebarOpen,
+    generatePreviewSilently,
+  ]);
   const scrollFirstErrorIntoView = useCallback(() => {
     const first = document.querySelector("[data-field-error=true]") as HTMLElement | null;
     if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -3278,7 +3726,10 @@ export default function AppliedInfluencersPage() {
         if (!row.deliverableFormat.trim()) {
           messages.push(`${label}: deliverable format is required.`);
         }
-        if (!row.platformHandle.trim()) {
+        if (!row.platform.trim()) {
+          messages.push(`${label}: platform is required.`);
+        }
+        if (!row.Handle.length) {
           messages.push(`${label}: platform / handle is required.`);
         }
         if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
@@ -3287,7 +3738,139 @@ export default function AppliedInfluencersPage() {
       });
       if (messages.length) add("scheduleA.deliverables", messages.join(" "));
     }
+    // ── Date ordering validation ──────────────────────────────────────────────
+    // ── Date ordering validation ──────────────────────────────────────────────
+    const preShootRequired = getAtPath(
+      contractForm,
+      "scheduleA.preShootScriptRequired",
+      false
+    );
+    const preShootDue = getAtPath(contractForm, "scheduleA.preShootScriptDue");
+    const preShootMs = preShootDue ? new Date(preShootDue).getTime() : 0;
 
+    const effMs = requestedEffDate ? new Date(requestedEffDate).getTime() : 0;
+
+    const hasPreShootAfterDraft = deliverables.some((row) => {
+      if (
+        !preShootRequired ||
+        !row.isDraftRequired ||
+        !preShootDue ||
+        !row.draftDue
+      ) {
+        return false;
+      }
+      const draftMs = new Date(row.draftDue).getTime();
+      return preShootMs >= draftMs;
+    });
+
+    if (hasPreShootAfterDraft) {
+      add(
+        "scheduleA.preShootScriptDue",
+        "Pre-shoot script due date must be before the draft due date."
+      );
+    }
+
+    if (hasPreShootAfterDraft) {
+      add(
+        "scheduleA.preShootScriptDue",
+        "Pre-shoot script due date must be before the draft due date."
+      );
+    }
+
+    // Effective date is mandatory
+    if (!requestedEffDate) {
+      add("requestedEffDate", "Requested effective date is required.");
+    }
+
+    // Pre-shoot date is mandatory if pre-shoot is required
+    if (preShootRequired && !preShootDue) {
+      add(
+        "scheduleA.preShootScriptDue",
+        "Pre-shoot script due date is required when pre-shoot script is required."
+      );
+    }
+
+    // Pre-shoot must be after effective date
+    if (preShootRequired && preShootDue && effMs && preShootMs <= effMs) {
+      add(
+        "scheduleA.preShootScriptDue",
+        "Pre-shoot script due date must be after the effective date."
+      );
+    }
+
+    deliverables.forEach((row, index) => {
+      const label = `Deliverable #${index + 1}`;
+      const draftMs = row.draftDue ? new Date(row.draftDue).getTime() : 0;
+      const liveMs = row.liveDate ? new Date(row.liveDate).getTime() : 0;
+
+      if (row.isDraftRequired && !row.draftDue) {
+        add(
+          "scheduleA.deliverables",
+          `${label}: draft due date is required when draft is required.`
+        );
+      }
+
+      // if (!row.liveDate) {
+      //   add("scheduleA.deliverables", `${label}: live date is required.`);
+      // }
+
+      // pre-shoot must be BEFORE draft due
+      if (
+        preShootRequired &&
+        row.isDraftRequired &&
+        preShootDue &&
+        row.draftDue &&
+        preShootMs >= draftMs
+      ) {
+        add(
+          "scheduleA.deliverables",
+          `${label}: pre-shoot script due date must be before the draft due date.`
+        );
+      }
+
+      // if no draft required, live must still be after pre-shoot
+      if (
+        preShootRequired &&
+        row.isDraftRequired &&
+        preShootDue &&
+        row.draftDue &&
+        preShootMs >= draftMs
+      ) {
+        add(
+          "scheduleA.preShootScriptDue",
+          "Pre-shoot script due date must be before the draft due date."
+        );
+
+        add(
+          "scheduleA.deliverables",
+          `${label}: pre-shoot script due date must be before the draft due date.`
+        );
+      }
+
+      // draft must be after effective date
+      if (row.isDraftRequired && row.draftDue && effMs && draftMs <= effMs) {
+        add(
+          "scheduleA.deliverables",
+          `${label}: draft due date must be after the effective date.`
+        );
+      }
+
+      // live must be after draft if draft exists
+      if (row.isDraftRequired && row.draftDue && row.liveDate && liveMs <= draftMs) {
+        add(
+          "scheduleA.deliverables",
+          `${label}: live date must be after the draft due date.`
+        );
+      }
+
+      // if no draft required, live must be after effective date
+      if (!row.isDraftRequired && row.liveDate && effMs && liveMs <= effMs) {
+        add(
+          "scheduleA.deliverables",
+          `${label}: live date must be after the effective date.`
+        );
+      }
+    });
     if (!ok) {
       toast({ icon: "error", title: "Please fix the highlighted fields" });
       setTimeout(scrollFirstErrorIntoView, 50);
@@ -3833,38 +4416,7 @@ export default function AppliedInfluencersPage() {
     setSelectedBulkIds([]);
   }, []);
 
-  const openBulkSidebar = useCallback(() => {
-    const targets = filteredRows
-      .filter((row) => selectedBulkIds.includes(row.rawInfluencer.influencerId))
-      .filter((row) => isBulkSelectable(row))
-      .map((row) => row.rawInfluencer);
 
-    if (!targets.length) {
-      toast({
-        icon: "info",
-        title: "No influencers selected",
-        text: "Select at least one eligible influencer.",
-      });
-      return;
-    }
-
-    setBulkTargets(targets);
-    setPanelMode("bulk-send");
-    setSelectedInf(targets[0]);
-    setSelectedMeta(null);
-
-    prefillFormFor(targets[0], null);
-    clearPreview();
-    clearErrors();
-    setSidebarOpen(true);
-  }, [
-    clearErrors,
-    clearPreview,
-    filteredRows,
-    isBulkSelectable,
-    prefillFormFor,
-    selectedBulkIds,
-  ]);
 
   function StatusBadge({
     meta,
@@ -4000,7 +4552,13 @@ export default function AppliedInfluencersPage() {
     );
   }
 
-  function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
+  function AppliedCampaignActionCell({
+    row,
+    onOpenPayoutTypeDialog,
+  }: {
+    row: AppliedInfluencerRow;
+    onOpenPayoutTypeDialog: (influencer: AppliedInfluencerRow["rawInfluencer"]) => void;
+  }) {
     const inf = row.rawInfluencer;
     const meta = row.contractMeta;
     const hasContract = row.hasContract;
@@ -4020,13 +4578,15 @@ export default function AppliedInfluencersPage() {
 
     const handlePrimary = () => {
       if (!hasContract) {
-        openSidebar(inf, "send");
+        onOpenPayoutTypeDialog(inf);
         return;
       }
+
       if (editable && !locked) {
         openSidebar(inf, "edit");
         return;
       }
+
       handleViewContract(inf);
     };
 
@@ -4072,7 +4632,7 @@ export default function AppliedInfluencersPage() {
           View Influencer
         </button>
 
-        {/* <button
+        <button
           type="button"
           onClick={() => router.push("/brand/inbox")}
           className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
@@ -4081,7 +4641,7 @@ export default function AppliedInfluencersPage() {
           {hasContract ? (
             <span className="absolute right-[0.32rem] top-[0.32rem] h-1.5 w-1.5 rounded-full bg-[#28A745]" />
           ) : null}
-        </button> */}
+        </button>
 
         <MilestoneActionsDropdown
           onAddMilestone={() => handleAddMilestone(inf, meta)}
@@ -4177,7 +4737,10 @@ export default function AppliedInfluencersPage() {
             ) : null}
 
             <div className="mt-3">
-              <AppliedCampaignActionCell row={row} />
+              <AppliedCampaignActionCell
+                row={row}
+                onOpenPayoutTypeDialog={openSinglePayoutTypeDialog}
+              />
             </div>
           </div>
         );
@@ -4228,12 +4791,26 @@ export default function AppliedInfluencersPage() {
     },
     [contractForm.scheduleA.usageRights.rows, setContractField]
   );
+  const preShootRequired = Boolean(
+    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+  );
 
-  const YES_NO_BOOL_OPTIONS = [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ];
-
+  const preShootDueDateError = useMemo(() => {
+    if (formErrors["scheduleA.preShootScriptDue"]) return formErrors["scheduleA.preShootScriptDue"];
+    if (!preShootRequired) return "";
+    const preShootVal = getAtPath(contractForm, "scheduleA.preShootScriptDue");
+    if (!preShootVal) return "";
+    const preShootMs = new Date(preShootVal).getTime();
+    for (const row of deliverables) {
+      if (row.isDraftRequired && row.draftDue) {
+        const draftMs = new Date(row.draftDue).getTime();
+        if (preShootMs >= draftMs) {
+          return `Pre-shoot date must be before draft due (${new Date(row.draftDue).toLocaleDateString()})`;
+        }
+      }
+    }
+    return "";
+  }, [preShootRequired, contractForm, deliverables, formErrors]);
   return (
     <TooltipProvider delayDuration={150}>
       <div className="mx-auto min-h-screen max-w-full space-y-6 p-4 md:space-y-8 md:p-8">
@@ -4267,23 +4844,7 @@ export default function AppliedInfluencersPage() {
           </div>
         ) : (
           <>
-            {selectedBulkIds.length > 0 ? (
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4">
-                <div className="text-sm font-medium text-gray-800">
-                  {selectedBulkIds.length} influencer{selectedBulkIds.length > 1 ? "s" : ""} selected
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={clearBulkSelection}>
-                    Clear
-                  </Button>
-                  <Button onClick={openBulkSidebar}>
-                    <PaperPlaneTilt className="mr-2 h-4 w-4" />
-                    Bulk Send Contract
-                  </Button>
-                </div>
-              </div>
-            ) : null}
 
             <div className="hidden overflow-x-auto rounded-md md:block">
               <InfluencerTable
@@ -4293,9 +4854,29 @@ export default function AppliedInfluencersPage() {
                 selectedIds={selectedBulkIds}
                 onToggleRow={toggleBulkRow}
                 onToggleAll={toggleBulkAllVisible}
+                onClearSelection={clearBulkSelection}
                 isRowSelectable={(baseRow) => isBulkSelectable(baseRow as AppliedInfluencerRow)}
+                renderBulkHeader={({ selectedIds, clearSelection }) => (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-[#F2F2F2] px-8">
+                    <div className="text-sm font-medium text-gray-800">
+                      {selectedIds.length} influencer{selectedIds.length > 1 ? "s" : ""} selected
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" onClick={clearSelection}>
+                        Clear
+                      </Button>
+
+                      <Button onClick={openBulkPayoutTypeDialog}>
+                        <PaperPlaneTilt className="mr-2 h-4 w-4" />
+                        Bulk Send Contract
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 renderStatus={(baseRow) => {
                   const row = baseRow as AppliedInfluencerRow;
+
                   if (row.rejected) {
                     return (
                       <div className="space-y-1 text-center">
@@ -4309,10 +4890,18 @@ export default function AppliedInfluencersPage() {
                     );
                   }
 
-                  return <StatusBadge meta={row.contractMeta} hasContract={row.hasContract} />;
+                  return (
+                    <StatusBadge
+                      meta={row.contractMeta}
+                      hasContract={row.hasContract}
+                    />
+                  );
                 }}
                 renderShortlistedActions={(baseRow) => (
-                  <AppliedCampaignActionCell row={baseRow as AppliedInfluencerRow} />
+                  <AppliedCampaignActionCell
+                    row={baseRow as AppliedInfluencerRow}
+                    onOpenPayoutTypeDialog={openSinglePayoutTypeDialog}
+                  />
                 )}
               />
             </div>
@@ -4361,13 +4950,16 @@ export default function AppliedInfluencersPage() {
           }
           subtitle={
             panelMode === "bulk-send"
-              ? `${selectedBulkIds.length} influencers selected`
+              ? bulkInfluencerNames.length > 0
+                ? bulkInfluencerNames.join(", ")
+                : `${selectedBulkIds.length} influencer${selectedBulkIds.length > 1 ? "s" : ""} selected`
               : selectedInf
                 ? `${pageTitle || "Agreement"} • ${selectedInf.name}`
                 : pageTitle || "Agreement"
           }
           previewUrl={pdfUrl}
           onClosePreview={clearPreview}
+          isAutoPreviewLoading={isAutoPreviewLoading}
         >
           <SidebarSection title="Brand" icon={<FileText className="h-4 w-4" />}>
             <div className="space-y-3">
@@ -4382,6 +4974,7 @@ export default function AppliedInfluencersPage() {
                 info={SIDEBAR_TOOLTIPS.brandLegalName}
                 state={sidebarStateFor("brand.legalName")}
                 errorText={sidebarErrorFor("brand.legalName")}
+                required
               />
 
               <FloatingInput
@@ -4392,9 +4985,10 @@ export default function AppliedInfluencersPage() {
                 onValueChange={(value: string) =>
                   setContractField("brand.contactPersonName", value)
                 }
+                required
               />
 
-              <FloatingInput
+              {/* <FloatingInput
                 id="brand-notice-email"
                 label="Notice Email"
                 info={SIDEBAR_TOOLTIPS.brandNoticeEmail}
@@ -4402,9 +4996,9 @@ export default function AppliedInfluencersPage() {
                 onValueChange={(value: string) =>
                   setContractField("brand.noticeEmail", value)
                 }
-              />
+              /> */}
 
-              <FloatingInput
+              {/* <FloatingInput
                 id="brand-notice-phone"
                 label="Notice Phone"
                 info={SIDEBAR_TOOLTIPS.brandNoticePhone}
@@ -4412,7 +5006,7 @@ export default function AppliedInfluencersPage() {
                 onValueChange={(value: string) =>
                   setContractField("brand.noticePhone", value)
                 }
-              />
+              /> */}
 
               <LabeledTextarea
                 id="brand-billing-address"
@@ -4422,6 +5016,7 @@ export default function AppliedInfluencersPage() {
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField("brand.billingAddress", e.target.value)
                 }
+                required
               />
             </div>
           </SidebarSection>
@@ -4441,6 +5036,7 @@ export default function AppliedInfluencersPage() {
                 }
                 state={sidebarStateFor("campaign.campaignTitleOrId")}
                 errorText={sidebarErrorFor("campaign.campaignTitleOrId")}
+                required
               />
 
               <LabeledTextarea
@@ -4478,19 +5074,30 @@ export default function AppliedInfluencersPage() {
                       next.scheduleA.commercial.totalCampaignFee = "0";
                     } return next;
                   });
-                }} searchable={false} state={sidebarStateFor("campaign.paymentType")} errorText={sidebarErrorFor("campaign.paymentType")}              >                {PAYMENT_TYPE_OPTIONS.map((option) => (<SelectItem key={option.value} value={option.value}>                    {option.label}                  </SelectItem>))}
+                }} searchable={false} state={sidebarStateFor("campaign.paymentType")} errorText={sidebarErrorFor("campaign.paymentType")}
+                disabled
+                info={SIDEBAR_TOOLTIPS.paymentType}
+              >                {PAYMENT_TYPE_OPTIONS.map((option) => (<SelectItem key={option.value} value={option.value}>                    {option.label}                  </SelectItem>))}
               </FloatingSelect>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <FloatingInput
-                  id="campaign-territory"
+                <FloatingSelect
                   label="Territory / Target Country"
                   info={SIDEBAR_TOOLTIPS.campaignTerritory}
                   value={getAtPath(contractForm, "campaign.territoryTargetCountry")}
-                  onValueChange={(value: string) =>
+                  onValueChange={(value) =>
                     setContractField("campaign.territoryTargetCountry", value)
                   }
-                />
+                  searchable
+                  required
+                >
+                  <SelectItem value="Worldwide">🌍 Worldwide</SelectItem>
+                  {countryOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
 
                 <FloatingDateInput
                   id="requested-effective-date"
@@ -4502,9 +5109,35 @@ export default function AppliedInfluencersPage() {
                   onValueChange={(value) => {
                     setRequestedEffDate(value);
                     setContractField("campaign.effectiveDate", value);
+
+                    const nextEffMs = value ? new Date(value).getTime() : 0;
+
+                    // clear pre-shoot if now invalid
+                    const currentPreShoot = getAtPath(contractForm, "scheduleA.preShootScriptDue");
+                    if (currentPreShoot && new Date(currentPreShoot).getTime() <= nextEffMs) {
+                      setContractField("scheduleA.preShootScriptDue", "");
+                    }
+
+                    // clear invalid deliverable dates
+                    setDeliverables((prev) =>
+                      prev.map((item) => {
+                        const next = { ...item };
+
+                        if (next.draftDue && new Date(next.draftDue).getTime() <= nextEffMs) {
+                          next.draftDue = "";
+                        }
+
+                        if (next.liveDate && new Date(next.liveDate).getTime() <= nextEffMs) {
+                          next.liveDate = "";
+                        }
+
+                        return next;
+                      })
+                    );
                   }}
                   state={sidebarStateFor("requestedEffDate")}
                   errorText={sidebarErrorFor("requestedEffDate")}
+                  required
                 />
 
               </div>
@@ -4524,6 +5157,7 @@ export default function AppliedInfluencersPage() {
               </FloatingSelect>
             </div>
           </SidebarSection>
+
 
           <SidebarSection
             title="Deliverables & Publication Timeline"
@@ -4571,18 +5205,44 @@ export default function AppliedInfluencersPage() {
                       disabled
                     />
 
-                    <FloatingInput
-                      id={`deliverable-platform-${row.id}`}
-                      label="Platform / Handle"
+
+                    <FloatingSelect
+                      label="Platform"
                       info={SIDEBAR_TOOLTIPS.platformHandle}
-                      value={row.platformHandle}
-                      onValueChange={(value: string) =>
+                      value={row.platform}
+                      onValueChange={(value) =>
                         setDeliverables((prev) =>
                           prev.map((item) =>
-                            item.id === row.id ? { ...item, platformHandle: value } : item
+                            item.id === row.id ? { ...item, platform: value } : item
                           )
                         )
                       }
+                      searchable={false}
+                      required
+                    >
+                      {PLATFORM_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </FloatingSelect>
+
+
+                    <FloatingInput
+                      id={`deliverable-handle-${row.id}`}          // ✅ was duplicate of platform id
+                      label="Handle"
+                      info={SIDEBAR_TOOLTIPS.handle}
+                      value={row.Handle[0] || ""}                  // ✅ was row.Handle (an array)
+                      onValueChange={(value: string) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id
+                              ? { ...item, Handle: value ? [value] : [] }  // ✅ was platformHandle
+                              : item
+                          )
+                        )
+                      }
+                      required
                     />
 
                     <FloatingInput
@@ -4613,6 +5273,7 @@ export default function AppliedInfluencersPage() {
                       )
                     }
                     searchable={false}
+                    required
                   >
                     {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
@@ -4622,22 +5283,56 @@ export default function AppliedInfluencersPage() {
                   </FloatingSelect>
 
 
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <FloatingDateInput
-                      id={`deliverable-draft-${row.id}`}
-                      label="Draft Due"
-                      info={SIDEBAR_TOOLTIPS.draftDue}
-                      type="date"
-                      value={row.draftDue}
-                      min={todayStr}
-                      onValueChange={(value) =>
-                        setDeliverables((prev) =>
-                          prev.map((item) =>
-                            item.id === row.id ? { ...item, draftDue: value } : item
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="flex items-center pt-2">
+                      <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={row.isDraftRequired}
+                          onChange={(e) =>
+                            setDeliverables((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id
+                                  ? {
+                                    ...item,
+                                    isDraftRequired: e.target.checked,
+                                    draftDue: e.target.checked ? item.draftDue : "",
+                                  }
+                                  : item
+                              )
+                            )
+                          }
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        Draft Required
+                      </label>
+                    </div>
+
+                    {row.isDraftRequired ? (
+                      <FloatingDateInput
+                        id={`deliverable-draft-${row.id}`}
+                        label="Draft Due"
+                        info={SIDEBAR_TOOLTIPS.draftDue}
+                        type="date"
+                        value={row.draftDue}
+                        min={
+                          getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+                            ? addOneDay(getAtPath(contractForm, "scheduleA.preShootScriptDue")) ||
+                            addOneDay(requestedEffDate) ||
+                            todayStr
+                            : addOneDay(requestedEffDate) || todayStr
+                        }
+                        onValueChange={(value) =>
+                          setDeliverables((prev) =>
+                            prev.map((item) =>
+                              item.id === row.id ? { ...item, draftDue: value } : item
+                            )
                           )
-                        )
-                      }
-                    />
+                        }
+                      />
+                    ) : (
+                      <div />
+                    )}
 
                     <FloatingDateInput
                       id={`deliverable-live-${row.id}`}
@@ -4645,7 +5340,15 @@ export default function AppliedInfluencersPage() {
                       info={SIDEBAR_TOOLTIPS.liveDate}
                       type="date"
                       value={row.liveDate}
-                      min={todayStr}
+                      min={
+                        row.isDraftRequired
+                          ? addOneDay(row.draftDue) || todayStr
+                          : getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+                            ? addOneDay(getAtPath(contractForm, "scheduleA.preShootScriptDue")) ||
+                            addOneDay(requestedEffDate) ||
+                            todayStr
+                            : addOneDay(requestedEffDate) || todayStr
+                      }
                       onValueChange={(value) =>
                         setDeliverables((prev) =>
                           prev.map((item) =>
@@ -4701,18 +5404,32 @@ export default function AppliedInfluencersPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 z-20">
                 <FloatingSelect
                   label="Pre-Shoot Script Required"
                   info={SIDEBAR_TOOLTIPS.preShootScriptRequired}
-                  value={
-                    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
-                      ? "yes"
-                      : "no"
-                  }
-                  onValueChange={(value) =>
-                    setContractField("scheduleA.preShootScriptRequired", value === "yes")
-                  }
+                  value={preShootRequired ? "yes" : "no"}
+                  onValueChange={(value) => {
+                    const isYes = value === "yes";
+
+                    setContractForm((prev) => {
+                      const next = deepClone(prev);
+                      next.scheduleA.preShootScriptRequired = isYes;
+
+                      if (!isYes) {
+                        next.scheduleA.preShootScriptDue = "";
+                      }
+
+                      return next;
+                    });
+
+                    if (!isYes) {
+                      return;
+                    }
+
+                    // if enabling pre-shoot after draft/live were already selected,
+                    // keep them for now; they will be corrected once pre-shoot date is chosen
+                  }}
                   searchable={false}
                 >
                   {YES_NO_BOOL_OPTIONS.map((option) => (
@@ -4722,34 +5439,440 @@ export default function AppliedInfluencersPage() {
                   ))}
                 </FloatingSelect>
 
-                <FloatingDateInput
-                  id="pre-shoot-script-due"
-                  label="Pre-Shoot Script Due"
-                  info={SIDEBAR_TOOLTIPS.preShootScriptDue}
-                  type="date"
-                  value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
-                  min={todayStr}
-                  onValueChange={(value) =>
-                    setContractField("scheduleA.preShootScriptDue", value)
-                  }
-                />
+                {preShootRequired ? (
+                  <>
+                    <FloatingDateInput
+                      id="pre-shoot-script-due"
+                      label="Pre-Shoot Script Due"
+                      info={SIDEBAR_TOOLTIPS.preShootScriptDue}
+                      type="date"
+                      value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
+                      min={addOneDay(requestedEffDate) || todayStr}
+                      onValueChange={(value) => {
+                        setContractField("scheduleA.preShootScriptDue", value);
+                      }}
+                      state={(() => {
+                        const v = getAtPath(contractForm, "scheduleA.preShootScriptDue");
+                        if (!v) return sidebarStateFor("scheduleA.preShootScriptDue");
+                        const preShootMs = new Date(v).getTime();
+                        for (const row of deliverables) {
+                          if (row.isDraftRequired && row.draftDue && preShootMs >= new Date(row.draftDue).getTime()) {
+                            return "error" as const;
+                          }
+                        }
+                        return sidebarStateFor("scheduleA.preShootScriptDue");
+                      })()}
+                      errorText={(() => {
+                        const v = getAtPath(contractForm, "scheduleA.preShootScriptDue");
+                        if (!v) return sidebarErrorFor("scheduleA.preShootScriptDue");
+                        const preShootMs = new Date(v).getTime();
+                        for (const row of deliverables) {
+                          if (row.isDraftRequired && row.draftDue) {
+                            const draftMs = new Date(row.draftDue).getTime();
+                            if (preShootMs >= draftMs) {
+                              return `Must be before draft due date`;
+                            }
+                          }
+                        }
+                        return sidebarErrorFor("scheduleA.preShootScriptDue");
+                      })()}
+                    />
 
-                <FloatingInput
-                  id="pre-shoot-review-days"
-                  label="Script Review Business Days"
-                  info={SIDEBAR_TOOLTIPS.preShootReviewDays}
-                  type="number"
-                  value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
-                  onValueChange={(value: string) =>
-                    setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
-                  }
-                  state={sidebarStateFor("scheduleA.preShootScriptReviewBusinessDays")}
-                  errorText={sidebarErrorFor("scheduleA.preShootScriptReviewBusinessDays")}
-                />
+                    <FloatingInput
+                      id="pre-shoot-review-days"
+                      label="Script Review Business Days"
+                      info={SIDEBAR_TOOLTIPS.preShootReviewDays}
+                      type="number"
+                      value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
+                      onValueChange={(value: string) =>
+                        setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
+                      }
+                      state={sidebarStateFor("scheduleA.preShootScriptReviewBusinessDays")}
+                      errorText={sidebarErrorFor("scheduleA.preShootScriptReviewBusinessDays")}
+                    />
+                  </>
+                ) : null}
               </div>
             </div>
           </SidebarSection>
+          {activePaymentType === PAYMENT_TYPE.FIXED ? (
+            <SidebarSection
+              title="Fixed Payment terms"
+              icon={<ClipboardText className="h-4 w-4" />}
+            >
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <FloatingInput
+                    id="fixed-total-campaign-fee"
+                    label="Total Budget"
+                    info={SIDEBAR_TOOLTIPS.totalCampaignFee}
+                    type="number"
+                    value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.totalCampaignFee", value)
+                    }
+                    state={sidebarStateFor("scheduleA.commercial.totalCampaignFee")}
+                    errorText={sidebarErrorFor("scheduleA.commercial.totalCampaignFee")}
+                    required
+                  />
+                  <FloatingSelect
+                    label="Currency"
+                    info={SIDEBAR_TOOLTIPS.currency}
+                    value={getAtPath(contractForm, "scheduleA.commercial.currency")}
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.currency", value)
+                    }
+                    searchable
+                    state={sidebarStateFor("scheduleA.commercial.currency")}
+                    errorText={sidebarErrorFor("scheduleA.commercial.currency")}
+                  >
+                    {currencyOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
+                  <FloatingSelect
+                    label="Payment Structure"
+                    info={SIDEBAR_TOOLTIPS.paymentStructure}
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentStructure")}
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.paymentStructure", value)
+                    }
+                    searchable={false}
+                  >
+                    {PAYMENT_STRUCTURE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
+                </div>
 
+                {getAtPath(contractForm, "scheduleA.commercial.paymentStructure") === "Custom" ? (
+                  <FloatingInput
+                    id="fixed-custom-split"
+                    label="Custom Split Details"
+                    info={SIDEBAR_TOOLTIPS.customSplit}
+                    value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.customSplit", value)
+                    }
+                  />
+                ) : null}
+
+                <LabeledTextarea
+                  id="fixed-advance-payment-trigger"
+                  label="Advance Payment Trigger"
+                  info={SIDEBAR_TOOLTIPS.advancePaymentTrigger}
+                  value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("scheduleA.commercial.advancePaymentTrigger", e.target.value)
+                  }
+                />
+
+                <LabeledTextarea
+                  id="fixed-balance-payment-trigger"
+                  label="Balance Payment Trigger"
+                  info={SIDEBAR_TOOLTIPS.remainingPaymentTrigger}
+                  value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("scheduleA.commercial.remainingPaymentTrigger", e.target.value)
+                  }
+                />
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <FloatingSelect
+                    label="Processor Fees Borne By"
+                    info={SIDEBAR_TOOLTIPS.processorFeesBorneBy}
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.paymentProcessorFeesBorneBy", value)
+                    }
+                    searchable={false}
+                  >
+                    {PROCESSOR_FEE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
+
+                  <FloatingInput
+                    id="processor-fees-notes"
+                    label="Payment Processor Fee Notes"
+                    info={SIDEBAR_TOOLTIPS.processorFeesNotes}
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesNotes")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.paymentProcessorFeesNotes", value)
+                    }
+                  />
+
+                  <FloatingInput
+                    id="fixed-kill-fee"
+                    label="Kill Fee / Pro-Rata"
+                    info={SIDEBAR_TOOLTIPS.killFeeFixed}
+                    value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.cancellation.killFeeOrProrata", value)
+                    }
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <FloatingSelect
+                    label="Payout Method"
+                    value={getAtPath(contractForm, "scheduleA.commercial.payoutMethod")}
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.payoutMethod", value)
+                    }
+                    searchable={false}
+                    info={SIDEBAR_TOOLTIPS.payoutMethod}
+                  >
+                    {PAYOUT_METHOD_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
+
+                  {/* <FloatingInput
+                    label="Payout Account Email / ID"
+                    value={getAtPath(contractForm, "scheduleA.commercial.payoutAccountId")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.payoutAccountId", value)
+                    }
+                  /> */}
+
+
+                  <FloatingInput
+                    label="Tax ID (if applicable)"
+                    value={getAtPath(contractForm, "scheduleA.commercial.taxId")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.taxId", value)
+                    }
+                  />
+                </div>
+              </div>
+            </SidebarSection>
+          ) : null}
+
+
+          {activePaymentType === PAYMENT_TYPE.MILESTONE ? (
+            <SidebarSection title="Milestone Payment Schedule" icon={<ClipboardText className="h-4 w-4" />}>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <FloatingInput
+                    id="milestone-total-campaign-fee"
+                    label="Total Budget (All Milestones)"
+                    info={SIDEBAR_TOOLTIPS.totalCampaignFee}
+                    type="number"
+                    value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}  // ✅ fixed
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.totalCampaignFee", value)        // ✅ fixed
+                    }
+                    state={sidebarStateFor("scheduleA.commercial.totalCampaignFee")}
+                    errorText={sidebarErrorFor("scheduleA.commercial.totalCampaignFee")}
+                  />
+
+                  <FloatingSelect
+                    label="Processor Fees Borne By"
+                    info={SIDEBAR_TOOLTIPS.processorFeesBorneBy}
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}  // ✅ fixed
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.paymentProcessorFeesBorneBy", value)        // ✅ fixed
+                    }
+                    searchable={false}
+                  >
+                    {PROCESSOR_FEE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </FloatingSelect>
+                </div>
+
+                <FloatingInput
+                  id="milestone-kill-fee"
+                  label="Kill Fee"
+                  info={SIDEBAR_TOOLTIPS.killFeeMilestone}
+                  value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}  // ✅ fixed
+                  onValueChange={(value: string) =>
+                    setContractField("scheduleA.cancellation.killFeeOrProrata", value)        // ✅ fixed
+                  }
+                />
+
+                <div>
+                  {/* <div className="mb-2 text-sm font-semibold text-gray-800">Milestones</div> */}
+                  <CommercialMilestonesEditor
+                    rows={contractForm.scheduleA.commercial.milestones}
+                    error={formErrors["scheduleA.commercial.milestones"]}
+                    onChange={(rows) =>
+                      setContractField("scheduleA.commercial.milestones", rows)
+                    }
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <FloatingSelect
+                    label="Payout Method"
+                    info={SIDEBAR_TOOLTIPS.payoutMethod}
+                    value={getAtPath(contractForm, "scheduleA.commercial.payoutMethod")}
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.payoutMethod", value)
+                    }
+                    searchable={false}
+                  >
+                    {PAYOUT_METHOD_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
+
+                  {/* <FloatingInput
+                    label="Payout Account Email / ID"
+                    value={getAtPath(contractForm, "scheduleA.commercial.payoutAccountId")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.payoutAccountId", value)
+                    }
+                  /> */}
+
+
+                  <FloatingInput
+                    label="Tax ID (if applicable)"
+                    value={getAtPath(contractForm, "scheduleA.commercial.taxId")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.taxId", value)
+                    }
+                    info={SIDEBAR_TOOLTIPS.taxId}
+                  />
+                </div>
+              </div>
+            </SidebarSection>
+          ) : null}
+
+          {/* {activePaymentType === PAYMENT_TYPE.GIFTING ? (
+            <SidebarSection
+              title="Product Gifting"
+              icon={<ClipboardText className="h-4 w-4" />}
+            >
+              <div className="space-y-4">
+                <FloatingInput
+                  id="estimated-retail-value"
+                  label="Estimated Retail Value (ERV)"
+                  info={SIDEBAR_TOOLTIPS.estimatedRetailValue}
+                  value={getAtPath(contractForm, "estimatedRetailValue")}
+                  onValueChange={(value: string) =>
+                    setContractField("estimatedRetailValue", value)
+                  }
+                />
+
+                <FloatingDateInput
+                  id="receipt-confirmation-deadline"
+                  label="Receipt Confirmation Deadline"
+                  info={SIDEBAR_TOOLTIPS.receiptConfirmationDeadline}
+                  type="date"
+                  value={getAtPath(contractForm, "receiptConfirmationDeadline")}
+                  min={todayStr}
+                  onValueChange={(value) =>
+                    setContractField("receiptConfirmationDeadline", value)
+                  }
+                />
+
+                <FloatingSelect
+                  label="Product Disposition"
+                  info={SIDEBAR_TOOLTIPS.productDisposition}
+                  value={getAtPath(contractForm, "productDisposition")}
+                  onValueChange={(value) => setContractField("productDisposition", value)}
+                  searchable={false}
+                >
+                  {PRODUCT_DISPOSITION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <FloatingInput
+                  id="return-window"
+                  label="Return Window"
+                  info={SIDEBAR_TOOLTIPS.returnWindowMethod}
+                  value={getAtPath(contractForm, "returnWindow")}
+                  onValueChange={(value: string) => setContractField("returnWindow", value)}
+                />
+
+                <FloatingSelect
+                  label="Return Shipping Method"
+                  info={SIDEBAR_TOOLTIPS.returnShippingMethod}
+                  value={getAtPath(contractForm, "returnShippingMethod")}
+                  onValueChange={(value) => setContractField("returnShippingMethod", value)}
+                  searchable={false}
+                >
+                  {RETURN_SHIPPING_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+
+                <LabeledTextarea
+                  id="return-packaging-instructions"
+                  label="Return Instructions"
+                  info={SIDEBAR_TOOLTIPS.returnPackagingInstructions}
+                  value={getAtPath(contractForm, "returnPackagingInstructions")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("returnPackagingInstructions", e.target.value)
+                  }
+                />
+
+                <FloatingTagInput
+                  label="Items to Keep / Return"
+                  info={SIDEBAR_TOOLTIPS.itemsToKeepReturn}
+                  value={csvToTags(getAtPath(contractForm, "itemsToKeepReturn"))}
+                  options={[]}
+                  onValueChange={(next) => setContractField("itemsToKeepReturn", tagsToCsv(next))}
+                  dropdownDirection="up"
+                />
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <FloatingInput
+                    id="ship-to-name"
+                    label="Ship-To Name"
+                    info={SIDEBAR_TOOLTIPS.shipToName}
+                    value={getAtPath(contractForm, "shipToName")}
+                    onValueChange={(value: string) => setContractField("shipToName", value)}
+                  />
+
+                  <FloatingInput
+                    id="ship-to-phone"
+                    label="Shipping Phone Number"
+                    info={SIDEBAR_TOOLTIPS.shipToPhone}
+                    value={getAtPath(contractForm, "shippingPhoneNumber")}
+                    onValueChange={(value: string) => setContractField("shippingPhoneNumber", value)}
+                  />
+                </div>
+
+                <LabeledTextarea
+                  id="shipping-address"
+                  label="Shipping Address"
+                  info={SIDEBAR_TOOLTIPS.shippingAddress}
+                  value={getAtPath(contractForm, "shippingAddress")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("shippingAddress", e.target.value)
+                  }
+                />
+
+                <LabeledTextarea
+                  id="delivery-instructions"
+                  label="Delivery Instructions"
+                  info={SIDEBAR_TOOLTIPS.deliveryInstructions}
+                  value={getAtPath(contractForm, "deliveryInstructions")}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setContractField("deliveryInstructions", e.target.value)
+                  }
+                />
+              </div>
+            </SidebarSection>
+          ) : null} */}
           <SidebarSection
             title="Review, Revisions & Reshoots"
             icon={<PenNib className="h-4 w-4" />}
@@ -4821,7 +5944,7 @@ export default function AppliedInfluencersPage() {
             icon={<FileText className="h-4 w-4" />}
           >
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {/* <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingInput
                   id="total-campaign-fee"
                   label="Total Campaign Fee"
@@ -4852,67 +5975,11 @@ export default function AppliedInfluencersPage() {
                     </SelectItem>
                   ))}
                 </FloatingSelect>
-              </div>
+              </div> */}
 
-              {activePaymentType === PAYMENT_TYPE.FIXED ? (
-                <>
-                  <FloatingSelect
-                    label="Payment Structure"
-                    info={SIDEBAR_TOOLTIPS.paymentStructure}
-                    value={getAtPath(contractForm, "scheduleA.commercial.paymentStructure")}
-                    onValueChange={(value) =>
-                      setContractField("scheduleA.commercial.paymentStructure", value)
-                    }
-                    searchable={false}
-                  >
-                    {PAYMENT_STRUCTURE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </FloatingSelect>
 
-                  <FloatingInput
-                    id="commercial-custom-split"
-                    label="Custom"
-                    info={SIDEBAR_TOOLTIPS.customSplit}
-                    value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
-                    onValueChange={(value: string) =>
-                      setContractField("scheduleA.commercial.customSplit", value)
-                    }
-                  />
 
-                  <LabeledTextarea
-                    id="advance-payment-trigger"
-                    label="Advance Payment Trigger"
-                    info={SIDEBAR_TOOLTIPS.advancePaymentTrigger}
-                    value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                      setContractField("scheduleA.commercial.advancePaymentTrigger", e.target.value)
-                    }
-                  />
-
-                  <LabeledTextarea
-                    id="remaining-payment-trigger"
-                    label="Remaining Payment Trigger"
-                    info={SIDEBAR_TOOLTIPS.remainingPaymentTrigger}
-                    value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                      setContractField("scheduleA.commercial.remainingPaymentTrigger", e.target.value)
-                    }
-                  />
-                </>
-              ) : null}
-
-              {activePaymentType === PAYMENT_TYPE.MILESTONE ? (
-                <CommercialMilestonesEditor
-                  rows={contractForm.scheduleA.commercial.milestones}
-                  error={formErrors["scheduleA.commercial.milestones"]}
-                  onChange={(rows) => setContractField("scheduleA.commercial.milestones", rows)}
-                />
-              ) : null}
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {/* <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingSelect
                   label="Payment Processor Fees Borne By"
                   info={SIDEBAR_TOOLTIPS.processorFeesBorneBy}
@@ -4938,7 +6005,7 @@ export default function AppliedInfluencersPage() {
                     setContractField("scheduleA.commercial.paymentProcessorFeesNotes", value)
                   }
                 />
-              </div>
+              </div> */}
 
               <LabeledTextarea
                 id="lane-a-marketplace-fee-note"
@@ -5332,7 +6399,7 @@ export default function AppliedInfluencersPage() {
             icon={<Info className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <LabeledTextarea
+              {/* <LabeledTextarea
                 id="kill-fee-or-prorata"
                 label="Kill Fee / Pro-Rata"
                 info={SIDEBAR_TOOLTIPS.killFeeOrProrata}
@@ -5340,7 +6407,7 @@ export default function AppliedInfluencersPage() {
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
                 }
-              />
+              /> */}
 
               <LabeledTextarea
                 id="refund-of-unearned-advance"
@@ -5424,20 +6491,18 @@ export default function AppliedInfluencersPage() {
             </div>
           </SidebarSection>
 
-          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 border-t border-gray-200 bg-white/95 p-6 backdrop-blur">
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 bg-white border-t border-gray-200 p-6 z-10">
+            {/* In the sticky footer, update the Preview button: */}
             <Button
               variant="outline"
               onClick={handleGeneratePreview}
-              disabled={isPreviewLoading || isSendLoading || isUpdateLoading}
+              disabled={isPreviewLoading || isSendLoading || isUpdateLoading || isAutoPreviewLoading}
+              title="Preview is auto-generated. Click to force refresh."
             >
               {isPreviewLoading ? (
-                <>
-                  <span className="mr-2 animate-spin">⏳</span> Generating…
-                </>
+                <><span className="mr-2 animate-spin">⏳</span> Generating…</>
               ) : (
-                <>
-                  <Eye className="mr-2 h-5 w-5" /> Preview
-                </>
+                <><Eye className="mr-2 h-5 w-5" /> Force Refresh</>
               )}
             </Button>
 
@@ -5542,6 +6607,54 @@ export default function AppliedInfluencersPage() {
             loadMetaCache(influencers);
           }}
         />
+        <Dialog
+          open={isPayoutTypeDialogOpen}
+          onOpenChange={setIsPayoutTypeDialogOpen}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Select campaign payout type</DialogTitle>
+              <DialogDescription>
+                Choose how this campaign will be structured for the selected influencers.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => handleSelectPayoutType(PAYMENT_TYPE.FIXED)}
+                className="rounded-xl border border-gray-200 p-4 text-left transition hover:bg-gray-50"
+              >
+                <div className="text-sm font-semibold text-gray-900">Fixed</div>
+                <div className="mt-1 text-sm text-gray-500">
+                  One fixed payout amount for the campaign.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectPayoutType(PAYMENT_TYPE.MILESTONE)}
+                className="rounded-xl border border-gray-200 p-4 text-left transition hover:bg-gray-50"
+              >
+                <div className="text-sm font-semibold text-gray-900">Milestone</div>
+                <div className="mt-1 text-sm text-gray-500">
+                  Payment is released in stages based on deliverables.
+                </div>
+              </button>
+
+              {/* <button
+                type="button"
+                onClick={() => handleSelectPayoutType(PAYMENT_TYPE.GIFTING)}
+                className="rounded-xl border border-gray-200 p-4 text-left transition hover:bg-gray-50"
+              >
+                <div className="text-sm font-semibold text-gray-900">Gifting</div>
+                <div className="mt-1 text-sm text-gray-500">
+                  Compensation is provided through product gifting.
+                </div>
+              </button> */}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
@@ -5948,10 +7061,11 @@ function ContractSidebar({
   subtitle = "New Agreement",
   previewUrl,
   onClosePreview,
+  isAutoPreviewLoading = false,
 }: any) {
   return (
     <div
-      className={`fixed inset-0 z-[120] ${isOpen ? "" : "pointer-events-none"}`}
+      className={`fixed inset-0  z-[120] ${isOpen ? "" : "pointer-events-none"}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="contract-title"
@@ -5966,18 +7080,15 @@ function ContractSidebar({
         className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
           }`}
       >
+        {/* Header — unchanged */}
         <div className="relative h-36 overflow-hidden border-b border-[#e5e5e5] bg-white">
           <div className="relative z-10 flex h-full items-start justify-between p-6">
             <div className="flex items-start gap-4">
               <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e8e8e8] bg-[#f7f7f7] shadow-sm">
                 <FileText className="h-6 w-6 text-[#1a1a1a]" />
               </div>
-
               <div>
-                <div
-                  className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]"
-                  id="contract-title"
-                >
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]" id="contract-title">
                   {title}
                 </div>
                 <div className="text-2xl font-extrabold leading-tight text-[#1a1a1a]">
@@ -5985,13 +7096,11 @@ function ContractSidebar({
                 </div>
               </div>
             </div>
-
             <button
               type="button"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e8e8e8] bg-white text-[#9d9d9d] transition-all duration-150 hover:bg-[#f7f7f7] hover:text-[#1a1a1a]"
               onClick={onClose}
               aria-label="Close"
-              title="Close"
             >
               ✕
             </button>
@@ -5999,46 +7108,76 @@ function ContractSidebar({
         </div>
 
         <div className="flex h-[calc(100%-9rem)]">
-          {previewUrl ? (
-            <div className="flex w-full flex-col border-r border-gray-100 p-6 sm:w-1/2">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <Eye className="h-4 w-4" />
-                  <span>Preview</span>
+          {/* ── Preview pane ── */}
+          <div className="hidden w-1/2 flex-col border-r border-gray-100 p-6 sm:flex">
+            {previewUrl ? (
+              <>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Eye className="h-4 w-4" />
+                    <span>Live Preview</span>
+                    {isAutoPreviewLoading && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                        <span className="animate-spin">⏳</span> Refreshing…
+                      </span>
+                    )}
+                  </div>
+                  {onClosePreview && (
+                    <button
+                      type="button"
+                      onClick={onClosePreview}
+                      className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-gray-700 hover:bg-neutral-100"
+                    >
+                      Close preview
+                    </button>
+                  )}
                 </div>
 
-                {onClosePreview && (
-                  <button
-                    type="button"
-                    onClick={onClosePreview}
-                    className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-gray-700 hover:bg-neutral-100"
-                  >
-                    Close preview
-                  </button>
+                {/* iframe with loading overlay */}
+                <div className="relative flex-1 overflow-auto rounded-lg border border-gray-200 bg-gray-50">
+                  <iframe
+                    src={previewUrl}
+                    width="100%"
+                    height="100%"
+                    className="border-0"
+                    title="Contract PDF"
+                  />
+                  {isAutoPreviewLoading && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-lg bg-white/70 backdrop-blur-[2px]">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1A1A1A]" />
+                      <span className="text-xs font-medium text-gray-600">
+                        Updating preview…
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* Empty state — show spinner if auto-loading, placeholder otherwise */
+              <div className="flex h-full items-center justify-center">
+                {isAutoPreviewLoading ? (
+                  <div className="flex flex-col items-center gap-3 text-gray-500">
+                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1A1A1A]" />
+                    <span className="text-sm font-medium">Generating preview…</span>
+                    <span className="text-xs text-gray-400">
+                      Fill in the required fields and it will appear here
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-400">
+                    <Eye className="mx-auto mb-2 h-8 w-8" />
+                    <div className="text-sm">
+                      Preview will appear here as you fill fields
+                    </div>
+                  </div>
                 )}
               </div>
+            )}
+          </div>
 
-              <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-gray-50">
-                <iframe
-                  src={previewUrl}
-                  width="100%"
-                  height="100%"
-                  className="border-0"
-                  title="Contract PDF"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="hidden w-1/2 select-none items-center justify-center p-6 text-gray-400 sm:flex">
-              <div className="text-center">
-                <Eye className="mx-auto mb-2 h-8 w-8" />
-                <div className="text-sm">Generate a preview to see the PDF here</div>
-              </div>
-            </div>
-          )}
-
+          {/* ── Form pane ── */}
           <div
-            className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"} h-full overflow-auto px-6 space-y-5`}
+            className={`${previewUrl || isAutoPreviewLoading ? "w-full sm:w-1/2" : "w-full"} h-full overflow-auto px-6 space-y-5`}
           >
             {children}
           </div>
@@ -6517,6 +7656,7 @@ function CommercialMilestonesEditor({
           </div>
         </div>
       ))}
+
     </div>
   );
 }

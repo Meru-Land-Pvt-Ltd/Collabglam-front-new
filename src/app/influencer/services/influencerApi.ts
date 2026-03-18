@@ -528,6 +528,11 @@ export const apiGetfetchMediaKit = (influencerId: string) => {
   });
 };
 
+
+export const apiGetfetchBulkInfleuncerId = (ids: string[]) => {
+  return apiPost<any>(`/${INFLUENCER_BASE}/getBulkByIds`, { ids })
+}
+
 export type ApplyToCampaignResponse = {
   message: string;
   campaignId: string;

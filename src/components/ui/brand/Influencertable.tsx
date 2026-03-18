@@ -20,23 +20,24 @@ export type InfluencerRow = {
     handle?: string;
     avatarUrl?: string;
   };
-
   category: string;
-
   platforms?: Array<{
     platform: PlatformType;
     followers: number;
     engagement: number;
   }>;
-
   followers?: number;
   engagement?: number;
-
   appliedDate: string;
-
   status?: string;
   budget?: string;
 };
+
+type BulkHeaderRenderer = (args: {
+  selectedIds: string[];
+  selectedRows: InfluencerRow[];
+  clearSelection: () => void;
+}) => React.ReactNode;
 
 type RowRenderer = (row: InfluencerRow) => React.ReactNode;
 
@@ -53,6 +54,9 @@ type InfluencerTableProps = {
   onToggleRow?: (id: string) => void;
   onToggleAll?: () => void;
   isRowSelectable?: (row: InfluencerRow) => boolean;
+
+  renderBulkHeader?: BulkHeaderRenderer;
+  onClearSelection?: () => void;
 };
 
 const headerTextStyle: React.CSSProperties = {
@@ -337,11 +341,24 @@ const colShort = {
 function DefaultTable({
   rows,
   onActionClick,
+  renderBulkHeader,
 }: {
   rows: InfluencerRow[];
   onActionClick?: (row: InfluencerRow) => void;
+  renderBulkHeader?: BulkHeaderRenderer;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
+
+  const selectedIdList = rows
+    .filter((r) => Boolean(selected[r.id]))
+    .map((r) => r.id);
+
+  const selectedRows = rows.filter((r) => Boolean(selected[r.id]));
+  const hasSelection = selectedIdList.length > 0;
+
+  const clearSelection = () => {
+    setSelected({});
+  };
 
   const allChecked =
     rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
@@ -363,74 +380,84 @@ function DefaultTable({
     <div className="flex w-full flex-col">
       <XScroll>
         <div className="min-w-full w-max">
-          <div
-            className="
-              flex h-14 w-full min-w-full items-center
-              bg-[var(--Light-Background-Neutral,#F2F2F2)]
-              rounded-tr-[0.75rem]
-              rounded-bl-[0.75rem]
-              rounded-br-[0.75rem]
-            "
-          >
-            <div className={`${colDefault.profile} flex h-14 items-center`}>
-              <div className="flex h-14 items-center justify-center gap-1 py-[0.625rem] pl-[1rem] pr-[0.75rem] rounded-tl-[0.75rem]">
-                <Checkbox
-                  className="cursor-pointer"
-                  checked={
-                    allChecked ? true : someChecked ? "indeterminate" : false
-                  }
-                  onCheckedChange={(v) => toggleAll(Boolean(v))}
-                  aria-label="Select all influencers"
-                />
+          {hasSelection && renderBulkHeader ? (
+            <div className="mb-4">
+              {renderBulkHeader({
+                selectedIds: selectedIdList,
+                selectedRows,
+                clearSelection,
+              })}
+            </div>
+          ) : (
+            <div
+              className="
+                flex h-14 w-full min-w-full items-center
+                bg-[var(--Light-Background-Neutral,#F2F2F2)]
+                rounded-tr-[0.75rem]
+                rounded-bl-[0.75rem]
+                rounded-br-[0.75rem]
+              "
+            >
+              <div className={`${colDefault.profile} flex h-14 items-center`}>
+                <div className="flex h-14 items-center justify-center gap-1 py-[0.625rem] pl-[1rem] pr-[0.75rem] rounded-tl-[0.75rem]">
+                  <Checkbox
+                    className="cursor-pointer"
+                    checked={
+                      allChecked ? true : someChecked ? "indeterminate" : false
+                    }
+                    onCheckedChange={(v) => toggleAll(Boolean(v))}
+                    aria-label="Select all influencers"
+                  />
+                </div>
+
+                <div className="flex h-14 flex-1 items-center justify-between px-4 py-[0.625rem]">
+                  <span style={headerTextStyle}>Profile</span>
+                  <HeaderCarets />
+                </div>
               </div>
 
-              <div className="flex h-14 flex-1 items-center justify-between px-4 py-[0.625rem]">
-                <span style={headerTextStyle}>Profile</span>
+              <div
+                className={`${colDefault.category} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Category</span>
                 <HeaderCarets />
               </div>
-            </div>
 
-            <div
-              className={`${colDefault.category} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Category</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colDefault.followers} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Followers</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colDefault.followers} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Followers</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colDefault.engagement} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Engagement</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colDefault.engagement} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Engagement</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colDefault.applied} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Applied Date</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colDefault.applied} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Applied Date</span>
-              <HeaderCarets />
+              <div
+                className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}
+              >
+                <span style={headerTextStyle}>Action</span>
+              </div>
             </div>
-
-            <div
-              className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}
-            >
-              <span style={headerTextStyle}>Action</span>
-            </div>
-          </div>
+          )}
 
           <div className="mt-[2rem] w-full space-y-3">
             {rows.map((r) => {
               const plat = getPlatformRows(r);
               const appliedText =
                 typeof r.appliedDate === "string" &&
-                  r.appliedDate.toLowerCase().startsWith("applied")
+                r.appliedDate.toLowerCase().startsWith("applied")
                   ? r.appliedDate
                   : `applied ${r.appliedDate}`;
 
@@ -625,6 +652,8 @@ function ShortlistedTable({
   onToggleRow,
   onToggleAll,
   isRowSelectable,
+  renderBulkHeader,
+  onClearSelection,
 }: {
   rows: InfluencerRow[];
   renderActions?: RowRenderer;
@@ -634,6 +663,8 @@ function ShortlistedTable({
   onToggleRow?: (id: string) => void;
   onToggleAll?: () => void;
   isRowSelectable?: (row: InfluencerRow) => boolean;
+  renderBulkHeader?: BulkHeaderRenderer;
+  onClearSelection?: () => void;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
@@ -644,20 +675,12 @@ function ShortlistedTable({
 
   const allChecked = selectable
     ? selectableRows.length > 0 &&
-    selectableRows.every((row) => selectedIds.includes(row.id))
+      selectableRows.every((row) => selectedIds.includes(row.id))
     : rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
 
   const someChecked = selectable
     ? selectableRows.some((row) => selectedIds.includes(row.id)) && !allChecked
     : rows.some((r) => Boolean(selected[r.id])) && !allChecked;
-
-  const toggleAllLocal = (checked: boolean) => {
-    const next: Record<string, boolean> = {};
-    rows.forEach((r) => {
-      next[r.id] = checked;
-    });
-    setSelected(next);
-  };
 
   const toggleOneLocal = (id: string, checked: boolean) => {
     setSelected((prev) => ({ ...prev, [id]: checked }));
@@ -699,72 +722,102 @@ function ShortlistedTable({
     background: "var(--Light-Text-Tertiary, #B8B8B8)",
   };
 
+  const activeSelectedIds = selectable
+    ? selectedIds.filter((id) => rows.some((row) => row.id === id))
+    : rows.filter((r) => Boolean(selected[r.id])).map((r) => r.id);
+
+  const activeSelectedRows = rows.filter((r) =>
+    activeSelectedIds.includes(r.id)
+  );
+
+  const hasSelection = activeSelectedIds.length > 0;
+
+  const clearSelection = () => {
+    if (selectable) {
+      onClearSelection?.();
+      return;
+    }
+    setSelected({});
+  };
+
   return (
     <div className="flex w-full flex-col">
       <XScroll>
         <div className="min-w-full w-max">
-          <div
-            className="
-              flex w-full min-w-[73rem] items-center
-              bg-[var(--Light-Background-Neutral,#F2F2F2)]
-              rounded-tr-[0.75rem] rounded-bl-[0.75rem] rounded-br-[0.75rem]
-              h-14
-            "
-          >
-            <div
-              className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}
-            >
-              {selectable ? (
-                <Checkbox
-                  className="cursor-pointer"
-                  checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                  onCheckedChange={() => onToggleAll?.()}
-                  aria-label="Select all"
-                />
-              ) : null}
+          {hasSelection && renderBulkHeader ? (
+            <div className="mb-4 min-w-[73rem]">
+              {renderBulkHeader({
+                selectedIds: activeSelectedIds,
+                selectedRows: activeSelectedRows,
+                clearSelection,
+              })}
             </div>
+          ) : (
+            <div
+              className="
+                flex w-full min-w-[73rem] items-center
+                bg-[var(--Light-Background-Neutral,#F2F2F2)]
+                rounded-tr-[0.75rem] rounded-bl-[0.75rem] rounded-br-[0.75rem]
+                h-14
+              "
+            >
+              <div
+                className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}
+              >
+                {selectable ? (
+                  <Checkbox
+                    className="cursor-pointer"
+                    checked={
+                      allChecked ? true : someChecked ? "indeterminate" : false
+                    }
+                    onCheckedChange={() => onToggleAll?.()}
+                    aria-label="Select all"
+                  />
+                ) : null}
+              </div>
 
-            <div
-              className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Profile</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Profile</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Status</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Status</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Platform</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Platform</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Budget</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Budget</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Date</span>
-              <HeaderCarets />
-            </div>
+              <div
+                className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Date</span>
+                <HeaderCarets />
+              </div>
 
-            <div
-              className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}
-            >
-              <span style={headerTextStyle}>Action</span>
+              <div
+                className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Action</span>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="mt-[2rem] w-full space-y-3">
             {rows.map((r) => {
@@ -790,7 +843,11 @@ function ShortlistedTable({
                   >
                     <Checkbox
                       className="cursor-pointer"
-                      checked={selectable ? selectedIds.includes(r.id) : Boolean(selected[r.id])}
+                      checked={
+                        selectable
+                          ? selectedIds.includes(r.id)
+                          : Boolean(selected[r.id])
+                      }
                       disabled={selectable ? !rowSelectable(r) : false}
                       onCheckedChange={(v) => {
                         if (selectable) {
@@ -947,7 +1004,7 @@ function RecommendedTable({
             const plat = getPlatformRows(r);
             const appliedText =
               typeof r.appliedDate === "string" &&
-                r.appliedDate.toLowerCase().startsWith("applied")
+              r.appliedDate.toLowerCase().startsWith("applied")
                 ? r.appliedDate
                 : `applied ${r.appliedDate}`;
 
@@ -1030,7 +1087,10 @@ function RecommendedTable({
                         >
                           <span
                             className="flex h-4 w-4 items-center justify-center rounded-full border border-[var(--Light-Border-Subtle,#E6E6E6)] bg-white"
-                            style={{ borderWidth: "0.5px", padding: "0.125rem" }}
+                            style={{
+                              borderWidth: "0.5px",
+                              padding: "0.125rem",
+                            }}
                             aria-hidden="true"
                           >
                             <img
@@ -1144,6 +1204,8 @@ export function InfluencerTable({
   onToggleRow,
   onToggleAll,
   isRowSelectable,
+  renderBulkHeader,
+  onClearSelection,
 }: InfluencerTableProps) {
   if (variant === "recommended") {
     return (
@@ -1165,9 +1227,17 @@ export function InfluencerTable({
         onToggleRow={onToggleRow}
         onToggleAll={onToggleAll}
         isRowSelectable={isRowSelectable}
+        renderBulkHeader={renderBulkHeader}
+        onClearSelection={onClearSelection}
       />
     );
   }
 
-  return <DefaultTable rows={rows} onActionClick={onActionClick} />;
+  return (
+    <DefaultTable
+      rows={rows}
+      onActionClick={onActionClick}
+      renderBulkHeader={renderBulkHeader}
+    />
+  );
 }

@@ -169,6 +169,12 @@ type ContractInfluencerContent = {
   contactPhone?: string;
   whatsApp?: string;
   address?: string;
+
+  ftcAcknowledgement?: string;
+  shipToName?: string;
+  shipToAddress?: string;
+  shipToPhone?: string;
+  deliveryNotes?: string;
 };
 
 type ContractMeta = {
@@ -207,6 +213,16 @@ type LocalInfluencer = {
   contactPhone: string;
   whatsApp: string;
   address: string;
+  ftcAcknowledgement: string;
+  shipToName: string;
+  shipToAddress: string;
+  shipToPhone: string;
+  deliveryNotes: string;
+
+  payoutMethod: string;
+  payoutAccount: string;
+  taxId: string;
+
 };
 
 const emptyLocal: LocalInfluencer = {
@@ -217,6 +233,15 @@ const emptyLocal: LocalInfluencer = {
   contactPhone: "",
   whatsApp: "",
   address: "",
+  ftcAcknowledgement: "",
+  shipToName: "",
+  shipToAddress: "",
+  shipToPhone: "",
+  deliveryNotes: "",
+
+  payoutMethod: "",
+  payoutAccount: "",
+  taxId: "",
 };
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
@@ -240,6 +265,17 @@ const sanitizeLocal = (p: LocalInfluencer): LocalInfluencer => ({
   contactPhone: trimStr(p.contactPhone),
   whatsApp: trimStr(p.whatsApp),
   address: trimStr(p.address),
+
+
+  ftcAcknowledgement: trimStr(p.ftcAcknowledgement),
+  shipToName: trimStr(p.shipToName),
+  shipToAddress: trimStr(p.shipToAddress),
+  shipToPhone: trimStr(p.shipToPhone),
+  deliveryNotes: trimStr(p.deliveryNotes),
+
+  payoutMethod: trimStr(p.payoutMethod),
+  payoutAccount: trimStr(p.payoutAccount),
+  taxId: trimStr(p.taxId),
 });
 
 const toContractInfluencerPayload = (
@@ -252,6 +288,13 @@ const toContractInfluencerPayload = (
   contactPhone: p.contactPhone,
   whatsApp: p.whatsApp,
   address: p.address,
+
+  ftcAcknowledgement: p.ftcAcknowledgement,
+  shipToName: p.shipToName,
+  shipToAddress: p.shipToAddress,
+  shipToPhone: p.shipToPhone,
+  deliveryNotes: p.deliveryNotes,
+
 });
 
 function hasAcceptedCurrent(
@@ -477,8 +520,8 @@ function FloatingInput({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled
-            ? "border-gray-200 opacity-60 cursor-not-allowed"
-            : "border-gray-200 focus:border-[#FFBF00]"
+          ? "border-gray-200 opacity-60 cursor-not-allowed"
+          : "border-gray-200 focus:border-[#FFBF00]"
           }`}
         placeholder=" "
       />
@@ -516,8 +559,8 @@ function FloatingTextarea({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={`w-full px-4 pt-6 pb-2 border-2 rounded-lg text-sm transition-all duration-200 focus:outline-none ${disabled
-            ? "border-gray-200 opacity-60 cursor-not-allowed"
-            : "border-gray-200 focus:border-[#FFBF00]"
+          ? "border-gray-200 opacity-60 cursor-not-allowed"
+          : "border-gray-200 focus:border-[#FFBF00]"
           }`}
         placeholder=" "
       />
@@ -720,10 +763,10 @@ function SignatureModal({
           <div
             ref={dropRef}
             className={`rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all select-none ${isSubmitting
-                ? "opacity-60 cursor-not-allowed border-gray-300 bg-gray-50"
-                : isDragging
-                  ? "cursor-pointer border-amber-400 bg-amber-50 shadow-sm"
-                  : "cursor-pointer border-gray-300 bg-gray-50 hover:bg-gray-100/80"
+              ? "opacity-60 cursor-not-allowed border-gray-300 bg-gray-50"
+              : isDragging
+                ? "cursor-pointer border-amber-400 bg-amber-50 shadow-sm"
+                : "cursor-pointer border-gray-300 bg-gray-50 hover:bg-gray-100/80"
               }`}
           >
             <div className="flex flex-col items-center gap-2">
@@ -1081,10 +1124,10 @@ function ContractActionBar({
         </span>
         <span
           className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${locked
-              ? "bg-emerald-100 text-emerald-700"
-              : rejected
-                ? "bg-red-100 text-red-700"
-                : "bg-yellow-100 text-yellow-700"
+            ? "bg-emerald-100 text-emerald-700"
+            : rejected
+              ? "bg-red-100 text-red-700"
+              : "bg-yellow-100 text-yellow-700"
             }`}
         >
           {statusText}
@@ -1201,7 +1244,12 @@ function InfluencerContractModal({
   const locked = isLockedMeta(meta);
   const rejected = isRejectedMeta(meta);
   const superseded = isSupersededMeta(meta);
-
+  const campaignType: "fixed" | "milestone" | "gifting" =
+    (campaign as any).campaignType ??
+    (campaign as any).paymentType ??
+    (campaign as any).laneType ??
+    "fixed";
+  const isGifting = campaignType === "gifting";
   const canEdit = useMemo(() => {
     if (readOnly) return false;
     if (locked || readyToSign) return false;
@@ -1250,6 +1298,16 @@ function InfluencerContractModal({
       contactPhone: lite?.phone || "",
       whatsApp: lite?.whatsapp || "",
       address: lite?.address || "",
+
+      ftcAcknowledgement: "",
+      shipToName: "",
+      shipToAddress: "",
+      shipToPhone: "",
+      deliveryNotes: "",
+
+      payoutMethod: "",
+      payoutAccount: "",
+      taxId: "",
     };
   }, []);
 
@@ -1320,6 +1378,17 @@ function InfluencerContractModal({
               contentInfluencer.contactPhone ?? prev.contactPhone,
             whatsApp: contentInfluencer.whatsApp ?? prev.whatsApp,
             address: contentInfluencer.address ?? prev.address,
+
+            ftcAcknowledgement:
+              contentInfluencer.ftcAcknowledgement ?? prev.ftcAcknowledgement,
+            shipToName: contentInfluencer.shipToName ?? prev.shipToName,
+            shipToAddress: contentInfluencer.shipToAddress ?? prev.shipToAddress,
+            shipToPhone: contentInfluencer.shipToPhone ?? prev.shipToPhone,
+            deliveryNotes: contentInfluencer.deliveryNotes ?? prev.deliveryNotes,
+
+            payoutMethod: contentInfluencer.payoutMethod ?? prev.payoutMethod,
+            payoutAccount: contentInfluencer.payoutAccount ?? prev.payoutAccount,
+            taxId: contentInfluencer.taxId ?? prev.taxId,
           })
         );
       } else {
@@ -1536,9 +1605,9 @@ function InfluencerContractModal({
         <div className="relative h-24 overflow-hidden">
           <div
             className="absolute inset-0"
-            style={{
-              background: "linear-gradient(135deg, #FFBF00 0%, #FFDB58 100%)",
-            }}
+            // style={{
+            //   background: "linear-gradient(135deg, #FFBF00 0%, #FFDB58 100%)",
+            // }}
           />
           <div className="relative z-10 p-5 text-gray-900 flex items-center justify-between h-full">
             <div className="min-w-0">
@@ -1559,8 +1628,8 @@ function InfluencerContractModal({
                   </div>
                   <div className="mt-0.5 text-[11px] text-gray-800 truncate">
                     {campaign?.brandName ? `${campaign.brandName}` : ""}{" "}
-                    {campaign?.brandName && campaign?.id ? "•" : ""}{" "}
-                    {campaign?.id ? `#${campaign.id.slice(-6)}` : ""}
+                    {/* {campaign?.brandName && campaign?.id ? "•" : ""}{" "} */}
+                    {/* {campaign?.id ? `#${campaign.id.slice(-6)}` : ""} */}
                   </div>
                 </div>
               </div>
@@ -1599,8 +1668,8 @@ function InfluencerContractModal({
           {meta?.status && (
             <span
               className={`px-2 py-1 rounded-full border ${locked
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                  : "bg-yellow-50 border-yellow-200 text-yellow-700"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                : "bg-yellow-50 border-yellow-200 text-yellow-700"
                 }`}
             >
               Status: {String(meta.status).toUpperCase()}
@@ -1747,7 +1816,7 @@ function InfluencerContractModal({
                       disabled={!canEdit}
                     />
 
-                    <FloatingInput
+                    {/* <FloatingInput
                       id="contactEmail"
                       label="Contact Email"
                       value={local.contactEmail}
@@ -1755,9 +1824,9 @@ function InfluencerContractModal({
                         setLocal((p) => ({ ...p, contactEmail: v }))
                       }
                       disabled={!canEdit}
-                    />
+                    /> */}
 
-                    <FloatingInput
+                    {/* <FloatingInput
                       id="contactPhone"
                       label="Contact Phone"
                       value={local.contactPhone}
@@ -1765,15 +1834,15 @@ function InfluencerContractModal({
                         setLocal((p) => ({ ...p, contactPhone: v }))
                       }
                       disabled={!canEdit}
-                    />
+                    /> */}
 
-                    <FloatingInput
+                    {/* <FloatingInput
                       id="whatsApp"
                       label="WhatsApp"
                       value={local.whatsApp}
                       onChange={(v) => setLocal((p) => ({ ...p, whatsApp: v }))}
                       disabled={!canEdit}
-                    />
+                    /> */}
                   </div>
 
                   <div className="mt-3">
@@ -1785,6 +1854,117 @@ function InfluencerContractModal({
                       rows={4}
                       disabled={!canEdit}
                     />
+                  </div>
+                  <div className="mt-5 border-t pt-4">
+                    <div className="text-sm font-semibold text-gray-800 mb-3">
+                      FTC / Disclosure Acknowledgement
+                    </div>
+
+                    <FloatingTextarea
+                      id="ftcAcknowledgement"
+                      label="FTC / Disclosure Acknowledgement"
+                      value={local.ftcAcknowledgement}
+                      onChange={(v) =>
+                        setLocal((p) => ({ ...p, ftcAcknowledgement: v }))
+                      }
+                      rows={4}
+                      disabled={!canEdit}
+                    />
+                  </div>
+
+                  {isGifting && (
+                    <div className="mt-5 border-t pt-4">
+                      <div className="text-sm font-semibold text-gray-800 mb-3">
+                        Shipping Details
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <FloatingInput
+                          id="shipToName"
+                          label="Ship-To Name"
+                          value={local.shipToName}
+                          onChange={(v) => setLocal((p) => ({ ...p, shipToName: v }))}
+                          disabled={!canEdit}
+                        />
+
+                        <FloatingInput
+                          id="shipToPhone"
+                          label="Shipping Phone Number"
+                          value={local.shipToPhone}
+                          onChange={(v) => setLocal((p) => ({ ...p, shipToPhone: v }))}
+                          disabled={!canEdit}
+                        />
+                      </div>
+
+                      <div className="mt-3">
+                        <FloatingTextarea
+                          id="shipToAddress"
+                          label="Shipping Address"
+                          value={local.shipToAddress}
+                          onChange={(v) => setLocal((p) => ({ ...p, shipToAddress: v }))}
+                          rows={3}
+                          disabled={!canEdit}
+                        />
+                      </div>
+
+                      <div className="mt-3">
+                        <FloatingTextarea
+                          id="deliveryNotes"
+                          label="Delivery Instructions"
+                          value={local.deliveryNotes}
+                          onChange={(v) => setLocal((p) => ({ ...p, deliveryNotes: v }))}
+                          rows={3}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-5 border-t pt-4">
+                    <div className="text-sm font-semibold text-gray-800 mb-1">
+                      Payout Setup
+                    </div>
+                    <div className="text-xs text-gray-500 mb-3">
+                      Private — only you can see this. Never shared with the brand.
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      <div className="lg:col-span-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Payout Method
+                        </label>
+                        <select
+                          value={local.payoutMethod}
+                          onChange={(e) =>
+                            setLocal((p) => ({ ...p, payoutMethod: e.target.value }))
+                          }
+                          disabled={!canEdit}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-gray-700 disabled:bg-gray-50 disabled:text-gray-400"
+                        >
+                          <option value="">— Select payout method —</option>
+                          <option value="paypal">PayPal</option>
+                          <option value="bank_transfer">Bank Transfer / ACH</option>
+                          <option value="wise">Wise</option>
+                          <option value="payoneer">Payoneer</option>
+                          <option value="platform_wallet">CollabGlam Wallet</option>
+                        </select>
+                      </div>
+
+                      {/* <FloatingInput
+                        id="payoutAccount"
+                        label="Payout Account Email / ID"
+                        value={local.payoutAccount}
+                        onChange={(v) => setLocal((p) => ({ ...p, payoutAccount: v }))}
+                        disabled={!canEdit}
+                      /> */}
+
+                      <FloatingInput
+                        id="taxId"
+                        label="Tax ID (if applicable)"
+                        value={local.taxId}
+                        onChange={(v) => setLocal((p) => ({ ...p, taxId: v }))}
+                        disabled={!canEdit}
+                      />
+                    </div>
                   </div>
 
                   <div className="mt-5 flex flex-wrap gap-2">
@@ -2324,8 +2504,8 @@ export default function MyCampaignsPage() {
                   key={tab.value}
                   value={tab.value}
                   className={`capitalize px-6 py-2.5 rounded-lg bg-transparent text-gray-600 font-semibold text-base transition-all flex-1 ${activeTab === tab.value
-                      ? "text-black"
-                      : "hover:text-gray-900"
+                    ? "text-black"
+                    : "hover:text-gray-900"
                     }`}
                   style={
                     activeTab === tab.value
