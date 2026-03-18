@@ -11,7 +11,8 @@ const INVITATION_BASE = "/invitation";
 const APPLY_BASE = "/apply-campaign";
 const MILESTONE_BASE = "/milestone";
 const DELIVERABLE_BASE = "/deliverable";
-const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
+const CAMPAIGN_INVITATION_BASE= "/campaign-invitation";
+const Apply_Base = "/apply";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -1430,3 +1431,140 @@ export async function apiCampaignHistory(payload: CampaignHistoryPayload) {
   throw new Error("No compatible API client found in @/lib/api");
 }
 
+
+
+/** -------- Applicant List By Campaign (NEW) -------- */
+
+export type ApplyListSortField =
+  | "name"
+  | "primaryPlatform"
+  | "category"
+  | "audienceSize"
+  | "handle"
+  | "createdAt";
+
+export type GetListByCampaignPayload = {
+  campaignId: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortField?: ApplyListSortField;
+  createdPage?: boolean | "true" | "false";
+  sortOrder?: 0 | 1; // 0 = asc, 1 = desc (matches backend)
+};
+
+export type CampaignApplicantInfluencerRow = {
+  influencerId: string;
+  name: string;
+  primaryPlatform: string | null;
+  handle: string | null;
+  category: string | null;
+  audienceSize: number;
+  createdAt: string | null;
+  isAssigned: 0 | 1;
+  isContracted: 0 | 1;
+  contractId: string | null;
+  feeAmount: number;
+  isAccepted: 0 | 1;
+  isRejected: 0 | 1;
+  rejectedReason: string;
+};
+
+export type GetListByCampaignResponse = {
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  applicantCount: number;
+  isContracted: 0 | 1;
+  contractId: string | null;
+  influencers: CampaignApplicantInfluencerRow[];
+};
+
+export async function apiGetListByCampaign(
+  payload: GetListByCampaignPayload
+) {
+  return apiPost<GetListByCampaignResponse>(
+    `${Apply_Base}/list`,
+    {
+      campaignId: payload.campaignId,
+      page: payload.page ?? 1,
+      limit: payload.limit ?? 10,
+      search: payload.search,
+      sortField: payload.sortField,
+      createdPage: payload.createdPage,
+      sortOrder: payload.sortOrder ?? 0,
+    }
+  );
+}
+
+export type ApplicantDecisionField =
+  | "isShortlisted"
+  | "isUndicided"
+  | "isRejected";
+
+export type SetApplicantDecisionStatusPayload = {
+  campaignId: string;
+  influencerId: string;
+  field: ApplicantDecisionField;
+};
+
+export type SetApplicantDecisionStatusResponse = {
+  message: string;
+  applicant: {
+    influencerId: string;
+    name: string;
+    isShortlisted: 0 | 1;
+    isUndicided: 0 | 1;
+    isRejected: 0 | 1;
+  };
+};
+
+export async function apiSetApplicantDecisionStatus(
+  payload: SetApplicantDecisionStatusPayload
+) {
+  return apiPost<SetApplicantDecisionStatusResponse>(
+    `${Apply_Base}/update-status`,
+    {
+      campaignId: payload.campaignId,
+      influencerId: payload.influencerId,
+      field: payload.field,
+    }
+  );
+}
+
+/** -------- Campaign Invitations By Brand + Campaign (NEW) -------- */
+export type GetCampaignInvitationsByBrandAndCampaignPayload = {
+  brandId: string;
+  campaignId: string;
+  status?: string;
+  influencerId?: string;
+  platform?: "youtube" | "instagram" | "tiktok";
+  handle?: string;
+};
+
+export type GetCampaignInvitationsByBrandAndCampaignResponse = {
+  status: "success" | "error";
+  total: number;
+  brandId: string;
+  campaignId: string;
+  invitations: CampaignInvitationRow[];
+};
+
+export async function apiGetCampaignInvitationsByBrandAndCampaign(
+  payload: GetCampaignInvitationsByBrandAndCampaignPayload
+) {
+  return apiPost<GetCampaignInvitationsByBrandAndCampaignResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/get-invitations`,
+    {
+      brandId: payload.brandId,
+      campaignId: payload.campaignId,
+      status: payload.status,
+      influencerId: payload.influencerId,
+      platform: payload.platform,
+      handle: payload.handle,
+    }
+  );
+}

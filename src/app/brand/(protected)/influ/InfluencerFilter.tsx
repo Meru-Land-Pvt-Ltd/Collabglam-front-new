@@ -87,7 +87,7 @@ type Props = {
 
 function unwrapArray(res: any) {
     if (Array.isArray(res)) return res;
-    return res?.data ?? res?.result ?? res?.items ?? [];
+    return res?.categories ?? res?.data ?? res?.result ?? res?.items ?? [];
 }
 
 // ✅ Multi-select normalization (used for Platform):
@@ -150,7 +150,9 @@ export default function InfluencerFilter({
         async function load() {
             try {
                 const catRes = await apiGetAllCategories();
-                const cats = unwrapArray(catRes)
+                const catsSource = Array.isArray(catRes) ? catRes : (catRes as any)?.categories ?? [];
+
+                const cats = catsSource
                     .map((c: any) => {
                         const label = String(c?.name ?? c?.categoryName ?? c?.title ?? "");
                         if (!label) return null;
@@ -581,7 +583,7 @@ export default function InfluencerFilter({
                                                         showCheckbox
                                                         className={[
                                                             itemNoTickNeutralSelectedCls,
-                                                            itemSelectedBgUnlessAll(opt.label),
+                                                            itemSelectedBgUnlessAll(opt.value),
                                                         ].join(" ")}
                                                     >
                                                         {opt.label}

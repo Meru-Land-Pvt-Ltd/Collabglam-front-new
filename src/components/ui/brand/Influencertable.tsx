@@ -12,6 +12,10 @@ import {
 } from "@phosphor-icons/react";
 
 export type PlatformType = "instagram" | "youtube" | "tiktok";
+export type ApplicantDecisionField =
+  | "isShortlisted"
+  | "isUndicided"
+  | "isRejected";
 
 export type InfluencerRow = {
   id: string;
@@ -42,7 +46,7 @@ type RowRenderer = (row: InfluencerRow) => React.ReactNode;
 
 type InfluencerTableProps = {
   rows: InfluencerRow[];
-  onActionClick?: (row: InfluencerRow) => void;
+  onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
   variant?: "default" | "shortlisted" | "recommended";
   renderRecommendedActions?: RowRenderer;
   renderShortlistedActions?: RowRenderer;
@@ -229,7 +233,11 @@ function PillTag({ text, title }: { text: string; title?: string }) {
   );
 }
 
-function ActionGroup({ onSelect }: { onSelect?: () => void }) {
+function ActionGroup({
+  onAction,
+}: {
+  onAction?: (action: ApplicantDecisionField) => void;
+}) {
   const b = "var(--Light-Border-Primary,#D6D6D6)";
 
   return (
@@ -251,6 +259,7 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           e.currentTarget.style.background = "transparent";
         }}
         aria-label="Reject"
+        onClick={() => onAction?.("isRejected")}
       >
         <X size={18} weight="bold" />
       </button>
@@ -272,6 +281,7 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           e.currentTarget.style.background = "transparent";
         }}
         aria-label="Undecided"
+        onClick={() => onAction?.("isUndicided")}
       >
         <QuestionMark size={18} weight="bold" />
       </button>
@@ -293,7 +303,7 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           e.currentTarget.style.background = "transparent";
         }}
         aria-label="Selected"
-        onClick={onSelect}
+        onClick={() => onAction?.("isShortlisted")}
       >
         <Check size={18} weight="bold" />
       </button>
@@ -339,7 +349,7 @@ function DefaultTable({
   onActionClick,
 }: {
   rows: InfluencerRow[];
-  onActionClick?: (row: InfluencerRow) => void;
+  onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
@@ -430,7 +440,7 @@ function DefaultTable({
               const plat = getPlatformRows(r);
               const appliedText =
                 typeof r.appliedDate === "string" &&
-                  r.appliedDate.toLowerCase().startsWith("applied")
+                r.appliedDate.toLowerCase().startsWith("applied")
                   ? r.appliedDate
                   : `applied ${r.appliedDate}`;
 
@@ -596,7 +606,7 @@ function DefaultTable({
                   <div
                     className={`${colDefault.actions} flex h-[5.5rem] items-center justify-end gap-2 bg-white pl-4 pr-4 py-[0.625rem] rounded-r-[0.75rem]`}
                   >
-                    <ActionGroup onSelect={() => onActionClick?.(r)} />
+                    <ActionGroup onAction={(action) => onActionClick?.(r, action)} />
 
                     <button
                       type="button"
@@ -644,20 +654,12 @@ function ShortlistedTable({
 
   const allChecked = selectable
     ? selectableRows.length > 0 &&
-    selectableRows.every((row) => selectedIds.includes(row.id))
+      selectableRows.every((row) => selectedIds.includes(row.id))
     : rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
 
   const someChecked = selectable
     ? selectableRows.some((row) => selectedIds.includes(row.id)) && !allChecked
     : rows.some((r) => Boolean(selected[r.id])) && !allChecked;
-
-  const toggleAllLocal = (checked: boolean) => {
-    const next: Record<string, boolean> = {};
-    rows.forEach((r) => {
-      next[r.id] = checked;
-    });
-    setSelected(next);
-  };
 
   const toggleOneLocal = (id: string, checked: boolean) => {
     setSelected((prev) => ({ ...prev, [id]: checked }));
@@ -864,11 +866,7 @@ function ShortlistedTable({
                   <div
                     className={`${colShort.status} flex h-[5.5rem] items-center justify-center px-4`}
                   >
-                    {renderStatus ? (
-                      renderStatus(r)
-                    ) : (
-                      <PillTag text={statusText} />
-                    )}
+                    {renderStatus ? renderStatus(r) : <PillTag text={statusText} />}
                   </div>
 
                   <div
@@ -947,7 +945,7 @@ function RecommendedTable({
             const plat = getPlatformRows(r);
             const appliedText =
               typeof r.appliedDate === "string" &&
-                r.appliedDate.toLowerCase().startsWith("applied")
+              r.appliedDate.toLowerCase().startsWith("applied")
                 ? r.appliedDate
                 : `applied ${r.appliedDate}`;
 

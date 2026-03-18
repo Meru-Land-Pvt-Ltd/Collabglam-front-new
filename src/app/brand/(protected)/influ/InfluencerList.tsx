@@ -1,29 +1,28 @@
-// app/brand/influ/InfluencerList.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import InfluencerFilter, { FilterState } from "./InfluencerFilter";
-import { InfluencerTable, type InfluencerRow } from "@/components/ui/brand/Influencertable";
+import {
+  InfluencerTable,
+  type InfluencerRow,
+} from "@/components/ui/brand/Influencertable";
 
 import { Button } from "@/components/ui/button";
 import { CircleNotch } from "@phosphor-icons/react";
 
 import {
-  apiGetApplicantsByCampaign,
-  apiUpdateApplicantStatus,
-  apiGetInvitationListByCampaign, // ✅ keep + use
+  apiGetListByCampaign,
+  apiGetCampaignInvitationsByBrandAndCampaign,
+  apiSetApplicantDecisionStatus,
+  type ApplicantDecisionField,
   getApiErrorMessage,
-  type ApplicantStatus,
 } from "@/app/brand/services/brandApi";
-
-import { toast } from "@/components/ui/toast";
 
 type Tab = "all" | "active" | "shortlisted" | "undecided" | "rejected";
 
 const PAGE_LIMIT = 20;
-const INVITE_PAGE_LIMIT = 100; // backend clamp usually 100
 
 function getTabFromPath(pathname: string | null): Tab {
   const p = pathname ?? "";
@@ -46,29 +45,72 @@ function toHandle(v: unknown) {
   return s.startsWith("@") ? s : `@${s}`;
 }
 
-// ---------------- Applicants mapping (ApplyCampaign) ----------------
-function normalizeApplicantStatus(s: unknown): ApplicantStatus {
-  const x = String(s ?? "").toLowerCase().trim();
-  if (x === "shortlisted") return "shortlisted";
-  if (x === "undecided") return "undecided";
-  if (x === "active") return "active";
-  if (x === "rejected") return "rejected";
-  return "applied";
+function getApplicantDisplayStatus(a: any) {
+  if (Number(a?.isAccepted) === 1) return "Active";
+  if (Number(a?.isRejected) === 1) return "Rejected";
+  if (Number(a?.isShortlisted) === 1) return "Shortlisted";
+  if (Number(a?.isUndicided) === 1) return "Undecided";
+  if (Number(a?.isAssigned) === 1) return "Shortlisted";
+  return "Applied";
 }
 
+// ---------------- Applicants mapping ----------------
 function mapApplicantToRow(a: any): InfluencerRow {
   const influencerId = String(a?.influencerId ?? "").trim();
-  const name = String(a?.influencerName ?? "Influencer").trim();
+  const name = String(a?.name ?? "Influencer").trim();
 
-  const statusRaw = normalizeApplicantStatus(a?.status);
-  const statusLabel = titleCase(statusRaw);
-
-  const appliedAtRaw = a?.appliedAt ? String(a.appliedAt) : "";
-  const appliedDate = appliedAtRaw ? appliedAtRaw.slice(0, 10) : "—";
+  const createdAtRaw = a?.createdAt ? String(a.createdAt) : "";
+  const appliedDate = createdAtRaw ? createdAtRaw.slice(0, 10) : "—";
 
   const row: any = {
     id: influencerId,
-    profile: { name, handle: "—" },
+    profile: {
+      name,
+      handle: a?.handle ? toHandle(a.handle) : "—",
+    },
+    category: String(a?.category ?? "—").trim() || "—",
+    followers: Number(a?.audienceSize ?? 0) || 0,
+    engagement: 0,
+    appliedDate,
+    status: getApplicantDisplayStatus(a),
+    budget: Number(a?.feeAmount ?? 0) > 0 ? String(a.feeAmount) : "—",
+
+    __source: "applicant",
+    __raw: a,
+  };
+
+  return row as InfluencerRow;
+}
+
+// ---------------- Invitations mapping ----------------
+function normalizeInviteStatus(
+  s: unknown
+): "invited" | "accepted" | "declined" | "cancelled" {
+  const x = String(s ?? "").toLowerCase().trim();
+
+  if (x === "accepted") return "accepted";
+  if (x === "declined" || x === "reject" || x === "rejected") return "declined";
+  if (x === "cancelled") return "cancelled";
+  return "invited";
+}
+
+function mapInviteToRow(x: any): InfluencerRow {
+  const id = String(x?.influencerId ?? "").trim();
+  const name = String(x?.influencerName ?? "Unknown").trim();
+  const handle = toHandle(x?.handle);
+
+  const invitedAtRaw = x?.sentAt ? String(x.sentAt) : "";
+  const appliedDate = invitedAtRaw ? invitedAtRaw.slice(0, 10) : "—";
+
+  const st = normalizeInviteStatus(x?.status);
+  const statusLabel = titleCase(st);
+
+  const row: any = {
+    id,
+    profile: {
+      name,
+      handle: handle || "—",
+    },
     category: "—",
     followers: 0,
     engagement: 0,
@@ -76,64 +118,9 @@ function mapApplicantToRow(a: any): InfluencerRow {
     status: statusLabel,
     budget: "—",
 
-    __source: "applicant",
-    __rawStatus: statusRaw as ApplicantStatus,
-  };
-
-  return row as InfluencerRow;
-}
-
-// ---------------- Invitations mapping (Invitation) ----------------
-function normalizeInviteStatus(s: unknown): "invited" | "accepted" | "declined" | "cancelled" {
-  const x = String(s ?? "").toLowerCase().trim();
-  if (x === "accepted") return "accepted";
-  if (x === "declined") return "declined";
-  if (x === "cancelled") return "cancelled";
-  return "invited";
-}
-
-function mapInviteToRow(x: any): InfluencerRow {
-  const inf = x?.influencer ?? {};
-  const id = String(inf?._id ?? x?.influencerId ?? "").trim();
-
-  const name = String(inf?.name ?? inf?.fullName ?? inf?.profile?.name ?? "Unknown").trim();
-  const handle = toHandle(inf?.handle ?? inf?.username ?? inf?.instagramHandle ?? inf?.profile?.handle);
-
-  const category = String(inf?.categories?.[0]?.name ?? inf?.category?.name ?? inf?.categoryName ?? "—").trim();
-
-  const followers = Number(inf?.followers ?? inf?.followerCount ?? inf?.followersCount ?? 0) || 0;
-  const engagement = Number(inf?.engagement ?? inf?.engagementRate ?? inf?.er ?? 0) || 0;
-
-  const invitedAtRaw = x?.invitedAt ? String(x.invitedAt) : "";
-  const appliedDate = invitedAtRaw ? invitedAtRaw.slice(0, 10) : "—";
-
-  const st = normalizeInviteStatus(x?.status);
-  const statusLabel = titleCase(st); // Invited / Accepted / Declined / Cancelled
-
-  const row: any = {
-    id,
-    profile: {
-      name,
-      handle: handle || "—",
-      avatarUrl:
-        String(
-          inf?.profilePic ??
-            inf?.avatarUrl ??
-            inf?.profile?.avatarUrl ??
-            inf?.photo ??
-            inf?.image ??
-            ""
-        ).trim() || undefined,
-    },
-    category,
-    followers,
-    engagement,
-    appliedDate,
-    status: statusLabel,
-    budget: "—",
-
     __source: "invite",
     __inviteStatus: st,
+    __raw: x,
   };
 
   return row as InfluencerRow;
@@ -157,21 +144,20 @@ export default function InfluencerList() {
   const [search, setSearch] = useState("");
   const [sortValue, setSortValue] = useState("Priority");
 
-  // ✅ applicants rows (server filtered by status)
   const [applicantRows, setApplicantRows] = useState<InfluencerRow[]>([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
   const [errApplicants, setErrApplicants] = useState("");
 
-  // ✅ invite rows (only for ALL + SHORTLISTED tabs)
   const [inviteRows, setInviteRows] = useState<InfluencerRow[]>([]);
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [errInvites, setErrInvites] = useState("");
 
   const [brandId, setBrandId] = useState("");
 
-  // ✅ client-side load more
   const [visibleCount, setVisibleCount] = useState(PAGE_LIMIT);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  const [updatingDecisionId, setUpdatingDecisionId] = useState<string | null>(null);
 
   const campaignId = useMemo(() => {
     const q1 = searchParams.get("campaignId");
@@ -188,27 +174,10 @@ export default function InfluencerList() {
     setBrandId(id);
   }, []);
 
-  // ✅ send status in applicants API based on tab
-  const requestedApplicantStatus: ApplicantStatus | undefined = useMemo(() => {
-    // As you requested:
-    // - All page -> applied only
-    // - Shortlisted page -> shortlisted only
-    if (tab === "all") return "applied";
-    if (tab === "shortlisted") return "shortlisted";
-    if (tab === "active") return "active";
-    if (tab === "rejected") return "rejected";
-    if (tab === "undecided") return "undecided";
-    return undefined;
-  }, [tab]);
-
-  // ✅ reset pagination when tab/search changes
   useEffect(() => {
     setVisibleCount(PAGE_LIMIT);
   }, [tab, search]);
 
-  // =========================
-  // Fetch Applicants (ApplyCampaign)
-  // =========================
   useEffect(() => {
     if (!campaignId) {
       setApplicantRows([]);
@@ -223,14 +192,16 @@ export default function InfluencerList() {
       setErrApplicants("");
 
       try {
-        const res: any = await apiGetApplicantsByCampaign({
+        const res: any = await apiGetListByCampaign({
           campaignId,
-          status: requestedApplicantStatus,
+          page: 1,
+          limit: 100,
+          search: search.trim() || undefined,
         });
 
-        const applicants = Array.isArray(res?.applicants) ? res.applicants : [];
+        const influencers = Array.isArray(res?.influencers) ? res.influencers : [];
 
-        const mapped = applicants
+        const mapped = influencers
           .map(mapApplicantToRow)
           .filter((r: InfluencerRow) => String((r as any)?.id ?? "").trim());
 
@@ -250,11 +221,8 @@ export default function InfluencerList() {
     return () => {
       cancelled = true;
     };
-  }, [campaignId, requestedApplicantStatus]);
+  }, [campaignId, search]);
 
-  // =========================
-  // Fetch Invited Influencers (Invitation) ONLY on ALL + SHORTLISTED
-  // =========================
   useEffect(() => {
     const needInvites = tab === "all" || tab === "shortlisted";
 
@@ -284,31 +252,14 @@ export default function InfluencerList() {
       setErrInvites("");
 
       try {
-        // Fetch ALL pages (safe cap)
-        const allItems: any[] = [];
-        let page = 1;
-        let totalPages = 1;
-        const MAX_PAGES = 20; // 20*100 = 2000 max safety
+        const res: any = await apiGetCampaignInvitationsByBrandAndCampaign({
+          brandId,
+          campaignId,
+        });
 
-        while (page <= totalPages && page <= MAX_PAGES) {
-          const res: any = await apiGetInvitationListByCampaign({
-            brandId,
-            campaignId,
-            page,
-            limit: INVITE_PAGE_LIMIT,
-          });
+        const items = Array.isArray(res?.invitations) ? res.invitations : [];
 
-          const items = Array.isArray(res?.items) ? res.items : [];
-          const meta = res?.meta ?? null;
-
-          allItems.push(...items);
-
-          totalPages = Number(meta?.totalPages ?? 1) || 1;
-          if (page >= totalPages) break;
-          page += 1;
-        }
-
-        const mapped = allItems
+        const mapped = items
           .map(mapInviteToRow)
           .filter((r: InfluencerRow) => String((r as any)?.id ?? "").trim());
 
@@ -318,7 +269,9 @@ export default function InfluencerList() {
         mapped.forEach((r: InfluencerRow) => map.set(String((r as any).id), r));
         setInviteRows(Array.from(map.values()));
       } catch (e) {
-        if (!cancelled) setErrInvites(getApiErrorMessage(e, "Failed to load invited influencers"));
+        if (!cancelled) {
+          setErrInvites(getApiErrorMessage(e, "Failed to load invited influencers"));
+        }
       } finally {
         if (!cancelled) setLoadingInvites(false);
       }
@@ -330,80 +283,112 @@ export default function InfluencerList() {
     };
   }, [tab, brandId, campaignId]);
 
-  // =========================
-  // Combine rows:
-  // - ALL + SHORTLISTED: invited + applicants (applicant overrides if same influencerId)
-  // - other tabs: applicants only
-  // =========================
+  const handleApplicantDecision = async (
+    row: InfluencerRow,
+    action: ApplicantDecisionField
+  ) => {
+    const source = String((row as any)?.__source ?? "");
+    if (source !== "applicant") return;
+
+    if (!campaignId || !row.id) return;
+
+    try {
+      setUpdatingDecisionId(row.id);
+
+      const res = await apiSetApplicantDecisionStatus({
+        campaignId,
+        influencerId: row.id,
+        field: action,
+      });
+
+      const updatedApplicant = res?.applicant;
+      if (!updatedApplicant) return;
+
+      setApplicantRows((prev) =>
+        prev.map((r) => {
+          if (r.id !== row.id) return r;
+
+          const prevRaw = (r as any)?.__raw ?? {};
+
+          const nextRaw = {
+            ...prevRaw,
+            isShortlisted: Number(updatedApplicant.isShortlisted ?? 0),
+            isUndicided: Number(updatedApplicant.isUndicided ?? 0),
+            isRejected: Number(updatedApplicant.isRejected ?? 0),
+          };
+
+          return {
+            ...r,
+            status: getApplicantDisplayStatus(nextRaw),
+            __raw: nextRaw,
+          } as InfluencerRow;
+        })
+      );
+    } catch (e) {
+      alert(getApiErrorMessage(e, "Failed to update applicant status"));
+    } finally {
+      setUpdatingDecisionId(null);
+    }
+  };
+
   const combinedRows = useMemo(() => {
     const needInvites = tab === "all" || tab === "shortlisted";
     if (!needInvites) return applicantRows;
 
     const map = new Map<string, InfluencerRow>();
 
-    // invited first
     inviteRows.forEach((r) => map.set(String((r as any)?.id ?? ""), r));
-    // applicants override
     applicantRows.forEach((r) => map.set(String((r as any)?.id ?? ""), r));
 
     return Array.from(map.values()).filter((r) => String((r as any)?.id ?? "").trim());
   }, [tab, inviteRows, applicantRows]);
 
-  // ✅ Search filter (client-side)
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return combinedRows;
+  const tabFilteredRows = useMemo(() => {
+    if (tab === "all") return combinedRows;
 
-    return combinedRows.filter((r: InfluencerRow) => {
-      const name = String((r as any)?.profile?.name ?? "").toLowerCase();
-      const handle = String((r as any)?.profile?.handle ?? "").toLowerCase();
-      const category = String((r as any)?.category ?? "").toLowerCase();
-      return name.includes(q) || handle.includes(q) || category.includes(q);
+    return combinedRows.filter((row: InfluencerRow) => {
+      const source = String((row as any)?.__source ?? "");
+
+      if (source === "invite") {
+        const inviteStatus = String((row as any)?.__inviteStatus ?? "").toLowerCase();
+        if (tab === "shortlisted") return inviteStatus === "invited" || inviteStatus === "accepted";
+        if (tab === "active") return inviteStatus === "accepted";
+        if (tab === "rejected") return inviteStatus === "declined" || inviteStatus === "cancelled";
+        if (tab === "undecided") return false;
+        return true;
+      }
+
+      const raw = (row as any)?.__raw ?? {};
+      const isAccepted = Number(raw?.isAccepted) === 1;
+      const isRejected = Number(raw?.isRejected) === 1;
+      const isShortlisted = Number(raw?.isShortlisted) === 1;
+      const isUndicided = Number(raw?.isUndicided) === 1;
+      const isAssigned = Number(raw?.isAssigned) === 1;
+
+      if (tab === "shortlisted") {
+        return (isShortlisted || isAssigned) && !isAccepted && !isRejected;
+      }
+
+      if (tab === "active") return isAccepted;
+      if (tab === "rejected") return isRejected;
+      if (tab === "undecided") return isUndicided;
+      return true;
     });
-  }, [combinedRows, search]);
+  }, [combinedRows, tab]);
 
-  const visibleRows = useMemo(() => filteredRows.slice(0, visibleCount), [filteredRows, visibleCount]);
-  const hasMore = visibleCount < filteredRows.length;
+  const visibleRows = useMemo(() => {
+    return tabFilteredRows.slice(0, visibleCount);
+  }, [tabFilteredRows, visibleCount]);
+
+  const hasMore = visibleCount < tabFilteredRows.length;
 
   const loadMore = async () => {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
-      setVisibleCount((c) => Math.min(filteredRows.length, c + PAGE_LIMIT));
+      setVisibleCount((c) => Math.min(tabFilteredRows.length, c + PAGE_LIMIT));
     } finally {
       setLoadingMore(false);
-    }
-  };
-
-  // ✅ Tick action: Applied -> Shortlisted (ONLY for applicant rows)
-  const handleActionClick = async (row: InfluencerRow) => {
-    if (!campaignId) return;
-
-    const src = String((row as any)?.__source ?? "");
-    if (src !== "applicant") return;
-
-    const influencerId = String((row as any)?.id ?? "").trim();
-    if (!influencerId) return;
-
-    const raw = String((row as any)?.__rawStatus ?? "").toLowerCase();
-    if (raw !== "applied") return;
-
-    try {
-      await apiUpdateApplicantStatus({
-        campaignId,
-        influencerId,
-        status: "shortlisted",
-      });
-
-      // current ALL tab is "applied" list -> remove from applicants list immediately
-      setApplicantRows((prev) => prev.filter((r) => String((r as any)?.id ?? "") !== influencerId));
-
-      toast({
-        icon: "success",
-        title: `${String((row as any)?.profile?.name ?? "Influencer")} shortlisted successfully`,
-      });
-    } catch (e) {
-      toast({ icon: "error", title: getApiErrorMessage(e, "Failed to update status") });
     }
   };
 
@@ -433,8 +418,14 @@ export default function InfluencerList() {
             <InfluencerTable
               rows={visibleRows}
               variant={tab === "shortlisted" ? "shortlisted" : "default"}
-              onActionClick={handleActionClick}
+              onActionClick={handleApplicantDecision}
             />
+          )}
+
+          {updatingDecisionId && (
+            <div className="px-6 pb-2 text-xs text-gray-500">
+              Updating applicant status...
+            </div>
           )}
 
           {showLoadMore && (
@@ -462,7 +453,10 @@ export default function InfluencerList() {
                   disabled:cursor-not-allowed
                 "
               >
-                <CircleNotch weight="bold" className={`h-[0.875rem] w-[0.875rem] text-white ${loadingMore ? "animate-spin" : ""}`} />
+                <CircleNotch
+                  weight="bold"
+                  className={`h-[0.875rem] w-[0.875rem] text-white ${loadingMore ? "animate-spin" : ""}`}
+                />
                 <span className="flex items-center justify-center px-[0.25rem]">
                   {loadingMore ? "Loading..." : "Load More"}
                 </span>
