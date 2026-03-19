@@ -7,74 +7,74 @@ export default function App() {
 
 // "use client";
 
-// import React, {
-//   useCallback,
-//   useEffect,
-//   useMemo,
-//   useRef,
-//   useState,
-// } from "react";
-// import { useRouter, useSearchParams } from "next/navigation";
-// import dynamic from "next/dynamic";
-// import Swal from "sweetalert2";
-// import api, { post } from "@/lib/api";
-// import { Button } from "@/components/ui/buttonComp";
-// import { Skeleton } from "@/components/ui/skeleton";
-// import { Badge } from "@/components/ui/badge";
-// import InfluencerFilter, {
-//   type FilterState,
-// } from "@/components/ui/brand/InfluencerFilter";
-// import {
-//   InfluencerTable,
-//   type InfluencerRow,
-//   type PlatformType,
-// } from "@/components/ui/brand/Influencertable";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
+import Swal from "sweetalert2";
+import api, { post } from "@/lib/api";
+import { Button } from "@/components/ui/buttonComp";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import InfluencerFilter, {
+  type FilterState,
+} from "@/components/ui/brand/InfluencerFilter";
+import {
+  InfluencerTable,
+  type InfluencerRow,
+  type PlatformType,
+} from "@/components/ui/brand/Influencertable";
 
-// import AddMilestoneCard from "@/components/ui/brand/AddMilestoneCard";
-// import {
-//   Tooltip,
-//   TooltipContent,
-//   TooltipProvider,
-//   TooltipTrigger,
-// } from "@/components/ui/tooltip";
-// import {
-//   Combobox,
-//   ComboboxContent,
-//   ComboboxEmpty,
-//   ComboboxItem,
-//   ComboboxList,
-//   ComboboxTrigger,
-// } from "@/components/ui/combobox";
-// import {
-//   CaretLeft,
-//   CaretRight,
-//   ClipboardText,
-//   DotsThree,
-//   EnvelopeOpen,
-//   Eye,
-//   EyeSlash,
-//   FileText,
-//   Info,
-//   LockSimple,
-//   MagnifyingGlass,
-//   PaperPlaneTilt,
-//   PenNib,
-//   SealCheck,
-//   Signature,
-//   WarningCircle,
-// } from "@phosphor-icons/react";
-// import { FloatingInput } from "@/components/ui/floatingInput";
-// import {
-//   FloatingMultiSelect,
-//   FloatingSelect,
-//   SelectItem,
-// } from "@/components/ui/selectComp";
-// import { LabeledTextarea } from "@/components/ui/textAreaComp";
-// import { FloatingDateInput } from "@/components/ui/date";
-// import { FloatingTagInput } from "@/components/ui/tagInput";
+import AddMilestoneCard from "@/components/ui/brand/AddMilestoneCard";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "@/components/ui/combobox";
+import {
+  CaretLeft,
+  CaretRight,
+  ClipboardText,
+  DotsThree,
+  EnvelopeOpen,
+  Eye,
+  EyeSlash,
+  FileText,
+  Info,
+  LockSimple,
+  MagnifyingGlass,
+  PaperPlaneTilt,
+  PenNib,
+  SealCheck,
+  Signature,
+  WarningCircle,
+} from "@phosphor-icons/react";
+import { FloatingInput } from "@/components/ui/floatingInput";
+import {
+  FloatingMultiSelect,
+  FloatingSelect,
+  SelectItem,
+} from "@/components/ui/selectComp";
+import { LabeledTextarea } from "@/components/ui/textAreaComp";
+import { FloatingDateInput } from "@/components/ui/date";
+import { FloatingTagInput } from "@/components/ui/tagInput";
 
-// export type Party = "brand" | "influencer";
-// export type CampaignType = "fixed_payment" | "milestone_based" | "product_gifting";
+export type Party = "brand" | "influencer";
+export type CampaignType = "fixed_payment" | "milestone_based" | "product_gifting";
 
 // type FieldKind = "text" | "textarea" | "date" | "number" | "select" | "radio" | "multi";
 // type Option = { value: string; label: string };
@@ -239,17 +239,17 @@ export default function App() {
 //   return tags.join(", ");
 // }
 
-// const PLATFORM_OPTIONS: Option[] = [
-//   { value: "Instagram", label: "Instagram" },
-//   { value: "TikTok", label: "TikTok" },
-//   { value: "YouTube", label: "YouTube" },
-// ];
+const PLATFORM_OPTIONS: Option[] = [
+  { value: "Instagram", label: "Instagram" },
+  { value: "TikTok", label: "TikTok" },
+  { value: "YouTube", label: "YouTube" },
+];
 
-// const CAMPAIGN_TYPE_OPTIONS: Option[] = [
-//   { value: "fixed_payment", label: "Fixed Payment" },
-//   { value: "milestone_based", label: "Milestone-Based" },
-//   { value: "product_gifting", label: "Product Gifting" },
-// ];
+const CAMPAIGN_TYPE_OPTIONS: Option[] = [
+  { value: "fixed_payment", label: "Fixed Payment" },
+  { value: "milestone_based", label: "Milestone-Based" },
+  { value: "product_gifting", label: "Product Gifting" },
+];
 
 // const DELIVERABLE_FORMAT_OPTIONS: Option[] = [
 //   { value: "Dedicated Video", label: "Dedicated Video" },
@@ -389,11 +389,11 @@ export default function App() {
 //   { value: "Native Insights Access", label: "Native Insights Access" },
 // ];
 
-// const PAYMENT_TYPE_OPTIONS: Option[] = [
-//   { value: "fixed_payment", label: "Fixed Payment" },
-//   { value: "milestone_based", label: "Milestone Based" },
-//   { value: "product_gifting", label: "Product Gifting" },
-// ];
+const PAYMENT_TYPE_OPTIONS: Option[] = [
+  { value: "fixed_payment", label: "Fixed Payment" },
+  { value: "milestone_based", label: "Milestone Based" },
+  { value: "product_gifting", label: "Product Gifting" },
+];
 
 // const PAYMENT_STRUCTURE_OPTIONS: Option[] = [
 //   { value: "50% advance / 50% balance", label: "50% advance / 50% balance" },
@@ -441,22 +441,22 @@ export default function App() {
 //   { key: "scriptDueDate", label: "Script Due Date", owner: "brand", kind: "date", tooltip: "Deadline for the influencer to submit the pre-approved script.", required: (v) => v.preShootScriptRequired === "Yes", showWhen: (v) => v.preShootScriptRequired === "Yes" },
 //   { key: "reshootObligation", label: "Reshoot Obligation?", owner: "brand", kind: "radio", options: RESHOOT_OPTIONS, tooltip: "Under what circumstances must the influencer reshoot content?" },
 
-//   { key: "fixedTotalCampaignFee", label: "Total Campaign Fee", owner: "brand", kind: "text", placeholder: "e.g. $2,500 USD", tooltip: "Total fixed amount the brand will pay for all deliverables.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "paymentStructure", label: "Payment Structure", owner: "brand", kind: "select", options: PAYMENT_STRUCTURE_OPTIONS, tooltip: "How payment is split between advance and balance.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "customSplitDetails", label: "Custom Details", owner: "brand", kind: "text", placeholder: "e.g. 30% on signing, 70% on post", tooltip: "Exact payment split percentages and triggers.", required: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom", showWhen: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom" },
-//   { key: "advancePaymentTrigger", label: "Advance Payment Trigger", owner: "brand", kind: "select", options: ADVANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the advance payment released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "balancePaymentTrigger", label: "Balance Payment Trigger", owner: "brand", kind: "select", options: BALANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the remaining balance released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "fixedProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "fixedKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. $500 if cancelled after shoot", tooltip: "Compensation owed to influencer if brand cancels without cause.", showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "fixedPayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive payment. PRIVATE — brand cannot see.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "fixedPayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for the influencer's payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
-//   { key: "fixedTaxId", label: "Tax ID (if applicable)", owner: "influencer", kind: "text", placeholder: "e.g. EIN / SSN last 4 / VAT", tooltip: "May be required for processing above IRS thresholds. PRIVATE.", private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedTotalCampaignFee", label: "Total Campaign Fee", owner: "brand", kind: "text", placeholder: "e.g. $2,500 USD", tooltip: "Total fixed amount the brand will pay for all deliverables.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "paymentStructure", label: "Payment Structure", owner: "brand", kind: "select", options: PAYMENT_STRUCTURE_OPTIONS, tooltip: "How payment is split between advance and balance.", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "customSplitDetails", label: "Custom Details", owner: "brand", kind: "text", placeholder: "e.g. 30% on signing, 70% on post", tooltip: "Exact payment split percentages and triggers.", required: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom", showWhen: (v) => v.campaignType === "fixed_payment" && v.paymentStructure === "Custom" },
+  { key: "advancePaymentTrigger", label: "Advance Payment Trigger", owner: "brand", kind: "select", options: ADVANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the advance payment released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "balancePaymentTrigger", label: "Balance Payment Trigger", owner: "brand", kind: "select", options: BALANCE_PAYMENT_TRIGGER_OPTIONS, tooltip: "When is the remaining balance released?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges?", required: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. $500 if cancelled after shoot", tooltip: "Compensation owed to influencer if brand cancels without cause.", showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedPayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive payment. PRIVATE — brand cannot see.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedPayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for the influencer's payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
+  { key: "fixedTaxId", label: "Tax ID (if applicable)", owner: "influencer", kind: "text", placeholder: "e.g. EIN / SSN last 4 / VAT", tooltip: "May be required for processing above IRS thresholds. PRIVATE.", private: true, showWhen: (v) => v.campaignType === "fixed_payment" },
 
-//   { key: "milestoneTotalCampaignFee", label: "Total Campaign Fee (All Milestones)", owner: "brand", kind: "text", placeholder: "e.g. $5,000 USD", tooltip: "Total gross amount across all milestones combined.", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
-//   { key: "milestoneProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges per milestone?", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
-//   { key: "milestoneKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. Completed milestones non-refundable", tooltip: "Compensation if brand cancels mid-campaign.", showWhen: (v) => v.campaignType === "milestone_based" },
-//   { key: "milestonePayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive each milestone payment. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
-//   { key: "milestonePayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneTotalCampaignFee", label: "Total Campaign Fee (All Milestones)", owner: "brand", kind: "text", placeholder: "e.g. $5,000 USD", tooltip: "Total gross amount across all milestones combined.", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneProcessorFeesBorneBy", label: "Payment Processor Fees Borne By", owner: "brand", kind: "select", options: PROCESSOR_FEE_OPTIONS, tooltip: "Who pays payment processing charges per milestone?", required: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestoneKillFee", label: "Kill Fee / Cancellation Compensation", owner: "brand", kind: "text", placeholder: "e.g. Completed milestones non-refundable", tooltip: "Compensation if brand cancels mid-campaign.", showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestonePayoutMethod", label: "Payout Method on File", owner: "influencer", kind: "select", options: PAYOUT_METHOD_OPTIONS, tooltip: "How the influencer wants to receive each milestone payment. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
+  { key: "milestonePayoutAccountId", label: "Payout Account Email / ID", owner: "influencer", kind: "text", placeholder: "e.g. jane@paypal.com", tooltip: "Email or account ID for payout method. PRIVATE.", required: true, private: true, showWhen: (v) => v.campaignType === "milestone_based" },
 
 //   { key: "estimatedRetailValue", label: "Estimated Retail Value (ERV)", owner: "brand", kind: "text", placeholder: "e.g. $150 USD", tooltip: "Market retail value of gifted products — may have tax implications for influencer.", showWhen: (v) => v.campaignType === "product_gifting" },
 //   { key: "receiptConfirmationDeadline", label: "Product Receipt Confirmation Deadline", owner: "brand", kind: "text", placeholder: "e.g. Within 3 business days", tooltip: "How quickly the influencer must confirm receipt after delivery.", required: true, showWhen: (v) => v.campaignType === "product_gifting" },
@@ -680,100 +680,100 @@ export default function App() {
 //     }
 //   });
 
-//   if (scope === "brand" && values.campaignType === "milestone_based") {
-//     if (!values.milestones.length) {
-//       errors.milestones = "At least one milestone row is required.";
-//     }
-//     values.milestones.forEach((row, index) => {
-//       if (!row.milestoneName.trim()) errors[`ms_${row.id}_milestoneName`] = `Milestone ${index + 1}: name is required.`;
-//       if (!row.paymentAmount.trim()) errors[`ms_${row.id}_paymentAmount`] = `Milestone ${index + 1}: payment amount is required.`;
-//       if (!row.triggerEvent.trim()) errors[`ms_${row.id}_triggerEvent`] = `Milestone ${index + 1}: trigger event is required.`;
-//       if (!row.dueDate.trim()) errors[`ms_${row.id}_dueDate`] = `Milestone ${index + 1}: due date is required.`;
-//     });
-//   }
+  if (scope === "brand" && values.campaignType === "milestone_based") {
+    if (!values.milestones.length) {
+      errors.milestones = "At least one milestone row is required.";
+    }
+    values.milestones.forEach((row, index) => {
+      if (!row.milestoneName.trim()) errors[`ms_${row.id}_milestoneName`] = `Milestone ${index + 1}: name is required.`;
+      if (!row.paymentAmount.trim()) errors[`ms_${row.id}_paymentAmount`] = `Milestone ${index + 1}: payment amount is required.`;
+      if (!row.triggerEvent.trim()) errors[`ms_${row.id}_triggerEvent`] = `Milestone ${index + 1}: trigger event is required.`;
+      if (!row.dueDate.trim()) errors[`ms_${row.id}_dueDate`] = `Milestone ${index + 1}: due date is required.`;
+    });
+  }
 
 //   return errors;
 // }
 
-// const SIDEBAR_TOOLTIPS = {
-//   brandLegalName: "Full registered legal name of the brand signing this agreement.",
-//   brandContactPerson: "Primary brand contact responsible for campaign coordination and approvals.",
-//   brandNoticeEmail: "Official email for notices, updates, and legal communication.",
-//   brandNoticePhone: "Phone number for urgent campaign or contract communication.",
-//   brandBillingAddress: "Official billing address used for invoicing and records.",
+const SIDEBAR_TOOLTIPS = {
+  brandLegalName: "Full registered legal name of the brand signing this agreement.",
+  brandContactPerson: "Primary brand contact responsible for campaign coordination and approvals.",
+  brandNoticeEmail: "Official email for notices, updates, and legal communication.",
+  brandNoticePhone: "Phone number for urgent campaign or contract communication.",
+  brandBillingAddress: "Official billing address used for invoicing and records.",
 
-//   campaignTitle: "Internal or external campaign title / ID used to identify this agreement.",
-//   campaignProductsServices: "Products or services covered by this contract.",
-//   campaignTerritory: "Territory where content will be distributed or targeted.",
-//   requestedEffectiveDate: "Date the agreement is intended to become effective.",
-//   timezone: "Timezone used for the requested effective date and scheduling references.",
+  campaignTitle: "Internal or external campaign title / ID used to identify this agreement.",
+  campaignProductsServices: "Products or services covered by this contract.",
+  campaignTerritory: "Territory where content will be distributed or targeted.",
+  requestedEffectiveDate: "Date the agreement is intended to become effective.",
+  timezone: "Timezone used for the requested effective date and scheduling references.",
 
-//   platformHandle: "Social platform and creator handle where the content will be posted.",
-//   qty: "Number of content units for this deliverable.",
-//   deliverableFormat: "Content format required for this deliverable.",
-//   draftDue: "Deadline for draft submission.",
-//   liveDate: "Date the deliverable must go live.",
-//   minimumVideoSpecs: "Format, duration, resolution, or aspect-ratio requirements.",
-//   mandatoryTags: "Required mentions, hashtags, affiliate links, tracking links, or promo codes.",
-//   preShootScriptRequired: "Whether brand approval is required before filming.",
-//   preShootScriptDue: "Deadline for script submission.",
-//   preShootReviewDays: "How many business days the brand gets to review the script.",
+  platformHandle: "Social platform and creator handle where the content will be posted.",
+  qty: "Number of content units for this deliverable.",
+  deliverableFormat: "Content format required for this deliverable.",
+  draftDue: "Deadline for draft submission.",
+  liveDate: "Date the deliverable must go live.",
+  minimumVideoSpecs: "Format, duration, resolution, or aspect-ratio requirements.",
+  mandatoryTags: "Required mentions, hashtags, affiliate links, tracking links, or promo codes.",
+  preShootScriptRequired: "Whether brand approval is required before filming.",
+  preShootScriptDue: "Deadline for script submission.",
+  preShootReviewDays: "How many business days the brand gets to review the script.",
 
-//   includedRevisionRounds: "Number of revision rounds included without extra charge.",
-//   additionalRevisionFee: "Fee charged for each extra revision round.",
-//   reshootObligation: "When a reshoot is required.",
-//   reshootFee: "Fee applicable when a reshoot is requested.",
-//   minimumLivePeriod: "Minimum time the content must stay live.",
+  includedRevisionRounds: "Number of revision rounds included without extra charge.",
+  additionalRevisionFee: "Fee charged for each extra revision round.",
+  reshootObligation: "When a reshoot is required.",
+  reshootFee: "Fee applicable when a reshoot is requested.",
+  minimumLivePeriod: "Minimum time the content must stay live.",
 
-//   totalCampaignFee: "Total compensation for the campaign.",
-//   currency: "Currency in which compensation is denominated.",
-//   paymentStructure: "How payment is split across milestones or stages.",
-//   customSplit: "Custom breakdown of the payment structure.",
-//   advancePaymentTrigger: "Condition that triggers advance payment.",
-//   remainingPaymentTrigger: "Condition that triggers the remaining payment.",
-//   processorFeesBorneBy: "Who bears payment processing fees.",
-//   processorFeesNotes: "Extra notes about processor fee treatment.",
-//   laneAMarketplaceFeeNote: "Marketplace fee wording included in the agreement.",
+  totalCampaignFee: "Total compensation for the campaign.",
+  currency: "Currency in which compensation is denominated.",
+  paymentStructure: "How payment is split across milestones or stages.",
+  customSplit: "Custom breakdown of the payment structure.",
+  advancePaymentTrigger: "Condition that triggers advance payment.",
+  remainingPaymentTrigger: "Condition that triggers the remaining payment.",
+  processorFeesBorneBy: "Who bears payment processing fees.",
+  processorFeesNotes: "Extra notes about processor fee treatment.",
+  laneAMarketplaceFeeNote: "Marketplace fee wording included in the agreement.",
 
-//   rawSourceFileDelivery: "Whether raw or source files must be delivered.",
-//   rawFilesFormat: "Expected format for delivered raw/source files.",
-//   rawFilesDeliveryDue: "Deadline to provide raw/source files.",
-//   analyticsReportingDeadline: "Deadline for providing analytics after publishing.",
-//   analyticsReportingItems: "Specific performance metrics or reports required.",
+  rawSourceFileDelivery: "Whether raw or source files must be delivered.",
+  rawFilesFormat: "Expected format for delivered raw/source files.",
+  rawFilesDeliveryDue: "Deadline to provide raw/source files.",
+  analyticsReportingDeadline: "Deadline for providing analytics after publishing.",
+  analyticsReportingItems: "Specific performance metrics or reports required.",
 
-//   productShippingApplicable: "Whether this campaign includes shipment of product.",
-//   productReturnable: "Whether products are gifted or must be returned.",
-//   shipToName: "Name to receive the shipment.",
-//   shipToPhone: "Phone number for shipping coordination.",
-//   shipToAddress: "Shipping destination for campaign products.",
-//   productReceiptConfirmationDeadline: "Deadline for acknowledging product receipt.",
-//   returnWindowMethod: "Return timeline and method.",
-//   riskOfLossNotes: "Notes about delivery risk, damage, or responsibility.",
+  productShippingApplicable: "Whether this campaign includes shipment of product.",
+  productReturnable: "Whether products are gifted or must be returned.",
+  shipToName: "Name to receive the shipment.",
+  shipToPhone: "Phone number for shipping coordination.",
+  shipToAddress: "Shipping destination for campaign products.",
+  productReceiptConfirmationDeadline: "Deadline for acknowledging product receipt.",
+  returnWindowMethod: "Return timeline and method.",
+  riskOfLossNotes: "Notes about delivery risk, damage, or responsibility.",
 
-//   grantedUsageRights: "Ways the brand is allowed to use the creator's content.",
-//   usageDuration: "Duration of granted usage rights.",
-//   usageTerritoryNotes: "Territory or limitations for the selected usage right.",
-//   attributionRequirement: "Whether creator attribution is required when content is reused.",
-//   editingRights: "Editing rights granted to the brand.",
-//   attributionText: "Specific attribution wording, if required.",
-//   musicStockAssetResponsibility: "Who is responsible for music / stock asset clearance.",
+  grantedUsageRights: "Ways the brand is allowed to use the creator's content.",
+  usageDuration: "Duration of granted usage rights.",
+  usageTerritoryNotes: "Territory or limitations for the selected usage right.",
+  attributionRequirement: "Whether creator attribution is required when content is reused.",
+  editingRights: "Editing rights granted to the brand.",
+  attributionText: "Specific attribution wording, if required.",
+  musicStockAssetResponsibility: "Who is responsible for music / stock asset clearance.",
 
-//   creativeBrief: "Mandatory talking points, claims, and content instructions.",
-//   restrictedStatements: "Statements or claims the creator must avoid.",
-//   competitorBlackout: "Competitor blackout or exclusivity terms.",
-//   categoryCompetitorList: "Competitors or categories restricted during blackout.",
-//   blackoutPeriod: "Time period for exclusivity / blackout.",
-//   optionalMoralsClause: "Whether a morals / reputation clause is included.",
+  creativeBrief: "Mandatory talking points, claims, and content instructions.",
+  restrictedStatements: "Statements or claims the creator must avoid.",
+  competitorBlackout: "Competitor blackout or exclusivity terms.",
+  categoryCompetitorList: "Competitors or categories restricted during blackout.",
+  blackoutPeriod: "Time period for exclusivity / blackout.",
+  optionalMoralsClause: "Whether a morals / reputation clause is included.",
 
-//   killFeeOrProrata: "Cancellation compensation or prorated payment rules.",
-//   refundOfUnearnedAdvance: "Whether unearned advance amounts must be refunded.",
+  killFeeOrProrata: "Cancellation compensation or prorated payment rules.",
+  refundOfUnearnedAdvance: "Whether unearned advance amounts must be refunded.",
 
-//   governingLaw: "Jurisdiction whose law governs this agreement.",
-//   disputeResolutionMethod: "Method used to resolve disputes.",
-//   disputeVenue: "Venue for court proceedings, if applicable.",
-//   arbitrationSeat: "Seat/location of arbitration, if applicable.",
-//   attorneysFees: "How attorneys' fees are allocated in a dispute.",
-// } as const;
+  governingLaw: "Jurisdiction whose law governs this agreement.",
+  disputeResolutionMethod: "Method used to resolve disputes.",
+  disputeVenue: "Venue for court proceedings, if applicable.",
+  arbitrationSeat: "Seat/location of arbitration, if applicable.",
+  attorneysFees: "How attorneys' fees are allocated in a dispute.",
+} as const;
 
 // function sectionFields(keys: Array<keyof LaneAContractValues>) {
 //   return ALL_FIELD_DEFS.filter((field) => keys.includes(field.key));
@@ -1742,15 +1742,15 @@ export default function App() {
 //   dueDate: string;
 // };
 
-// type ScheduleADeliverable = {
-//   id: string;
-//   srNo: number;
-//   platformHandle: string;
-//   deliverableFormat: string;
-//   qty: string;
-//   draftDue: string;
-//   liveDate: string;
-// };
+type ScheduleADeliverable = {
+  id: string;
+  srNo: number;
+  platformHandle: string;
+  deliverableFormat: string;
+  qty: string;
+  draftDue: string;
+  liveDate: string;
+};
 
 // type UsageRightsRow = {
 //   id: string;
@@ -1769,107 +1769,107 @@ export default function App() {
 // export type PaymentType =
 //   (typeof PAYMENT_TYPE)[keyof typeof PAYMENT_TYPE];
 
-// type ContractCampaign = {
-//   productsServicesCovered: string;
-//   territoryTargetCountry: string;
-//   effectiveDate: string;
-//   campaignTitleOrId: string;
-//   paymentType: PaymentType;
-// };
-// type ContractFormState = {
-//   brand: ContractPartyBrand;
-//   influencer: ContractPartyInfluencer;
-//   campaign: ContractCampaign;
-//   scheduleA: {
-//     minimumVideoSpecs: string;
-//     preShootScriptRequired: boolean;
-//     preShootScriptDue: string;
-//     preShootScriptReviewBusinessDays: string;
-//     mandatoryTagsMentionsLinksCodes: string;
-//     review: {
-//       includedRevisionRounds: string;
-//       additionalRevisionFee: string;
-//       reshootObligation: string;
-//       reshootFee: string;
-//       minimumLivePeriod: string;
-//     };
-//     commercial: {
-//       totalCampaignFee: string;
-//       currency: string;
-//       paymentStructure: string;
-//       customSplit: string;
-//       advancePaymentTrigger: string;
-//       remainingPaymentTrigger: string;
-//       paymentProcessorFeesBorneBy: string;
-//       paymentProcessorFeesNotes: string;
-//       laneAMarketplaceFeeNote: string;
-//       milestones: ContractMilestone[];
-//     };
-//     rawFiles: {
-//       rawSourceFileDelivery: string;
-//       deliveryDue: string;
-//       format: string;
-//       analyticsReportingDeadline: string;
-//       analyticsReportingItems: string;
-//     };
-//     shipping: {
-//       productShippingApplicable: string;
-//       shipToName: string;
-//       shipToAddress: string;
-//       shipToPhone: string;
-//       productReceiptConfirmationDeadline: string;
-//       productReturnable: string;
-//       returnWindowMethod: string;
-//       riskOfLossNotes: string;
-//     };
-//     usageRights: {
-//       rows: UsageRightsRow[];
-//       attributionRequirement: string;
-//       attributionText: string;
-//       editingRights: string;
-//       musicStockAssetResponsibility: string;
-//     };
-//     compliance: {
-//       creativeBriefMandatoryTalkingPoints: string;
-//       restrictedStatements: string;
-//     };
-//     exclusivity: {
-//       competitorBlackout: string;
-//       categoryCompetitorList: string;
-//       blackoutPeriod: string;
-//       optionalMoralsClause: string;
-//     };
-//     cancellation: {
-//       killFeeOrProrata: string;
-//       refundOfUnearnedAdvance: string;
-//     };
-//     dispute: {
-//       governingLaw: string;
-//       disputeResolutionMethod: string;
-//       disputeVenue: string;
-//       arbitrationSeat: string;
-//       attorneysFees: string;
-//     };
-//   };
-// };
-// interface Influencer {
-//   influencerId: string;
-//   name: string;
-//   primaryPlatform?: "instagram" | "tiktok" | "youtube" | string | null;
-//   handle: string | null;
-//   category?: string | { name?: string } | null;
-//   categoryName?: string | null;
-//   categories?: Array<{ name?: string }>;
-//   audienceSize: number;
-//   createdAt?: string;
-//   isAssigned: number;
-//   isContracted: number;
-//   contractId: string | null;
-//   feeAmount: number;
-//   isAccepted: number;
-//   isRejected: number;
-//   rejectedReason: string;
-// }
+type ContractCampaign = {
+  productsServicesCovered: string;
+  territoryTargetCountry: string;
+  effectiveDate: string;
+  campaignTitleOrId: string;
+  paymentType: PaymentType;
+};
+type ContractFormState = {
+  brand: ContractPartyBrand;
+  influencer: ContractPartyInfluencer;
+  campaign: ContractCampaign;
+  scheduleA: {
+    minimumVideoSpecs: string;
+    preShootScriptRequired: boolean;
+    preShootScriptDue: string;
+    preShootScriptReviewBusinessDays: string;
+    mandatoryTagsMentionsLinksCodes: string;
+    review: {
+      includedRevisionRounds: string;
+      additionalRevisionFee: string;
+      reshootObligation: string;
+      reshootFee: string;
+      minimumLivePeriod: string;
+    };
+    commercial: {
+      totalCampaignFee: string;
+      currency: string;
+      paymentStructure: string;
+      customSplit: string;
+      advancePaymentTrigger: string;
+      remainingPaymentTrigger: string;
+      paymentProcessorFeesBorneBy: string;
+      paymentProcessorFeesNotes: string;
+      laneAMarketplaceFeeNote: string;
+      milestones: ContractMilestone[];
+    };
+    rawFiles: {
+      rawSourceFileDelivery: string;
+      deliveryDue: string;
+      format: string;
+      analyticsReportingDeadline: string;
+      analyticsReportingItems: string;
+    };
+    shipping: {
+      productShippingApplicable: string;
+      shipToName: string;
+      shipToAddress: string;
+      shipToPhone: string;
+      productReceiptConfirmationDeadline: string;
+      productReturnable: string;
+      returnWindowMethod: string;
+      riskOfLossNotes: string;
+    };
+    usageRights: {
+      rows: UsageRightsRow[];
+      attributionRequirement: string;
+      attributionText: string;
+      editingRights: string;
+      musicStockAssetResponsibility: string;
+    };
+    compliance: {
+      creativeBriefMandatoryTalkingPoints: string;
+      restrictedStatements: string;
+    };
+    exclusivity: {
+      competitorBlackout: string;
+      categoryCompetitorList: string;
+      blackoutPeriod: string;
+      optionalMoralsClause: string;
+    };
+    cancellation: {
+      killFeeOrProrata: string;
+      refundOfUnearnedAdvance: string;
+    };
+    dispute: {
+      governingLaw: string;
+      disputeResolutionMethod: string;
+      disputeVenue: string;
+      arbitrationSeat: string;
+      attorneysFees: string;
+    };
+  };
+};
+interface Influencer {
+  influencerId: string;
+  name: string;
+  primaryPlatform?: "instagram" | "tiktok" | "youtube" | string | null;
+  handle: string | null;
+  category?: string | { name?: string } | null;
+  categoryName?: string | null;
+  categories?: Array<{ name?: string }>;
+  audienceSize: number;
+  createdAt?: string;
+  isAssigned: number;
+  isContracted: number;
+  contractId: string | null;
+  feeAmount: number;
+  isAccepted: number;
+  isRejected: number;
+  rejectedReason: string;
+}
 
 // interface Meta {
 //   total: number;
@@ -2023,118 +2023,118 @@ export default function App() {
 //   },
 // ];
 
-// const createDefaultScheduleDeliverable = (
-//   index: number = 1
-// ): ScheduleADeliverable => ({
-//   id: `deliverable-${index}`,
-//   srNo: index,
-//   platformHandle: "",
-//   deliverableFormat: "",
-//   qty: "1",
-//   draftDue: "",
-//   liveDate: "",
-// });
+const createDefaultScheduleDeliverable = (
+  index: number = 1
+): ScheduleADeliverable => ({
+  id: `deliverable-${index}`,
+  srNo: index,
+  platformHandle: "",
+  deliverableFormat: "",
+  qty: "1",
+  draftDue: "",
+  liveDate: "",
+});
 
-// const createDefaultContractForm = (): ContractFormState => ({
-//   brand: {
-//     legalName: "",
-//     contactPersonName: "",
-//     noticeEmail: "",
-//     noticePhone: "",
-//     billingAddress: "",
-//   },
-//   influencer: {
-//     legalName: "",
-//     contactName: "",
-//     postingHandleUrl: "",
-//     contactEmail: "",
-//     contactPhone: "",
-//     whatsApp: "",
-//     address: "",
-//   },
-//   campaign: {
-//     productsServicesCovered: "",
-//     territoryTargetCountry: "Worldwide",
-//     effectiveDate: "",
-//     campaignTitleOrId: "",
-//     paymentType: PAYMENT_TYPE.FIXED,
-//   },
-//   scheduleA: {
-//     minimumVideoSpecs: "",
-//     preShootScriptRequired: false,
-//     preShootScriptDue: "",
-//     preShootScriptReviewBusinessDays: "2",
-//     mandatoryTagsMentionsLinksCodes: "",
-//     review: {
-//       includedRevisionRounds: "1",
-//       additionalRevisionFee: "",
-//       reshootObligation:
-//         "No reshoot required except for material failure to follow approved brief",
-//       reshootFee: "",
-//       minimumLivePeriod: "",
-//     },
-//     commercial: {
-//       totalCampaignFee: "",
-//       currency: "USD",
-//       paymentStructure: "50% advance / 50% balance",
-//       customSplit: "",
-//       advancePaymentTrigger: "",
-//       remainingPaymentTrigger: "",
-//       paymentProcessorFeesBorneBy: "",
-//       paymentProcessorFeesNotes: "",
-//       laneAMarketplaceFeeNote:
-//         "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
-//       milestones: [createDefaultCommercialMilestone()],
-//     },
-//     rawFiles: {
-//       rawSourceFileDelivery: "Not included",
-//       deliveryDue: "",
-//       format: "",
-//       analyticsReportingDeadline: "",
-//       analyticsReportingItems: "",
-//     },
-//     shipping: {
-//       productShippingApplicable: "No",
-//       shipToName: "",
-//       shipToAddress: "",
-//       shipToPhone: "",
-//       productReceiptConfirmationDeadline: "",
-//       productReturnable: "Gift / keep product",
-//       returnWindowMethod: "",
-//       riskOfLossNotes: "",
-//     },
-//     usageRights: {
-//       rows: defaultUsageRightsRows(),
-//       attributionRequirement: "No attribution required",
-//       attributionText: "",
-//       editingRights: "Cropping / resizing only",
-//       musicStockAssetResponsibility:
-//         "Brand responsible for separate commercial licensing",
-//     },
-//     compliance: {
-//       creativeBriefMandatoryTalkingPoints: "",
-//       restrictedStatements: "",
-//     },
-//     exclusivity: {
-//       competitorBlackout: "None",
-//       categoryCompetitorList: "",
-//       blackoutPeriod: "",
-//       optionalMoralsClause: "Not included",
-//     },
-//     cancellation: {
-//       killFeeOrProrata: "None",
-//       refundOfUnearnedAdvance:
-//         "Yes — on material non-performance / uncured breach",
-//     },
-//     dispute: {
-//       governingLaw: "Nevada, USA",
-//       disputeResolutionMethod: "AAA arbitration",
-//       disputeVenue: "",
-//       arbitrationSeat: "Las Vegas, Nevada, USA",
-//       attorneysFees: "Each Party bears own fees",
-//     },
-//   },
-// });
+const createDefaultContractForm = (): ContractFormState => ({
+  brand: {
+    legalName: "",
+    contactPersonName: "",
+    noticeEmail: "",
+    noticePhone: "",
+    billingAddress: "",
+  },
+  influencer: {
+    legalName: "",
+    contactName: "",
+    postingHandleUrl: "",
+    contactEmail: "",
+    contactPhone: "",
+    whatsApp: "",
+    address: "",
+  },
+  campaign: {
+    productsServicesCovered: "",
+    territoryTargetCountry: "Worldwide",
+    effectiveDate: "",
+    campaignTitleOrId: "",
+    paymentType: PAYMENT_TYPE.FIXED,
+  },
+  scheduleA: {
+    minimumVideoSpecs: "",
+    preShootScriptRequired: false,
+    preShootScriptDue: "",
+    preShootScriptReviewBusinessDays: "2",
+    mandatoryTagsMentionsLinksCodes: "",
+    review: {
+      includedRevisionRounds: "1",
+      additionalRevisionFee: "",
+      reshootObligation:
+        "No reshoot required except for material failure to follow approved brief",
+      reshootFee: "",
+      minimumLivePeriod: "",
+    },
+    commercial: {
+      totalCampaignFee: "",
+      currency: "USD",
+      paymentStructure: "50% advance / 50% balance",
+      customSplit: "",
+      advancePaymentTrigger: "",
+      remainingPaymentTrigger: "",
+      paymentProcessorFeesBorneBy: "",
+      paymentProcessorFeesNotes: "",
+      laneAMarketplaceFeeNote:
+        "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
+      milestones: [createDefaultCommercialMilestone()],
+    },
+    rawFiles: {
+      rawSourceFileDelivery: "Not included",
+      deliveryDue: "",
+      format: "",
+      analyticsReportingDeadline: "",
+      analyticsReportingItems: "",
+    },
+    shipping: {
+      productShippingApplicable: "No",
+      shipToName: "",
+      shipToAddress: "",
+      shipToPhone: "",
+      productReceiptConfirmationDeadline: "",
+      productReturnable: "Gift / keep product",
+      returnWindowMethod: "",
+      riskOfLossNotes: "",
+    },
+    usageRights: {
+      rows: defaultUsageRightsRows(),
+      attributionRequirement: "No attribution required",
+      attributionText: "",
+      editingRights: "Cropping / resizing only",
+      musicStockAssetResponsibility:
+        "Brand responsible for separate commercial licensing",
+    },
+    compliance: {
+      creativeBriefMandatoryTalkingPoints: "",
+      restrictedStatements: "",
+    },
+    exclusivity: {
+      competitorBlackout: "None",
+      categoryCompetitorList: "",
+      blackoutPeriod: "",
+      optionalMoralsClause: "Not included",
+    },
+    cancellation: {
+      killFeeOrProrata: "None",
+      refundOfUnearnedAdvance:
+        "Yes — on material non-performance / uncured breach",
+    },
+    dispute: {
+      governingLaw: "Nevada, USA",
+      disputeResolutionMethod: "AAA arbitration",
+      disputeVenue: "",
+      arbitrationSeat: "Las Vegas, Nevada, USA",
+      attorneysFees: "Each Party bears own fees",
+    },
+  },
+});
 
 // function createRowId() {
 //   return Math.random().toString(36).slice(2);
@@ -2215,22 +2215,22 @@ export default function App() {
 //   return result.isConfirmed;
 // };
 
-// function toInputDate(v?: string | Date | null) {
-//   if (!v) return "";
-//   const d = new Date(v);
-//   if (Number.isNaN(d.getTime())) return "";
-//   const yyyy = d.getFullYear();
-//   const mm = String(d.getMonth() + 1).padStart(2, "0");
-//   const dd = String(d.getDate()).padStart(2, "0");
-//   return `${yyyy}-${mm}-${dd}`;
-// }
+function toInputDate(v?: string | Date | null) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
-// function formatCompactAudience(n: number) {
-//   if (!n && n !== 0) return "—";
-//   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-//   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-//   return String(n);
-// }
+function formatCompactAudience(n: number) {
+  if (!n && n !== 0) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
 
 // function formatMoneyINR(n: number) {
 //   return `₹${Number(n || 0).toLocaleString("en-IN")}`;
@@ -2471,53 +2471,53 @@ export default function App() {
 //   return rejected?.details?.reason ? String(rejected.details.reason).trim() : null;
 // }
 
-// export default function AppliedInfluencersPage() {
-//   const searchParams = useSearchParams();
-//   const router = useRouter();
+export default function AppliedInfluencersPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-//   const campaignId = searchParams.get("id");
-//   const influencerId = searchParams.get("infId");
-//   const createdPage = searchParams.get("createdPage") === "true";
+  const campaignId = searchParams.get("id");
+  const influencerId = searchParams.get("infId");
+  const createdPage = searchParams.get("createdPage") === "true";
 
-//   const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
-//   const [bulkTargets, setBulkTargets] = useState<Influencer[]>([]);
+  const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
+  const [bulkTargets, setBulkTargets] = useState<Influencer[]>([]);
 
-//   const [addMilestoneOpen, setAddMilestoneOpen] = useState(false);
-//   const [milestoneTargetInf, setMilestoneTargetInf] = useState<Influencer | null>(null);
-//   const [milestoneTargetMeta, setMilestoneTargetMeta] = useState<ContractMeta | null>(null);
+  const [addMilestoneOpen, setAddMilestoneOpen] = useState(false);
+  const [milestoneTargetInf, setMilestoneTargetInf] = useState<Influencer | null>(null);
+  const [milestoneTargetMeta, setMilestoneTargetMeta] = useState<ContractMeta | null>(null);
 
-//   const [serverCampaignTitle, setServerCampaignTitle] = useState("");
-//   const [serverBudget, setServerBudget] = useState<number | null>(null);
-//   const [serverTimeline, setServerTimeline] = useState<{
-//     startDate?: string | Date;
-//     endDate?: string | Date;
-//   } | null>(null);
+  const [serverCampaignTitle, setServerCampaignTitle] = useState("");
+  const [serverBudget, setServerBudget] = useState<number | null>(null);
+  const [serverTimeline, setServerTimeline] = useState<{
+    startDate?: string | Date;
+    endDate?: string | Date;
+  } | null>(null);
 
-//   const [influencers, setInfluencers] = useState<Influencer[]>([]);
-//   const [meta, setMeta] = useState<Meta>({
-//     total: 0,
-//     page: 1,
-//     limit: PAGE_SIZE,
-//     totalPages: 1,
-//   });
-//   const [loading, setLoading] = useState(true);
-//   const [error, setError] = useState<string | null>(null);
-//   const [page, setPage] = useState(1);
+  const [influencers, setInfluencers] = useState<Influencer[]>([]);
+  const [meta, setMeta] = useState<Meta>({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 1,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-//   const [filters, setFilters] = useState<FilterState>({
-//     "Influencer Type": "",
-//     "Engagement Rate": "",
-//     Follower: "",
-//     Category: [],
-//     Platform: [],
-//     Date: "",
-//   });
-//   const [search, setSearch] = useState("");
-//   const [debouncedSearch, setDebouncedSearch] = useState("");
-//   const [sortValue, setSortValue] = useState("Priority");
-//   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [filters, setFilters] = useState<FilterState>({
+    "Influencer Type": "",
+    "Engagement Rate": "",
+    Follower: "",
+    Category: [],
+    Platform: [],
+    Date: "",
+  });
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sortValue, setSortValue] = useState("Priority");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-//   const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
+  const [highlightInfId, setHighlightInfId] = useState<string | null>(null);
 
 //   const [sidebarOpen, setSidebarOpen] = useState(false);
 //   const [panelMode, setPanelMode] = useState<PanelMode>("send");
@@ -2614,9 +2614,9 @@ export default function App() {
 //     setContractForm((prev) => setAtPath(prev, path, value));
 //   }, []);
 
-//   const isBulkSelectable = useCallback((row: AppliedInfluencerRow) => {
-//     return !row.hasContract || row.rejected;
-//   }, []);
+  const isBulkSelectable = useCallback((row: AppliedInfluencerRow) => {
+    return !row.hasContract || row.rejected;
+  }, []);
 
 //   const handleAddMilestone = useCallback(
 //     (inf: Influencer, meta: ContractMeta | null) => {
@@ -2897,9 +2897,9 @@ export default function App() {
 //     [campaignId, page, createdPage]
 //   );
 
-//   useEffect(() => {
-//     fetchApplicants(debouncedSearch);
-//   }, [fetchApplicants, debouncedSearch]);
+  useEffect(() => {
+    fetchApplicants(debouncedSearch);
+  }, [fetchApplicants, debouncedSearch]);
 
 //   const getLatestContractFor = useCallback(
 //     async (inf: Influencer): Promise<ContractMeta | null> => {
@@ -2980,20 +2980,20 @@ export default function App() {
 //     return () => clearTimeout(timeout);
 //   }, [influencerId, influencers]);
 
-//   const clearPreview = useCallback(() => {
-//     setPdfUrl((prev) => {
-//       if (prev) URL.revokeObjectURL(prev);
-//       return "";
-//     });
-//   }, []);
+  const clearPreview = useCallback(() => {
+    setPdfUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
+  }, []);
 
-//   useEffect(() => {
-//     clearPreview();
-//   }, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
+  useEffect(() => {
+    clearPreview();
+  }, [contractForm, deliverables, requestedEffDate, requestedEffTz, clearPreview]);
 
-//   const prefillFormFor = useCallback(
-//     (inf: Influencer, meta?: ContractMeta | null) => {
-//       clearErrors();
+  const prefillFormFor = useCallback(
+    (inf: Influencer, meta?: ContractMeta | null) => {
+      clearErrors();
 
 //       const base = createDefaultContractForm();
 //       base.brand.legalName = localStorage.getItem("brandName") || "";
@@ -3017,33 +3017,33 @@ export default function App() {
 //       base.campaign.territoryTargetCountry = "Worldwide";
 //       base.campaign.effectiveDate = requestedEffDate || toInputDate(new Date());
 
-//       base.scheduleA.commercial.totalCampaignFee = String(
-//         serverBudget ?? inf.feeAmount ?? 0
-//       );
+      base.scheduleA.commercial.totalCampaignFee = String(
+        serverBudget ?? inf.feeAmount ?? 0
+      );
 
-//       if (serverTimeline?.startDate) {
-//         const start = toInputDate(serverTimeline.startDate);
-//         if (start) {
-//           base.campaign.effectiveDate = start;
-//           setRequestedEffDate(start);
-//         }
-//       }
-//       if (meta?.requestedEffectiveDate) {
-//         setRequestedEffDate(toInputDate(meta.requestedEffectiveDate));
-//       }
-//       if (meta?.requestedEffectiveDateTimezone) {
-//         setRequestedEffTz(meta.requestedEffectiveDateTimezone || DEFAULT_TIMEZONE);
-//       } else {
-//         setRequestedEffTz(DEFAULT_TIMEZONE);
-//       }
+      if (serverTimeline?.startDate) {
+        const start = toInputDate(serverTimeline.startDate);
+        if (start) {
+          base.campaign.effectiveDate = start;
+          setRequestedEffDate(start);
+        }
+      }
+      if (meta?.requestedEffectiveDate) {
+        setRequestedEffDate(toInputDate(meta.requestedEffectiveDate));
+      }
+      if (meta?.requestedEffectiveDateTimezone) {
+        setRequestedEffTz(meta.requestedEffectiveDateTimezone || DEFAULT_TIMEZONE);
+      } else {
+        setRequestedEffTz(DEFAULT_TIMEZONE);
+      }
 
-//       const seededDeliverable = createDefaultScheduleDeliverable();
-//       seededDeliverable.platformHandle = inf.handle ? sanitizeHandle(inf.handle) : "";
-//       seededDeliverable.srNo = 1;
+      const seededDeliverable = createDefaultScheduleDeliverable();
+      seededDeliverable.platformHandle = inf.handle ? sanitizeHandle(inf.handle) : "";
+      seededDeliverable.srNo = 1;
 
-//       const initialPaymentType = normalizePaymentType(
-//         meta?.content?.campaign?.paymentType || serverPaymentType
-//       );
+      const initialPaymentType = normalizePaymentType(
+        meta?.content?.campaign?.paymentType || serverPaymentType
+      );
 
 //       base.campaign.paymentType = initialPaymentType;
 
@@ -3082,67 +3082,67 @@ export default function App() {
 //         }));
 //       }
 
-//       setDeliverables(
-//         Array.isArray(deliverablesFromMeta) && deliverablesFromMeta.length
-//           ? deliverablesFromMeta.map((row, index) => ({
-//             id: createRowId(),
-//             srNo: Number(row?.srNo ?? index + 1),
-//             platformHandle: String(row?.platformHandle || ""),
-//             deliverableFormat: String(row?.deliverableFormat || ""),
-//             qty: String(row?.qty ?? "1"),
-//             draftDue: String(row?.draftDue || ""),
-//             liveDate: String(row?.liveDate || ""),
-//           }))
-//           : [seededDeliverable]
-//       );
+      setDeliverables(
+        Array.isArray(deliverablesFromMeta) && deliverablesFromMeta.length
+          ? deliverablesFromMeta.map((row, index) => ({
+            id: createRowId(),
+            srNo: Number(row?.srNo ?? index + 1),
+            platformHandle: String(row?.platformHandle || ""),
+            deliverableFormat: String(row?.deliverableFormat || ""),
+            qty: String(row?.qty ?? "1"),
+            draftDue: String(row?.draftDue || ""),
+            liveDate: String(row?.liveDate || ""),
+          }))
+          : [seededDeliverable]
+      );
 
 
-//       setContractForm(merged);
-//     },
-//     [clearErrors, requestedEffDate, serverBudget, serverCampaignTitle, serverTimeline, serverPaymentType]
-//   );
+      setContractForm(merged);
+    },
+    [clearErrors, requestedEffDate, serverBudget, serverCampaignTitle, serverTimeline, serverPaymentType]
+  );
 
-//   const openSidebar = useCallback(
-//     async (inf: Influencer, mode: PanelMode) => {
-//       if (isFullyManagedPlan) {
-//         toast({
-//           icon: "info",
-//           title: "Fully Managed Plan",
-//           text: "Contract sending is handled by CollabGlam for Fully Managed brands.",
-//         });
-//         return;
-//       }
+  const openSidebar = useCallback(
+    async (inf: Influencer, mode: PanelMode) => {
+      if (isFullyManagedPlan) {
+        toast({
+          icon: "info",
+          title: "Fully Managed Plan",
+          text: "Contract sending is handled by CollabGlam for Fully Managed brands.",
+        });
+        return;
+      }
 
-//       setSelectedInf(inf);
-//       setPanelMode(mode);
-//       const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
-//       setSelectedMeta(meta || null);
-//       prefillFormFor(inf, meta || null);
-//       clearPreview();
-//       setSidebarOpen(true);
-//     },
-//     [clearPreview, getLatestContractFor, isFullyManagedPlan, metaCache, prefillFormFor]
-//   );
+      setSelectedInf(inf);
+      setPanelMode(mode);
+      const meta = metaCache[inf.influencerId] ?? (await getLatestContractFor(inf));
+      setSelectedMeta(meta || null);
+      prefillFormFor(inf, meta || null);
+      clearPreview();
+      setSidebarOpen(true);
+    },
+    [clearPreview, getLatestContractFor, isFullyManagedPlan, metaCache, prefillFormFor]
+  );
 
-//   const closeSidebar = useCallback(() => {
-//     setSidebarOpen(false);
-//     clearPreview();
-//     setSelectedInf(null);
-//     setSelectedMeta(null);
-//     setBulkTargets([]);
-//     setIsPreviewLoading(false);
-//     setIsSendLoading(false);
-//     setIsUpdateLoading(false);
-//   }, [clearPreview]);
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+    clearPreview();
+    setSelectedInf(null);
+    setSelectedMeta(null);
+    setBulkTargets([]);
+    setIsPreviewLoading(false);
+    setIsSendLoading(false);
+    setIsUpdateLoading(false);
+  }, [clearPreview]);
 
-//   useEffect(() => {
-//     if (!sidebarOpen) return;
-//     const prev = document.body.style.overflow;
-//     document.body.style.overflow = "hidden";
-//     return () => {
-//       document.body.style.overflow = prev;
-//     };
-//   }, [sidebarOpen]);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sidebarOpen]);
 
 //   const activePaymentType = useMemo(
 //     () =>
@@ -3160,60 +3160,60 @@ export default function App() {
 //     return {
 //       ...content,
 
-//       campaign: {
-//         ...content.campaign,
-//         paymentType,
-//         effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
-//       },
-//       scheduleA: {
-//         ...content.scheduleA,
-//         deliverables: deliverables.map((row, index) => ({
-//           srNo: index + 1,
-//           platformHandle: row.platformHandle,
-//           deliverableFormat: row.deliverableFormat,
-//           qty: Number(row.qty || "0") || 0,
-//           draftDue: row.draftDue,
-//           liveDate: row.liveDate,
-//         })),
-//         review: {
-//           ...content.scheduleA.review,
-//           includedRevisionRounds:
-//             Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
-//         },
-//         commercial: {
-//           ...content.scheduleA.commercial,
-//           totalCampaignFee:
-//             paymentType === PAYMENT_TYPE.GIFTING
-//               ? 0
-//               : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
-//           milestones:
-//             paymentType === PAYMENT_TYPE.MILESTONE
-//               ? content.scheduleA.commercial.milestones.map((row) => ({
-//                 milestoneName: row.milestoneName,
-//                 paymentAmount: Number(row.paymentAmount || "0") || 0,
-//                 triggerEvent: row.triggerEvent,
-//                 dueDate: row.dueDate,
-//               }))
-//               : [],
-//         },
-//         usageRights: {
-//           ...content.scheduleA.usageRights,
-//           rows: content.scheduleA.usageRights.rows.map((row) => ({
-//             usageRight: row.usageRight,
-//             selected: row.selected,
-//             duration: row.duration,
-//             territoryNotes: row.territoryNotes,
-//           })),
-//         },
-//       },
-//     };
-//   }, [contractForm, deliverables, requestedEffDate, activePaymentType]);
+      campaign: {
+        ...content.campaign,
+        paymentType,
+        effectiveDate: requestedEffDate || content.campaign.effectiveDate || "",
+      },
+      scheduleA: {
+        ...content.scheduleA,
+        deliverables: deliverables.map((row, index) => ({
+          srNo: index + 1,
+          platformHandle: row.platformHandle,
+          deliverableFormat: row.deliverableFormat,
+          qty: Number(row.qty || "0") || 0,
+          draftDue: row.draftDue,
+          liveDate: row.liveDate,
+        })),
+        review: {
+          ...content.scheduleA.review,
+          includedRevisionRounds:
+            Number(content.scheduleA.review.includedRevisionRounds || "1") || 1,
+        },
+        commercial: {
+          ...content.scheduleA.commercial,
+          totalCampaignFee:
+            paymentType === PAYMENT_TYPE.GIFTING
+              ? 0
+              : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+          milestones:
+            paymentType === PAYMENT_TYPE.MILESTONE
+              ? content.scheduleA.commercial.milestones.map((row) => ({
+                milestoneName: row.milestoneName,
+                paymentAmount: Number(row.paymentAmount || "0") || 0,
+                triggerEvent: row.triggerEvent,
+                dueDate: row.dueDate,
+              }))
+              : [],
+        },
+        usageRights: {
+          ...content.scheduleA.usageRights,
+          rows: content.scheduleA.usageRights.rows.map((row) => ({
+            usageRight: row.usageRight,
+            selected: row.selected,
+            duration: row.duration,
+            territoryNotes: row.territoryNotes,
+          })),
+        },
+      },
+    };
+  }, [contractForm, deliverables, requestedEffDate, activePaymentType]);
 
-//   const buildBrandUpdatesPayload = useCallback(() => {
-//     return {
-//       content: buildContentPayload(),
-//     };
-//   }, [buildContentPayload]);
+  const buildBrandUpdatesPayload = useCallback(() => {
+    return {
+      content: buildContentPayload(),
+    };
+  }, [buildContentPayload]);
 
 //   const buildBulkContentPayload = useCallback(() => {
 //     const content = buildContentPayload();
@@ -3231,10 +3231,10 @@ export default function App() {
 //     };
 //   }, [buildContentPayload]);
 
-//   const scrollFirstErrorIntoView = useCallback(() => {
-//     const first = document.querySelector("[data-field-error=true]") as HTMLElement | null;
-//     if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
-//   }, []);
+  const scrollFirstErrorIntoView = useCallback(() => {
+    const first = document.querySelector("[data-field-error=true]") as HTMLElement | null;
+    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
 
 //   const validateForPreview = useCallback(() => {
 //     clearErrors();
@@ -3315,40 +3315,40 @@ export default function App() {
 //     }
 //     if (!requestedEffDate) add("requestedEffDate", "Requested effective date is required.");
 
-//     if (!deliverables.length) {
-//       add("scheduleA.deliverables", "Add at least one deliverable.");
-//     } else {
-//       const messages: string[] = [];
-//       deliverables.forEach((row, index) => {
-//         const label = `Deliverable #${index + 1}`;
-//         const qtyNum = Number(row.qty || "");
-//         if (!row.deliverableFormat.trim()) {
-//           messages.push(`${label}: deliverable format is required.`);
-//         }
-//         if (!row.platformHandle.trim()) {
-//           messages.push(`${label}: platform / handle is required.`);
-//         }
-//         if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
-//           messages.push(`${label}: quantity must be at least 1.`);
-//         }
-//       });
-//       if (messages.length) add("scheduleA.deliverables", messages.join(" "));
-//     }
+    if (!deliverables.length) {
+      add("scheduleA.deliverables", "Add at least one deliverable.");
+    } else {
+      const messages: string[] = [];
+      deliverables.forEach((row, index) => {
+        const label = `Deliverable #${index + 1}`;
+        const qtyNum = Number(row.qty || "");
+        if (!row.deliverableFormat.trim()) {
+          messages.push(`${label}: deliverable format is required.`);
+        }
+        if (!row.platformHandle.trim()) {
+          messages.push(`${label}: platform / handle is required.`);
+        }
+        if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
+          messages.push(`${label}: quantity must be at least 1.`);
+        }
+      });
+      if (messages.length) add("scheduleA.deliverables", messages.join(" "));
+    }
 
-//     if (!ok) {
-//       toast({ icon: "error", title: "Please fix the highlighted fields" });
-//       setTimeout(scrollFirstErrorIntoView, 50);
-//     }
-//     return ok;
-//   }, [
-//     clearErrors,
-//     contractForm,
-//     deliverables,
-//     requestedEffDate,
-//     scrollFirstErrorIntoView,
-//     setErr,
-//     activePaymentType
-//   ]);
+    if (!ok) {
+      toast({ icon: "error", title: "Please fix the highlighted fields" });
+      setTimeout(scrollFirstErrorIntoView, 50);
+    }
+    return ok;
+  }, [
+    clearErrors,
+    contractForm,
+    deliverables,
+    requestedEffDate,
+    scrollFirstErrorIntoView,
+    setErr,
+    activePaymentType
+  ]);
 
 //   const handleGeneratePreview = useCallback(async () => {
 //     if (!selectedInf || !campaignId || !brandId) return;
@@ -3880,38 +3880,38 @@ export default function App() {
 //     setSelectedBulkIds([]);
 //   }, []);
 
-//   const openBulkSidebar = useCallback(() => {
-//     const targets = filteredRows
-//       .filter((row) => selectedBulkIds.includes(row.rawInfluencer.influencerId))
-//       .filter((row) => isBulkSelectable(row))
-//       .map((row) => row.rawInfluencer);
+  const openBulkSidebar = useCallback(() => {
+    const targets = filteredRows
+      .filter((row) => selectedBulkIds.includes(row.rawInfluencer.influencerId))
+      .filter((row) => isBulkSelectable(row))
+      .map((row) => row.rawInfluencer);
 
-//     if (!targets.length) {
-//       toast({
-//         icon: "info",
-//         title: "No influencers selected",
-//         text: "Select at least one eligible influencer.",
-//       });
-//       return;
-//     }
+    if (!targets.length) {
+      toast({
+        icon: "info",
+        title: "No influencers selected",
+        text: "Select at least one eligible influencer.",
+      });
+      return;
+    }
 
-//     setBulkTargets(targets);
-//     setPanelMode("bulk-send");
-//     setSelectedInf(targets[0]);
-//     setSelectedMeta(null);
+    setBulkTargets(targets);
+    setPanelMode("bulk-send");
+    setSelectedInf(targets[0]);
+    setSelectedMeta(null);
 
-//     prefillFormFor(targets[0], null);
-//     clearPreview();
-//     clearErrors();
-//     setSidebarOpen(true);
-//   }, [
-//     clearErrors,
-//     clearPreview,
-//     filteredRows,
-//     isBulkSelectable,
-//     prefillFormFor,
-//     selectedBulkIds,
-//   ]);
+    prefillFormFor(targets[0], null);
+    clearPreview();
+    clearErrors();
+    setSidebarOpen(true);
+  }, [
+    clearErrors,
+    clearPreview,
+    filteredRows,
+    isBulkSelectable,
+    prefillFormFor,
+    selectedBulkIds,
+  ]);
 
 //   function StatusBadge({
 //     meta,
@@ -4047,15 +4047,15 @@ export default function App() {
 //     );
 //   }
 
-//   function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
-//     const inf = row.rawInfluencer;
-//     const meta = row.contractMeta;
-//     const hasContract = row.hasContract;
-//     const statusStr = String(meta?.status || "");
-//     const locked = isLockedStatus(statusStr);
-//     const editable = isEditableStatus(statusStr) || row.rejected;
-//     const needsAccept = needsBrandAcceptance(statusStr);
-//     const readyToSign = canSignNow(statusStr) && !meta?.signatures?.brand?.signed;
+  function AppliedCampaignActionCell({ row }: { row: AppliedInfluencerRow }) {
+    const inf = row.rawInfluencer;
+    const meta = row.contractMeta;
+    const hasContract = row.hasContract;
+    const statusStr = String(meta?.status || "");
+    const locked = isLockedStatus(statusStr);
+    const editable = isEditableStatus(statusStr) || row.rejected;
+    const needsAccept = needsBrandAcceptance(statusStr);
+    const readyToSign = canSignNow(statusStr) && !meta?.signatures?.brand?.signed;
 
 //     const primaryLabel = !hasContract
 //       ? "Send Contract"
@@ -4065,17 +4065,17 @@ export default function App() {
 //           ? "Edit Contract"
 //           : "View Contract";
 
-//     const handlePrimary = () => {
-//       if (!hasContract) {
-//         openSidebar(inf, "send");
-//         return;
-//       }
-//       if (editable && !locked) {
-//         openSidebar(inf, "edit");
-//         return;
-//       }
-//       handleViewContract(inf);
-//     };
+    const handlePrimary = () => {
+      if (!hasContract) {
+        openSidebar(inf, "send");
+        return;
+      }
+      if (editable && !locked) {
+        openSidebar(inf, "edit");
+        return;
+      }
+      handleViewContract(inf);
+    };
 
 //     const handleManageClick = () => {
 //       router.push(`/brand/influencers?id=${inf.influencerId}`);
@@ -4119,15 +4119,15 @@ export default function App() {
 //           View Influencer
 //         </button>
 
-//         <button
-//           type="button"
-//           onClick={() => handleOpenInboxThread(inf)}
-//           className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
-//           title="Open inbox"
-//           aria-label="Open inbox"
-//         >
-//           <EnvelopeOpen size={16} />
-//         </button>
+        <button
+          type="button"
+          onClick={() => handleOpenInboxThread(inf)}
+          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white transition-colors hover:bg-[#F7F7F7]"
+          title="Open inbox"
+          aria-label="Open inbox"
+        >
+          <EnvelopeOpen size={16} />
+        </button>
 
 //         <MilestoneActionsDropdown
 //           onAddMilestone={() => handleAddMilestone(inf, meta)}
@@ -4222,14 +4222,14 @@ export default function App() {
 //               </div>
 //             ) : null}
 
-//             <div className="mt-3">
-//               <AppliedCampaignActionCell row={row} />
-//             </div>
-//           </div>
-//         );
-//       })}
-//     </div>
-//   );
+            <div className="mt-3">
+              <AppliedCampaignActionCell row={row} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 
 //   const todayStr = toInputDate(new Date());
 //   const updateBtnLabel =
@@ -4262,35 +4262,35 @@ export default function App() {
 //     [contractForm.scheduleA.usageRights.rows]
 //   );
 
-//   const setSelectedUsageRights = useCallback(
-//     (next: string[]) => {
-//       setContractField(
-//         "scheduleA.usageRights.rows",
-//         contractForm.scheduleA.usageRights.rows.map((row) => ({
-//           ...row,
-//           selected: next.includes(row.usageRight),
-//         }))
-//       );
-//     },
-//     [contractForm.scheduleA.usageRights.rows, setContractField]
-//   );
+  const setSelectedUsageRights = useCallback(
+    (next: string[]) => {
+      setContractField(
+        "scheduleA.usageRights.rows",
+        contractForm.scheduleA.usageRights.rows.map((row) => ({
+          ...row,
+          selected: next.includes(row.usageRight),
+        }))
+      );
+    },
+    [contractForm.scheduleA.usageRights.rows, setContractField]
+  );
 
-//   const YES_NO_BOOL_OPTIONS = [
-//     { value: "yes", label: "Yes" },
-//     { value: "no", label: "No" },
-//   ];
+  const YES_NO_BOOL_OPTIONS = [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+  ];
 
-//   return (
-//     <TooltipProvider delayDuration={150}>
-//       <div className="mx-auto min-h-screen max-w-full space-y-6 p-4 md:space-y-8 md:p-8">
-//         <header className="sticky top-0 flex items-center justify-between rounded-md border-b border-gray-100 bg-white/90 p-2 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:p-4">
-//           <h1 className="truncate text-xl font-bold md:text-3xl">Campaign: {pageTitle}</h1>
-//           <div className="flex items-center gap-2">
-//             <Button size="sm" variant="outline" onClick={() => router.back()}>
-//               Back
-//             </Button>
-//           </div>
-//         </header>
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="mx-auto min-h-screen max-w-full space-y-6 p-4 md:space-y-8 md:p-8">
+        <header className="sticky top-0 flex items-center justify-between rounded-md border-b border-gray-100 bg-white/90 p-2 backdrop-blur supports-[backdrop-filter]:bg-white/70 md:p-4">
+          <h1 className="truncate text-xl font-bold md:text-3xl">Campaign: {pageTitle}</h1>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => router.back()}>
+              Back
+            </Button>
+          </div>
+        </header>
 
 //         <InfluencerFilter
 //           filters={filters}
@@ -4301,67 +4301,67 @@ export default function App() {
 //           setSortValue={setSortValue}
 //         />
 
-//         {loading ? (
-//           <div className="rounded-md bg-white shadow-sm">
-//             <LoadingSkeleton rows={PAGE_SIZE} />
-//           </div>
-//         ) : error ? (
-//           <ErrorMessage>{error}</ErrorMessage>
-//         ) : filteredRows.length === 0 ? (
-//           <div className="rounded-md bg-white shadow-sm">
-//             <EmptyState />
-//           </div>
-//         ) : (
-//           <>
-//             {selectedBulkIds.length > 0 ? (
-//               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4">
-//                 <div className="text-sm font-medium text-gray-800">
-//                   {selectedBulkIds.length} influencer{selectedBulkIds.length > 1 ? "s" : ""} selected
-//                 </div>
+        {loading ? (
+          <div className="rounded-md bg-white shadow-sm">
+            <LoadingSkeleton rows={PAGE_SIZE} />
+          </div>
+        ) : error ? (
+          <ErrorMessage>{error}</ErrorMessage>
+        ) : filteredRows.length === 0 ? (
+          <div className="rounded-md bg-white shadow-sm">
+            <EmptyState />
+          </div>
+        ) : (
+          <>
+            {selectedBulkIds.length > 0 ? (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4">
+                <div className="text-sm font-medium text-gray-800">
+                  {selectedBulkIds.length} influencer{selectedBulkIds.length > 1 ? "s" : ""} selected
+                </div>
 
-//                 <div className="flex items-center gap-2">
-//                   <Button variant="outline" onClick={clearBulkSelection}>
-//                     Clear
-//                   </Button>
-//                   <Button onClick={openBulkSidebar}>
-//                     <PaperPlaneTilt className="mr-2 h-4 w-4" />
-//                     Bulk Send Contract
-//                   </Button>
-//                 </div>
-//               </div>
-//             ) : null}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={clearBulkSelection}>
+                    Clear
+                  </Button>
+                  <Button onClick={openBulkSidebar}>
+                    <PaperPlaneTilt className="mr-2 h-4 w-4" />
+                    Bulk Send Contract
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
-//             <div className="hidden overflow-x-auto rounded-md md:block">
-//               <InfluencerTable
-//                 rows={filteredRows}
-//                 variant="shortlisted"
-//                 selectable
-//                 selectedIds={selectedBulkIds}
-//                 onToggleRow={toggleBulkRow}
-//                 onToggleAll={toggleBulkAllVisible}
-//                 isRowSelectable={(baseRow: AppliedInfluencerRow) => isBulkSelectable(baseRow as AppliedInfluencerRow)}
-//                 renderStatus={(baseRow: AppliedInfluencerRow) => {
-//                   const row = baseRow as AppliedInfluencerRow;
-//                   if (row.rejected) {
-//                     return (
-//                       <div className="space-y-1 text-center">
-//                         <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
-//                           Rejected
-//                         </span>
-//                         <p className="max-w-[150px] break-words text-[11px] text-gray-500">
-//                           {getRejectReasonFromMeta(row.contractMeta) || "No reason provided"}
-//                         </p>
-//                       </div>
-//                     );
-//                   }
+            <div className="hidden overflow-x-auto rounded-md md:block">
+              <InfluencerTable
+                rows={filteredRows}
+                variant="shortlisted"
+                selectable
+                selectedIds={selectedBulkIds}
+                onToggleRow={toggleBulkRow}
+                onToggleAll={toggleBulkAllVisible}
+                isRowSelectable={(baseRow) => isBulkSelectable(baseRow as AppliedInfluencerRow)}
+                renderStatus={(baseRow) => {
+                  const row = baseRow as AppliedInfluencerRow;
+                  if (row.rejected) {
+                    return (
+                      <div className="space-y-1 text-center">
+                        <span className="inline-flex items-center rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
+                          Rejected
+                        </span>
+                        <p className="max-w-[150px] break-words text-[11px] text-gray-500">
+                          {getRejectReasonFromMeta(row.contractMeta) || "No reason provided"}
+                        </p>
+                      </div>
+                    );
+                  }
 
-//                   return <StatusBadge meta={row.contractMeta} hasContract={row.hasContract} />;
-//                 }}
-//                 renderShortlistedActions={(baseRow: AppliedInfluencerRow) => (
-//                   <AppliedCampaignActionCell row={baseRow as AppliedInfluencerRow} />
-//                 )}
-//               />
-//             </div>
+                  return <StatusBadge meta={row.contractMeta} hasContract={row.hasContract} />;
+                }}
+                renderShortlistedActions={(baseRow) => (
+                  <AppliedCampaignActionCell row={baseRow as AppliedInfluencerRow} />
+                )}
+              />
+            </div>
 
 //             <MobileCardList />
 //           </>
@@ -4393,101 +4393,101 @@ export default function App() {
 //           </div>
 //         ) : null}
 
-//         <ContractSidebar
-//           isOpen={sidebarOpen && !isFullyManagedPlan}
-//           onClose={closeSidebar}
-//           title={
-//             panelMode === "bulk-send"
-//               ? "Bulk Send Contracts"
-//               : panelMode === "send"
-//                 ? "Send Contract"
-//                 : selectedMeta && isRejectedMeta(selectedMeta)
-//                   ? "Resend Contract"
-//                   : "Edit Contract"
-//           }
-//           subtitle={
-//             panelMode === "bulk-send"
-//               ? `${selectedBulkIds.length} influencers selected`
-//               : selectedInf
-//                 ? `${pageTitle || "Agreement"} • ${selectedInf.name}`
-//                 : pageTitle || "Agreement"
-//           }
-//           previewUrl={pdfUrl}
-//           onClosePreview={clearPreview}
-//         >
-//           <SidebarSection title="Brand" icon={<FileText className="h-4 w-4" />}>
-//             <div className="space-y-3">
+        <ContractSidebar
+          isOpen={sidebarOpen && !isFullyManagedPlan}
+          onClose={closeSidebar}
+          title={
+            panelMode === "bulk-send"
+              ? "Bulk Send Contracts"
+              : panelMode === "send"
+                ? "Send Contract"
+                : selectedMeta && isRejectedMeta(selectedMeta)
+                  ? "Resend Contract"
+                  : "Edit Contract"
+          }
+          subtitle={
+            panelMode === "bulk-send"
+              ? `${selectedBulkIds.length} influencers selected`
+              : selectedInf
+                ? `${pageTitle || "Agreement"} • ${selectedInf.name}`
+                : pageTitle || "Agreement"
+          }
+          previewUrl={pdfUrl}
+          onClosePreview={clearPreview}
+        >
+          <SidebarSection title="Brand" icon={<FileText className="h-4 w-4" />}>
+            <div className="space-y-3">
 
-//               <FloatingInput
-//                 id="brand-legal-name"
-//                 label="Brand Legal Name"
-//                 value={getAtPath(contractForm, "brand.legalName")}
-//                 onValueChange={(value: string) =>
-//                   setContractField("brand.legalName", value)
-//                 }
-//                 info={SIDEBAR_TOOLTIPS.brandLegalName}
-//                 state={sidebarStateFor("brand.legalName")}
-//                 errorText={sidebarErrorFor("brand.legalName")}
-//               />
+              <FloatingInput
+                id="brand-legal-name"
+                label="Brand Legal Name"
+                value={getAtPath(contractForm, "brand.legalName")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.legalName", value)
+                }
+                info={SIDEBAR_TOOLTIPS.brandLegalName}
+                state={sidebarStateFor("brand.legalName")}
+                errorText={sidebarErrorFor("brand.legalName")}
+              />
 
-//               <FloatingInput
-//                 id="brand-contact-person"
-//                 label="Contact Person Name"
-//                 info={SIDEBAR_TOOLTIPS.brandContactPerson}
-//                 value={getAtPath(contractForm, "brand.contactPersonName")}
-//                 onValueChange={(value: string) =>
-//                   setContractField("brand.contactPersonName", value)
-//                 }
-//               />
+              <FloatingInput
+                id="brand-contact-person"
+                label="Contact Person Name"
+                info={SIDEBAR_TOOLTIPS.brandContactPerson}
+                value={getAtPath(contractForm, "brand.contactPersonName")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.contactPersonName", value)
+                }
+              />
 
-//               <FloatingInput
-//                 id="brand-notice-email"
-//                 label="Notice Email"
-//                 info={SIDEBAR_TOOLTIPS.brandNoticeEmail}
-//                 value={getAtPath(contractForm, "brand.noticeEmail")}
-//                 onValueChange={(value: string) =>
-//                   setContractField("brand.noticeEmail", value)
-//                 }
-//               />
+              <FloatingInput
+                id="brand-notice-email"
+                label="Notice Email"
+                info={SIDEBAR_TOOLTIPS.brandNoticeEmail}
+                value={getAtPath(contractForm, "brand.noticeEmail")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.noticeEmail", value)
+                }
+              />
 
-//               <FloatingInput
-//                 id="brand-notice-phone"
-//                 label="Notice Phone"
-//                 info={SIDEBAR_TOOLTIPS.brandNoticePhone}
-//                 value={getAtPath(contractForm, "brand.noticePhone")}
-//                 onValueChange={(value: string) =>
-//                   setContractField("brand.noticePhone", value)
-//                 }
-//               />
+              <FloatingInput
+                id="brand-notice-phone"
+                label="Notice Phone"
+                info={SIDEBAR_TOOLTIPS.brandNoticePhone}
+                value={getAtPath(contractForm, "brand.noticePhone")}
+                onValueChange={(value: string) =>
+                  setContractField("brand.noticePhone", value)
+                }
+              />
 
-//               <LabeledTextarea
-//                 id="brand-billing-address"
-//                 label="Billing Address"
-//                 info={SIDEBAR_TOOLTIPS.brandBillingAddress}
-//                 value={getAtPath(contractForm, "brand.billingAddress")}
-//                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-//                   setContractField("brand.billingAddress", e.target.value)
-//                 }
-//               />
-//             </div>
-//           </SidebarSection>
+              <LabeledTextarea
+                id="brand-billing-address"
+                label="Billing Address"
+                info={SIDEBAR_TOOLTIPS.brandBillingAddress}
+                value={getAtPath(contractForm, "brand.billingAddress")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("brand.billingAddress", e.target.value)
+                }
+              />
+            </div>
+          </SidebarSection>
 
-//           <SidebarSection
-//             title="Campaign Overview"
-//             icon={<Info className="h-4 w-4" />}
-//           >
-//             <div className="space-y-4">
-//               <FloatingInput
-//                 id="campaign-title"
-//                 label="Campaign Title / ID"
-//                 info={SIDEBAR_TOOLTIPS.campaignTitle}
-//                 value={getAtPath(contractForm, "campaign.campaignTitleOrId")}
-//                 onValueChange={(value: string) =>
-//                   setContractField("campaign.campaignTitleOrId", value)
-//                 }
-//                 state={sidebarStateFor("campaign.campaignTitleOrId")}
-//                 errorText={sidebarErrorFor("campaign.campaignTitleOrId")}
-//               />
+          <SidebarSection
+            title="Campaign Overview"
+            icon={<Info className="h-4 w-4" />}
+          >
+            <div className="space-y-4">
+              <FloatingInput
+                id="campaign-title"
+                label="Campaign Title / ID"
+                info={SIDEBAR_TOOLTIPS.campaignTitle}
+                value={getAtPath(contractForm, "campaign.campaignTitleOrId")}
+                onValueChange={(value: string) =>
+                  setContractField("campaign.campaignTitleOrId", value)
+                }
+                state={sidebarStateFor("campaign.campaignTitleOrId")}
+                errorText={sidebarErrorFor("campaign.campaignTitleOrId")}
+              />
 
 //               <LabeledTextarea
 //                 id="campaign-products-services"
@@ -4499,77 +4499,77 @@ export default function App() {
 //                 }
 //               />
 
-//               <FloatingSelect
-//                 label="campaign-payment-type"
-//                 value={getAtPath(contractForm, "campaign.paymentType")}
-//                 onValueChange={(value) => {
-//                   const nextType = normalizePaymentType(value);
-//                   setContractForm((prev) => {
-//                     const next = deepClone(prev);
-//                     next.campaign.paymentType = nextType;
-//                     if (nextType === PAYMENT_TYPE.MILESTONE) {
-//                       if (!next.scheduleA.commercial.milestones.length) {
-//                         next.scheduleA.commercial.milestones =
-//                           [createDefaultCommercialMilestone()];
-//                       }
-//                       next.scheduleA.commercial.paymentStructure = "";
-//                     }
-//                     if (nextType === PAYMENT_TYPE.FIXED) {
-//                       next.scheduleA.commercial.milestones = [];
-//                       if (!next.scheduleA.commercial.paymentStructure) { next.scheduleA.commercial.paymentStructure = "50% advance / 50% balance"; }
-//                     }
-//                     if (nextType === PAYMENT_TYPE.GIFTING) {
-//                       next.scheduleA.commercial.milestones = [];
-//                       next.scheduleA.commercial.paymentStructure = "";
-//                       next.scheduleA.commercial.totalCampaignFee = "0";
-//                     } return next;
-//                   });
-//                 }} searchable={false} state={sidebarStateFor("campaign.paymentType")} errorText={sidebarErrorFor("campaign.paymentType")}              >                {PAYMENT_TYPE_OPTIONS.map((option) => (<SelectItem key={option.value} value={option.value}>                    {option.label}                  </SelectItem>))}
-//               </FloatingSelect>
+              <FloatingSelect
+                label="campaign-payment-type"
+                value={getAtPath(contractForm, "campaign.paymentType")}
+                onValueChange={(value) => {
+                  const nextType = normalizePaymentType(value);
+                  setContractForm((prev) => {
+                    const next = deepClone(prev);
+                    next.campaign.paymentType = nextType;
+                    if (nextType === PAYMENT_TYPE.MILESTONE) {
+                      if (!next.scheduleA.commercial.milestones.length) {
+                        next.scheduleA.commercial.milestones =
+                          [createDefaultCommercialMilestone()];
+                      }
+                      next.scheduleA.commercial.paymentStructure = "";
+                    }
+                    if (nextType === PAYMENT_TYPE.FIXED) {
+                      next.scheduleA.commercial.milestones = [];
+                      if (!next.scheduleA.commercial.paymentStructure) { next.scheduleA.commercial.paymentStructure = "50% advance / 50% balance"; }
+                    }
+                    if (nextType === PAYMENT_TYPE.GIFTING) {
+                      next.scheduleA.commercial.milestones = [];
+                      next.scheduleA.commercial.paymentStructure = "";
+                      next.scheduleA.commercial.totalCampaignFee = "0";
+                    } return next;
+                  });
+                }} searchable={false} state={sidebarStateFor("campaign.paymentType")} errorText={sidebarErrorFor("campaign.paymentType")}              >                {PAYMENT_TYPE_OPTIONS.map((option) => (<SelectItem key={option.value} value={option.value}>                    {option.label}                  </SelectItem>))}
+              </FloatingSelect>
 
-//               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-//                 <FloatingInput
-//                   id="campaign-territory"
-//                   label="Territory / Target Country"
-//                   info={SIDEBAR_TOOLTIPS.campaignTerritory}
-//                   value={getAtPath(contractForm, "campaign.territoryTargetCountry")}
-//                   onValueChange={(value: string) =>
-//                     setContractField("campaign.territoryTargetCountry", value)
-//                   }
-//                 />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingInput
+                  id="campaign-territory"
+                  label="Territory / Target Country"
+                  info={SIDEBAR_TOOLTIPS.campaignTerritory}
+                  value={getAtPath(contractForm, "campaign.territoryTargetCountry")}
+                  onValueChange={(value: string) =>
+                    setContractField("campaign.territoryTargetCountry", value)
+                  }
+                />
 
-//                 <FloatingDateInput
-//                   id="requested-effective-date"
-//                   label="Requested Effective Date"
-//                   info={SIDEBAR_TOOLTIPS.requestedEffectiveDate}
-//                   type="date"
-//                   value={requestedEffDate}
-//                   min={todayStr}
-//                   onValueChange={(value) => {
-//                     setRequestedEffDate(value);
-//                     setContractField("campaign.effectiveDate", value);
-//                   }}
-//                   state={sidebarStateFor("requestedEffDate")}
-//                   errorText={sidebarErrorFor("requestedEffDate")}
-//                 />
+                <FloatingDateInput
+                  id="requested-effective-date"
+                  label="Requested Effective Date"
+                  info={SIDEBAR_TOOLTIPS.requestedEffectiveDate}
+                  type="date"
+                  value={requestedEffDate}
+                  min={todayStr}
+                  onValueChange={(value) => {
+                    setRequestedEffDate(value);
+                    setContractField("campaign.effectiveDate", value);
+                  }}
+                  state={sidebarStateFor("requestedEffDate")}
+                  errorText={sidebarErrorFor("requestedEffDate")}
+                />
 
 //               </div>
 
-//               <FloatingSelect
-//                 label="Timezone"
-//                 info={SIDEBAR_TOOLTIPS.timezone}
-//                 value={requestedEffTz}
-//                 onValueChange={(value) => setRequestedEffTz(value)}
-//                 searchable
-//               >
-//                 {tzOptions.map((option, index) => (
-//                   <SelectItem key={`${option.value}-${index}`} value={option.value}>
-//                     {option.label}
-//                   </SelectItem>
-//                 ))}
-//               </FloatingSelect>
-//             </div>
-//           </SidebarSection>
+              <FloatingSelect
+                label="Timezone"
+                info={SIDEBAR_TOOLTIPS.timezone}
+                value={requestedEffTz}
+                onValueChange={(value) => setRequestedEffTz(value)}
+                searchable
+              >
+                {tzOptions.map((option, index) => (
+                  <SelectItem key={`${option.value}-${index}`} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </FloatingSelect>
+            </div>
+          </SidebarSection>
 
 //           <SidebarSection
 //             title="Deliverables & Publication Timeline"
@@ -4617,19 +4617,19 @@ export default function App() {
 //                       disabled
 //                     />
 
-//                     <FloatingInput
-//                       id={`deliverable-platform-${row.id}`}
-//                       label="Platform / Handle"
-//                       info={SIDEBAR_TOOLTIPS.platformHandle}
-//                       value={row.platformHandle}
-//                       onValueChange={(value: string) =>
-//                         setDeliverables((prev) =>
-//                           prev.map((item) =>
-//                             item.id === row.id ? { ...item, platformHandle: value } : item
-//                           )
-//                         )
-//                       }
-//                     />
+                    <FloatingInput
+                      id={`deliverable-platform-${row.id}`}
+                      label="Platform / Handle"
+                      info={SIDEBAR_TOOLTIPS.platformHandle}
+                      value={row.platformHandle}
+                      onValueChange={(value: string) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, platformHandle: value } : item
+                          )
+                        )
+                      }
+                    />
 
 //                     <FloatingInput
 //                       id={`deliverable-qty-${row.id}`}
@@ -4647,62 +4647,62 @@ export default function App() {
 //                     />
 //                   </div>
 
-//                   <FloatingSelect
-//                     label="Deliverable Format"
-//                     info={SIDEBAR_TOOLTIPS.deliverableFormat}
-//                     value={row.deliverableFormat}
-//                     onValueChange={(value) =>
-//                       setDeliverables((prev) =>
-//                         prev.map((item) =>
-//                           item.id === row.id ? { ...item, deliverableFormat: value } : item
-//                         )
-//                       )
-//                     }
-//                     searchable={false}
-//                   >
-//                     {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
-//                       <SelectItem key={option.value} value={option.value}>
-//                         {option.label}
-//                       </SelectItem>
-//                     ))}
-//                   </FloatingSelect>
+                  <FloatingSelect
+                    label="Deliverable Format"
+                    info={SIDEBAR_TOOLTIPS.deliverableFormat}
+                    value={row.deliverableFormat}
+                    onValueChange={(value) =>
+                      setDeliverables((prev) =>
+                        prev.map((item) =>
+                          item.id === row.id ? { ...item, deliverableFormat: value } : item
+                        )
+                      )
+                    }
+                    searchable={false}
+                  >
+                    {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
 
 
-//                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-//                     <FloatingDateInput
-//                       id={`deliverable-draft-${row.id}`}
-//                       label="Draft Due"
-//                       info={SIDEBAR_TOOLTIPS.draftDue}
-//                       type="date"
-//                       value={row.draftDue}
-//                       min={todayStr}
-//                       onValueChange={(value) =>
-//                         setDeliverables((prev) =>
-//                           prev.map((item) =>
-//                             item.id === row.id ? { ...item, draftDue: value } : item
-//                           )
-//                         )
-//                       }
-//                     />
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <FloatingDateInput
+                      id={`deliverable-draft-${row.id}`}
+                      label="Draft Due"
+                      info={SIDEBAR_TOOLTIPS.draftDue}
+                      type="date"
+                      value={row.draftDue}
+                      min={todayStr}
+                      onValueChange={(value) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, draftDue: value } : item
+                          )
+                        )
+                      }
+                    />
 
-//                     <FloatingDateInput
-//                       id={`deliverable-live-${row.id}`}
-//                       label="Live Date"
-//                       info={SIDEBAR_TOOLTIPS.liveDate}
-//                       type="date"
-//                       value={row.liveDate}
-//                       min={todayStr}
-//                       onValueChange={(value) =>
-//                         setDeliverables((prev) =>
-//                           prev.map((item) =>
-//                             item.id === row.id ? { ...item, liveDate: value } : item
-//                           )
-//                         )
-//                       }
-//                     />
-//                   </div>
-//                 </div>
-//               ))}
+                    <FloatingDateInput
+                      id={`deliverable-live-${row.id}`}
+                      label="Live Date"
+                      info={SIDEBAR_TOOLTIPS.liveDate}
+                      type="date"
+                      value={row.liveDate}
+                      min={todayStr}
+                      onValueChange={(value) =>
+                        setDeliverables((prev) =>
+                          prev.map((item) =>
+                            item.id === row.id ? { ...item, liveDate: value } : item
+                          )
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
 
 //               <Button
 //                 variant="outline"
@@ -4747,72 +4747,72 @@ export default function App() {
 //                 />
 //               </div>
 
-//               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-//                 <FloatingSelect
-//                   label="Pre-Shoot Script Required"
-//                   info={SIDEBAR_TOOLTIPS.preShootScriptRequired}
-//                   value={
-//                     getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
-//                       ? "yes"
-//                       : "no"
-//                   }
-//                   onValueChange={(value) =>
-//                     setContractField("scheduleA.preShootScriptRequired", value === "yes")
-//                   }
-//                   searchable={false}
-//                 >
-//                   {YES_NO_BOOL_OPTIONS.map((option) => (
-//                     <SelectItem key={option.value} value={option.value}>
-//                       {option.label}
-//                     </SelectItem>
-//                   ))}
-//                 </FloatingSelect>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <FloatingSelect
+                  label="Pre-Shoot Script Required"
+                  info={SIDEBAR_TOOLTIPS.preShootScriptRequired}
+                  value={
+                    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+                      ? "yes"
+                      : "no"
+                  }
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.preShootScriptRequired", value === "yes")
+                  }
+                  searchable={false}
+                >
+                  {YES_NO_BOOL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
 
-//                 <FloatingDateInput
-//                   id="pre-shoot-script-due"
-//                   label="Pre-Shoot Script Due"
-//                   info={SIDEBAR_TOOLTIPS.preShootScriptDue}
-//                   type="date"
-//                   value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
-//                   min={todayStr}
-//                   onValueChange={(value) =>
-//                     setContractField("scheduleA.preShootScriptDue", value)
-//                   }
-//                 />
+                <FloatingDateInput
+                  id="pre-shoot-script-due"
+                  label="Pre-Shoot Script Due"
+                  info={SIDEBAR_TOOLTIPS.preShootScriptDue}
+                  type="date"
+                  value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
+                  min={todayStr}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.preShootScriptDue", value)
+                  }
+                />
 
-//                 <FloatingInput
-//                   id="pre-shoot-review-days"
-//                   label="Script Review Business Days"
-//                   info={SIDEBAR_TOOLTIPS.preShootReviewDays}
-//                   type="number"
-//                   value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
-//                   onValueChange={(value: string) =>
-//                     setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
-//                   }
-//                   state={sidebarStateFor("scheduleA.preShootScriptReviewBusinessDays")}
-//                   errorText={sidebarErrorFor("scheduleA.preShootScriptReviewBusinessDays")}
-//                 />
-//               </div>
-//             </div>
-//           </SidebarSection>
+                <FloatingInput
+                  id="pre-shoot-review-days"
+                  label="Script Review Business Days"
+                  info={SIDEBAR_TOOLTIPS.preShootReviewDays}
+                  type="number"
+                  value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
+                  onValueChange={(value: string) =>
+                    setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
+                  }
+                  state={sidebarStateFor("scheduleA.preShootScriptReviewBusinessDays")}
+                  errorText={sidebarErrorFor("scheduleA.preShootScriptReviewBusinessDays")}
+                />
+              </div>
+            </div>
+          </SidebarSection>
 
-//           <SidebarSection
-//             title="Review, Revisions & Reshoots"
-//             icon={<PenNib className="h-4 w-4" />}
-//           >
-//             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-//               <FloatingInput
-//                 id="included-revision-rounds"
-//                 label="Included Revision Rounds"
-//                 info={SIDEBAR_TOOLTIPS.includedRevisionRounds}
-//                 type="number"
-//                 value={getAtPath(contractForm, "scheduleA.review.includedRevisionRounds")}
-//                 onValueChange={(value: string) =>
-//                   setContractField("scheduleA.review.includedRevisionRounds", value)
-//                 }
-//                 state={sidebarStateFor("scheduleA.review.includedRevisionRounds")}
-//                 errorText={sidebarErrorFor("scheduleA.review.includedRevisionRounds")}
-//               />
+          <SidebarSection
+            title="Review, Revisions & Reshoots"
+            icon={<PenNib className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <FloatingInput
+                id="included-revision-rounds"
+                label="Included Revision Rounds"
+                info={SIDEBAR_TOOLTIPS.includedRevisionRounds}
+                type="number"
+                value={getAtPath(contractForm, "scheduleA.review.includedRevisionRounds")}
+                onValueChange={(value: string) =>
+                  setContractField("scheduleA.review.includedRevisionRounds", value)
+                }
+                state={sidebarStateFor("scheduleA.review.includedRevisionRounds")}
+                errorText={sidebarErrorFor("scheduleA.review.includedRevisionRounds")}
+              />
 
 //               <FloatingInput
 //                 id="additional-revision-fee"
@@ -4862,129 +4862,129 @@ export default function App() {
 //             </div>
 //           </SidebarSection>
 
-//           <SidebarSection
-//             title="Commercial Terms"
-//             icon={<FileText className="h-4 w-4" />}
-//           >
-//             <div className="space-y-4">
-//               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-//                 <FloatingInput
-//                   id="total-campaign-fee"
-//                   label="Total Campaign Fee"
-//                   info={SIDEBAR_TOOLTIPS.totalCampaignFee}
-//                   type="number"
-//                   value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
-//                   onValueChange={(value: string) =>
-//                     setContractField("scheduleA.commercial.totalCampaignFee", value)
-//                   }
-//                   state={sidebarStateFor("scheduleA.commercial.totalCampaignFee")}
-//                   errorText={sidebarErrorFor("scheduleA.commercial.totalCampaignFee")}
-//                 />
+          <SidebarSection
+            title="Commercial Terms"
+            icon={<FileText className="h-4 w-4" />}
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingInput
+                  id="total-campaign-fee"
+                  label="Total Campaign Fee"
+                  info={SIDEBAR_TOOLTIPS.totalCampaignFee}
+                  type="number"
+                  value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
+                  onValueChange={(value: string) =>
+                    setContractField("scheduleA.commercial.totalCampaignFee", value)
+                  }
+                  state={sidebarStateFor("scheduleA.commercial.totalCampaignFee")}
+                  errorText={sidebarErrorFor("scheduleA.commercial.totalCampaignFee")}
+                />
 
-//                 <FloatingSelect
-//                   label="Currency"
-//                   info={SIDEBAR_TOOLTIPS.currency}
-//                   value={getAtPath(contractForm, "scheduleA.commercial.currency")}
-//                   onValueChange={(value) =>
-//                     setContractField("scheduleA.commercial.currency", value)
-//                   }
-//                   searchable
-//                   state={sidebarStateFor("scheduleA.commercial.currency")}
-//                   errorText={sidebarErrorFor("scheduleA.commercial.currency")}
-//                 >
-//                   {currencyOptions.map((option) => (
-//                     <SelectItem key={option.value} value={option.value}>
-//                       {option.label}
-//                     </SelectItem>
-//                   ))}
-//                 </FloatingSelect>
-//               </div>
+                <FloatingSelect
+                  label="Currency"
+                  info={SIDEBAR_TOOLTIPS.currency}
+                  value={getAtPath(contractForm, "scheduleA.commercial.currency")}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.commercial.currency", value)
+                  }
+                  searchable
+                  state={sidebarStateFor("scheduleA.commercial.currency")}
+                  errorText={sidebarErrorFor("scheduleA.commercial.currency")}
+                >
+                  {currencyOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
+              </div>
 
-//               {activePaymentType === PAYMENT_TYPE.FIXED ? (
-//                 <>
-//                   <FloatingSelect
-//                     label="Payment Structure"
-//                     info={SIDEBAR_TOOLTIPS.paymentStructure}
-//                     value={getAtPath(contractForm, "scheduleA.commercial.paymentStructure")}
-//                     onValueChange={(value) =>
-//                       setContractField("scheduleA.commercial.paymentStructure", value)
-//                     }
-//                     searchable={false}
-//                   >
-//                     {PAYMENT_STRUCTURE_OPTIONS.map((option) => (
-//                       <SelectItem key={option.value} value={option.value}>
-//                         {option.label}
-//                       </SelectItem>
-//                     ))}
-//                   </FloatingSelect>
+              {activePaymentType === PAYMENT_TYPE.FIXED ? (
+                <>
+                  <FloatingSelect
+                    label="Payment Structure"
+                    info={SIDEBAR_TOOLTIPS.paymentStructure}
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentStructure")}
+                    onValueChange={(value) =>
+                      setContractField("scheduleA.commercial.paymentStructure", value)
+                    }
+                    searchable={false}
+                  >
+                    {PAYMENT_STRUCTURE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FloatingSelect>
 
-//                   <FloatingInput
-//                     id="commercial-custom-split"
-//                     label="Custom"
-//                     info={SIDEBAR_TOOLTIPS.customSplit}
-//                     value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
-//                     onValueChange={(value: string) =>
-//                       setContractField("scheduleA.commercial.customSplit", value)
-//                     }
-//                   />
+                  <FloatingInput
+                    id="commercial-custom-split"
+                    label="Custom"
+                    info={SIDEBAR_TOOLTIPS.customSplit}
+                    value={getAtPath(contractForm, "scheduleA.commercial.customSplit")}
+                    onValueChange={(value: string) =>
+                      setContractField("scheduleA.commercial.customSplit", value)
+                    }
+                  />
 
-//                   <LabeledTextarea
-//                     id="advance-payment-trigger"
-//                     label="Advance Payment Trigger"
-//                     info={SIDEBAR_TOOLTIPS.advancePaymentTrigger}
-//                     value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
-//                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-//                       setContractField("scheduleA.commercial.advancePaymentTrigger", e.target.value)
-//                     }
-//                   />
+                  <LabeledTextarea
+                    id="advance-payment-trigger"
+                    label="Advance Payment Trigger"
+                    info={SIDEBAR_TOOLTIPS.advancePaymentTrigger}
+                    value={getAtPath(contractForm, "scheduleA.commercial.advancePaymentTrigger")}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setContractField("scheduleA.commercial.advancePaymentTrigger", e.target.value)
+                    }
+                  />
 
-//                   <LabeledTextarea
-//                     id="remaining-payment-trigger"
-//                     label="Remaining Payment Trigger"
-//                     info={SIDEBAR_TOOLTIPS.remainingPaymentTrigger}
-//                     value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
-//                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-//                       setContractField("scheduleA.commercial.remainingPaymentTrigger", e.target.value)
-//                     }
-//                   />
-//                 </>
-//               ) : null}
+                  <LabeledTextarea
+                    id="remaining-payment-trigger"
+                    label="Remaining Payment Trigger"
+                    info={SIDEBAR_TOOLTIPS.remainingPaymentTrigger}
+                    value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setContractField("scheduleA.commercial.remainingPaymentTrigger", e.target.value)
+                    }
+                  />
+                </>
+              ) : null}
 
-//               {activePaymentType === PAYMENT_TYPE.MILESTONE ? (
-//                 <CommercialMilestonesEditor
-//                   rows={contractForm.scheduleA.commercial.milestones}
-//                   error={formErrors["scheduleA.commercial.milestones"]}
-//                   onChange={(rows) => setContractField("scheduleA.commercial.milestones", rows)}
-//                 />
-//               ) : null}
+              {activePaymentType === PAYMENT_TYPE.MILESTONE ? (
+                <CommercialMilestonesEditor
+                  rows={contractForm.scheduleA.commercial.milestones}
+                  error={formErrors["scheduleA.commercial.milestones"]}
+                  onChange={(rows) => setContractField("scheduleA.commercial.milestones", rows)}
+                />
+              ) : null}
 
-//               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-//                 <FloatingSelect
-//                   label="Payment Processor Fees Borne By"
-//                   info={SIDEBAR_TOOLTIPS.processorFeesBorneBy}
-//                   value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}
-//                   onValueChange={(value) =>
-//                     setContractField("scheduleA.commercial.paymentProcessorFeesBorneBy", value)
-//                   }
-//                   searchable={false}
-//                 >
-//                   {PROCESSOR_FEE_OPTIONS.map((option) => (
-//                     <SelectItem key={option.value} value={option.value}>
-//                       {option.label}
-//                     </SelectItem>
-//                   ))}
-//                 </FloatingSelect>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FloatingSelect
+                  label="Payment Processor Fees Borne By"
+                  info={SIDEBAR_TOOLTIPS.processorFeesBorneBy}
+                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}
+                  onValueChange={(value) =>
+                    setContractField("scheduleA.commercial.paymentProcessorFeesBorneBy", value)
+                  }
+                  searchable={false}
+                >
+                  {PROCESSOR_FEE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </FloatingSelect>
 
-//                 <FloatingInput
-//                   id="processor-fees-notes"
-//                   label="Payment Processor Fee Notes"
-//                   info={SIDEBAR_TOOLTIPS.processorFeesNotes}
-//                   value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesNotes")}
-//                   onValueChange={(value: string) =>
-//                     setContractField("scheduleA.commercial.paymentProcessorFeesNotes", value)
-//                   }
-//                 />
-//               </div>
+                <FloatingInput
+                  id="processor-fees-notes"
+                  label="Payment Processor Fee Notes"
+                  info={SIDEBAR_TOOLTIPS.processorFeesNotes}
+                  value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesNotes")}
+                  onValueChange={(value: string) =>
+                    setContractField("scheduleA.commercial.paymentProcessorFeesNotes", value)
+                  }
+                />
+              </div>
 
 //               <LabeledTextarea
 //                 id="lane-a-marketplace-fee-note"
@@ -5373,20 +5373,20 @@ export default function App() {
 //             </div>
 //           </SidebarSection>
 
-//           <SidebarSection
-//             title="Cancellation & Refunds"
-//             icon={<Info className="h-4 w-4" />}
-//           >
-//             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-//               <LabeledTextarea
-//                 id="kill-fee-or-prorata"
-//                 label="Kill Fee / Pro-Rata"
-//                 info={SIDEBAR_TOOLTIPS.killFeeOrProrata}
-//                 value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}
-//                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-//                   setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
-//                 }
-//               />
+          <SidebarSection
+            title="Cancellation & Refunds"
+            icon={<Info className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <LabeledTextarea
+                id="kill-fee-or-prorata"
+                label="Kill Fee / Pro-Rata"
+                info={SIDEBAR_TOOLTIPS.killFeeOrProrata}
+                value={getAtPath(contractForm, "scheduleA.cancellation.killFeeOrProrata")}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
+                }
+              />
 
 //               <LabeledTextarea
 //                 id="refund-of-unearned-advance"
@@ -5470,22 +5470,22 @@ export default function App() {
 //             </div>
 //           </SidebarSection>
 
-//           <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 border-t border-gray-200 bg-white/95 p-6 backdrop-blur">
-//             <Button
-//               variant="outline"
-//               onClick={handleGeneratePreview}
-//               disabled={isPreviewLoading || isSendLoading || isUpdateLoading}
-//             >
-//               {isPreviewLoading ? (
-//                 <>
-//                   <span className="mr-2 animate-spin">⏳</span> Generating…
-//                 </>
-//               ) : (
-//                 <>
-//                   <Eye className="mr-2 h-5 w-5" /> Preview
-//                 </>
-//               )}
-//             </Button>
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 border-t border-gray-200 bg-white/95 p-6 backdrop-blur">
+            <Button
+              variant="outline"
+              onClick={handleGeneratePreview}
+              disabled={isPreviewLoading || isSendLoading || isUpdateLoading}
+            >
+              {isPreviewLoading ? (
+                <>
+                  <span className="mr-2 animate-spin">⏳</span> Generating…
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-2 h-5 w-5" /> Preview
+                </>
+              )}
+            </Button>
 
 //             {panelMode === "bulk-send" ? (
 //               <Button
@@ -5535,63 +5535,63 @@ export default function App() {
 //           </div>
 //         </ContractSidebar>
 
-//         <SignatureModal
-//           isOpen={signOpen}
-//           onClose={() => {
-//             setSignOpen(false);
-//             setSignTargetMeta(null);
-//           }}
-//           onSigned={async (sigDataUrl: string) => {
-//             if (!signTargetMeta?.contractId) return;
-//             try {
-//               await post("/contract/sign", {
-//                 contractId: signTargetMeta.contractId,
-//                 role: "brand",
-//                 name: signerName,
-//                 email: signerEmail,
-//                 signatureImageDataUrl: sigDataUrl,
-//               });
-//               toast({ icon: "success", title: "Signed", text: "Signature recorded." });
-//               setSignOpen(false);
-//               setSignTargetMeta(null);
-//               fetchApplicants(debouncedSearch);
-//               loadMetaCache(influencers);
-//             } catch (e: any) {
-//               toast({
-//                 icon: "error",
-//                 title: "Sign failed",
-//                 text:
-//                   e?.response?.data?.message ||
-//                   e?.message ||
-//                   "Could not sign contract.",
-//               });
-//             }
-//           }}
-//         />
-//         <AddMilestoneCard
-//           open={addMilestoneOpen}
-//           onClose={() => {
-//             setAddMilestoneOpen(false);
-//             setMilestoneTargetInf(null);
-//             setMilestoneTargetMeta(null);
-//           }}
-//           brandId={brandId || ""}
-//           contractId={milestoneTargetMeta?.contractId || ""}
-//           campaignId={campaignId || ""}
-//           influencerId={milestoneTargetInf?.influencerId || ""}
-//           influencerName={milestoneTargetInf?.name || ""}
-//           onSubmit={() => {
-//             setAddMilestoneOpen(false);
-//             setMilestoneTargetInf(null);
-//             setMilestoneTargetMeta(null);
-//             fetchApplicants(debouncedSearch);
-//             loadMetaCache(influencers);
-//           }}
-//         />
-//       </div>
-//     </TooltipProvider>
-//   );
-// }
+        <SignatureModal
+          isOpen={signOpen}
+          onClose={() => {
+            setSignOpen(false);
+            setSignTargetMeta(null);
+          }}
+          onSigned={async (sigDataUrl: string) => {
+            if (!signTargetMeta?.contractId) return;
+            try {
+              await post("/contract/sign", {
+                contractId: signTargetMeta.contractId,
+                role: "brand",
+                name: signerName,
+                email: signerEmail,
+                signatureImageDataUrl: sigDataUrl,
+              });
+              toast({ icon: "success", title: "Signed", text: "Signature recorded." });
+              setSignOpen(false);
+              setSignTargetMeta(null);
+              fetchApplicants(debouncedSearch);
+              loadMetaCache(influencers);
+            } catch (e: any) {
+              toast({
+                icon: "error",
+                title: "Sign failed",
+                text:
+                  e?.response?.data?.message ||
+                  e?.message ||
+                  "Could not sign contract.",
+              });
+            }
+          }}
+        />
+        <AddMilestoneCard
+          open={addMilestoneOpen}
+          onClose={() => {
+            setAddMilestoneOpen(false);
+            setMilestoneTargetInf(null);
+            setMilestoneTargetMeta(null);
+          }}
+          brandId={brandId || ""}
+          contractId={milestoneTargetMeta?.contractId || ""}
+          campaignId={campaignId || ""}
+          influencerId={milestoneTargetInf?.influencerId || ""}
+          influencerName={milestoneTargetInf?.name || ""}
+          onSubmit={() => {
+            setAddMilestoneOpen(false);
+            setMilestoneTargetInf(null);
+            setMilestoneTargetMeta(null);
+            fetchApplicants(debouncedSearch);
+            loadMetaCache(influencers);
+          }}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
 
 // /* ===============================================================
 //    Support UI components
@@ -5986,113 +5986,113 @@ export default function App() {
 //   );
 // }
 
-// function ContractSidebar({
-//   isOpen,
-//   onClose,
-//   children,
-//   title = "Initiate Contract",
-//   subtitle = "New Agreement",
-//   previewUrl,
-//   onClosePreview,
-// }: any) {
-//   return (
-//     <div
-//       className={`fixed inset-0 z-[120] ${isOpen ? "" : "pointer-events-none"}`}
-//       role="dialog"
-//       aria-modal="true"
-//       aria-labelledby="contract-title"
-//     >
-//       <div
-//         className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"
-//           }`}
-//         onClick={onClose}
-//       />
+function ContractSidebar({
+  isOpen,
+  onClose,
+  children,
+  title = "Initiate Contract",
+  subtitle = "New Agreement",
+  previewUrl,
+  onClosePreview,
+}: any) {
+  return (
+    <div
+      className={`fixed inset-0 z-[120] ${isOpen ? "" : "pointer-events-none"}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="contract-title"
+    >
+      <div
+        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"
+          }`}
+        onClick={onClose}
+      />
 
-//       <div
-//         className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
-//           }`}
-//       >
-//         <div className="relative h-36 overflow-hidden border-b border-[#e5e5e5] bg-white">
-//           <div className="relative z-10 flex h-full items-start justify-between p-6">
-//             <div className="flex items-start gap-4">
-//               <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e8e8e8] bg-[#f7f7f7] shadow-sm">
-//                 <FileText className="h-6 w-6 text-[#1a1a1a]" />
-//               </div>
+      <div
+        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+      >
+        <div className="relative h-36 overflow-hidden border-b border-[#e5e5e5] bg-white">
+          <div className="relative z-10 flex h-full items-start justify-between p-6">
+            <div className="flex items-start gap-4">
+              <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e8e8e8] bg-[#f7f7f7] shadow-sm">
+                <FileText className="h-6 w-6 text-[#1a1a1a]" />
+              </div>
 
-//               <div>
-//                 <div
-//                   className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]"
-//                   id="contract-title"
-//                 >
-//                   {title}
-//                 </div>
-//                 <div className="text-2xl font-extrabold leading-tight text-[#1a1a1a]">
-//                   {subtitle}
-//                 </div>
-//               </div>
-//             </div>
+              <div>
+                <div
+                  className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]"
+                  id="contract-title"
+                >
+                  {title}
+                </div>
+                <div className="text-2xl font-extrabold leading-tight text-[#1a1a1a]">
+                  {subtitle}
+                </div>
+              </div>
+            </div>
 
-//             <button
-//               type="button"
-//               className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e8e8e8] bg-white text-[#9d9d9d] transition-all duration-150 hover:bg-[#f7f7f7] hover:text-[#1a1a1a]"
-//               onClick={onClose}
-//               aria-label="Close"
-//               title="Close"
-//             >
-//               ✕
-//             </button>
-//           </div>
-//         </div>
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e8e8e8] bg-white text-[#9d9d9d] transition-all duration-150 hover:bg-[#f7f7f7] hover:text-[#1a1a1a]"
+              onClick={onClose}
+              aria-label="Close"
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
 
-//         <div className="flex h-[calc(100%-9rem)]">
-//           {previewUrl ? (
-//             <div className="flex w-full flex-col border-r border-gray-100 p-6 sm:w-1/2">
-//               <div className="mb-3 flex items-center justify-between">
-//                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-//                   <Eye className="h-4 w-4" />
-//                   <span>Preview</span>
-//                 </div>
+        <div className="flex h-[calc(100%-9rem)]">
+          {previewUrl ? (
+            <div className="flex w-full flex-col border-r border-gray-100 p-6 sm:w-1/2">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <Eye className="h-4 w-4" />
+                  <span>Preview</span>
+                </div>
 
-//                 {onClosePreview && (
-//                   <button
-//                     type="button"
-//                     onClick={onClosePreview}
-//                     className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-gray-700 hover:bg-neutral-100"
-//                   >
-//                     Close preview
-//                   </button>
-//                 )}
-//               </div>
+                {onClosePreview && (
+                  <button
+                    type="button"
+                    onClick={onClosePreview}
+                    className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-gray-700 hover:bg-neutral-100"
+                  >
+                    Close preview
+                  </button>
+                )}
+              </div>
 
-//               <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-gray-50">
-//                 <iframe
-//                   src={previewUrl}
-//                   width="100%"
-//                   height="100%"
-//                   className="border-0"
-//                   title="Contract PDF"
-//                 />
-//               </div>
-//             </div>
-//           ) : (
-//             <div className="hidden w-1/2 select-none items-center justify-center p-6 text-gray-400 sm:flex">
-//               <div className="text-center">
-//                 <Eye className="mx-auto mb-2 h-8 w-8" />
-//                 <div className="text-sm">Generate a preview to see the PDF here</div>
-//               </div>
-//             </div>
-//           )}
+              <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-gray-50">
+                <iframe
+                  src={previewUrl}
+                  width="100%"
+                  height="100%"
+                  className="border-0"
+                  title="Contract PDF"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="hidden w-1/2 select-none items-center justify-center p-6 text-gray-400 sm:flex">
+              <div className="text-center">
+                <Eye className="mx-auto mb-2 h-8 w-8" />
+                <div className="text-sm">Generate a preview to see the PDF here</div>
+              </div>
+            </div>
+          )}
 
-//           <div
-//             className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"} h-full overflow-auto px-6 space-y-5`}
-//           >
-//             {children}
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
+          <div
+            className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"} h-full overflow-auto px-6 space-y-5`}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // /* ======================
 //    Signature Modal
@@ -6553,19 +6553,19 @@ export default function App() {
 //               onValueChange={(value) => updateRow(row.id, "dueDate", value)}
 //             />
 
-//             <LabeledTextarea
-//               label="Trigger Event"
-//               value={row.triggerEvent}
-//               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-//                 updateRow(row.id, "triggerEvent", e.target.value)
-//               }
-//             />
-//           </div>
-//         </div>
-//       ))}
-//     </div>
-//   );
-// }
+            <LabeledTextarea
+              label="Trigger Event"
+              value={row.triggerEvent}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                updateRow(row.id, "triggerEvent", e.target.value)
+              }
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // const BTN_GRAD =
 //   "bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white hover:from-[#FF7236] hover:to-[#FFA135] shadow-none";

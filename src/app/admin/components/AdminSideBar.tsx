@@ -20,6 +20,7 @@ import {
   LogOut,
   Bell,
   Settings as SettingsIcon,
+  MessageSquare,
 } from "lucide-react";
 
 const outfit = Outfit({
@@ -35,6 +36,7 @@ const navItems = [
   { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: DollarSign },
   { key: "disputes", label: "Disputes", href: "/admin/disputes", icon: FileText },
   { key: "emails", label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
+  { key: "messages", label: "Message", href: "/admin/messages", icon: MessageSquare},
   { key: "influencer-email", label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
   { key: "inbound-emails", label: "Inbound Emails", href: "/admin/inbound-emails", icons: MailCheckIcon },
   { key: "missing-email", label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },

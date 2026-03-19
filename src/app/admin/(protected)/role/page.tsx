@@ -161,6 +161,7 @@ const permissionSections = [
       { key: "emails", label: "E-Mails" },
       { key: "employees", label: "Employees" },
       { key: "inbound-emails", label: "Inbound Emails" },
+      { key: "messages", label: "Message" },
     ],
   },
 ];
@@ -294,6 +295,10 @@ export default function AdminsPage() {
   const canViewAdmins = true;
   const canEditAdmins = roleCanEdit(currentRole);
   const canInviteAdmins = roleCanInvite(currentRole);
+  const selectedAdmin = useMemo(
+    () => rows.find((r) => r._id === selectedId) || null,
+    [rows, selectedId]
+  );
 
   const inviteRoleOptions = useMemo(
     () =>
@@ -302,6 +307,18 @@ export default function AdminsPage() {
       ),
     [currentRole]
   );
+
+  const editRoleOptions = useMemo(() => {
+    const base = inviteRoleOptions.length ? inviteRoleOptions : ROLE_OPTIONS;
+    const current = String(selectedAdmin?.role || "").toLowerCase() as AdminRole;
+
+    if (!current) return base;
+
+    const exists = base.some((item) => item.value === current);
+    return exists
+      ? base
+      : [{ value: current, label: getRoleLabel(current) }, ...base];
+  }, [inviteRoleOptions, selectedAdmin]);
 
   const revenueHeadOptions = useMemo(() => {
     return rows.filter((r) => String(r.role).toLowerCase() === "revenue_head");
@@ -392,8 +409,8 @@ export default function AdminsPage() {
       const nextRows = Array.isArray(data?.data)
         ? data.data
         : Array.isArray(data)
-        ? data
-        : [];
+          ? data
+          : [];
       setRows(nextRows);
 
       if (nextRows.length && !selectedId) {
@@ -420,8 +437,8 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(toApiUrl("admins/status"), {
-        method: "PATCH",
+      const res = await fetch(toApiUrl("admins/update-status"), {
+        method: "PUT",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
@@ -517,27 +534,39 @@ export default function AdminsPage() {
   }
 
   async function onSaveCurrent() {
-    if (!selectedId) return;
+    if (!selectedId || !selectedAdmin) return;
+
     setSavingEdit(true);
     setEditErr(null);
 
     try {
       const token = getToken();
 
-      const res = await fetch(toApiUrl("admins/status"), {
-        method: "PATCH",
+      const payload: Record<string, any> = {
+        adminId: selectedId,
+        status: editStatus,
+        access: editAccess,
+      };
+
+      const trimmedName = editName.trim();
+      const currentName = String(selectedAdmin.name || "").trim();
+      if (trimmedName !== currentName) {
+        payload.name = trimmedName || undefined;
+      }
+
+      const currentRoleValue = String(selectedAdmin.role || "").toLowerCase();
+      if (editRole && editRole !== currentRoleValue) {
+        payload.role = editRole;
+      }
+
+      const res = await fetch(toApiUrl("admins/update-status"), {
+        method: "PUT",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          adminId: selectedId,
-          name: editName.trim() || undefined,
-          role: editRole || undefined,
-          status: editStatus,
-          access: editAccess,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -662,11 +691,6 @@ export default function AdminsPage() {
   const paginatedRows = filteredRows.slice(
     (safePage - 1) * limit,
     safePage * limit
-  );
-
-  const selectedAdmin = useMemo(
-    () => rows.find((r) => r._id === selectedId) || null,
-    [rows, selectedId]
   );
 
   if (!canViewAdmins) {
@@ -964,17 +988,11 @@ export default function AdminsPage() {
                     className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20 disabled:opacity-60"
                   >
                     <option value="">Select role</option>
-                    {inviteRoleOptions.length
-                      ? inviteRoleOptions.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))
-                      : ROLE_OPTIONS.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
+                    {editRoleOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
