@@ -9,13 +9,12 @@ import {
   QuestionMark,
   Check,
   DotsThree,
+  EnvelopeOpen,
 } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/buttonComp";
 
 export type PlatformType = "instagram" | "youtube" | "tiktok";
-export type ApplicantDecisionField =
-  | "isShortlisted"
-  | "isUndicided"
-  | "isRejected";
+export type DecisionAction = "isRejected" | "isUndicided" | "isShortlisted";
 
 export type InfluencerRow = {
   id: string;
@@ -37,26 +36,19 @@ export type InfluencerRow = {
   engagement?: number;
 
   appliedDate: string;
-
   status?: string;
   budget?: string;
-};
 
-type RowRenderer = (row: InfluencerRow) => React.ReactNode;
+  [key: string]: any;
+};
 
 type InfluencerTableProps = {
   rows: InfluencerRow[];
-  onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
-  variant?: "default" | "shortlisted" | "recommended";
-  renderRecommendedActions?: RowRenderer;
-  renderShortlistedActions?: RowRenderer;
-  renderStatus?: RowRenderer;
-
-  selectable?: boolean;
-  selectedIds?: string[];
-  onToggleRow?: (id: string) => void;
-  onToggleAll?: () => void;
-  isRowSelectable?: (row: InfluencerRow) => boolean;
+  onActionClick?: (row: InfluencerRow, action: DecisionAction) => void;
+  variant?: "default" | "shortlisted" | "active" | "recommended";
+  renderRecommendedActions?: (row: InfluencerRow) => React.ReactNode;
+  renderShortlistedActions?: (row: InfluencerRow) => React.ReactNode;
+  renderActiveActions?: (row: InfluencerRow) => React.ReactNode;
 };
 
 const headerTextStyle: React.CSSProperties = {
@@ -71,7 +63,6 @@ const headerTextStyle: React.CSSProperties = {
 
 function HeaderCarets() {
   const iconClass = "h-3 w-3 text-[var(--stone,#343330)]";
-
   return (
     <span className="flex flex-col items-center leading-none">
       <ChevronUp className={iconClass} strokeWidth={3} />
@@ -82,15 +73,10 @@ function HeaderCarets() {
 
 function formatCompact(n: number) {
   const abs = Math.abs(n);
-
   if (abs >= 1_000_000) {
     return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   }
-
-  if (abs >= 1_000) {
-    return `${Math.round(n / 1_000)}K`;
-  }
-
+  if (abs >= 1_000) return `${Math.round(n / 1_000)}K`;
   return `${n}`;
 }
 
@@ -122,11 +108,9 @@ function getPlatformRows(r: InfluencerRow) {
 function formatDDMMYY(input: string) {
   const d = new Date(input);
   if (Number.isNaN(d.getTime())) return input;
-
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yy = String(d.getFullYear()).slice(-2);
-
   return `${dd}/${mm}/${yy}`;
 }
 
@@ -135,27 +119,6 @@ const PLATFORM_ICON_SRC: Record<PlatformType, string> = {
   youtube: "/logos_youtube-icon.svg",
   tiktok: "/ic_baseline-tiktok.svg",
 };
-
-function AvatarThumb({
-  avatarUrl,
-  sizeClass = "h-12 w-12",
-}: {
-  avatarUrl?: string;
-  sizeClass?: string;
-}) {
-  return (
-    <div
-      className={`${sizeClass} shrink-0 rounded-[0.5rem] border bg-black`}
-      style={{
-        borderColor:
-          "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
-        backgroundImage: avatarUrl ? `url(${avatarUrl})` : undefined,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    />
-  );
-}
 
 function PlatformBubble({ platform }: { platform: PlatformType }) {
   return (
@@ -188,7 +151,6 @@ function PlatformBubble({ platform }: { platform: PlatformType }) {
 
 function PlatformOverlap({ platforms }: { platforms: PlatformType[] }) {
   const list = Array.from(new Set(platforms)).slice(0, 3);
-
   return (
     <div className="flex items-center justify-center">
       {list.map((p, idx) => (
@@ -234,9 +196,11 @@ function PillTag({ text, title }: { text: string; title?: string }) {
 }
 
 function ActionGroup({
+  row,
   onAction,
 }: {
-  onAction?: (action: ApplicantDecisionField) => void;
+  row: InfluencerRow;
+  onAction?: (row: InfluencerRow, action: DecisionAction) => void;
 }) {
   const b = "var(--Light-Border-Primary,#D6D6D6)";
 
@@ -251,15 +215,13 @@ function ActionGroup({
           borderLeft: `1px solid ${b}`,
           borderRadius: "0.5rem 0 0 0.5rem",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background =
-            "var(--Light-Background-Negative-Subtle, #F9CACA)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.background =
+            "var(--Light-Background-Negative-Subtle, #F9CACA)")
+        }
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         aria-label="Reject"
-        onClick={() => onAction?.("isRejected")}
+        onClick={() => onAction?.(row, "isRejected")}
       >
         <X size={18} weight="bold" />
       </button>
@@ -273,15 +235,13 @@ function ActionGroup({
           borderLeft: `1px solid ${b}`,
           borderRadius: 0,
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background =
-            "var(--Light-Background-BrandSubtle, #FFF9E6)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.background =
+            "var(--Light-Background-BrandSubtle, #FFF9E6)")
+        }
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         aria-label="Undecided"
-        onClick={() => onAction?.("isUndicided")}
+        onClick={() => onAction?.(row, "isUndicided")}
       >
         <QuestionMark size={18} weight="bold" />
       </button>
@@ -296,14 +256,12 @@ function ActionGroup({
           borderRight: `1px solid ${b}`,
           borderRadius: "0 0.5rem 0.5rem 0",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--Success-50, #EAF6EC)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
-        aria-label="Selected"
-        onClick={() => onAction?.("isShortlisted")}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.background = "var(--Success-50, #EAF6EC)")
+        }
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        aria-label="Shortlist"
+        onClick={() => onAction?.(row, "isShortlisted")}
       >
         <Check size={18} weight="bold" />
       </button>
@@ -328,8 +286,8 @@ function XScroll({ children }: { children: React.ReactNode }) {
 const colDefault = {
   profile: "min-w-[16rem] flex-[3_1_0%] min-w-0",
   category: "min-w-[10rem] flex-[2.5_1_0%] min-w-0",
-  followers: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
-  engagement: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
+  followers: "min-w-[9rem]  flex-[2.5_1_0%] min-w-0",
+  engagement: "min-w-[9rem]  flex-[2.5_1_0%] min-w-0",
   applied: "min-w-[10rem] flex-[2.5_1_0%] min-w-0",
   actions: "min-w-[18rem] flex-[3_1_0%] min-w-0",
 };
@@ -341,7 +299,7 @@ const colShort = {
   platform: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
   budget: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
   date: "min-w-[10rem] flex-[2.5_1_0%] shrink-0",
-  actions: "min-w-[21rem] flex-[3_1_0%] shrink-0",
+  actions: "min-w-[22rem] flex-[3_1_0%] shrink-0",
 };
 
 function DefaultTable({
@@ -349,19 +307,16 @@ function DefaultTable({
   onActionClick,
 }: {
   rows: InfluencerRow[];
-  onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
+  onActionClick?: (row: InfluencerRow, action: DecisionAction) => void;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
-  const allChecked =
-    rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
+  const allChecked = rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
   const someChecked = rows.some((r) => Boolean(selected[r.id])) && !allChecked;
 
   const toggleAll = (checked: boolean) => {
     const next: Record<string, boolean> = {};
-    rows.forEach((r) => {
-      next[r.id] = checked;
-    });
+    rows.forEach((r) => (next[r.id] = checked));
     setSelected(next);
   };
 
@@ -386,9 +341,7 @@ function DefaultTable({
               <div className="flex h-14 items-center justify-center gap-1 py-[0.625rem] pl-[1rem] pr-[0.75rem] rounded-tl-[0.75rem]">
                 <Checkbox
                   className="cursor-pointer"
-                  checked={
-                    allChecked ? true : someChecked ? "indeterminate" : false
-                  }
+                  checked={allChecked ? true : someChecked ? "indeterminate" : false}
                   onCheckedChange={(v) => toggleAll(Boolean(v))}
                   aria-label="Select all influencers"
                 />
@@ -428,9 +381,7 @@ function DefaultTable({
               <HeaderCarets />
             </div>
 
-            <div
-              className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}
-            >
+            <div className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}>
               <span style={headerTextStyle}>Action</span>
             </div>
           </div>
@@ -438,11 +389,9 @@ function DefaultTable({
           <div className="mt-[2rem] w-full space-y-3">
             {rows.map((r) => {
               const plat = getPlatformRows(r);
-              const appliedText =
-                typeof r.appliedDate === "string" &&
-                r.appliedDate.toLowerCase().startsWith("applied")
-                  ? r.appliedDate
-                  : `applied ${r.appliedDate}`;
+              const appliedText = r.appliedDate.toLowerCase().startsWith("applied")
+                ? r.appliedDate
+                : `applied ${r.appliedDate}`;
 
               return (
                 <div
@@ -467,7 +416,18 @@ function DefaultTable({
                       />
 
                       <div className="flex items-center gap-3 min-w-0">
-                        <AvatarThumb avatarUrl={r.profile.avatarUrl} />
+                        <div
+                          className="h-12 w-12 shrink-0 rounded-[0.5rem] border bg-black"
+                          style={{
+                            borderColor:
+                              "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
+                            backgroundImage: r.profile.avatarUrl
+                              ? `url(${r.profile.avatarUrl})`
+                              : undefined,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }}
+                        />
 
                         <div className="flex min-w-0 flex-col">
                           <span
@@ -513,15 +473,10 @@ function DefaultTable({
                     <PillTag text={r.category} />
                   </div>
 
-                  <div
-                    className={`${colDefault.followers} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}
-                  >
+                  <div className={`${colDefault.followers} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}>
                     <div className="mx-auto flex w-fit flex-col justify-center gap-2">
                       {plat.map((p) => (
-                        <div
-                          key={`f-${r.id}-${p.platform}`}
-                          className="flex w-fit items-center gap-2"
-                        >
+                        <div key={`f-${r.id}-${p.platform}`} className="flex w-fit items-center gap-2">
                           <span
                             className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--Light-Border-Subtle,#E6E6E6)] bg-white"
                             style={{ borderWidth: "0.5px", padding: "0.25rem" }}
@@ -552,15 +507,10 @@ function DefaultTable({
                     </div>
                   </div>
 
-                  <div
-                    className={`${colDefault.engagement} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}
-                  >
+                  <div className={`${colDefault.engagement} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}>
                     <div className="mx-auto flex w-fit flex-col justify-center gap-2">
                       {plat.map((p) => (
-                        <div
-                          key={`e-${r.id}-${p.platform}`}
-                          className="flex w-fit items-center gap-2"
-                        >
+                        <div key={`e-${r.id}-${p.platform}`} className="flex w-fit items-center gap-2">
                           <ChartLine size={16} weight="bold" color="#D6D6D6" />
                           <span
                             style={{
@@ -606,7 +556,7 @@ function DefaultTable({
                   <div
                     className={`${colDefault.actions} flex h-[5.5rem] items-center justify-end gap-2 bg-white pl-4 pr-4 py-[0.625rem] rounded-r-[0.75rem]`}
                   >
-                    <ActionGroup onAction={(action) => onActionClick?.(r, action)} />
+                    <ActionGroup row={r} onAction={onActionClick} />
 
                     <button
                       type="button"
@@ -626,42 +576,27 @@ function DefaultTable({
   );
 }
 
-function ShortlistedTable({
+function PipelineTable({
   rows,
+  mode,
   renderActions,
-  renderStatus,
-  selectable = false,
-  selectedIds = [],
-  onToggleRow,
-  onToggleAll,
-  isRowSelectable,
 }: {
   rows: InfluencerRow[];
-  renderActions?: RowRenderer;
-  renderStatus?: RowRenderer;
-  selectable?: boolean;
-  selectedIds?: string[];
-  onToggleRow?: (id: string) => void;
-  onToggleAll?: () => void;
-  isRowSelectable?: (row: InfluencerRow) => boolean;
+  mode: "shortlisted" | "active";
+  renderActions?: (row: InfluencerRow) => React.ReactNode;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
-  const rowSelectable = (row: InfluencerRow) =>
-    isRowSelectable ? isRowSelectable(row) : true;
+  const allChecked = rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
+  const someChecked = rows.some((r) => Boolean(selected[r.id])) && !allChecked;
 
-  const selectableRows = rows.filter((row) => rowSelectable(row));
+  const toggleAll = (checked: boolean) => {
+    const next: Record<string, boolean> = {};
+    rows.forEach((r) => (next[r.id] = checked));
+    setSelected(next);
+  };
 
-  const allChecked = selectable
-    ? selectableRows.length > 0 &&
-      selectableRows.every((row) => selectedIds.includes(row.id))
-    : rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
-
-  const someChecked = selectable
-    ? selectableRows.some((row) => selectedIds.includes(row.id)) && !allChecked
-    : rows.some((r) => Boolean(selected[r.id])) && !allChecked;
-
-  const toggleOneLocal = (id: string, checked: boolean) => {
+  const toggleOne = (id: string, checked: boolean) => {
     setSelected((prev) => ({ ...prev, [id]: checked }));
   };
 
@@ -701,6 +636,13 @@ function ShortlistedTable({
     background: "var(--Light-Text-Tertiary, #B8B8B8)",
   };
 
+  const fallbackStatus = mode === "active" ? "Active" : "Shortlisted";
+  const rowHeightClass = mode === "active" ? "min-h-[7rem]" : "h-[5.5rem]";
+  const actionCellClass =
+    mode === "active"
+      ? `${rowHeightClass} items-start py-3`
+      : `${rowHeightClass} items-center`;
+
   return (
     <div className="flex w-full flex-col">
       <XScroll>
@@ -713,57 +655,41 @@ function ShortlistedTable({
               h-14
             "
           >
-            <div
-              className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}
-            >
-              {selectable ? (
-                <Checkbox
-                  className="cursor-pointer"
-                  checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                  onCheckedChange={() => onToggleAll?.()}
-                  aria-label="Select all"
-                />
-              ) : null}
+            <div className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}>
+              <Checkbox
+                className="cursor-pointer"
+                checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                onCheckedChange={(v) => toggleAll(Boolean(v))}
+                aria-label="Select all"
+              />
             </div>
 
-            <div
-              className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
+            <div className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
               <span style={headerTextStyle}>Profile</span>
               <HeaderCarets />
             </div>
 
-            <div
-              className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
+            <div className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
               <span style={headerTextStyle}>Status</span>
               <HeaderCarets />
             </div>
 
-            <div
-              className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
+            <div className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
               <span style={headerTextStyle}>Platform</span>
               <HeaderCarets />
             </div>
 
-            <div
-              className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
+            <div className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
               <span style={headerTextStyle}>Budget</span>
               <HeaderCarets />
             </div>
 
-            <div
-              className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-            >
+            <div className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
               <span style={headerTextStyle}>Date</span>
               <HeaderCarets />
             </div>
 
-            <div
-              className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}
-            >
+            <div className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}>
               <span style={headerTextStyle}>Action</span>
             </div>
           </div>
@@ -772,45 +698,45 @@ function ShortlistedTable({
             {rows.map((r) => {
               const platRows = getPlatformRows(r);
               const platforms = platRows.map((p) => p.platform);
-              const statusText = r.status ?? "Contract Sent";
-              const budgetText = r.budget ?? "₹0";
+
+              const statusText = r.status ?? fallbackStatus;
+              const budgetText = r.budget ?? "—";
               const dateText = formatDDMMYY(r.appliedDate);
 
               return (
                 <div
                   key={r.id}
                   className="
-                    flex w-full min-w-[73rem] items-center
+                    flex w-full min-w-[73rem] items-stretch
                     rounded-[0.75rem]
                     border border-[var(--Light-Border-Primary,#D6D6D6)]
                     bg-[var(--Light-Background-Primary,#FFF)]
                     overflow-hidden
                   "
                 >
-                  <div
-                    className={`${colShort.checkbox} flex h-[5.5rem] items-center justify-center`}
-                  >
+                  <div className={`${colShort.checkbox} flex ${rowHeightClass} items-center justify-center`}>
                     <Checkbox
                       className="cursor-pointer"
-                      checked={selectable ? selectedIds.includes(r.id) : Boolean(selected[r.id])}
-                      disabled={selectable ? !rowSelectable(r) : false}
-                      onCheckedChange={(v) => {
-                        if (selectable) {
-                          if (!rowSelectable(r)) return;
-                          onToggleRow?.(r.id);
-                          return;
-                        }
-                        toggleOneLocal(r.id, Boolean(v));
-                      }}
+                      checked={Boolean(selected[r.id])}
+                      onCheckedChange={(v) => toggleOne(r.id, Boolean(v))}
                       aria-label={`Select ${r.profile.name}`}
                     />
                   </div>
 
-                  <div
-                    className={`${colShort.profile} flex h-[5.5rem] items-center px-4`}
-                  >
+                  <div className={`${colShort.profile} flex ${rowHeightClass} items-center px-4`}>
                     <div className="flex items-center gap-3 min-w-0">
-                      <AvatarThumb avatarUrl={r.profile.avatarUrl} />
+                      <div
+                        className="h-12 w-12 shrink-0 rounded-[0.5rem] border bg-black"
+                        style={{
+                          borderColor:
+                            "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
+                          backgroundImage: r.profile.avatarUrl
+                            ? `url(${r.profile.avatarUrl})`
+                            : undefined,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }}
+                      />
 
                       <div className="flex min-w-0 flex-col">
                         <span
@@ -838,11 +764,7 @@ function ShortlistedTable({
                             minWidth: 0,
                           }}
                         >
-                          <span
-                            className="truncate"
-                            style={handleStyle}
-                            title={r.profile.handle ?? ""}
-                          >
+                          <span className="truncate" style={handleStyle} title={r.profile.handle ?? ""}>
                             {r.profile.handle ?? ""}
                           </span>
 
@@ -863,27 +785,19 @@ function ShortlistedTable({
                     </div>
                   </div>
 
-                  <div
-                    className={`${colShort.status} flex h-[5.5rem] items-center justify-center px-4`}
-                  >
-                    {renderStatus ? renderStatus(r) : <PillTag text={statusText} />}
+                  <div className={`${colShort.status} flex ${rowHeightClass} items-center justify-center px-4`}>
+                    <PillTag text={statusText} />
                   </div>
 
-                  <div
-                    className={`${colShort.platform} flex h-[5.5rem] items-center justify-center px-4`}
-                  >
+                  <div className={`${colShort.platform} flex ${rowHeightClass} items-center justify-center px-4`}>
                     <PlatformOverlap platforms={platforms} />
                   </div>
 
-                  <div
-                    className={`${colShort.budget} flex h-[5.5rem] items-center justify-center px-4`}
-                  >
+                  <div className={`${colShort.budget} flex ${rowHeightClass} items-center justify-center px-4`}>
                     <PillTag text={budgetText} />
                   </div>
 
-                  <div
-                    className={`${colShort.date} flex h-[5.5rem] items-center justify-center pl-4 pr-9`}
-                  >
+                  <div className={`${colShort.date} flex ${rowHeightClass} items-center justify-center pl-4 pr-9`}>
                     <span
                       style={{
                         flex: "1 0 0",
@@ -902,18 +816,8 @@ function ShortlistedTable({
                     </span>
                   </div>
 
-                  <div
-                    className={`${colShort.actions} flex h-[5.5rem] items-center justify-end pl-9 pr-4`}
-                  >
-                    <div className="flex w-full justify-end">
-                      {renderActions ? (
-                        renderActions(r)
-                      ) : (
-                        <span className="text-xs text-[var(--Light-Text-Secondary,#969696)]">
-                          No actions available
-                        </span>
-                      )}
-                    </div>
+                  <div className={`${colShort.actions} flex ${actionCellClass} justify-end pl-9 pr-4`}>
+                    {renderActions ? renderActions(r) : null}
                   </div>
                 </div>
               );
@@ -933,7 +837,7 @@ function RecommendedTable({
   renderActions,
 }: {
   rows: InfluencerRow[];
-  renderActions?: RowRenderer;
+  renderActions?: (row: InfluencerRow) => React.ReactNode;
 }) {
   const border = "var(--Light-Border-Primary,#D6D6D6)";
 
@@ -943,11 +847,10 @@ function RecommendedTable({
         <div className="min-w-full w-max space-y-3">
           {rows.map((r) => {
             const plat = getPlatformRows(r);
-            const appliedText =
-              typeof r.appliedDate === "string" &&
-              r.appliedDate.toLowerCase().startsWith("applied")
-                ? r.appliedDate
-                : `applied ${r.appliedDate}`;
+
+            const appliedText = r.appliedDate?.toLowerCase?.().startsWith("applied")
+              ? r.appliedDate
+              : `applied ${r.appliedDate}`;
 
             return (
               <div key={r.id} className="flex w-full min-w-[60rem]">
@@ -969,7 +872,18 @@ function RecommendedTable({
                   }}
                 >
                   <div className="flex w-full items-center gap-3 min-w-0">
-                    <AvatarThumb avatarUrl={r.profile.avatarUrl} />
+                    <div
+                      className="h-12 w-12 shrink-0 rounded-[0.5rem] border bg-black"
+                      style={{
+                        borderColor:
+                          "var(--Light-Border-Border-stroke, rgba(255,255,255,0.30))",
+                        backgroundImage: r.profile.avatarUrl
+                          ? `url(${r.profile.avatarUrl})`
+                          : undefined,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                      }}
+                    />
 
                     <div className="flex min-w-0 flex-col">
                       <span
@@ -1136,33 +1050,28 @@ export function InfluencerTable({
   variant = "default",
   renderRecommendedActions,
   renderShortlistedActions,
-  renderStatus,
-  selectable = false,
-  selectedIds = [],
-  onToggleRow,
-  onToggleAll,
-  isRowSelectable,
+  renderActiveActions,
 }: InfluencerTableProps) {
   if (variant === "recommended") {
-    return (
-      <RecommendedTable
-        rows={rows}
-        renderActions={renderRecommendedActions}
-      />
-    );
+    return <RecommendedTable rows={rows} renderActions={renderRecommendedActions} />;
   }
 
   if (variant === "shortlisted") {
     return (
-      <ShortlistedTable
+      <PipelineTable
         rows={rows}
+        mode="shortlisted"
         renderActions={renderShortlistedActions}
-        renderStatus={renderStatus}
-        selectable={selectable}
-        selectedIds={selectedIds}
-        onToggleRow={onToggleRow}
-        onToggleAll={onToggleAll}
-        isRowSelectable={isRowSelectable}
+      />
+    );
+  }
+
+  if (variant === "active") {
+    return (
+      <PipelineTable
+        rows={rows}
+        mode="active"
+        renderActions={renderActiveActions}
       />
     );
   }

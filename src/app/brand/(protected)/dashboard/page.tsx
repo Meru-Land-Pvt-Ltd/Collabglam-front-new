@@ -360,7 +360,7 @@ export default function BrandDashboardHome() {
                     </Button>
 
                     <Button
-                      onClick={() => router.push("/brand/add-edit-campaign")}                    >
+                      onClick={() => router.push("/brand/create-campaign")}                    >
                       Create New Campaign
                     </Button>
                   </div>

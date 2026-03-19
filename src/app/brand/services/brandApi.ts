@@ -11,7 +11,7 @@ const INVITATION_BASE = "/invitation";
 const APPLY_BASE = "/apply-campaign";
 const MILESTONE_BASE = "/milestone";
 const DELIVERABLE_BASE = "/deliverable";
-const CAMPAIGN_INVITATION_BASE= "/campaign-invitation";
+const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 const Apply_Base = "/apply";
 
 /** -------------------------
@@ -498,26 +498,26 @@ export type ListCampaignsPayload = {
 
   dateField?: "createdAt" | "updatedAt" | "startAt" | "endAt" | "publishedAt";
   datePreset?:
-    | "today"
-    | "last7days"
-    | "last30days"
-    | "thisweek"
-    | "thismonth"
-    | "launchingSoon";
+  | "today"
+  | "last7days"
+  | "last30days"
+  | "thisweek"
+  | "thismonth"
+  | "launchingSoon";
 
   dateFrom?: string;
   dateTo?: string;
 
   sortBy?:
-    | "createdAt"
-    | "updatedAt"
-    | "startAt"
-    | "endAt"
-    | "publishedAt"
-    | "campaignTitle"
-    | "campaignBudget"
-    | "numberOfInfluencers"
-    | "status";
+  | "createdAt"
+  | "updatedAt"
+  | "startAt"
+  | "endAt"
+  | "publishedAt"
+  | "campaignTitle"
+  | "campaignBudget"
+  | "numberOfInfluencers"
+  | "status";
 
   sortOrder?: "asc" | "desc";
 };
@@ -1435,6 +1435,8 @@ export async function apiCampaignHistory(payload: CampaignHistoryPayload) {
 
 /** -------- Applicant List By Campaign (NEW) -------- */
 
+/** -------- Applicant List By Campaign (UPDATED) -------- */
+
 export type ApplyListSortField =
   | "name"
   | "primaryPlatform"
@@ -1443,6 +1445,8 @@ export type ApplyListSortField =
   | "handle"
   | "createdAt";
 
+export type ApplicantDecisionFilter = 0 | 1 | boolean | "0" | "1" | "true" | "false";
+
 export type GetListByCampaignPayload = {
   campaignId: string;
   page?: number;
@@ -1450,7 +1454,12 @@ export type GetListByCampaignPayload = {
   search?: string;
   sortField?: ApplyListSortField;
   createdPage?: boolean | "true" | "false";
-  sortOrder?: 0 | 1; // 0 = asc, 1 = desc (matches backend)
+  sortOrder?: 0 | 1; // 0 = asc, 1 = desc
+
+  // new applicant decision filters
+  isShortlisted?: ApplicantDecisionFilter;
+  isUndicided?: ApplicantDecisionFilter;
+  isRejected?: ApplicantDecisionFilter;
 };
 
 export type CampaignApplicantInfluencerRow = {
@@ -1461,12 +1470,21 @@ export type CampaignApplicantInfluencerRow = {
   category: string | null;
   audienceSize: number;
   createdAt: string | null;
+
+  // applicant decision flags
+  isShortlisted: 0 | 1;
+  isUndicided: 0 | 1;
+  isRejected: 0 | 1;
+
+  // approval / contract flags
   isAssigned: 0 | 1;
   isContracted: 0 | 1;
   contractId: string | null;
   feeAmount: number;
   isAccepted: 0 | 1;
-  isRejected: 0 | 1;
+
+  // contract rejection (separate from applicant rejection)
+  isContractRejected?: 0 | 1;
   rejectedReason: string;
 };
 
@@ -1496,6 +1514,9 @@ export async function apiGetListByCampaign(
       sortField: payload.sortField,
       createdPage: payload.createdPage,
       sortOrder: payload.sortOrder ?? 0,
+      isShortlisted: payload.isShortlisted,
+      isUndicided: payload.isUndicided,
+      isRejected: payload.isRejected,
     }
   );
 }

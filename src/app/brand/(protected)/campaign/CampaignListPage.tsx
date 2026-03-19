@@ -396,6 +396,18 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
     const campaignId = normalizeMongoId(c.campaignId ?? c._id ?? c.id);
     const campaignTitle = c.campaignTitle ?? "Untitled Campaign";
 
+    const goToInfluencers = () => {
+      if (typeof window !== "undefined") {
+        window.location.href = `/brand/influ/all?campaignId=${encodeURIComponent(campaignId)}`;
+      }
+    };
+
+    const goToActiveContracts = () => {
+      if (typeof window !== "undefined") {
+        window.location.href = `/brand/influ/active?campaignId=${encodeURIComponent(campaignId)}`;
+      }
+    };
+
     const handleView = () => {
       if (typeof window !== "undefined") {
         window.location.href = `/brand/campaign/${campaignTitle}?id=${campaignId}`;
@@ -422,9 +434,42 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         tags={[c.category?.name || "No Category"]}
         stats={[
           { label: "Platform", value: ((c.platformSelection ?? []) as string[]).length },
-          { label: "Contract", value: c.contractsCount ?? 0 },
-          { label: "Influencer", value: c.numberOfInfluencers ?? 0 },
-          { label: "Accepted", value: c.acceptedContracts ?? 0 },
+          {
+            label: "Contract",
+            value: (
+              <button
+                type="button"
+                onClick={goToActiveContracts}
+                className="cursor-pointer text-primary hover:underline"
+              >
+                {c.contractsCount ?? 0}
+              </button>
+            ),
+          },
+          {
+            label: "Influencer",
+            value: (
+              <button
+                type="button"
+                onClick={goToInfluencers}
+                className="cursor-pointer text-primary hover:underline"
+              >
+                {c.numberOfInfluencers ?? 0}
+              </button>
+            ),
+          },
+          {
+            label: "Accepted",
+            value: (
+              <button
+                type="button"
+                onClick={goToActiveContracts}
+                className="cursor-pointer text-primary hover:underline"
+              >
+                {c.acceptedContracts ?? 0}
+              </button>
+            ),
+          },
         ]}
         footer={
           <>

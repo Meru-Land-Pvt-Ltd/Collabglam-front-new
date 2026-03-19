@@ -21,7 +21,7 @@ type AddMilestoneCardProps = {
   campaignId?: string;
   influencerId?: string;
   influencerName?: string;
-  onSubmit?: () => void;
+  onSubmit?: () => void | Promise<void>;
 };
 
 type WalletShortfallState = {
@@ -153,7 +153,7 @@ function WalletTopupModal({
                 <div className="mt-1">
                   Minimum suggested top-up:{" "}
                   <span className="font-semibold">
-                    ₹{Number(defaultAmount || 0).toFixed(2)}
+                    ${Number(defaultAmount || 0).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -165,19 +165,19 @@ function WalletTopupModal({
               <div className="rounded-xl border border-[#ECECEC] bg-[#FAFAFA] px-3 py-3">
                 <div className="text-[11px] text-[#777777]">Wallet</div>
                 <div className="mt-1 text-sm font-semibold text-[#1A1A1A]">
-                  ₹{Number(walletInfo.walletBalance || 0).toFixed(2)}
+                  ${Number(walletInfo.walletBalance || 0).toFixed(2)}
                 </div>
               </div>
               <div className="rounded-xl border border-[#ECECEC] bg-[#FAFAFA] px-3 py-3">
                 <div className="text-[11px] text-[#777777]">Frozen</div>
                 <div className="mt-1 text-sm font-semibold text-[#1A1A1A]">
-                  ₹{Number(walletInfo.frozenBalance || 0).toFixed(2)}
+                  ${Number(walletInfo.frozenBalance || 0).toFixed(2)}
                 </div>
               </div>
               <div className="rounded-xl border border-[#ECECEC] bg-[#FAFAFA] px-3 py-3">
                 <div className="text-[11px] text-[#777777]">Usable</div>
                 <div className="mt-1 text-sm font-semibold text-[#1A1A1A]">
-                  ₹{Number(walletInfo.usableBalance || 0).toFixed(2)}
+                  ${Number(walletInfo.usableBalance || 0).toFixed(2)}
                 </div>
               </div>
             </div>
@@ -332,7 +332,7 @@ export default function AddMilestoneCard({
       });
 
       setWalletShortfall(null);
-      onSubmit?.();
+      await onSubmit?.();
       onClose();
     } catch (err: any) {
       const message = getApiErrorMessage(err, "Failed to create milestone");
@@ -378,7 +378,7 @@ export default function AddMilestoneCard({
     setWalletShortfall(null);
     setError("");
     setTopupSuccess(
-      `Wallet balance added successfully. ₹${Number(payload.amount || 0).toFixed(
+      `Wallet balance added successfully. $${Number(payload.amount || 0).toFixed(
         2
       )} was added. You can now create the milestone.`
     );
@@ -460,7 +460,7 @@ export default function AddMilestoneCard({
                   <div className="mt-1">
                     Please add{" "}
                     <span className="font-semibold">
-                      ₹{Number(walletShortfall.needToAdd || 0).toFixed(2)}
+                      ${Number(walletShortfall.needToAdd || 0).toFixed(2)}
                     </span>{" "}
                     to continue.
                   </div>
