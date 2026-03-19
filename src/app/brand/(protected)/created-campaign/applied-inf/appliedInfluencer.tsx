@@ -3684,27 +3684,27 @@ export default function AppliedInfluencersPage() {
       }
     }
 
-    if (paymentType === PAYMENT_TYPE.MILESTONE) {
-      const milestones = contractForm.scheduleA.commercial.milestones || [];
+    // if (paymentType === PAYMENT_TYPE.MILESTONE) {
+    //   const milestones = contractForm.scheduleA.commercial.milestones || [];
 
-      if (!milestones.length) {
-        add("scheduleA.commercial.milestones", "Add at least one milestone.");
-      } else {
-        const messages: string[] = [];
+    //   if (!milestones.length) {
+    //     add("scheduleA.commercial.milestones", "Add at least one milestone.");
+    //   } else {
+    //     const messages: string[] = [];
 
-        milestones.forEach((row, index) => {
-          const label = `Milestone #${index + 1}`;
-          if (!row.milestoneName.trim()) messages.push(`${label}: name is required.`);
-          if (!row.paymentAmount.trim()) messages.push(`${label}: amount is required.`);
-          if (!row.triggerEvent.trim()) messages.push(`${label}: trigger event is required.`);
-          if (!row.dueDate.trim()) messages.push(`${label}: due date is required.`);
-        });
+    //     milestones.forEach((row, index) => {
+    //       const label = `Milestone #${index + 1}`;
+    //       if (!row.milestoneName.trim()) messages.push(`${label}: name is required.`);
+    //       if (!row.paymentAmount.trim()) messages.push(`${label}: amount is required.`);
+    //       if (!row.triggerEvent.trim()) messages.push(`${label}: trigger event is required.`);
+    //       if (!row.dueDate.trim()) messages.push(`${label}: due date is required.`);
+    //     });
 
-        if (messages.length) {
-          add("scheduleA.commercial.milestones", messages.join(" "));
-        }
-      }
-    }
+    //     if (messages.length) {
+    //       add("scheduleA.commercial.milestones", messages.join(" "));
+    //     }
+    //   }
+    // }
     if (Number.isNaN(revisionValue) || revisionValue < 0) {
       add("scheduleA.review.includedRevisionRounds", "Revision rounds must be zero or more.");
     }
@@ -3738,7 +3738,6 @@ export default function AppliedInfluencersPage() {
       });
       if (messages.length) add("scheduleA.deliverables", messages.join(" "));
     }
-    // ── Date ordering validation ──────────────────────────────────────────────
     // ── Date ordering validation ──────────────────────────────────────────────
     const preShootRequired = getAtPath(
       contractForm,

@@ -27,26 +27,101 @@ const outfit = Outfit({
 
 // ✅ Notifications moved AFTER Invited Influencer (same item, same route)
 const navItems = [
-  { key: "notifications", label: "Notifications", href: "/admin/notifications", icon: Bell },
+  {
+    key: "notifications",
+    label: "Notifications",
+    href: "/admin/notifications",
+    icon: Bell,
+  },
   { key: "brands", label: "Brands", href: "/admin/brands", icon: Home },
-  { key: "influencers", label: "Influencers", href: "/admin/influencers", icon: Users },
-  { key: "campaigns", label: "All Campaigns", href: "/admin/campaigns", icon: List },
-  { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: DollarSign },
-  { key: "disputes", label: "Disputes", href: "/admin/disputes", icon: FileText },
+  {
+    key: "paid-brands",
+    label: "Paid Brands",
+    href: "/admin/paid-brands",
+    icon: Home,
+  },
+  {
+    key: "influencers",
+    label: "Influencers",
+    href: "/admin/influencers",
+    icon: Users,
+  },
+  {
+    key: "campaigns",
+    label: "All Campaigns",
+    href: "/admin/campaigns",
+    icon: List,
+  },
+  {
+    key: "subscriptions",
+    label: "Subscriptions",
+    href: "/admin/subscriptions",
+    icon: DollarSign,
+  },
+  {
+    key: "disputes",
+    label: "Disputes",
+    href: "/admin/disputes",
+    icon: FileText,
+  },
 
-  { key: "emails", label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
-  { key: "influencer-email", label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
-  { key: "missing-email", label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },
+  {
+    key: "emails",
+    label: "E-Mails",
+    href: "/admin/emails",
+    icon: MailCheckIcon,
+  },
+  {
+    key: "influencer-email",
+    label: "Influencer-Email",
+    href: "/admin/influencerdetails",
+    icon: MailCheckIcon,
+  },
+  {
+    key: "missing-email",
+    label: "Missing-Email",
+    href: "/admin/missingemail",
+    icon: MailCheckIcon,
+  },
 
-  { key: "invoice-details", label: "Invoice Details", href: "/admin/invoiceDetails", icon: DollarSign },
-  { key: "payment-notification", label: "Payment Notification", href: "/admin/payment", icon: Bell },
+  {
+    key: "invoice-details",
+    label: "Invoice Details",
+    href: "/admin/invoiceDetails",
+    icon: DollarSign,
+  },
+  {
+    key: "payment-notification",
+    label: "Payment Notification",
+    href: "/admin/payment",
+    icon: Bell,
+  },
 
-  { key: "youtube-handle", label: "Youtube Handle", href: "/admin/youtube", icon: MailCheckIcon },
-  { key: "modash-data", label: "Modash Data", href: "/admin/modash", icon: MailCheckIcon },
-  { key: "invited-influencer", label: "Invited Influencer", href: "/admin/invitedInfluencer", icon: MailCheckIcon },
+  {
+    key: "youtube-handle",
+    label: "Youtube Handle",
+    href: "/admin/youtube",
+    icon: MailCheckIcon,
+  },
+  {
+    key: "modash-data",
+    label: "Modash Data",
+    href: "/admin/modash",
+    icon: MailCheckIcon,
+  },
+  {
+    key: "invited-influencer",
+    label: "Invited Influencer",
+    href: "/admin/invitedInfluencer",
+    icon: MailCheckIcon,
+  },
   { key: "role", label: "Role", href: "/admin/role", icon: MailCheckIcon },
   { label: "Notifications", href: "/admin/notifications", icon: Bell },
-  { label: "Influencer Data", href: "/admin/influencer-data", icon: MailCheckIcon },
+  {
+    label: "Influencer Data",
+    href: "/admin/influencer-data",
+    icon: MailCheckIcon,
+  },
 ];
 
 const documentLinks = [
@@ -55,7 +130,10 @@ const documentLinks = [
   { label: "Privacy Policy", href: "/admin/documents/privacy-policy" },
   { label: "Terms of Service", href: "/admin/documents/terms-of-service" },
   { label: "Cookie Policy", href: "/admin/documents/cookie-policy" },
-  { label: "Shipping & Delivery Policy", href: "/admin/documents/shipping-delivery" },
+  {
+    label: "Shipping & Delivery Policy",
+    href: "/admin/documents/shipping-delivery",
+  },
   { label: "Returns Policy", href: "/admin/documents/return-policy" },
 ];
 
@@ -95,7 +173,10 @@ export default function AdminSidebar() {
   const linkActive = "bg-black text-white";
   const linkInactive = "text-black/80 hover:bg-black hover:text-white";
 
-  const renderLink = ({ label, href, icon: Icon }: any, onClick?: () => void) => {
+  const renderLink = (
+    { label, href, icon: Icon }: any,
+    onClick?: () => void,
+  ) => {
     const active = pathname === href || pathname.startsWith(href + "/");
     return (
       <Link
@@ -107,8 +188,9 @@ export default function AdminSidebar() {
         <span className="flex items-center gap-2">
           {Icon ? (
             <Icon
-              className={`h-4 w-4 ${active ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+              className={`h-4 w-4 ${
+                active ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
             />
           ) : null}
           <span className="whitespace-nowrap flex-1">{label}</span>
@@ -128,19 +210,28 @@ export default function AdminSidebar() {
         >
           <span className="flex items-center gap-2">
             <FileText
-              className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+              className={`h-4 w-4 ${
+                docsActive
+                  ? "text-white"
+                  : "text-black/50 group-hover:text-white"
+              }`}
             />
             <span className="flex-1 text-left">Documents</span>
             {docsOpen ? (
               <ChevronUp
-                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                  }`}
+                className={`h-4 w-4 ${
+                  docsActive
+                    ? "text-white"
+                    : "text-black/50 group-hover:text-white"
+                }`}
               />
             ) : (
               <ChevronDown
-                className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
-                  }`}
+                className={`h-4 w-4 ${
+                  docsActive
+                    ? "text-white"
+                    : "text-black/50 group-hover:text-white"
+                }`}
               />
             )}
           </span>
@@ -155,7 +246,8 @@ export default function AdminSidebar() {
               className="ml-3 mt-2 space-y-1 overflow-hidden"
             >
               {documentLinks.map(({ label, href }) => {
-                const active = pathname === href || pathname.startsWith(href + "/");
+                const active =
+                  pathname === href || pathname.startsWith(href + "/");
                 return (
                   <Link
                     key={href}
@@ -163,8 +255,11 @@ export default function AdminSidebar() {
                     onClick={() => {
                       if (isMobile) setDrawerOpen(false);
                     }}
-                    className={`${linkBase} ${active ? linkActive : "text-black/70 hover:bg-black hover:text-white"
-                      }`}
+                    className={`${linkBase} ${
+                      active
+                        ? linkActive
+                        : "text-black/70 hover:bg-black hover:text-white"
+                    }`}
                   >
                     {label}
                   </Link>
@@ -181,10 +276,18 @@ export default function AdminSidebar() {
     <div className={compact ? "px-4 py-3" : "p-5"}>
       <Link href="/admin" className="flex items-center gap-3">
         <div className="h-10 w-10 rounded-xl border border-black/10 overflow-hidden bg-white">
-          <img src="/logo.png" alt="CollabGlam logo" className="h-full w-full object-contain" />
+          <img
+            src="/logo.png"
+            alt="CollabGlam logo"
+            className="h-full w-full object-contain"
+          />
         </div>
         <div className="leading-tight">
-          <div className={compact ? "text-sm font-extrabold" : "text-base font-extrabold"}>
+          <div
+            className={
+              compact ? "text-sm font-extrabold" : "text-base font-extrabold"
+            }
+          >
             CollabGlam
           </div>
           <div className="text-xs text-black/60" />
@@ -210,7 +313,11 @@ export default function AdminSidebar() {
         <div className="ml-3">
           <Link href="/admin" className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-xl border border-black/10 overflow-hidden bg-white">
-              <img src="/logo.png" alt="CollabGlam logo" className="h-full w-full object-contain" />
+              <img
+                src="/logo.png"
+                alt="CollabGlam logo"
+                className="h-full w-full object-contain"
+              />
             </div>
             <span className="text-base font-extrabold">CollabGlam</span>
           </Link>
@@ -234,7 +341,10 @@ export default function AdminSidebar() {
 
         {/* Bottom (pinned) */}
         <div className="shrink-0 p-3 border-t border-black/10">
-          <button onClick={handleLogout} className={`${linkBase} w-full ${linkInactive}`}>
+          <button
+            onClick={handleLogout}
+            className={`${linkBase} w-full ${linkInactive}`}
+          >
             <span className="flex items-center gap-2">
               <LogOut className="h-4 w-4 text-black/50 group-hover:text-white" />
               <span>Logout</span>
@@ -276,7 +386,9 @@ export default function AdminSidebar() {
 
               <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
                 <nav className="space-y-1">
-                  {navItems.map((item) => renderLink(item, () => setDrawerOpen(false)))}
+                  {navItems.map((item) =>
+                    renderLink(item, () => setDrawerOpen(false)),
+                  )}
                   {renderDocuments(true)}
                 </nav>
               </div>
