@@ -17,12 +17,21 @@ import { Label } from "@/components/ui/label";
 import { HiEye, HiEyeSlash } from "react-icons/hi2";
 import { post } from "@/lib/api";
 
+type AdminUser = {
+  _id: string;
+  email: string;
+  name?: string;
+  role?: string;
+  status?: string;
+};
+
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,19 +40,37 @@ export default function AdminLoginPage() {
     setError(null);
 
     try {
-      const data = await post<{ token: string; admin: { _id: string; email: string } }>(
-        "/admins/login",
-        { email, password }
-      );
+      const data = await post<{
+        token: string;
+        admin: AdminUser;
+      }>("/admins/login", { email, password });
+
+      const admin = data?.admin;
+
+      if (!data?.token || !admin?._id) {
+        throw new Error("Invalid login response");
+      }
 
       localStorage.setItem("token", data.token);
-      localStorage.setItem("adminId", data.admin._id);
+      localStorage.setItem("adminId", admin._id);
       localStorage.setItem("userType", "admin");
-      localStorage.setItem("userEmail", data.admin.email || email);
+      localStorage.setItem("userEmail", admin.email || email);
+
+      // Needed for revenue_head UI logic
+      localStorage.setItem("adminRole", admin.role || "");
+      localStorage.setItem("admin", JSON.stringify(admin));
+
+      // Optional convenience keys
+      if (admin.name) localStorage.setItem("adminName", admin.name);
+      if (admin.status) localStorage.setItem("adminStatus", admin.status);
 
       router.replace("/admin/brands");
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || "Invalid credentials");
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Invalid credentials"
+      );
     } finally {
       setLoading(false);
     }
@@ -54,8 +81,14 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 relative">
-            <Image src="/logo.png" alt="Admin Logo" fill className="object-contain" />
+            <Image
+              src="/logo.png"
+              alt="Admin Logo"
+              fill
+              className="object-contain"
+            />
           </div>
+
           <CardTitle className="text-2xl font-bold">Admin Sign In</CardTitle>
           <CardDescription className="text-gray-500">
             Please enter your admin credentials
@@ -72,6 +105,7 @@ export default function AdminLoginPage() {
                 placeholder="admin@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 required
               />
             </div>
@@ -89,6 +123,7 @@ export default function AdminLoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   required
                 />
 
@@ -103,7 +138,9 @@ export default function AdminLoginPage() {
               </div>
             </div>
 
-            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+            {error && (
+              <p className="text-sm text-red-500 text-center">{error}</p>
+            )}
           </CardContent>
 
           <CardFooter className="pt-0">
