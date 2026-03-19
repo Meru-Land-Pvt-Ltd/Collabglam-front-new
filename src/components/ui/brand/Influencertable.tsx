@@ -23,14 +23,18 @@ export type InfluencerRow = {
     handle?: string;
     avatarUrl?: string;
   };
+
   category: string;
+
   platforms?: Array<{
     platform: PlatformType;
     followers: number;
     engagement: number;
   }>;
+
   followers?: number;
   engagement?: number;
+
   appliedDate: string;
   status?: string;
   budget?: string;
@@ -301,7 +305,6 @@ const colShort = {
 function DefaultTable({
   rows,
   onActionClick,
-  renderBulkHeader,
 }: {
   rows: InfluencerRow[];
   onActionClick?: (row: InfluencerRow, action: DecisionAction) => void;
@@ -344,39 +347,39 @@ function DefaultTable({
                 />
               </div>
 
-                <div className="flex h-14 flex-1 items-center justify-between px-4 py-[0.625rem]">
-                  <span style={headerTextStyle}>Profile</span>
-                  <HeaderCarets />
-                </div>
-              </div>
-
-              <div
-                className={`${colDefault.category} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-              >
-                <span style={headerTextStyle}>Category</span>
+              <div className="flex h-14 flex-1 items-center justify-between px-4 py-[0.625rem]">
+                <span style={headerTextStyle}>Profile</span>
                 <HeaderCarets />
               </div>
+            </div>
 
-              <div
-                className={`${colDefault.followers} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-              >
-                <span style={headerTextStyle}>Followers</span>
-                <HeaderCarets />
-              </div>
+            <div
+              className={`${colDefault.category} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
+              <span style={headerTextStyle}>Category</span>
+              <HeaderCarets />
+            </div>
 
-              <div
-                className={`${colDefault.engagement} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-              >
-                <span style={headerTextStyle}>Engagement</span>
-                <HeaderCarets />
-              </div>
+            <div
+              className={`${colDefault.followers} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
+              <span style={headerTextStyle}>Followers</span>
+              <HeaderCarets />
+            </div>
 
-              <div
-                className={`${colDefault.applied} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
-              >
-                <span style={headerTextStyle}>Applied Date</span>
-                <HeaderCarets />
-              </div>
+            <div
+              className={`${colDefault.engagement} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
+              <span style={headerTextStyle}>Engagement</span>
+              <HeaderCarets />
+            </div>
+
+            <div
+              className={`${colDefault.applied} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
+              <span style={headerTextStyle}>Applied Date</span>
+              <HeaderCarets />
+            </div>
 
             <div className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}>
               <span style={headerTextStyle}>Action</span>
@@ -939,10 +942,7 @@ function RecommendedTable({
                         >
                           <span
                             className="flex h-4 w-4 items-center justify-center rounded-full border border-[var(--Light-Border-Subtle,#E6E6E6)] bg-white"
-                            style={{
-                              borderWidth: "0.5px",
-                              padding: "0.125rem",
-                            }}
+                            style={{ borderWidth: "0.5px", padding: "0.125rem" }}
                             aria-hidden="true"
                           >
                             <img
@@ -1076,11 +1076,5 @@ export function InfluencerTable({
     );
   }
 
-  return (
-    <DefaultTable
-      rows={rows}
-      onActionClick={onActionClick}
-      renderBulkHeader={renderBulkHeader}
-    />
-  );
+  return <DefaultTable rows={rows} onActionClick={onActionClick} />;
 }
