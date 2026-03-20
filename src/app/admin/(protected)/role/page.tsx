@@ -62,6 +62,18 @@ type MeResponse = {
   rootAdmin?: string | AdminMini | null;
 };
 
+type PermissionItem = {
+  key: string;
+  label: string;
+};
+
+type PermissionSection = {
+  key: string;
+  title: string;
+  icon: React.ElementType;
+  items: PermissionItem[];
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -78,47 +90,7 @@ const ROLE_OPTIONS: Array<{ value: AdminRole; label: string }> = [
   { value: "bme", label: "BME" },
 ];
 
-function formatDT(v?: string) {
-  if (!v) return "—";
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
-}
-
-function normalizeKey(v: string) {
-  return String(v || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
-function cn(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function toApiUrl(path: string) {
-  const base = API_BASE.endsWith("/") ? API_BASE : `${API_BASE}/`;
-  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  return `${base}${cleanPath}`;
-}
-
-function getRoleLabel(role?: string) {
-  return ROLE_LABELS[String(role || "").toLowerCase()] || role || "—";
-}
-
-function getParentName(parent?: string | AdminMini | null) {
-  if (!parent) return "—";
-  if (typeof parent === "string") return "Assigned";
-  return parent.name || parent.email || "Assigned";
-}
-
-const noBlueFocus =
-  "outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0";
-
-const inputBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
-const selectBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
-
-const permissionSections = [
+const permissionSections: PermissionSection[] = [
   {
     key: "brand-campaign",
     title: "Brand & Campaign",
@@ -136,6 +108,7 @@ const permissionSections = [
     icon: Users,
     items: [
       { key: "influencers", label: "Influencers" },
+      { key: "influencer-pipeline", label: "Influencer Pipeline" },
       { key: "invited-influencer", label: "Invited Influencer" },
       { key: "influencer-email", label: "Influencer-Email" },
       { key: "missing-email", label: "Missing-Email" },
@@ -166,25 +139,73 @@ const permissionSections = [
   },
 ];
 
+const noBlueFocus =
+  "outline-none focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0";
+
+const inputBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
+const selectBase = `border border-black/10 rounded-2xl bg-white text-sm ${noBlueFocus} focus:border-black/30`;
+
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function formatDT(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString();
+}
+
+function normalizeKey(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+function toApiUrl(path: string) {
+  const base = API_BASE.endsWith("/") ? API_BASE : `${API_BASE}/`;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${base}${cleanPath}`;
+}
+
+function getRoleLabel(role?: string) {
+  return ROLE_LABELS[String(role || "").toLowerCase()] || role || "—";
+}
+
+function getParentName(parent?: string | AdminMini | null) {
+  if (!parent) return "—";
+  if (typeof parent === "string") return "Assigned";
+  return parent.name || parent.email || "Assigned";
+}
+
+function getToken() {
+  return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+}
+
 function getPermissionLevel(
   access: AdminAccess[] = [],
   moduleKey: string
 ): PermissionLevel {
   const found = access.find(
-    (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
+    (item) => normalizeKey(item.key) === normalizeKey(moduleKey)
   );
+
   if (!found) return "none";
   return found.isEdit ? "write" : "read";
 }
 
 function getAllowedInviteRoles(currentRole?: string): AdminRole[] {
   const role = String(currentRole || "").toLowerCase();
+
   if (role === "super_admin") {
     return ["revenue_head", "ime", "bme"];
   }
+
   if (role === "revenue_head") {
     return ["ime", "bme"];
   }
+
   return [];
 }
 
@@ -235,6 +256,7 @@ function PermissionSwitch({
     <div className="inline-flex items-center rounded-full bg-black/5 p-1">
       {options.map((option) => {
         const active = value === option;
+
         return (
           <button
             key={option}
@@ -261,17 +283,17 @@ export default function AdminsPage() {
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [me, setMe] = useState<MeResponse | null>(null);
 
-  const [loading, setLoading] = useState<boolean>(true);
-  const [loadingMe, setLoadingMe] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
+  const [loadingMe, setLoadingMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rowMsg, setRowMsg] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const [search, setSearch] = useState<string>("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | AdminStatus>("all");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [roleFilter, setRoleFilter] = useState("all");
 
-  const [page, setPage] = useState<number>(1);
+  const [page, setPage] = useState(1);
   const limit = 5;
 
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -295,18 +317,16 @@ export default function AdminsPage() {
   const canViewAdmins = true;
   const canEditAdmins = roleCanEdit(currentRole);
   const canInviteAdmins = roleCanInvite(currentRole);
+
   const selectedAdmin = useMemo(
-    () => rows.find((r) => r._id === selectedId) || null,
+    () => rows.find((row) => row._id === selectedId) || null,
     [rows, selectedId]
   );
 
-  const inviteRoleOptions = useMemo(
-    () =>
-      ROLE_OPTIONS.filter((item) =>
-        getAllowedInviteRoles(currentRole).includes(item.value)
-      ),
-    [currentRole]
-  );
+  const inviteRoleOptions = useMemo(() => {
+    const allowed = getAllowedInviteRoles(currentRole);
+    return ROLE_OPTIONS.filter((item) => allowed.includes(item.value));
+  }, [currentRole]);
 
   const editRoleOptions = useMemo(() => {
     const base = inviteRoleOptions.length ? inviteRoleOptions : ROLE_OPTIONS;
@@ -321,21 +341,49 @@ export default function AdminsPage() {
   }, [inviteRoleOptions, selectedAdmin]);
 
   const revenueHeadOptions = useMemo(() => {
-    return rows.filter((r) => String(r.role).toLowerCase() === "revenue_head");
+    return rows.filter((row) => String(row.role).toLowerCase() === "revenue_head");
   }, [rows]);
 
   const roleOptions = useMemo(() => {
-    const visible = rows
-      .map((r) => String(r.role || "").trim())
+    const visibleRoles = rows
+      .map((row) => String(row.role || "").trim())
       .filter(Boolean)
-      .map((r) => normalizeKey(r));
+      .map((role) => normalizeKey(role));
 
-    return Array.from(new Set(visible));
+    return Array.from(new Set(visibleRoles));
   }, [rows]);
 
-  function getToken() {
-    return typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  }
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return rows.filter((row) => {
+      const matchesSearch =
+        !query ||
+        row.email?.toLowerCase().includes(query) ||
+        (row.name || "").toLowerCase().includes(query) ||
+        String(row.role || "").toLowerCase().includes(query);
+
+      const status = (row.status || "pending") as AdminStatus;
+      const matchesStatus =
+        statusFilter === "all" ? true : status === statusFilter;
+
+      const normalizedRole = normalizeKey(String(row.role || ""));
+      const matchesRole =
+        roleFilter === "all"
+          ? true
+          : normalizedRole === normalizeKey(roleFilter);
+
+      return matchesSearch && matchesStatus && matchesRole;
+    });
+  }, [rows, search, statusFilter, roleFilter]);
+
+  const total = filteredRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = filteredRows.slice(
+    (safePage - 1) * limit,
+    safePage * limit
+  );
 
   function hydrateEditor(admin: AdminRow | null) {
     if (!admin) {
@@ -344,6 +392,7 @@ export default function AdminsPage() {
       setEditRole("");
       setEditStatus("pending");
       setEditAccess([]);
+      setEditErr(null);
       return;
     }
 
@@ -355,8 +404,48 @@ export default function AdminsPage() {
     setEditErr(null);
   }
 
+  function buildAccessEntry(
+    moduleKey: string,
+    label: string,
+    level: PermissionLevel
+  ): AdminAccess {
+    return {
+      key: moduleKey,
+      name: label,
+      isEdit: level === "write",
+      isDelete: false,
+      isManager: false,
+    };
+  }
+
+  function updateAccessState(
+    setter: React.Dispatch<React.SetStateAction<AdminAccess[]>>,
+    moduleKey: string,
+    label: string,
+    level: PermissionLevel
+  ) {
+    setter((prev) => {
+      const index = prev.findIndex(
+        (item) => normalizeKey(item.key) === normalizeKey(moduleKey)
+      );
+
+      if (level === "none") {
+        return prev.filter(
+          (item) => normalizeKey(item.key) !== normalizeKey(moduleKey)
+        );
+      }
+
+      const nextValue = buildAccessEntry(moduleKey, label, level);
+
+      if (index === -1) return [...prev, nextValue];
+
+      return prev.map((item, i) => (i === index ? { ...item, ...nextValue } : item));
+    });
+  }
+
   async function fetchMe() {
     setLoadingMe(true);
+
     try {
       const token = getToken();
 
@@ -411,6 +500,7 @@ export default function AdminsPage() {
         : Array.isArray(data)
           ? data
           : [];
+
       setRows(nextRows);
 
       if (nextRows.length && !selectedId) {
@@ -479,10 +569,7 @@ export default function AdminsPage() {
     if (!email) return setInviteErr("Email is required");
     if (!role) return setInviteErr("Role is required");
 
-    if (
-      needsParentRevenueHead(currentRole, role) &&
-      !inviteParentAdmin.trim()
-    ) {
+    if (needsParentRevenueHead(currentRole, role) && !inviteParentAdmin.trim()) {
       return setInviteErr("Please select a Revenue Head");
     }
 
@@ -525,6 +612,7 @@ export default function AdminsPage() {
       setInviteParentAdmin("");
       setInviteAccess([]);
       setRowMsg(data?.message || "Invite sent successfully");
+
       await fetchAdmins();
     } catch (e: any) {
       setInviteErr(e?.message || "Invite failed");
@@ -585,66 +673,6 @@ export default function AdminsPage() {
     }
   }
 
-  function toggleInviteModuleLevel(
-    moduleKey: string,
-    label: string,
-    level: PermissionLevel
-  ) {
-    setInviteAccess((prev) => {
-      const idx = prev.findIndex(
-        (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
-      );
-
-      if (level === "none") {
-        return prev.filter(
-          (a) => normalizeKey(a.key) !== normalizeKey(moduleKey)
-        );
-      }
-
-      const nextValue: AdminAccess = {
-        key: moduleKey,
-        name: label,
-        isEdit: level === "write",
-        isDelete: false,
-        isManager: false,
-      };
-
-      if (idx === -1) return [...prev, nextValue];
-
-      return prev.map((a, i) => (i === idx ? { ...a, ...nextValue } : a));
-    });
-  }
-
-  function setModuleLevel(
-    moduleKey: string,
-    label: string,
-    level: PermissionLevel
-  ) {
-    setEditAccess((prev) => {
-      const idx = prev.findIndex(
-        (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
-      );
-
-      if (level === "none") {
-        return prev.filter(
-          (a) => normalizeKey(a.key) !== normalizeKey(moduleKey)
-        );
-      }
-
-      const nextValue: AdminAccess = {
-        key: moduleKey,
-        name: label,
-        isEdit: level === "write",
-        isDelete: false,
-        isManager: false,
-      };
-
-      if (idx === -1) return [...prev, nextValue];
-
-      return prev.map((a, i) => (i === idx ? { ...a, ...nextValue } : a));
-    });
-  }
-
   useEffect(() => {
     refreshAll();
   }, []);
@@ -659,39 +687,11 @@ export default function AdminsPage() {
       return;
     }
 
-    const stillVisible = filteredRows.find((r) => r._id === selectedId);
+    const stillVisible = filteredRows.find((row) => row._id === selectedId);
     if (!stillVisible) {
       hydrateEditor(filteredRows[0]);
     }
-  }, [selectedId, rows]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-
-    return rows.filter((r) => {
-      const matchesSearch =
-        !q ||
-        r.email?.toLowerCase().includes(q) ||
-        (r.name || "").toLowerCase().includes(q) ||
-        String(r.role || "").toLowerCase().includes(q);
-
-      const st = (r.status || "pending") as AdminStatus;
-      const matchesStatus = statusFilter === "all" ? true : st === statusFilter;
-      const normalizedRole = normalizeKey(String(r.role || ""));
-      const matchesRole =
-        roleFilter === "all" ? true : normalizedRole === normalizeKey(roleFilter);
-
-      return matchesSearch && matchesStatus && matchesRole;
-    });
-  }, [rows, search, statusFilter, roleFilter]);
-
-  const total = filteredRows.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const safePage = Math.min(page, totalPages);
-  const paginatedRows = filteredRows.slice(
-    (safePage - 1) * limit,
-    safePage * limit
-  );
+  }, [filteredRows, selectedId]);
 
   if (!canViewAdmins) {
     return (
@@ -713,6 +713,7 @@ export default function AdminsPage() {
           <p className="mt-1 text-sm text-black/60">
             Hierarchy-based RBAC: Super Admin → Revenue Head → IME / BME
           </p>
+
           {!loadingMe && me ? (
             <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-black/70">
               <Shield className="h-3.5 w-3.5" />
@@ -779,9 +780,7 @@ export default function AdminsPage() {
         <select
           className={`${selectBase} h-12 w-full px-4`}
           value={statusFilter}
-          onChange={(e) =>
-            setStatusFilter(e.target.value as "all" | AdminStatus)
-          }
+          onChange={(e) => setStatusFilter(e.target.value as "all" | AdminStatus)}
         >
           <option value="all">All Status</option>
           <option value="pending">Pending</option>
@@ -823,9 +822,7 @@ export default function AdminsPage() {
             paginatedRows.map((admin) => {
               const active = selectedId === admin._id;
               const status = (admin.status || "pending") as AdminStatus;
-              const accessCount = Array.isArray(admin.access)
-                ? admin.access.length
-                : 0;
+              const accessCount = Array.isArray(admin.access) ? admin.access.length : 0;
 
               return (
                 <button
@@ -886,8 +883,8 @@ export default function AdminsPage() {
           {filteredRows.length > 0 ? (
             <div className="flex items-center justify-between rounded-[20px] border border-black/10 bg-white px-4 py-3">
               <div className="text-sm text-black/60">
-                Page <span className="font-medium text-black">{safePage}</span>{" "}
-                of <span className="font-medium text-black">{totalPages}</span>
+                Page <span className="font-medium text-black">{safePage}</span> of{" "}
+                <span className="font-medium text-black">{totalPages}</span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -899,6 +896,7 @@ export default function AdminsPage() {
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
+
                 <button
                   type="button"
                   disabled={safePage === totalPages}
@@ -915,9 +913,11 @@ export default function AdminsPage() {
             <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/10">
               <Info className="h-5 w-5 text-black" />
             </div>
+
             <div className="text-lg font-semibold text-black">
               Hierarchy Rules
             </div>
+
             <p className="mx-auto mt-3 max-w-[260px] text-sm leading-6 text-black/60">
               Revenue Head sees only their IME and BME. IME and BME see only
               their own records. Super Admin sees everything.
@@ -938,11 +938,13 @@ export default function AdminsPage() {
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5">
                       <Shield className="h-4 w-4 text-black" />
                     </div>
+
                     <h2 className="text-[34px] font-semibold tracking-[-0.03em] text-black">
                       Permissions for{" "}
                       {getRoleLabel(editRole || selectedAdmin.role || "admin")}
                     </h2>
                   </div>
+
                   <p className="mt-2 text-base text-black/55">
                     Configure what this admin can access inside their allowed
                     hierarchy scope.
@@ -1004,10 +1006,7 @@ export default function AdminsPage() {
                     className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20 disabled:opacity-60"
                     value={editStatus}
                     disabled={!canEditAdmins}
-                    onChange={(e) => {
-                      const next = e.target.value as AdminStatus;
-                      setEditStatus(next);
-                    }}
+                    onChange={(e) => setEditStatus(e.target.value as AdminStatus)}
                   >
                     <option value="pending">Pending</option>
                     <option value="active">Active</option>
@@ -1053,9 +1052,7 @@ export default function AdminsPage() {
                     <button
                       type="button"
                       disabled={updatingId === selectedAdmin._id || !canEditAdmins}
-                      onClick={() =>
-                        updateStatus(selectedAdmin._id, editStatus)
-                      }
+                      onClick={() => updateStatus(selectedAdmin._id, editStatus)}
                       className="mt-1 rounded-xl border border-black/10 px-3 py-2 text-sm font-medium hover:bg-black/5 disabled:opacity-50"
                     >
                       {updatingId === selectedAdmin._id
@@ -1075,8 +1072,9 @@ export default function AdminsPage() {
                     "Can view everything across the system."}
                   {String(selectedAdmin.role).toLowerCase() === "revenue_head" &&
                     "Can view only their own IME and BME team data."}
-                  {["ime", "bme"].includes(String(selectedAdmin.role).toLowerCase()) &&
-                    "Can view only their own records."}
+                  {["ime", "bme"].includes(
+                    String(selectedAdmin.role).toLowerCase()
+                  ) && "Can view only their own records."}
                 </div>
               </div>
 
@@ -1109,7 +1107,12 @@ export default function AdminsPage() {
                             value={getPermissionLevel(editAccess, item.key)}
                             disabled={!canEditAdmins}
                             onChange={(next) =>
-                              setModuleLevel(item.key, item.label, next)
+                              updateAccessState(
+                                setEditAccess,
+                                item.key,
+                                item.label,
+                                next
+                              )
                             }
                           />
                         </div>
@@ -1155,6 +1158,7 @@ export default function AdminsPage() {
                   Invite according to RBAC hierarchy
                 </div>
               </div>
+
               <button
                 className="rounded-xl border border-black/10 px-3 py-2 text-sm text-black/60 hover:bg-black/5 hover:text-black"
                 onClick={() => setInviteOpen(false)}
@@ -1172,7 +1176,7 @@ export default function AdminsPage() {
 
               <div className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black/70">
                 <span className="font-semibold text-black">Allowed roles:</span>{" "}
-                {inviteRoleOptions.map((r) => r.label).join(", ") || "None"}
+                {inviteRoleOptions.map((role) => role.label).join(", ") || "None"}
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
@@ -1235,7 +1239,9 @@ export default function AdminsPage() {
                     <option value="">Select Revenue Head</option>
                     {revenueHeadOptions.map((admin) => (
                       <option key={admin._id} value={admin._id}>
-                        {(admin.name || admin.email) + " · " + getRoleLabel(admin.role)}
+                        {(admin.name || admin.email) +
+                          " · " +
+                          getRoleLabel(admin.role)}
                       </option>
                     ))}
                   </select>
@@ -1270,7 +1276,8 @@ export default function AdminsPage() {
                           <PermissionSwitch
                             value={getPermissionLevel(inviteAccess, item.key)}
                             onChange={(next) =>
-                              toggleInviteModuleLevel(
+                              updateAccessState(
+                                setInviteAccess,
                                 item.key,
                                 item.label,
                                 next
@@ -1293,6 +1300,7 @@ export default function AdminsPage() {
               >
                 Cancel
               </button>
+
               <button
                 type="button"
                 onClick={onInvite}
