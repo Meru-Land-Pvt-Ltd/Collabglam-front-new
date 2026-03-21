@@ -5,7 +5,6 @@ import {
   Search,
   Send,
   Users,
-  Building2,
   Mail,
   MessageSquare,
   ChevronRight,
@@ -15,7 +14,6 @@ import {
   Eye,
   UserCircle2,
   Inbox,
-  Plus,
   PanelLeft,
   LayoutGrid,
   X,
@@ -23,19 +21,25 @@ import {
   FileSpreadsheet,
   Trash2,
   Loader2,
+  ArrowRightLeft,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCcw,
 } from "lucide-react";
 import EmailEditor from "@/components/ui/EmailEditor";
 import {
+  type AdminRole,
+  type AdminEmailThreadDto,
+  type AdminEmailMessageDto,
   sendBulkCsvEmail,
   fetchEmailThreads,
   fetchThreadMessages,
   replyToEmailThread,
 } from "./admin-email";
 
-type ExecutiveRole = "IME" | "BME";
-type AudienceType = "Influencers" | "Brands";
-type ThreadStatus = "Open" | "Replied" | "Waiting" | "Closed";
-type RecipientStatus = "Active" | "Pending" | "Replied" | "Bounced";
+type RecipientStatus = "Ready" | "Sent" | "Replied" | "Bounced" | "Failed";
+type ThreadStatusUi = "Waiting" | "Replied" | "Closed" | "Archived";
+type AudienceType = "Admin outreach";
 
 type Recipient = {
   id: string;
@@ -47,6 +51,8 @@ type Recipient = {
   tags: string[];
   lastContact?: string;
   createdAt: number;
+  threadId?: string;
+  replyToEmail?: string;
 };
 
 type Message = {
@@ -56,19 +62,27 @@ type Message = {
   role: "executive" | "recipient";
   body: string;
   time: string;
+  direction: "INBOUND" | "OUTBOUND";
+  providerStatus?: string;
 };
 
 type Thread = {
   id: string;
   subject: string;
-  recipientId: string;
   recipientName: string;
   recipientEmail: string;
   audience: AudienceType;
-  executive: ExecutiveRole;
-  status: ThreadStatus;
+  role: AdminRole;
+  status: ThreadStatusUi;
   unread: number;
   lastMessageAt: string;
+  lastMessageDirection?: "INBOUND" | "OUTBOUND";
+  replyToEmail?: string;
+  senderEmail?: string;
+  ownerAdminId?: string;
+  ownerAdminName?: string;
+  ownerAdminEmail?: string;
+  ownerProxyEmail?: string;
   tags: string[];
   messages: Message[];
 };
@@ -88,42 +102,56 @@ type EmailEditorAttachment = {
   contentBase64: string;
 };
 
+const ADMIN_REPLY_DOMAIN = "reply.collabglam.cloud";
+
 const roleConfig: Record<
-  ExecutiveRole,
+  AdminRole,
   {
     title: string;
     subtitle: string;
-    audience: AudienceType;
-    primaryMetric: string;
     deskEmail: string;
+    badge: string;
   }
 > = {
-  IME: {
-    title: "Influencer Marketing Executive",
-    subtitle:
-      "Import creator CSV lists, review recipients, and send bulk outreach from one workspace.",
-    audience: "Influencers",
-    primaryMetric: "Influencer recipients",
-    deskEmail: "ime@collabglam.com",
+  super_admin: {
+    title: "Super Admin",
+    subtitle: "Full admin email operations across all visible thread trees.",
+    deskEmail: "admin@collabglam.cloud",
+    badge: "Super Admin",
   },
-  BME: {
+  revenue_head: {
+    title: "Revenue Head",
+    subtitle: "Own threads plus IME and BME threads within the managed tree.",
+    deskEmail: "revenue@collabglam.cloud",
+    badge: "Revenue Head",
+  },
+  ime: {
+    title: "Influencer Marketing Executive",
+    subtitle: "Personal outbound threads and replies for your own mailbox.",
+    deskEmail: "ime@collabglam.cloud",
+    badge: "IME",
+  },
+  bme: {
     title: "Brand Marketing Executive",
-    subtitle:
-      "Import brand CSV lists, review recipients, and send partnership emails in bulk.",
-    audience: "Brands",
-    primaryMetric: "Brand recipients",
-    deskEmail: "bme@collabglam.com",
+    subtitle: "Personal outbound threads and replies for your own mailbox.",
+    deskEmail: "bme@collabglam.cloud",
+    badge: "BME",
   },
 };
 
-const statusPillClass: Record<ThreadStatus | RecipientStatus, string> = {
-  Open: "bg-slate-900 text-white border border-slate-900",
-  Replied: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+const threadStatusPillClass: Record<ThreadStatusUi, string> = {
   Waiting: "bg-amber-50 text-amber-700 border border-amber-200",
-  Closed: "bg-slate-100 text-slate-600 border border-slate-200",
-  Active: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-  Pending: "bg-amber-50 text-amber-700 border border-amber-200",
+  Replied: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  Closed: "bg-slate-100 text-slate-700 border border-slate-200",
+  Archived: "bg-slate-100 text-slate-500 border border-slate-200",
+};
+
+const recipientStatusPillClass: Record<RecipientStatus, string> = {
+  Ready: "bg-slate-100 text-slate-700 border border-slate-200",
+  Sent: "bg-blue-50 text-blue-700 border border-blue-200",
+  Replied: "bg-emerald-50 text-emerald-700 border border-emerald-200",
   Bounced: "bg-rose-50 text-rose-700 border border-rose-200",
+  Failed: "bg-rose-50 text-rose-700 border border-rose-200",
 };
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -224,7 +252,15 @@ function extractCell(
 }
 
 function recipientsToCsv(recipients: Recipient[]) {
-  const header = ["name", "email", "company", "niche", "status", "tags"];
+  const header = [
+    "name",
+    "email",
+    "company",
+    "niche",
+    "status",
+    "replyToEmail",
+    "tags",
+  ];
   const lines = recipients.map((item) =>
     [
       item.name,
@@ -232,6 +268,7 @@ function recipientsToCsv(recipients: Recipient[]) {
       item.company || "",
       item.niche || "",
       item.status,
+      item.replyToEmail || "",
       item.tags.join(" | "),
     ]
       .map((value) => `"${String(value).replaceAll('"', '""')}"`)
@@ -241,29 +278,86 @@ function recipientsToCsv(recipients: Recipient[]) {
   return [header.join(","), ...lines].join("\n");
 }
 
-function mapBackendThreadToUi(thread: any, role: ExecutiveRole): Thread {
+function getThreadOwner(thread: AdminEmailThreadDto) {
+  const exec = thread.executiveId;
+
+  if (!exec) {
+    return {
+      ownerAdminId: "",
+      ownerAdminName: "",
+      ownerAdminEmail: "",
+      ownerProxyEmail: "",
+    };
+  }
+
+  if (typeof exec === "string") {
+    return {
+      ownerAdminId: exec,
+      ownerAdminName: "",
+      ownerAdminEmail: "",
+      ownerProxyEmail: "",
+    };
+  }
+
+  return {
+    ownerAdminId: exec._id || "",
+    ownerAdminName: exec.name || "",
+    ownerAdminEmail: exec.email || "",
+    ownerProxyEmail: exec.proxyEmail || "",
+  };
+}
+
+function getRoleScopeText(role: AdminRole) {
+  if (role === "super_admin") {
+    return "Can see every admin thread across the system.";
+  }
+
+  if (role === "revenue_head") {
+    return "Can see own threads plus all IME and BME threads under the managed tree.";
+  }
+
+  return "Can see only own threads.";
+}
+
+function mapBackendThreadToUi(thread: AdminEmailThreadDto): Thread {
+  let status: ThreadStatusUi = "Waiting";
+
+  if (thread.status === "CLOSED") status = "Closed";
+  else if (thread.status === "ARCHIVED") status = "Archived";
+  else if (thread.lastMessageDirection === "INBOUND") status = "Replied";
+
+  const owner = getThreadOwner(thread);
+
   return {
     id: thread._id,
     subject: thread.subject || "(no subject)",
-    recipientId: thread.recipientEmail || thread._id,
     recipientName: thread.recipientEmail || "Recipient",
     recipientEmail: thread.recipientEmail || "",
-    audience: roleConfig[role].audience,
-    executive: role,
-    status:
-      thread.status === "CLOSED"
-        ? "Closed"
-        : thread.lastMessageDirection === "INBOUND"
-          ? "Replied"
-          : "Waiting",
+    audience: "Admin outreach",
+    role: thread.role,
+    status,
     unread: 0,
     lastMessageAt: formatDateTime(thread.lastMessageAt),
-    tags: [],
+    lastMessageDirection: thread.lastMessageDirection,
+    replyToEmail: thread.replyToEmail,
+    senderEmail: thread.senderEmail,
+    ownerAdminId: owner.ownerAdminId,
+    ownerAdminName: owner.ownerAdminName,
+    ownerAdminEmail: owner.ownerAdminEmail,
+    ownerProxyEmail: owner.ownerProxyEmail,
+    tags: [
+      thread.role?.toUpperCase?.() || "",
+      thread.lastMessageDirection || "",
+      owner.ownerAdminName || owner.ownerAdminEmail || "",
+    ].filter(Boolean),
     messages: [],
   };
 }
 
-function mapBackendMessageToUi(msg: any, role: ExecutiveRole): Message {
+function mapBackendMessageToUi(
+  msg: AdminEmailMessageDto,
+  thread: Thread | null
+): Message {
   const body =
     msg.textPreview ||
     (typeof msg.htmlPreview === "string"
@@ -273,19 +367,24 @@ function mapBackendMessageToUi(msg: any, role: ExecutiveRole): Message {
 
   return {
     id: msg._id,
-    sender: msg.direction === "OUTBOUND" ? role : msg.from || "Recipient",
-    email: msg.from || "",
+    sender:
+      msg.direction === "OUTBOUND"
+        ? thread?.senderEmail || thread?.ownerAdminName || thread?.role || "Admin"
+        : msg.from || "Recipient",
+    email:
+      msg.direction === "OUTBOUND" ? thread?.senderEmail || "" : msg.from || "",
     role: msg.direction === "OUTBOUND" ? "executive" : "recipient",
     body,
     time: formatDateTime(msg.createdAt),
+    direction: msg.direction,
+    providerStatus: msg.providerStatus,
   };
 }
 
 export default function Page() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [role, setRole] = useState<ExecutiveRole>("IME");
-
+  const [role, setRole] = useState<AdminRole>("ime");
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -293,7 +392,6 @@ export default function Page() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSending, setEditorSending] = useState(false);
-  const [editorMode, setEditorMode] = useState<"bulk" | "reply">("bulk");
 
   const [mobileRecipientsOpen, setMobileRecipientsOpen] = useState(false);
   const [mobileThreadsOpen, setMobileThreadsOpen] = useState(false);
@@ -311,20 +409,31 @@ export default function Page() {
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
 
-  const [uploadSummary, setUploadSummary] = useState<Record<ExecutiveRole, UploadSummary | null>>({
-    IME: null,
-    BME: null,
+  const [uploadSummary, setUploadSummary] = useState<
+    Record<AdminRole, UploadSummary | null>
+  >({
+    super_admin: null,
+    revenue_head: null,
+    ime: null,
+    bme: null,
   });
 
-  const [recipientsByDesk, setRecipientsByDesk] = useState<Record<ExecutiveRole, Recipient[]>>({
-    IME: [],
-    BME: [],
+  const [recipientsByDesk, setRecipientsByDesk] = useState<
+    Record<AdminRole, Recipient[]>
+  >({
+    super_admin: [],
+    revenue_head: [],
+    ime: [],
+    bme: [],
   });
 
-  const [threadsByDesk, setThreadsByDesk] = useState<Record<ExecutiveRole, Thread[]>>({
-    IME: [],
-    BME: [],
+  const [threadsByDesk, setThreadsByDesk] = useState<Record<AdminRole, Thread[]>>({
+    super_admin: [],
+    revenue_head: [],
+    ime: [],
+    bme: [],
   });
 
   const config = roleConfig[role];
@@ -343,9 +452,7 @@ export default function Page() {
         item.niche?.toLowerCase().includes(q) ||
         item.tags.some((tag) => tag.toLowerCase().includes(q));
 
-      const matchesStatus =
-        statusFilter === "All" || item.status === statusFilter;
-
+      const matchesStatus = statusFilter === "All" || item.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [recipients, search, statusFilter]);
@@ -353,15 +460,22 @@ export default function Page() {
   const filteredThreads = useMemo(() => {
     return threads.filter((thread) => {
       const q = search.toLowerCase();
-      return (
+
+      const matchesSearch =
         !search ||
         thread.subject.toLowerCase().includes(q) ||
         thread.recipientName.toLowerCase().includes(q) ||
         thread.recipientEmail.toLowerCase().includes(q) ||
-        thread.tags.some((tag) => tag.toLowerCase().includes(q))
-      );
+        thread.replyToEmail?.toLowerCase().includes(q) ||
+        thread.senderEmail?.toLowerCase().includes(q) ||
+        thread.ownerAdminName?.toLowerCase().includes(q) ||
+        thread.ownerAdminEmail?.toLowerCase().includes(q) ||
+        thread.tags.some((tag) => tag.toLowerCase().includes(q));
+
+      const matchesStatus = statusFilter === "All" || thread.status === statusFilter;
+      return matchesSearch && matchesStatus;
     });
-  }, [threads, search]);
+  }, [threads, search, statusFilter]);
 
   const selectedThread =
     filteredThreads.find((thread) => thread.id === selectedThreadId) ||
@@ -374,38 +488,36 @@ export default function Page() {
 
   const totalRecipients = recipients.length;
   const repliedCount = recipients.filter((r) => r.status === "Replied").length;
-  const pendingCount = recipients.filter((r) => r.status === "Pending").length;
+  const sentCount = recipients.filter((r) => r.status === "Sent").length;
+  const failedCount = recipients.filter(
+    (r) => r.status === "Bounced" || r.status === "Failed"
+  ).length;
   const activeSelectionCount = selectedRecipients.length;
   const summary = uploadSummary[role];
 
-  const loadThreadsFromApi = async (forceRole?: ExecutiveRole) => {
-
-    const activeRole = forceRole || role;
-
+  const loadThreadsFromApi = async () => {
     try {
       setLoadingThreads(true);
+      setApiError(null);
+
       const response = await fetchEmailThreads({
         page: 1,
         limit: 100,
       });
 
       const items = response?.data?.items || [];
-      const mappedThreads = items.map((thread: any) =>
-        mapBackendThreadToUi(thread, activeRole)
-      );
+      const mappedThreads = items.map(mapBackendThreadToUi);
 
       setThreadsByDesk((prev) => ({
         ...prev,
-        [activeRole]: mappedThreads,
+        [role]: mappedThreads,
       }));
 
-      if (mappedThreads.length) {
-        setSelectedThreadId((prev) => prev || mappedThreads[0].id);
-      } else {
-        setSelectedThreadId(null);
-      }
+      setSelectedThreadId((prev) => {
+        if (prev && mappedThreads.some((item) => item.id === prev)) return prev;
+        return mappedThreads[0]?.id || null;
+      });
     } catch (error: any) {
-      console.error("Failed to load threads", error);
       setApiError(
         error?.response?.data?.message ||
         error?.message ||
@@ -421,21 +533,31 @@ export default function Page() {
 
     try {
       setLoadingMessages(true);
+      setApiError(null);
+
       const response = await fetchThreadMessages(threadId);
-      const backendMessages = (response?.data?.messages || []).map((msg: any) =>
-        mapBackendMessageToUi(msg, role)
+      const backendThread = response?.data?.thread;
+      const baseThread = backendThread
+        ? mapBackendThreadToUi(backendThread)
+        : selectedThread;
+
+      const backendMessages = (response?.data?.messages || []).map(
+        (msg: AdminEmailMessageDto) => mapBackendMessageToUi(msg, baseThread || null)
       );
 
       setThreadsByDesk((prev) => ({
         ...prev,
         [role]: prev[role].map((thread) =>
           thread.id === threadId
-            ? { ...thread, messages: backendMessages }
+            ? {
+              ...thread,
+              ...(baseThread ? baseThread : {}),
+              messages: backendMessages,
+            }
             : thread
         ),
       }));
     } catch (error: any) {
-      console.error("Failed to load thread messages", error);
       setApiError(
         error?.response?.data?.message ||
         error?.message ||
@@ -447,10 +569,13 @@ export default function Page() {
   };
 
   useEffect(() => {
+    loadThreadsFromApi();
+  }, [role]);
+
+  useEffect(() => {
     if (selectedThreadId) {
       loadThreadMessagesFromApi(selectedThreadId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedThreadId]);
 
   const toggleRecipient = (id: string) => {
@@ -474,18 +599,15 @@ export default function Page() {
     }
   };
 
-const handleRoleChange = (item: ExecutiveRole) => {
-  setRole(item);
-  setSelectedRecipientIds([]);
-  setSearch("");
-  setStatusFilter("All");
-  setSelectedThreadId(null);
-  setApiError(null);
-
-  setTimeout(() => {
-    loadThreadsFromApi(item);
-  }, 0);
-};
+  const handleRoleChange = (item: AdminRole) => {
+    setRole(item);
+    setSelectedRecipientIds([]);
+    setSearch("");
+    setStatusFilter("All");
+    setSelectedThreadId(null);
+    setApiError(null);
+    setBannerMessage(null);
+  };
 
   const handleCsvUpload = async (file: File) => {
     const text = await file.text();
@@ -507,27 +629,15 @@ const handleRoleChange = (item: ExecutiveRole) => {
       );
 
       for (const row of rows) {
-        const email = extractCell(row, headerMap, [
-          "email",
-          "e mail",
-          "mail",
-        ]).toLowerCase();
-        const name = extractCell(row, headerMap, [
-          "name",
-          "full name",
-          "fullname",
-        ]);
+        const email = extractCell(row, headerMap, ["email", "e mail", "mail"]).toLowerCase();
+        const name = extractCell(row, headerMap, ["name", "full name", "fullname"]);
         const company = extractCell(row, headerMap, [
           "company",
           "brand",
           "organization",
           "organisation",
         ]);
-        const niche = extractCell(row, headerMap, [
-          "niche",
-          "category",
-          "industry",
-        ]);
+        const niche = extractCell(row, headerMap, ["niche", "category", "industry"]);
         const rawTags = extractCell(row, headerMap, ["tags", "tag"]);
 
         if (!email || !isValidEmail(email)) {
@@ -548,7 +658,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
           email,
           company: company || undefined,
           niche: niche || undefined,
-          status: "Active",
+          status: "Ready",
           tags: rawTags
             ? rawTags
               .split(/[|,]/)
@@ -584,10 +694,10 @@ const handleRoleChange = (item: ExecutiveRole) => {
     try {
       setUploadingCsv(true);
       setApiError(null);
+      setBannerMessage(null);
       setUploadedCsvFile(file);
       await handleCsvUpload(file);
     } catch (error: any) {
-      console.error(error);
       setApiError(error?.message || "Failed to parse CSV");
     } finally {
       setUploadingCsv(false);
@@ -601,6 +711,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
     setSelectedRecipientIds([]);
     setUploadedCsvFile(null);
     setApiError(null);
+    setBannerMessage(null);
   };
 
   const exportRecipientsForRole = () => {
@@ -611,24 +722,21 @@ const handleRoleChange = (item: ExecutiveRole) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${role.toLowerCase()}-recipients.csv`;
+    a.download = `${role}-admin-recipients.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  useEffect(() => {
-    loadThreadsFromApi();
-  }, [role]);
-
   const handleSendBulkCsvToBackend = async () => {
     if (!uploadedCsvFile) {
-      setApiError("Please upload a CSV file first");
+      setApiError("Please upload a CSV file first.");
       return;
     }
 
     try {
       setSendingBulk(true);
       setApiError(null);
+      setBannerMessage(null);
 
       const response = await sendBulkCsvEmail({
         file: uploadedCsvFile,
@@ -636,7 +744,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
 
       const resultMap = new Map(
         (response?.data?.results || []).map((item: any) => [
-          item.email.toLowerCase(),
+          String(item.email || "").toLowerCase(),
           item,
         ])
       );
@@ -649,21 +757,24 @@ const handleRoleChange = (item: ExecutiveRole) => {
 
           return {
             ...recipient,
-            status: apiItem.success ? "Pending" : "Bounced",
-            lastContact: apiItem.success
-              ? formatRelativeNow()
-              : recipient.lastContact,
+            status: apiItem.success
+              ? "Sent"
+              : apiItem.error?.toLowerCase().includes("bounce")
+                ? "Bounced"
+                : "Failed",
+            lastContact: apiItem.success ? formatRelativeNow() : recipient.lastContact,
+            threadId: apiItem.threadId,
+            replyToEmail: apiItem.replyToEmail,
           };
         }),
       }));
 
       await loadThreadsFromApi();
 
-      alert(
-        `Bulk email completed.\nSent: ${response.data.sent}\nFailed: ${response.data.failed}`
+      setBannerMessage(
+        `Bulk email finished. Sent: ${response.data.sent}, Failed: ${response.data.failed}. Replies will route through ${ADMIN_REPLY_DOMAIN}.`
       );
     } catch (error: any) {
-      console.error(error);
       setApiError(
         error?.response?.data?.message ||
         error?.message ||
@@ -674,34 +785,14 @@ const handleRoleChange = (item: ExecutiveRole) => {
     }
   };
 
-  const openBulkEditor = () => {
-    const emailList = selectedRecipients.map((item) => item.email).join(", ");
-
-    setEditorMode("bulk");
-    setEditorPayload({
-      toLabel: emailList,
-      subject:
-        role === "IME"
-          ? "Creator collaboration opportunity from CollabGlam"
-          : "Brand partnership opportunity from CollabGlam",
-      initialBody:
-        role === "IME"
-          ? "Hi {{name}},\n\nWe would love to connect with you regarding an upcoming campaign collaboration. Sharing the brief and next steps below.\n\nRegards,\nTeam CollabGlam"
-          : "Hi {{name}},\n\nWe would love to discuss how CollabGlam can support your upcoming influencer marketing requirements. Sharing more details below.\n\nRegards,\nTeam CollabGlam",
-      toAvatar: "",
-    });
-    setEditorOpen(true);
-  };
-
   const openReplyEditor = () => {
     if (!selectedThread) return;
 
-    setEditorMode("reply");
     setEditorPayload({
       toLabel: selectedThread.recipientEmail,
       subject: `Re: ${selectedThread.subject}`,
       initialBody:
-        "Hi,\n\nThanks for your reply. Sharing the requested details below.\n\nBest,\nTeam CollabGlam",
+        "Hi,\n\nThanks for your reply. Sharing the requested details below.\n\nBest regards,\nCollabGlam",
       toAvatar: "",
     });
     setEditorOpen(true);
@@ -720,34 +811,27 @@ const handleRoleChange = (item: ExecutiveRole) => {
       setEditorSending(true);
       setApiError(null);
 
-      if (editorMode === "reply") {
-        if (!selectedThread) {
-          throw new Error("No thread selected");
-        }
+      if (!selectedThread) throw new Error("No thread selected");
 
+      await replyToEmailThread({
+        threadId: selectedThread.id,
+        subject: payload.subject,
+        text: payload.body,
+        html: payload.htmlBody,
+      });
 
-        await replyToEmailThread({
-          threadId: selectedThread.id,
-          subject: payload.subject,
-          text: payload.body,
-          html: payload.htmlBody,
-        });
-
-        await loadThreadsFromApi();
-        await loadThreadMessagesFromApi(selectedThread.id);
-      } else {
-        setApiError(
-          "Bulk send is handled through the uploaded CSV. Use the 'Send bulk email' button."
-        );
-      }
+      await loadThreadsFromApi();
+      await loadThreadMessagesFromApi(selectedThread.id);
 
       setEditorOpen(false);
+      setBannerMessage(
+        "Reply sent. Future responses should continue in the same admin thread."
+      );
     } catch (error: any) {
-      console.error(error);
       setApiError(
         error?.response?.data?.message ||
         error?.message ||
-        "Failed to send email"
+        "Failed to send reply"
       );
     } finally {
       setEditorSending(false);
@@ -765,7 +849,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
       />
 
       <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-[260px] shrink-0 rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur xl:flex xl:flex-col">
+        <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-[270px] shrink-0 rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur xl:flex xl:flex-col">
           <div>
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
@@ -776,14 +860,14 @@ const handleRoleChange = (item: ExecutiveRole) => {
                   CollabGlam
                 </div>
                 <div className="text-xs text-slate-500">
-                  Outreach Command Center
+                  Admin Email Console
                 </div>
               </div>
             </div>
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Active desk
+                Active role
               </div>
               <div className="mt-2 text-sm font-semibold text-slate-900">
                 {config.title}
@@ -791,48 +875,29 @@ const handleRoleChange = (item: ExecutiveRole) => {
               <div className="mt-1 text-xs leading-5 text-slate-500">
                 {config.subtitle}
               </div>
+              <div className="mt-2 text-xs leading-5 text-slate-500">
+                {getRoleScopeText(role)}
+              </div>
             </div>
           </div>
 
           <div className="mt-8 space-y-2">
-            <SidebarItem
-              icon={<LayoutGrid className="h-4 w-4" />}
-              label="Overview"
-              active
-            />
-            <SidebarItem
-              icon={<Users className="h-4 w-4" />}
-              label="Recipients"
-            />
-            <SidebarItem
-              icon={<Inbox className="h-4 w-4" />}
-              label="Threads"
-            />
-            <SidebarItem
-              icon={<Mail className="h-4 w-4" />}
-              label="Campaigns"
-            />
-            <SidebarItem
-              icon={<Building2 className="h-4 w-4" />}
-              label="Teams"
-            />
+            <SidebarItem icon={<LayoutGrid className="h-4 w-4" />} label="Overview" active />
+            <SidebarItem icon={<Users className="h-4 w-4" />} label="Bulk CSV send" />
+            <SidebarItem icon={<Inbox className="h-4 w-4" />} label="Threads" />
+            <SidebarItem icon={<ArrowRightLeft className="h-4 w-4" />} label="Inbound replies" />
+            <SidebarItem icon={<Mail className="h-4 w-4" />} label="SES status" />
           </div>
 
           <div className="mt-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
               <Clock3 className="h-4 w-4" />
-              Today’s pulse
+              Live summary
             </div>
             <div className="space-y-2 text-sm text-slate-600">
-              <MetricRow
-                label="Imported recipients"
-                value={String(totalRecipients)}
-              />
-              <MetricRow label="Open threads" value={String(threads.length)} />
-              <MetricRow
-                label="Selected to send"
-                value={String(activeSelectionCount)}
-              />
+              <MetricRow label="Imported recipients" value={String(totalRecipients)} />
+              <MetricRow label="Threads" value={String(threads.length)} />
+              <MetricRow label="Selected" value={String(activeSelectionCount)} />
             </div>
           </div>
         </aside>
@@ -845,42 +910,54 @@ const handleRoleChange = (item: ExecutiveRole) => {
               </div>
             ) : null}
 
+            {bannerMessage ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {bannerMessage}
+              </div>
+            ) : null}
+
             <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-5 py-5 text-white sm:px-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                   <div className="max-w-3xl">
                     <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur">
                       <Sparkles className="h-3.5 w-3.5" />
-                      CSV powered outreach workflow
+                      Admin bulk CSV and reply thread workflow
                     </div>
                     <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl xl:text-[2rem]">
                       Admin Outreach Console
                     </h1>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                      Upload CSV files, preview recipients, send bulk outreach,
-                      and manage inbound replies from one workspace.
+                      Send bulk admin emails, track outbound threads, and continue recipient replies through
+                      the admin inbound flow on{" "}
+                      <span className="font-semibold text-white">
+                        {ADMIN_REPLY_DOMAIN}
+                      </span>
+                      .
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:flex-col xl:items-end">
-                    <div className="inline-flex rounded-2xl border border-white/10 bg-white/10 p-1 backdrop-blur">
-                      {(["IME", "BME"] as ExecutiveRole[]).map((item) => {
-                        const active = role === item;
-                        return (
-                          <button
-                            key={item}
-                            onClick={() => handleRoleChange(item)}
-                            className={cn(
-                              "rounded-xl px-4 py-2 text-sm font-medium transition",
-                              active
-                                ? "bg-white text-slate-950 shadow-sm"
-                                : "text-slate-200 hover:bg-white/10"
-                            )}
-                          >
-                            {item}
-                          </button>
-                        );
-                      })}
+                    <div className="inline-flex flex-wrap rounded-2xl border border-white/10 bg-white/10 p-1 backdrop-blur">
+                      {(["super_admin", "revenue_head", "ime", "bme"] as AdminRole[]).map(
+                        (item) => {
+                          const active = role === item;
+                          return (
+                            <button
+                              key={item}
+                              onClick={() => handleRoleChange(item)}
+                              className={cn(
+                                "rounded-xl px-4 py-2 text-sm font-medium transition",
+                                active
+                                  ? "bg-white text-slate-950 shadow-sm"
+                                  : "text-slate-200 hover:bg-white/10"
+                              )}
+                            >
+                              {roleConfig[item].badge}
+                            </button>
+                          );
+                        }
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2 xl:hidden">
@@ -906,27 +983,27 @@ const handleRoleChange = (item: ExecutiveRole) => {
               <div className="grid gap-4 px-5 py-5 sm:px-6 md:grid-cols-2 2xl:grid-cols-4">
                 <StatCard
                   icon={<Users className="h-5 w-5" />}
-                  label={config.primaryMetric}
+                  label="Imported recipients"
                   value={String(totalRecipients)}
-                  hint={`Recipients loaded for ${role}`}
+                  hint="Recipients loaded from current CSV"
                 />
                 <StatCard
-                  icon={<Mail className="h-5 w-5" />}
-                  label="Pending outreach"
-                  value={String(pendingCount)}
-                  hint="Recipients recently emailed"
+                  icon={<Send className="h-5 w-5" />}
+                  label="Sent"
+                  value={String(sentCount)}
+                  hint="Bulk send results marked successful"
                 />
                 <StatCard
-                  icon={<MessageSquare className="h-5 w-5" />}
+                  icon={<CheckCircle2 className="h-5 w-5" />}
                   label="Replies received"
                   value={String(repliedCount)}
-                  hint="Replies in your live threads"
+                  hint="Threads with latest inbound direction"
                 />
                 <StatCard
-                  icon={<Inbox className="h-5 w-5" />}
-                  label="Open threads"
-                  value={String(threads.length)}
-                  hint="Fetched from backend"
+                  icon={<AlertTriangle className="h-5 w-5" />}
+                  label="Failed or bounced"
+                  value={String(failedCount)}
+                  hint="Rows that failed in the bulk send response"
                 />
               </div>
             </section>
@@ -936,14 +1013,16 @@ const handleRoleChange = (item: ExecutiveRole) => {
                 <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
-                      CSV import and bulk email workspace
+                      Bulk CSV send workspace
                     </h2>
                     <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                      Upload a CSV with at least{" "}
-                      <span className="font-semibold text-slate-700">name</span>{" "}
-                      and{" "}
-                      <span className="font-semibold text-slate-700">email</span>{" "}
-                      columns. Then send the file to the backend for bulk email.
+                      Upload a CSV with at least <span className="font-semibold text-slate-700">name</span> and{" "}
+                      <span className="font-semibold text-slate-700">email</span>. The backend bulk send flow will
+                      create admin threads and assign a unique reply address on{" "}
+                      <span className="font-semibold text-slate-700">
+                        {ADMIN_REPLY_DOMAIN}
+                      </span>
+                      .
                     </p>
                   </div>
 
@@ -955,19 +1034,22 @@ const handleRoleChange = (item: ExecutiveRole) => {
                       selected
                     </div>
                     <button
-                      onClick={openBulkEditor}
-                      disabled={selectedRecipients.length === 0}
+                      onClick={handleSendBulkCsvToBackend}
+                      disabled={!uploadedCsvFile || sendingBulk}
                       className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Send className="h-4 w-4" />
-                      Open email editor
+                      {sendingBulk ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      {sendingBulk ? "Sending..." : "Send bulk email"}
                     </button>
                   </div>
                 </div>
 
                 <div className="mb-5 grid gap-4 xl:grid-cols-[1.15fr_minmax(320px,0.85fr)]">
                   <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 p-5">
-
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
@@ -975,7 +1057,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
                           CSV import
                         </div>
                         <h3 className="mt-3 text-lg font-semibold text-slate-900">
-                          Upload recipient file
+                          Upload admin recipient file
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
                           Accepted headers: name, email, company, niche, tags.
@@ -998,24 +1080,16 @@ const handleRoleChange = (item: ExecutiveRole) => {
                     {summary ? (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <InfoCard title="File" value={summary.fileName} />
-                        <InfoCard
-                          title="Rows read"
-                          value={String(summary.totalRows)}
-                        />
-                        <InfoCard
-                          title="Imported"
-                          value={String(summary.importedRows)}
-                        />
+                        <InfoCard title="Rows read" value={String(summary.totalRows)} />
+                        <InfoCard title="Imported" value={String(summary.importedRows)} />
                         <InfoCard
                           title="Skipped"
-                          value={String(
-                            summary.invalidRows + summary.duplicateRows
-                          )}
+                          value={String(summary.invalidRows + summary.duplicateRows)}
                         />
                       </div>
                     ) : (
                       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-                        No CSV uploaded for {role} yet.
+                        No CSV uploaded for this role yet.
                       </div>
                     )}
                   </div>
@@ -1023,24 +1097,28 @@ const handleRoleChange = (item: ExecutiveRole) => {
                   <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="font-semibold text-slate-900">
-                          Current list actions
-                        </h3>
+                        <h3 className="font-semibold text-slate-900">Flow summary</h3>
                         <p className="mt-1 text-sm text-slate-500">
-                          Manage the current imported list before sending.
+                          Final admin email setup uses thread-based routing and hierarchy-aware visibility.
                         </p>
                       </div>
                       <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
                         <Eye className="h-4 w-4" />
-                        Preview
+                        Review
                       </button>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <FeaturePill text="CSV based recipients" />
-                      <FeaturePill text="Bulk template sending" />
-                      <FeaturePill text="Shared email editor" />
-                      <FeaturePill text="Live backend threads" />
+                      <FeaturePill text="Bulk CSV send" />
+                      <FeaturePill text="Thread-based replies" />
+                    </div>
+
+                    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                      <div className="font-semibold text-slate-900">Admin outbound</div>
+                      <div className="mt-1">
+                        From: sender on{" "}
+                        <span className="font-medium">{ADMIN_REPLY_DOMAIN}</span>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -1063,16 +1141,14 @@ const handleRoleChange = (item: ExecutiveRole) => {
                       </button>
 
                       <button
-                        onClick={handleSendBulkCsvToBackend}
-                        disabled={!uploadedCsvFile || sendingBulk}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={loadThreadsFromApi}
+                        disabled={loadingThreads}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
                       >
-                        {sendingBulk ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                        {sendingBulk ? "Sending..." : "Send bulk email"}
+                        <RefreshCcw
+                          className={cn("h-4 w-4", loadingThreads && "animate-spin")}
+                        />
+                        Refresh threads
                       </button>
                     </div>
 
@@ -1103,11 +1179,9 @@ const handleRoleChange = (item: ExecutiveRole) => {
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold text-slate-900">
-                        Recipients
-                      </h3>
+                      <h3 className="font-semibold text-slate-900">Recipients</h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Search, filter, and manage imported recipients.
+                        Review imported recipients and bulk send results.
                       </p>
                     </div>
                     <button
@@ -1130,7 +1204,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
                       <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder={`Search ${config.audience.toLowerCase()}`}
+                        placeholder="Search recipients"
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
                       />
                     </label>
@@ -1143,10 +1217,14 @@ const handleRoleChange = (item: ExecutiveRole) => {
                         className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
                       >
                         <option>All</option>
-                        <option>Active</option>
-                        <option>Pending</option>
+                        <option>Ready</option>
+                        <option>Sent</option>
                         <option>Replied</option>
                         <option>Bounced</option>
+                        <option>Failed</option>
+                        <option>Waiting</option>
+                        <option>Closed</option>
+                        <option>Archived</option>
                       </select>
                     </label>
                   </div>
@@ -1155,14 +1233,12 @@ const handleRoleChange = (item: ExecutiveRole) => {
                     <EmptyState
                       icon={<Users className="h-6 w-6" />}
                       title="No recipients available"
-                      description="Upload a CSV to populate the recipient table for this desk."
+                      description="Upload a CSV to populate the recipient table."
                     />
                   ) : (
                     <div className="space-y-3 max-xl:max-h-[560px] max-xl:overflow-y-auto xl:max-h-[640px] xl:overflow-y-auto xl:pr-1">
                       {filteredRecipients.map((recipient) => {
-                        const checked = selectedRecipientIds.includes(
-                          recipient.id
-                        );
+                        const checked = selectedRecipientIds.includes(recipient.id);
                         return (
                           <button
                             key={recipient.id}
@@ -1200,7 +1276,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
                                   <span
                                     className={cn(
                                       "inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-medium",
-                                      statusPillClass[recipient.status]
+                                      recipientStatusPillClass[recipient.status]
                                     )}
                                   >
                                     {recipient.status}
@@ -1209,14 +1285,20 @@ const handleRoleChange = (item: ExecutiveRole) => {
 
                                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                                   <span>
-                                    {recipient.company ||
-                                      recipient.niche ||
-                                      config.audience.slice(0, -1)}
+                                    {recipient.company || recipient.niche || "Admin recipient"}
                                   </span>
                                   {recipient.lastContact ? (
                                     <>
                                       <span className="text-slate-300">•</span>
                                       <span>{recipient.lastContact}</span>
+                                    </>
+                                  ) : null}
+                                  {recipient.replyToEmail ? (
+                                    <>
+                                      <span className="text-slate-300">•</span>
+                                      <span className="font-mono">
+                                        {recipient.replyToEmail}
+                                      </span>
                                     </>
                                   ) : null}
                                 </div>
@@ -1250,11 +1332,11 @@ const handleRoleChange = (item: ExecutiveRole) => {
                       Quick actions
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      Useful controls while preparing a send.
+                      Useful controls for the admin mail flow.
                     </p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-500">
-                    <Plus className="h-5 w-5" />
+                    <Sparkles className="h-5 w-5" />
                   </div>
                 </div>
 
@@ -1262,27 +1344,34 @@ const handleRoleChange = (item: ExecutiveRole) => {
                   <QuickAction
                     icon={<Upload className="h-4 w-4" />}
                     title="Import recipient CSV"
-                    subtitle="Load recipients into the active desk"
+                    subtitle="Load recipients into the active admin role"
                     onClick={() => fileInputRef.current?.click()}
                   />
                   <QuickAction
                     icon={<Send className="h-4 w-4" />}
                     title="Send bulk email"
-                    subtitle="Send the uploaded CSV through backend API"
+                    subtitle="Create backend admin threads and outbound emails"
                     onClick={handleSendBulkCsvToBackend}
                     disabled={!uploadedCsvFile || sendingBulk}
                   />
                   <QuickAction
+                    icon={<Inbox className="h-4 w-4" />}
+                    title="Refresh threads"
+                    subtitle="Reload admin threads and latest inbound state"
+                    onClick={loadThreadsFromApi}
+                    disabled={loadingThreads}
+                  />
+                  <QuickAction
                     icon={<FileSpreadsheet className="h-4 w-4" />}
                     title="Export current list"
-                    subtitle="Download the imported recipients as CSV"
+                    subtitle="Download current imported recipients as CSV"
                     onClick={exportRecipientsForRole}
                     disabled={!recipients.length}
                   />
                   <QuickAction
                     icon={<Trash2 className="h-4 w-4" />}
                     title="Clear current desk"
-                    subtitle="Reset imported recipients only"
+                    subtitle="Reset imported recipients for this role"
                     onClick={clearRecipientsForRole}
                     disabled={!recipients.length}
                   />
@@ -1294,31 +1383,23 @@ const handleRoleChange = (item: ExecutiveRole) => {
                     Activity summary
                   </div>
                   <div className="space-y-3 text-sm text-slate-600">
-                    <MetricRow
-                      label="Imported recipients"
-                      value={String(totalRecipients)}
-                    />
-                    <MetricRow
-                      label="Sent threads"
-                      value={String(threads.length)}
-                    />
-                    <MetricRow
-                      label="Pending recipients"
-                      value={String(pendingCount)}
-                    />
+                    <MetricRow label="Imported recipients" value={String(totalRecipients)} />
+                    <MetricRow label="Threads" value={String(threads.length)} />
+                    <MetricRow label="Sent" value={String(sentCount)} />
+                    <MetricRow label="Replies received" value={String(repliedCount)} />
                   </div>
                 </div>
               </div>
             </section>
 
-            <section className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+            <section className="grid gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
               <div className="hidden rounded-[28px] border border-slate-200 bg-white shadow-sm xl:block">
                 <div className="border-b border-slate-200 px-5 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h2 className="text-lg font-semibold">Threads</h2>
                       <p className="mt-1 text-sm text-slate-500">
-                        Live message history from backend
+                        Backend admin email threads
                       </p>
                     </div>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
@@ -1333,7 +1414,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
                       <EmptyState
                         icon={<Inbox className="h-6 w-6" />}
                         title="No threads yet"
-                        description="Threads will appear here after you send a bulk email or receive replies."
+                        description="Threads appear after bulk sends or inbound replies."
                       />
                     </div>
                   ) : (
@@ -1357,27 +1438,47 @@ const handleRoleChange = (item: ExecutiveRole) => {
                                 <div className="truncate font-semibold text-slate-900">
                                   {thread.recipientName}
                                 </div>
-                                {thread.unread > 0 && (
-                                  <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white">
-                                    {thread.unread}
-                                  </span>
-                                )}
                               </div>
+
                               <div className="truncate text-sm text-slate-500">
                                 {thread.subject}
                               </div>
+
+                              <div className="mt-2 text-xs text-slate-500">
+                                Owner:{" "}
+                                <span className="font-medium text-slate-700">
+                                  {thread.ownerAdminName ||
+                                    thread.ownerAdminEmail ||
+                                    "Admin"}
+                                </span>
+                              </div>
+
+                              {thread.senderEmail ? (
+                                <div className="mt-1 truncate text-[11px] text-slate-500">
+                                  Sender mailbox:{" "}
+                                  <span className="font-mono">{thread.senderEmail}</span>
+                                </div>
+                              ) : null}
+
                               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                                 <span
                                   className={cn(
                                     "rounded-full px-2.5 py-1 font-medium",
-                                    statusPillClass[thread.status]
+                                    threadStatusPillClass[thread.status]
                                   )}
                                 >
                                   {thread.status}
                                 </span>
                                 <span>{thread.lastMessageAt}</span>
                               </div>
+
+                              {thread.replyToEmail ? (
+                                <div className="mt-2 truncate font-mono text-[11px] text-slate-500">
+                                  {thread.replyToEmail}
+                                </div>
+                              ) : null}
                             </div>
+
                             <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
                           </div>
                         </button>
@@ -1400,16 +1501,42 @@ const handleRoleChange = (item: ExecutiveRole) => {
                             <span
                               className={cn(
                                 "rounded-full px-2.5 py-1 text-xs font-medium",
-                                statusPillClass[selectedThread.status]
+                                threadStatusPillClass[selectedThread.status]
                               )}
                             >
                               {selectedThread.status}
                             </span>
                           </div>
                           <p className="mt-1 truncate text-sm text-slate-500">
-                            {selectedThread.recipientName} ·{" "}
-                            {selectedThread.recipientEmail}
+                            {selectedThread.recipientName} · {selectedThread.recipientEmail}
                           </p>
+
+                          <div className="mt-2 space-y-1 text-xs text-slate-500">
+                            <div>
+                              Thread owner:{" "}
+                              <span className="font-medium text-slate-700">
+                                {selectedThread.ownerAdminName ||
+                                  selectedThread.ownerAdminEmail ||
+                                  "Admin"}
+                              </span>
+                            </div>
+
+                            {selectedThread.senderEmail ? (
+                              <div>
+                                Sender mailbox:{" "}
+                                <span className="font-mono text-slate-700">
+                                  {selectedThread.senderEmail}
+                                </span>
+                              </div>
+                            ) : null}
+
+                            <div>
+                              Reply address:{" "}
+                              <span className="font-mono text-slate-700">
+                                {selectedThread.replyToEmail}
+                              </span>
+                            </div>
+                          </div>
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -1434,13 +1561,11 @@ const handleRoleChange = (item: ExecutiveRole) => {
                       ) : selectedThread.messages.length ? (
                         selectedThread.messages.map((message) => {
                           const isExecutive = message.role === "executive";
+
                           return (
                             <div
                               key={message.id}
-                              className={cn(
-                                "flex",
-                                isExecutive ? "justify-end" : "justify-start"
-                              )}
+                              className={cn("flex", isExecutive ? "justify-end" : "justify-start")}
                             >
                               <div
                                 className={cn(
@@ -1455,6 +1580,12 @@ const handleRoleChange = (item: ExecutiveRole) => {
                                   <span>{message.sender}</span>
                                   <span>•</span>
                                   <span>{message.time}</span>
+                                  {message.providerStatus ? (
+                                    <>
+                                      <span>•</span>
+                                      <span>{message.providerStatus}</span>
+                                    </>
+                                  ) : null}
                                 </div>
                                 <p className="whitespace-pre-wrap text-sm leading-6">
                                   {message.body}
@@ -1473,11 +1604,9 @@ const handleRoleChange = (item: ExecutiveRole) => {
                     <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                          <h3 className="font-semibold text-slate-900">
-                            Reply composer
-                          </h3>
+                          <h3 className="font-semibold text-slate-900">Reply composer</h3>
                           <p className="mt-1 text-sm text-slate-500">
-                            Continue the conversation using the shared email editor.
+                            Continue the admin thread. Replies should keep routing through the same thread address.
                           </p>
                         </div>
                         <button
@@ -1495,7 +1624,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
                     <EmptyState
                       icon={<MessageSquare className="h-7 w-7" />}
                       title="No thread selected"
-                      description="Send a bulk email first. Threads and replies will appear here from the backend."
+                      description="Send a bulk email first. Admin threads and inbound replies will appear here."
                     />
                   </div>
                 )}
@@ -1527,9 +1656,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
                   onClick={() => toggleRecipient(recipient.id)}
                   className={cn(
                     "w-full rounded-2xl border bg-white p-4 text-left transition",
-                    checked
-                      ? "border-slate-900 bg-slate-50"
-                      : "border-slate-200"
+                    checked ? "border-slate-900 bg-slate-50" : "border-slate-200"
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -1544,7 +1671,7 @@ const handleRoleChange = (item: ExecutiveRole) => {
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-1 text-xs font-medium",
-                        statusPillClass[recipient.status]
+                        recipientStatusPillClass[recipient.status]
                       )}
                     >
                       {recipient.status}
@@ -1593,6 +1720,9 @@ const handleRoleChange = (item: ExecutiveRole) => {
                   <div className="mt-1 truncate text-sm text-slate-500">
                     {thread.subject}
                   </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    Owner: {thread.ownerAdminName || thread.ownerAdminEmail || "Admin"}
+                  </div>
                 </button>
               );
             })
@@ -1605,17 +1735,15 @@ const handleRoleChange = (item: ExecutiveRole) => {
         onClose={() => setEditorOpen(false)}
         toLabel={editorPayload.toLabel}
         toAvatar={editorPayload.toAvatar}
-        fromName={role}
-        fromEmail={config.deskEmail}
+        fromName={selectedThread?.ownerAdminName || config.title}
+        fromEmail={selectedThread?.senderEmail || config.deskEmail}
         subject={editorPayload.subject}
         initialBody={editorPayload.initialBody}
         sending={editorSending}
         onSend={handleEditorSend}
         onSaveDraft={async (payload) => {
           localStorage.setItem(
-            editorMode === "bulk"
-              ? "collabglam-bulk-mail-draft"
-              : "collabglam-thread-reply-draft",
+            "collabglam-admin-thread-reply-draft",
             JSON.stringify(payload)
           );
         }}

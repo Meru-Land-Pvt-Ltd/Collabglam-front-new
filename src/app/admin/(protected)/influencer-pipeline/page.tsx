@@ -1,6 +1,6 @@
 "use client"
 
-import React, { JSX, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
     Briefcase,
@@ -558,7 +558,7 @@ function ProfilePanel({ record }: { record?: InfluencerRecord | null }) {
     );
 }
 
-export default function InfluencerPipelinePage(): JSX.Element {
+export default function InfluencerPipelinePage() {
     const [selectedCampaignId, setSelectedCampaignId] = useState<string>(campaigns[0].id);
     const [stage, setStage] = useState<StageKey>(campaigns[0].activeStage);
     const [search, setSearch] = useState<string>("");

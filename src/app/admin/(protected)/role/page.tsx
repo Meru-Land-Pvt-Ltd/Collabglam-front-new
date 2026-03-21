@@ -38,6 +38,7 @@ type AdminRow = {
   _id: string;
   email: string;
   name?: string;
+  proxyEmail?: string;
   role: AdminRole | string;
   status?: AdminStatus;
   invitedAt?: string;
@@ -54,6 +55,7 @@ type MeResponse = {
   _id: string;
   email: string;
   name?: string;
+  proxyEmail?: string;
   role: AdminRole | string;
   status?: AdminStatus;
   permissions?: AdminAccess[];
@@ -299,6 +301,7 @@ export default function AdminsPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
+  const [inviteProxyEmail, setInviteProxyEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole | "">("");
   const [inviteParentAdmin, setInviteParentAdmin] = useState("");
   const [inviteAccess, setInviteAccess] = useState<AdminAccess[]>([]);
@@ -360,6 +363,7 @@ export default function AdminsPage() {
       const matchesSearch =
         !query ||
         row.email?.toLowerCase().includes(query) ||
+        (row.proxyEmail || "").toLowerCase().includes(query) ||
         (row.name || "").toLowerCase().includes(query) ||
         String(row.role || "").toLowerCase().includes(query);
 
@@ -565,6 +569,7 @@ export default function AdminsPage() {
 
     const email = inviteEmail.trim().toLowerCase();
     const role = String(inviteRole || "").trim().toLowerCase() as AdminRole;
+    const proxyEmail = inviteProxyEmail.trim();
 
     if (!email) return setInviteErr("Email is required");
     if (!role) return setInviteErr("Role is required");
@@ -583,6 +588,7 @@ export default function AdminsPage() {
         name: inviteName.trim() || undefined,
         role,
         access: inviteAccess,
+        proxyEmail: proxyEmail || undefined,
       };
 
       if (needsParentRevenueHead(currentRole, role)) {
@@ -608,6 +614,7 @@ export default function AdminsPage() {
       setInviteOpen(false);
       setInviteEmail("");
       setInviteName("");
+      setInviteProxyEmail("");
       setInviteRole("");
       setInviteParentAdmin("");
       setInviteAccess([]);
@@ -718,6 +725,7 @@ export default function AdminsPage() {
             <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-black/70">
               <Shield className="h-3.5 w-3.5" />
               Logged in as {me.name || me.email} · {getRoleLabel(me.role)}
+              {me.proxyEmail ? ` · ${me.proxyEmail}` : ""}
             </div>
           ) : null}
         </div>
@@ -741,6 +749,7 @@ export default function AdminsPage() {
                 setInviteErr(null);
                 setInviteEmail("");
                 setInviteName("");
+                setInviteProxyEmail("");
                 setInviteRole("");
                 setInviteParentAdmin("");
                 setInviteAccess([]);
@@ -757,7 +766,7 @@ export default function AdminsPage() {
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
           <input
-            placeholder="Search by name, email or role..."
+            placeholder="Search by name, email, proxy email or role..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className={`${inputBase} h-12 w-full pl-11 pr-4`}
@@ -864,6 +873,9 @@ export default function AdminsPage() {
 
                     <div className="mt-4 text-xs text-black/45">
                       <div className="truncate">{admin.email}</div>
+                      {admin.proxyEmail ? (
+                        <div className="mt-1 truncate">Proxy: {admin.proxyEmail}</div>
+                      ) : null}
                       <div className="mt-1">
                         Last login: {formatDT(admin.lastLoginAt)}
                       </div>
@@ -1029,6 +1041,15 @@ export default function AdminsPage() {
 
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                      Proxy Email
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-black">
+                      {selectedAdmin.proxyEmail || "—"}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Parent
                     </div>
                     <div className="mt-1 text-sm font-medium text-black">
@@ -1044,22 +1065,22 @@ export default function AdminsPage() {
                       {formatDT(selectedAdmin.lastLoginAt)}
                     </div>
                   </div>
+                </div>
 
-                  <div>
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
-                      Quick Status API
-                    </div>
-                    <button
-                      type="button"
-                      disabled={updatingId === selectedAdmin._id || !canEditAdmins}
-                      onClick={() => updateStatus(selectedAdmin._id, editStatus)}
-                      className="mt-1 rounded-xl border border-black/10 px-3 py-2 text-sm font-medium hover:bg-black/5 disabled:opacity-50"
-                    >
-                      {updatingId === selectedAdmin._id
-                        ? "Updating..."
-                        : "Update Status Only"}
-                    </button>
+                <div className="mt-4 border-t border-black/10 pt-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                    Quick Status API
                   </div>
+                  <button
+                    type="button"
+                    disabled={updatingId === selectedAdmin._id || !canEditAdmins}
+                    onClick={() => updateStatus(selectedAdmin._id, editStatus)}
+                    className="mt-2 rounded-xl border border-black/10 px-3 py-2 text-sm font-medium hover:bg-black/5 disabled:opacity-50"
+                  >
+                    {updatingId === selectedAdmin._id
+                      ? "Updating..."
+                      : "Update Status Only"}
+                  </button>
                 </div>
               </div>
 
@@ -1179,7 +1200,7 @@ export default function AdminsPage() {
                 {inviteRoleOptions.map((role) => role.label).join(", ") || "None"}
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
                     Email
@@ -1202,6 +1223,21 @@ export default function AdminsPage() {
                     onChange={(e) => setInviteName(e.target.value)}
                     placeholder="Jane Doe"
                   />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
+                    Proxy Email Prefix
+                  </label>
+                  <input
+                    className={`${inputBase} h-12 w-full px-4`}
+                    value={inviteProxyEmail}
+                    onChange={(e) => setInviteProxyEmail(e.target.value)}
+                    placeholder="jane.doe or jane"
+                  />
+                  <p className="mt-2 text-xs text-black/50">
+                    Final suffix will be fixed as @reply.collabglam.cloud
+                  </p>
                 </div>
 
                 <div>
