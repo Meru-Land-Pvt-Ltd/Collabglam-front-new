@@ -2844,7 +2844,7 @@ function CommercialMilestonesEditor({
 
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
 
-      {rows.map((row, indSignex) => (
+      {rows.map((row, index) => (
         <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Milestone #{index + 1}</div>

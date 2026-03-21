@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Checkbox } from "@/components/animate-ui/components/radix/checkbox";
 import { ChevronDown, ChevronUp } from "lucide-react";
+
 import {
   ChartLine,
   X,
@@ -11,7 +12,6 @@ import {
   DotsThree,
   EnvelopeOpen,
 } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/buttonComp";
 
 export type PlatformType = "instagram" | "youtube" | "tiktok";
 export type DecisionAction = "isRejected" | "isUndicided" | "isShortlisted";
