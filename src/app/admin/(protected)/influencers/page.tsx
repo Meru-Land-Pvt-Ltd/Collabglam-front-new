@@ -14,7 +14,7 @@ import {
   HiOutlineClipboardList,
 } from "react-icons/hi";
 import { Instagram, Youtube } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +40,7 @@ interface GetListResponse {
 }
 
 interface Influencer {
-  influencerId: string;
+  _id: string;
   name: string;
   email: string;
   phone?: string;
@@ -209,6 +209,7 @@ const AdminInfluencersPage = () => {
   ]);
 
   return (
+    <TooltipProvider>
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -300,7 +301,7 @@ const AdminInfluencersPage = () => {
                   const dLeft = daysUntil(inf.expiresAt);
                   return (
                     <TableRow
-                      key={inf.influencerId}
+                      key={inf._id}
                       className={expired ? "bg-red-50/30" : undefined}
                     >
                       <TableCell className="font-medium">
@@ -350,7 +351,7 @@ const AdminInfluencersPage = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Link
-                                href={`/admin/influencers/view?influencerId=${inf.influencerId}`}
+                                href={`/admin/influencers/view?influencerId=${inf._id}`}
                               >
                                 <Button variant="ghost" size="icon">
                                   <HiOutlineEye />
@@ -362,7 +363,7 @@ const AdminInfluencersPage = () => {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Link
-                                href={`/admin/influencers/campaigns?influencerId=${inf.influencerId}`}
+                                href={`/admin/influencers/campaigns?influencerId=${inf._id}`}
                               >
                                 <Button
                                   variant="ghost"
@@ -447,6 +448,7 @@ const AdminInfluencersPage = () => {
         </div>
       </Card>
     </div>
+    </TooltipProvider>
   );
 };
 

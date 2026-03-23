@@ -1,23 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Outfit } from "next/font/google";
 import {
-  Home,
-  Users,
-  List,
-  Menu,
-  X,
-  DollarSign,
-  MailCheckIcon,
-  FileText,
+  Bell,
   ChevronDown,
   ChevronUp,
+  DollarSign,
+  FileText,
+  Home,
+  List,
   LogOut,
-  Bell,
+  MailCheckIcon,
+  Menu,
+  Users,
+  X,
 } from "lucide-react";
 
 const outfit = Outfit({
@@ -25,15 +25,34 @@ const outfit = Outfit({
   weight: ["400", "500", "600", "700", "800", "900"],
 });
 
-// ✅ Notifications moved AFTER Invited Influencer (same item, same route)
-const navItems = [
+type IconType = React.ComponentType<{ className?: string }>;
+
+type NavItem = {
+  key: string;
+  label: string;
+  href: string;
+  icon?: IconType;
+};
+
+type DocumentLink = {
+  key: string;
+  label: string;
+  href: string;
+};
+
+const navItems: NavItem[] = [
   {
     key: "notifications",
     label: "Notifications",
     href: "/admin/notifications",
     icon: Bell,
   },
-  { key: "brands", label: "Brands", href: "/admin/brands", icon: Home },
+  {
+    key: "brands",
+    label: "Brands",
+    href: "/admin/brands",
+    icon: Home,
+  },
   {
     key: "paid-brands",
     label: "Paid Brands",
@@ -53,6 +72,12 @@ const navItems = [
     icon: List,
   },
   {
+    key: "influencer-pipeline",
+    label: "Influencer Pipeline",
+    href: "/admin/influencer-pipeline",
+    icon: List,
+  },
+  {
     key: "subscriptions",
     label: "Subscriptions",
     href: "/admin/subscriptions",
@@ -64,7 +89,6 @@ const navItems = [
     href: "/admin/disputes",
     icon: FileText,
   },
-
   {
     key: "emails",
     label: "E-Mails",
@@ -83,7 +107,6 @@ const navItems = [
     href: "/admin/missingemail",
     icon: MailCheckIcon,
   },
-
   {
     key: "invoice-details",
     label: "Invoice Details",
@@ -96,7 +119,6 @@ const navItems = [
     href: "/admin/payment",
     icon: Bell,
   },
-
   {
     key: "youtube-handle",
     label: "Youtube Handle",
@@ -115,123 +137,163 @@ const navItems = [
     href: "/admin/invitedInfluencer",
     icon: MailCheckIcon,
   },
-  { key: "role", label: "Role", href: "/admin/role", icon: MailCheckIcon },
-  { label: "Notifications", href: "/admin/notifications", icon: Bell },
   {
+    key: "role",
+    label: "Role",
+    href: "/admin/role",
+    icon: MailCheckIcon,
+  },
+  {
+    key: "influencer-data",
     label: "Influencer Data",
     href: "/admin/influencer-data",
     icon: MailCheckIcon,
   },
 ];
 
-const documentLinks = [
-  { label: "Contact US Page Email", href: "/admin/documents/contact-us" },
-  { label: "FAQs", href: "/admin/documents/faqs" },
-  { label: "Privacy Policy", href: "/admin/documents/privacy-policy" },
-  { label: "Terms of Service", href: "/admin/documents/terms-of-service" },
-  { label: "Cookie Policy", href: "/admin/documents/cookie-policy" },
+const documentLinks: DocumentLink[] = [
   {
+    key: "contact-us",
+    label: "Contact US Page Email",
+    href: "/admin/documents/contact-us",
+  },
+  {
+    key: "faqs",
+    label: "FAQs",
+    href: "/admin/documents/faqs",
+  },
+  {
+    key: "privacy-policy",
+    label: "Privacy Policy",
+    href: "/admin/documents/privacy-policy",
+  },
+  {
+    key: "terms-of-service",
+    label: "Terms of Service",
+    href: "/admin/documents/terms-of-service",
+  },
+  {
+    key: "cookie-policy",
+    label: "Cookie Policy",
+    href: "/admin/documents/cookie-policy",
+  },
+  {
+    key: "shipping-delivery",
     label: "Shipping & Delivery Policy",
     href: "/admin/documents/shipping-delivery",
   },
-  { label: "Returns Policy", href: "/admin/documents/return-policy" },
+  {
+    key: "return-policy",
+    label: "Returns Policy",
+    href: "/admin/documents/return-policy",
+  },
 ];
+
+const drawerVariants = {
+  hidden: { x: "-100%" },
+  visible: { x: "0%" },
+};
+
+const linkBase =
+  "group block rounded-lg px-3 py-2 text-sm font-semibold transition focus:outline-none";
+const linkActive = "bg-black text-white";
+const linkInactive = "text-black/80 hover:bg-black hover:text-white";
 
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const initialDocsOpen = pathname.startsWith("/admin/documents/");
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [docsOpen, setDocsOpen] = useState(initialDocsOpen);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [docsOpen, setDocsOpen] = React.useState(
+    pathname.startsWith("/admin/documents/"),
+  );
 
-  useEffect(() => {
-    if (pathname.startsWith("/admin/documents/")) setDocsOpen(true);
+  React.useEffect(() => {
+    if (pathname.startsWith("/admin/documents/")) {
+      setDocsOpen(true);
+    }
   }, [pathname]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     document.body.style.overflow = drawerOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [drawerOpen]);
 
-  const drawerVariants = {
-    hidden: { x: "-100%" },
-    visible: { x: "0%" },
-  };
+  const isActive = React.useCallback(
+    (href: string) => pathname === href || pathname.startsWith(href + "/"),
+    [pathname],
+  );
 
-  const handleLogout = () => {
+  const handleLogout = React.useCallback(() => {
     try {
-      if (typeof window !== "undefined") localStorage.clear();
-    } catch (e) {
-      // ignore
+      if (typeof window !== "undefined") {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+    } catch {
+      // ignore storage errors
     }
-    router.push("/admin/login");
-  };
+    router.replace("/admin/login");
+  }, [router]);
 
-  // ✅ Brands page vibe: clean + black hover/active + Outfit font
-  const linkBase =
-    "group block rounded-lg px-3 py-2 text-sm font-semibold transition focus:outline-none";
-  const linkActive = "bg-black text-white";
-  const linkInactive = "text-black/80 hover:bg-black hover:text-white";
+  const renderNavLink = React.useCallback(
+    (item: NavItem, onClick?: () => void) => {
+      const active = isActive(item.href);
+      const Icon = item.icon;
 
-  const renderLink = (
-    { label, href, icon: Icon }: any,
-    onClick?: () => void,
-  ) => {
-    const active = pathname === href || pathname.startsWith(href + "/");
-    return (
-      <Link
-        key={href}
-        href={href}
-        onClick={onClick}
-        className={`${linkBase} ${active ? linkActive : linkInactive}`}
-      >
-        <span className="flex items-center gap-2">
-          {Icon ? (
-            <Icon
-              className={`h-4 w-4 ${
-                active ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
-            />
-          ) : null}
-          <span className="whitespace-nowrap flex-1">{label}</span>
-        </span>
-      </Link>
-    );
-  };
+      return (
+        <Link
+          href={item.href}
+          onClick={onClick}
+          className={`${linkBase} ${active ? linkActive : linkInactive}`}
+        >
+          <span className="flex items-center gap-2">
+            {Icon ? (
+              <Icon
+                className={`h-4 w-4 ${active ? "text-white" : "text-black/50 group-hover:text-white"
+                  }`}
+              />
+            ) : null}
+            <span className="flex-1 whitespace-nowrap">{item.label}</span>
+          </span>
+        </Link>
+      );
+    },
+    [isActive],
+  );
 
   const renderDocuments = (isMobile = false) => {
     const docsActive = pathname.startsWith("/admin/documents/");
+
     return (
       <div>
         <button
           type="button"
           onClick={() => setDocsOpen((prev) => !prev)}
-          className={`${linkBase} w-full ${docsActive ? linkActive : linkInactive}`}
+          className={`${linkBase} w-full ${docsActive ? linkActive : linkInactive
+            }`}
         >
           <span className="flex items-center gap-2">
             <FileText
-              className={`h-4 w-4 ${
-                docsActive
-                  ? "text-white"
-                  : "text-black/50 group-hover:text-white"
-              }`}
+              className={`h-4 w-4 ${docsActive ? "text-white" : "text-black/50 group-hover:text-white"
+                }`}
             />
             <span className="flex-1 text-left">Documents</span>
             {docsOpen ? (
               <ChevronUp
-                className={`h-4 w-4 ${
-                  docsActive
+                className={`h-4 w-4 ${docsActive
                     ? "text-white"
                     : "text-black/50 group-hover:text-white"
-                }`}
+                  }`}
               />
             ) : (
               <ChevronDown
-                className={`h-4 w-4 ${
-                  docsActive
+                className={`h-4 w-4 ${docsActive
                     ? "text-white"
                     : "text-black/50 group-hover:text-white"
-                }`}
+                  }`}
               />
             )}
           </span>
@@ -245,23 +307,22 @@ export default function AdminSidebar() {
               exit={{ height: 0, opacity: 0 }}
               className="ml-3 mt-2 space-y-1 overflow-hidden"
             >
-              {documentLinks.map(({ label, href }) => {
-                const active =
-                  pathname === href || pathname.startsWith(href + "/");
+              {documentLinks.map((doc) => {
+                const active = isActive(doc.href);
+
                 return (
                   <Link
-                    key={href}
-                    href={href}
+                    key={doc.key}
+                    href={doc.href}
                     onClick={() => {
                       if (isMobile) setDrawerOpen(false);
                     }}
-                    className={`${linkBase} ${
-                      active
+                    className={`${linkBase} ${active
                         ? linkActive
                         : "text-black/70 hover:bg-black hover:text-white"
-                    }`}
+                      }`}
                   >
-                    {label}
+                    {doc.label}
                   </Link>
                 );
               })}
@@ -275,13 +336,14 @@ export default function AdminSidebar() {
   const BrandHeader = ({ compact = false }: { compact?: boolean }) => (
     <div className={compact ? "px-4 py-3" : "p-5"}>
       <Link href="/admin" className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-xl border border-black/10 overflow-hidden bg-white">
+        <div className="h-10 w-10 overflow-hidden rounded-xl border border-black/10 bg-white">
           <img
             src="/logo.png"
             alt="CollabGlam logo"
             className="h-full w-full object-contain"
           />
         </div>
+
         <div className="leading-tight">
           <div
             className={
@@ -290,7 +352,6 @@ export default function AdminSidebar() {
           >
             CollabGlam
           </div>
-          <div className="text-xs text-black/60" />
         </div>
       </Link>
     </div>
@@ -298,21 +359,20 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* Mobile Topbar */}
       <header
-        className={`${outfit.className} md:hidden fixed inset-x-0 top-0 z-50 h-12 bg-white border-b border-black/10 flex items-center px-4`}
+        className={`${outfit.className} fixed inset-x-0 top-0 z-50 flex h-12 items-center border-b border-black/10 bg-white px-4 md:hidden`}
       >
         <button
           onClick={() => setDrawerOpen(true)}
           aria-label="Open menu"
-          className="p-2 rounded-lg hover:bg-black/5 focus:outline-none"
+          className="rounded-lg p-2 hover:bg-black/5 focus:outline-none"
         >
           <Menu className="h-6 w-6 text-black/80" />
         </button>
 
         <div className="ml-3">
           <Link href="/admin" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl border border-black/10 overflow-hidden bg-white">
+            <div className="h-8 w-8 overflow-hidden rounded-xl border border-black/10 bg-white">
               <img
                 src="/logo.png"
                 alt="CollabGlam logo"
@@ -324,26 +384,26 @@ export default function AdminSidebar() {
         </div>
       </header>
 
-      {/* Desktop Sidebar */}
       <aside
-        className={`${outfit.className} hidden md:flex md:fixed md:inset-y-0 md:left-0 w-64 border-r border-black/10 bg-white h-screen flex-col`}
+        className={`${outfit.className} hidden h-screen w-64 flex-col border-r border-black/10 bg-white md:fixed md:inset-y-0 md:left-0 md:flex`}
       >
-        {/* Header */}
         <BrandHeader compact={false} />
 
-        {/* Middle (scrolls) */}
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           <nav className="space-y-1">
-            {navItems.map((item) => renderLink(item))}
+            {navItems.map((item) => (
+              <React.Fragment key={item.key}>
+                {renderNavLink(item)}
+              </React.Fragment>
+            ))}
             {renderDocuments(false)}
           </nav>
         </div>
 
-        {/* Bottom (pinned) */}
-        <div className="shrink-0 p-3 border-t border-black/10">
+        <div className="shrink-0 border-t border-black/10 p-3">
           <button
             onClick={handleLogout}
-            className={`${linkBase} w-full ${linkInactive}`}
+            className={`${linkBase} ${linkInactive} w-full`}
           >
             <span className="flex items-center gap-2">
               <LogOut className="h-4 w-4 text-black/50 group-hover:text-white" />
@@ -353,7 +413,6 @@ export default function AdminSidebar() {
         </div>
       </aside>
 
-      {/* Mobile Drawer */}
       <AnimatePresence>
         {drawerOpen && (
           <>
@@ -366,19 +425,19 @@ export default function AdminSidebar() {
             />
 
             <motion.aside
-              className={`${outfit.className} fixed inset-y-0 left-0 z-50 w-64 border-r border-black/10 bg-white h-screen flex flex-col`}
+              className={`${outfit.className} fixed inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r border-black/10 bg-white`}
               initial="hidden"
               animate="visible"
               exit="hidden"
               variants={drawerVariants}
               transition={{ type: "tween", duration: 0.2 }}
             >
-              <div className="h-12 flex items-center justify-between border-b border-black/10">
+              <div className="flex h-12 items-center justify-between border-b border-black/10">
                 <BrandHeader compact />
                 <button
                   onClick={() => setDrawerOpen(false)}
                   aria-label="Close menu"
-                  className="mr-2 p-2 rounded-lg hover:bg-black/5 focus:outline-none"
+                  className="mr-2 rounded-lg p-2 hover:bg-black/5 focus:outline-none"
                 >
                   <X className="h-6 w-6 text-black/80" />
                 </button>
@@ -386,20 +445,22 @@ export default function AdminSidebar() {
 
               <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
                 <nav className="space-y-1">
-                  {navItems.map((item) =>
-                    renderLink(item, () => setDrawerOpen(false)),
-                  )}
+                  {navItems.map((item) => (
+                    <React.Fragment key={item.key}>
+                      {renderNavLink(item, () => setDrawerOpen(false))}
+                    </React.Fragment>
+                  ))}
                   {renderDocuments(true)}
                 </nav>
               </div>
 
-              <div className="shrink-0 p-3 border-t border-black/10">
+              <div className="shrink-0 border-t border-black/10 p-3">
                 <button
                   onClick={() => {
                     setDrawerOpen(false);
                     handleLogout();
                   }}
-                  className={`${linkBase} w-full ${linkInactive}`}
+                  className={`${linkBase} ${linkInactive} w-full`}
                 >
                   <span className="flex items-center gap-2">
                     <LogOut className="h-4 w-4 text-black/50 group-hover:text-white" />

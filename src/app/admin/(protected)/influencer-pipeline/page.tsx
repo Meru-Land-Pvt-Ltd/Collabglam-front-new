@@ -2,15 +2,38 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FolderKanban, RefreshCw } from 'lucide-react';
+import { FolderKanban, RefreshCw, CalendarDays, BadgeIndianRupee } from 'lucide-react';
 import swal from 'sweetalert';
 import { get } from '@/lib/api';
 
 type CampaignItem = {
   _id: string;
-  name: string;
+  brandId?: string;
   brandName?: string;
+  campaignTitle?: string;
+  campaignType?: string;
+  campaignCategory?: string;
+  campaignSubcategory?: string;
+  numberOfInfluencers?: number;
+  targetCountry?: string;
+  campaignBudget?: number;
+  budget?: number;
+  influencerBudget?: number;
+  paymentType?: string;
+  platformSelection?: string[];
+  scheduledAt?: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
+  status?: string;
+  publishStatus?: string;
   createdAt?: string;
+  updatedAt?: string;
+};
+
+type CampaignListResponse = {
+  success: boolean;
+  count: number;
+  data: CampaignItem[];
 };
 
 function showErr(message: string) {
@@ -21,6 +44,29 @@ function showErr(message: string) {
   });
 }
 
+function formatDate(value?: string | null) {
+  if (!value) return '--';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '--';
+
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  }).format(d);
+}
+
+function formatCurrency(value?: number) {
+  if (value == null || !Number.isFinite(value)) return '--';
+  return new Intl.NumberFormat('en-IN').format(value);
+}
+
+function formatPlatforms(platforms?: string[]) {
+  if (!Array.isArray(platforms) || !platforms.length) return '--';
+  return platforms.join(', ');
+}
+
 export default function CampaignsPage() {
   const [items, setItems] = useState<CampaignItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,9 +74,8 @@ export default function CampaignsPage() {
   async function loadCampaigns() {
     setLoading(true);
     try {
-      // change endpoint if your actual campaign list route is different
-      const resp = await get<CampaignItem[]>('/campaign/getlist');
-      setItems(Array.isArray(resp) ? resp : []);
+      const resp = await get<CampaignListResponse>('/admins/campaign/list');
+      setItems(Array.isArray(resp?.data) ? resp.data : []);
     } catch (e: any) {
       await showErr(e?.message || 'Failed to load campaigns.');
     } finally {
@@ -77,20 +122,63 @@ export default function CampaignsPage() {
             {items.map((campaign) => (
               <Link
                 key={campaign._id}
-                href={`/campaigns/${campaign._id}/pipeline?name=${encodeURIComponent(campaign.name || '')}`}
+                href={`/admin/influencer-pipeline/pipeline?id=${campaign._id}`}
                 className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
               >
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
                   <FolderKanban className="h-6 w-6" />
                 </div>
 
-                <h2 className="text-lg font-semibold text-slate-900 group-hover:text-blue-700">
-                  {campaign.name || 'Untitled Campaign'}
+                <h2 className="line-clamp-2 text-lg font-semibold text-slate-900 group-hover:text-blue-700">
+                  {campaign.campaignTitle || 'Untitled Campaign'}
                 </h2>
 
-                <p className="mt-2 text-sm text-slate-600">
-                  {campaign.brandName ? `Brand: ${campaign.brandName}` : 'Open campaign pipeline'}
-                </p>
+                <div className="mt-3 space-y-2 text-sm text-slate-600">
+                  <p>
+                    <span className="font-semibold text-slate-800">Brand:</span>{' '}
+                    {campaign.brandName || '--'}
+                  </p>
+
+                  <p>
+                    <span className="font-semibold text-slate-800">Category:</span>{' '}
+                    {campaign.campaignCategory || '--'}
+                  </p>
+
+                  <p>
+                    <span className="font-semibold text-slate-800">Type:</span>{' '}
+                    {campaign.campaignType || '--'}
+                  </p>
+
+                  <p>
+                    <span className="font-semibold text-slate-800">Platforms:</span>{' '}
+                    {formatPlatforms(campaign.platformSelection)}
+                  </p>
+
+                  <p>
+                    <span className="font-semibold text-slate-800">Influencers:</span>{' '}
+                    {campaign.numberOfInfluencers ?? '--'}
+                  </p>
+
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <BadgeIndianRupee className="h-4 w-4" />
+                    <span>
+                      <span className="font-semibold">Budget:</span>{' '}
+                      {formatCurrency(campaign.campaignBudget ?? campaign.budget)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <CalendarDays className="h-4 w-4" />
+                    <span>
+                      <span className="font-semibold">Start:</span> {formatDate(campaign.startAt)}
+                    </span>
+                  </div>
+
+                  <p>
+                    <span className="font-semibold text-slate-800">Status:</span>{' '}
+                    <span className="capitalize">{campaign.status || '--'}</span>
+                  </p>
+                </div>
 
                 <div className="mt-4 text-sm font-medium text-blue-600">
                   Open Pipeline →
