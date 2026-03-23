@@ -19,7 +19,7 @@ import {
   LangRow,
   ListQuery,
   TierRow,
-} from "../../services/brandApi";
+} from "../../../../brand/services/brandApi";
 import { countryKey, idOf, uniqByValue, Option, prettyTierValue } from "./create-campaign.utils";
 
 /* =============================================================================
