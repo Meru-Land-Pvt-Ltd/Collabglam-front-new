@@ -44,13 +44,13 @@ const ROUTES: Record<string, string> = {
   campaigns_all: "/brand/campaign/all",
   campaigns_active: "/brand/campaign/active",
   campaigns_draft: "/brand/campaign/draft",
-  campaigns_scheduled: "/brand/campaign/scheduled",  
+  campaigns_scheduled: "/brand/campaign/scheduled",
   browse: "/brand/browse-influencer",
   inbox: "/brand/inbox",
   wallet: "/brand/wallet",
   notification: "/brand/notifications",
   credits: "/brand/credits",
-  help: "/brand/help",
+  help: "/brand/help-and-support",
   invite: "/brand/invite-members",
 };
 
@@ -403,10 +403,10 @@ export default function BrandSidebar({
         icon: CardsThree,
         section: "dashboard",
         children: [
-          { key: "campaigns_all", label: "Created Campaigns" },
+          { key: "campaigns_all", label: "All Campaigns" },
           { key: "campaigns_active", label: "Active Campaigns" },
-          // { key: "campaigns_draft", label: "Drafts Campaigns" },
-          { key: "campaigns_history", label: "Campaigns History" },
+          { key: "campaigns_draft", label: "Drafts Campaigns" },
+          { key: "campaigns_scheduled", label: "Scheduled Campaigns " },
         ],
       },
       { key: "browse", label: "Browse Influencer", icon: Users, section: "dashboard" },
@@ -602,6 +602,7 @@ export default function BrandSidebar({
       hasInitializedCollapsed.current = false; // reset so re-entering desktop re-reads storage
     }
   }, [isDesktop, setDrawerOpenProp]);
+
 
   useEffect(() => {
     if (!workspaceOpen) return;
@@ -995,8 +996,8 @@ export default function BrandSidebar({
                   <div
                     key={item.key}
                     className="w-full"
-                    // onMouseEnter={handleCampaignMouseEnter}
-                    // onMouseLeave={handleCampaignMouseLeave}
+                  // onMouseEnter={handleCampaignMouseEnter}
+                  // onMouseLeave={handleCampaignMouseLeave}
                   >
                     <RowButton
                       icon={item.icon}
@@ -1007,8 +1008,8 @@ export default function BrandSidebar({
                       collapsed={false}
                       onClick={() => {
                         setCampaignOpen((v) => !v);
-                        setActive("campaigns_all");
-                        goTo("campaigns_all");
+                        // setActive("campaigns_all");
+                        // goTo("campaigns_all");
                       }}
                     />
 
