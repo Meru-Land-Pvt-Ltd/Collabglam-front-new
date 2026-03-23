@@ -66,7 +66,7 @@ export default function AdminFavoriteInfluencersPage() {
   const router = useRouter();
 
   // ✅ campaignsId coming from link: /admin/brands/fav-influencer?id=<campaignsId>&brandId=<brandId>
-  const campaignsId = searchParams.get("id") || searchParams.get("campaignsId");
+  const campaignId = searchParams.get("campaignId") || searchParams.get("id");
   const brandId = searchParams.get("brandId");
 
   const [rows, setRows] = useState<InvitationRow[]>([]);
@@ -102,8 +102,8 @@ export default function AdminFavoriteInfluencersPage() {
   }, [search]);
 
   const fetchInvitations = useCallback(async () => {
-    if (!campaignsId) {
-      setError("campaignsId missing in URL.");
+    if (!campaignId) {
+      setError("campaignId missing in URL.");
       setLoading(false);
       return;
     }
@@ -112,8 +112,8 @@ export default function AdminFavoriteInfluencersPage() {
     setError(null);
 
     try {
-      const resp = await post<any>("/admin-invitations/get-by-campaign", {
-        campaignsId,
+      const resp = await post<any>("/campaign-invitation/get-by-campaign", {
+        campaignId,
         page,
         limit: PAGE_SIZE,
         search: debouncedSearch || undefined, // if backend supports it
@@ -169,7 +169,7 @@ export default function AdminFavoriteInfluencersPage() {
     } finally {
       setLoading(false);
     }
-  }, [campaignsId, brandId, page, debouncedSearch]);
+  }, [campaignId, brandId, page, debouncedSearch]);
 
   useEffect(() => {
     fetchInvitations();
@@ -184,15 +184,7 @@ export default function AdminFavoriteInfluencersPage() {
         <div>
           <h1 className="text-2xl font-semibold">Favorite Influencers</h1>
           <p className="text-xs text-gray-600 mt-1">
-            Campaigns ID: <span className="font-semibold text-black">{campaignsId || "—"}</span>
-            {brandId ? (
-              <>
-                {" "}
-                · Brand ID: <span className="font-semibold text-black">{brandId}</span>
-              </>
-            ) : null}
-            {" "}
-            · Total: <span className="font-semibold text-black">{meta.total}</span>
+            Total: <span className="font-semibold text-black">{meta.total}</span>
           </p>
         </div>
 
@@ -220,7 +212,7 @@ export default function AdminFavoriteInfluencersPage() {
         </div>
       </div>
 
-      {!campaignsId ? (
+      {!campaignId ? (
         <div className="mb-3 rounded-lg border border-gray-300 bg-white p-3 text-sm">
           <span className="font-semibold">Error:</span> campaignsId missing in URL.
         </div>

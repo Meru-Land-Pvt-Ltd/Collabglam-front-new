@@ -97,7 +97,7 @@ export default function InfluencerDetailFullPage({
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const [campaigns, setCampaigns] = useState<{ campaignsId: string; productOrServiceName?: string }[]>([]);
+  const [campaigns, setCampaigns] = useState<{ campaignsId: string; campaignTitle?: string }[]>([]);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>(campaignId ? [campaignId] : []);
 
@@ -118,7 +118,7 @@ export default function InfluencerDetailFullPage({
         setCampaignsLoading(true);
 
         const payload: any = aId ? { adminId: aId } : { brandId: bId };
-        const resp: any = await post('/admin/campaign/lite', payload);
+        const resp: any = await post('/admins/campaign/lite', payload);
 
         if (cancelled) return;
 
@@ -126,7 +126,7 @@ export default function InfluencerDetailFullPage({
         setCampaigns(
           items.map((c: any) => ({
             campaignsId: c.campaignId || c.campaignsId || String(c._id || ''),
-            productOrServiceName: c.productOrServiceName,
+            campaignTitle: c.campaignTitle,
           }))
         );
       } catch {
@@ -412,7 +412,7 @@ export default function InfluencerDetailFullPage({
                                 className="sr-only"
                               />
 
-                              <span>{c.productOrServiceName || c.campaignsId}</span>
+                              <span>{c.campaignTitle || c.campaignsId}</span>
                             </div>
                           );
                         })}
