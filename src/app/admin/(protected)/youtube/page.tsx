@@ -1,10 +1,22 @@
 'use client';
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ExternalLink, Mail, RefreshCw, Search, X, Download, Info } from 'lucide-react';
+import {
+  ChevronDown,
+  ExternalLink,
+  Mail,
+  RefreshCw,
+  Search,
+  X,
+  Download,
+  Info,
+  Filter,
+} from 'lucide-react';
 import swal from 'sweetalert';
 import { post } from '@/lib/api';
 import { Checkbox } from '@/components/animate-ui/components/radix/checkbox';
+import { useSearchParams } from 'next/navigation';
 
 type VideoItem = {
   _id?: string;
@@ -14,12 +26,11 @@ type VideoItem = {
   viewCount?: number;
   likeCount?: number;
   commentCount?: number;
-  duration?: string; // ISO 8601, e.g. PT16M5S
+  duration?: string;
 };
 
 type InfluencerProfileDoc = {
   _id?: string;
-
   handleId: string;
   platform?: string;
   handle?: string;
@@ -40,7 +51,6 @@ type InfluencerProfileDoc = {
 
   instagramHandle?: string | null;
 
-  // ✅ manual fields
   email?: string | null;
   lastSponsor?: string | null;
   managedByAgency?: boolean | null;
@@ -68,9 +78,7 @@ type InfluencerProfileDoc = {
 
   rawChannel?: any;
   rawPlaylists?: any[];
-
   lastVideos?: VideoItem[];
-  lastVideosLimit?: number;
 
   createdAt?: string;
   updatedAt?: string;
@@ -100,225 +108,16 @@ type UpdateManualResponse = {
 };
 
 type InfluencerFilters = {
-  // NOTE: kept API keys as followersMin/followersMax to avoid backend break;
-  // UI shows them as "Subscribers".
   followersMin?: string;
   followersMax?: string;
-
-  // Country multi-select
   countries?: string[];
-
-  // Optional legacy (not used in UI)
   country?: string;
-
   category?: string;
   categories?: string[];
 };
 
 type SortMode = 'engagement_upload' | 'engagement' | 'uploads' | 'created';
 
-function showErr(message: string) {
-  return swal({
-    title: 'Error',
-    text: message || 'Something went wrong.',
-    icon: 'error',
-  });
-}
-
-function normalizeHandle(input: string) {
-  const s = (input || '').trim();
-  if (!s) return '';
-  const m = s.match(/@([A-Za-z0-9._\-]+)/);
-  if (m?.[1]) return `@${m[1]}`;
-  if (/^[A-Za-z0-9._\-]+$/.test(s)) return `@${s}`;
-  return s.startsWith('@') ? s : `@${s}`;
-}
-
-function isValidHandle(h: string) {
-  return /^@[A-Za-z0-9._\-]+$/.test(h);
-}
-
-function buildSavedSearchText(raw: string) {
-  const v = (raw || '').trim();
-  if (!v) return '';
-  const isHandleish = v.startsWith('@') || /^[A-Za-z0-9._\-]+$/.test(v);
-  return isHandleish ? normalizeHandle(v) : v;
-}
-
-function formatNumber(n?: number | null) {
-  if (n == null || !Number.isFinite(n)) return '—';
-  return new Intl.NumberFormat('en-IN').format(n);
-}
-
-function formatPercent(x?: number | null) {
-  if (x == null || !Number.isFinite(x)) return '—';
-  return `${(x * 100).toFixed(2)}%`;
-}
-
-function formatBool(b?: boolean | null) {
-  if (b === true) return 'Yes';
-  if (b === false) return 'No';
-  return 'Unknown';
-}
-
-/** force IST formatting */
-function formatDate(iso?: string | null, timeZone = 'Asia/Kolkata') {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone,
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(d);
-}
-
-function asList<T>(d: any): T[] {
-  return Array.isArray(d) ? d : [];
-}
-
-/** ✅ Card key/id for expand/scroll/UI (can fallback) */
-function getCardId(p: InfluencerProfileDoc) {
-  return p.handleId || p._id || p.channelId || p.handle || Math.random().toString(36).slice(2);
-}
-
-/** ✅ Selection id MUST be stable and exportable -> handleId only */
-function getSelectId(p: InfluencerProfileDoc) {
-  return p.handleId || '';
-}
-
-function ytVideoUrl(videoId?: string) {
-  if (!videoId) return '';
-  return `https://www.youtube.com/watch?v=${videoId}`;
-}
-
-function ytChannelUrl(p: InfluencerProfileDoc) {
-  if (p.handle) return `https://www.youtube.com/${p.handle.replace(/^@/, '@')}`;
-  if (p.channelId) return `https://www.youtube.com/channel/${p.channelId}`;
-  return '';
-}
-
-function toDateInputValue(iso?: string | null) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function parseFollowUps(text: string) {
-  const raw = (text || '')
-    .split(/[\n,]+/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const cleaned: string[] = [];
-  for (const d of raw) {
-    if (/^\d{4}-\d{2}-\d{2}/.test(d)) cleaned.push(d);
-  }
-  return Array.from(new Set(cleaned));
-}
-
-function splitCsvOrSpace(v: string): string[] {
-  return (v || '')
-    .split(/[,\n]/g)
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function chipText(filters: InfluencerFilters) {
-  const chips: string[] = [];
-
-  if (filters.followersMin || filters.followersMax) {
-    chips.push(`Subscribers: ${filters.followersMin || '0'} - ${filters.followersMax || '∞'}`);
-  }
-
-  const cs = filters.countries?.length
-    ? filters.countries
-    : filters.country
-      ? [filters.country]
-      : [];
-  if (cs.length) chips.push(`Country: ${cs.join(', ')}`);
-
-  const cats = filters.categories?.length ? filters.categories : filters.category ? [filters.category] : [];
-  if (cats.length) chips.push(`Category: ${cats.join(', ')}`);
-
-  return chips;
-}
-
-/** ✅ Topic helpers: show labels as clean category names */
-function topicFromUrl(url: string) {
-  try {
-    const last = (url || '').split('/').pop() || '';
-    return decodeURIComponent(last).replace(/_/g, ' ');
-  } catch {
-    return url;
-  }
-}
-
-function cleanTopicLabel(s: string) {
-  // "Lifestyle (sociology)" -> "Lifestyle"
-  return String(s || '')
-    .replace(/\s*\(.*?\)\s*$/, '')
-    .trim();
-}
-
-function getTopicNames(p: InfluencerProfileDoc) {
-  const labels = asList<string>(p.topicLabels).filter(Boolean).map(cleanTopicLabel);
-  if (labels.length) return Array.from(new Set(labels));
-
-  const cats = asList<string>(p.topicCategories).filter(Boolean).map(topicFromUrl).map(cleanTopicLabel);
-  return Array.from(new Set(cats));
-}
-
-function numOrNegInf(v: any) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
-}
-
-function sortProfiles(list: InfluencerProfileDoc[], mode: SortMode) {
-  const arr = [...(list || [])];
-
-  if (mode === 'created') {
-    arr.sort((a, b) => {
-      const ta = new Date(a.createdAt || 0).getTime() || 0;
-      const tb = new Date(b.createdAt || 0).getTime() || 0;
-      return tb - ta;
-    });
-    return arr;
-  }
-
-  if (mode === 'uploads') {
-    arr.sort((a, b) => numOrNegInf(b.uploadFrequencyPerWeek) - numOrNegInf(a.uploadFrequencyPerWeek));
-    return arr;
-  }
-
-  // engagement OR engagement+uploads
-  arr.sort((a, b) => {
-    const e = numOrNegInf(b.engagementRateLast15) - numOrNegInf(a.engagementRateLast15);
-    if (e !== 0) return e;
-    if (mode === 'engagement_upload') {
-      return numOrNegInf(b.uploadFrequencyPerWeek) - numOrNegInf(a.uploadFrequencyPerWeek);
-    }
-    return 0;
-  });
-  return arr;
-}
-
-function sortToApi(mode: SortMode) {
-  if (mode === 'uploads') return { sortBy: 'uploadFrequencyPerWeek', sortOrder: 'desc' as const };
-  if (mode === 'created') return { sortBy: 'createdAt', sortOrder: 'desc' as const };
-  // engagement_upload and engagement
-  return { sortBy: 'engagementRateLast15', sortOrder: 'desc' as const };
-}
-
-/** --- Country list for dropdown (common) --- */
 const COUNTRY_OPTIONS: Array<{ code: string; name: string }> = [
   { code: 'US', name: 'United States' },
   { code: 'IN', name: 'India' },
@@ -377,6 +176,183 @@ const COUNTRY_OPTIONS: Array<{ code: string; name: string }> = [
   { code: 'NP', name: 'Nepal' },
 ];
 
+function showErr(message: string) {
+  return swal({
+    title: 'Error',
+    text: message || 'Something went wrong.',
+    icon: 'error',
+  });
+}
+
+function normalizeHandle(input: string) {
+  const s = (input || '').trim();
+  if (!s) return '';
+  const m = s.match(/@([A-Za-z0-9._-]+)/);
+  if (m?.[1]) return `@${m[1]}`;
+  if (/^[A-Za-z0-9._-]+$/.test(s)) return `@${s}`;
+  return s.startsWith('@') ? s : `@${s}`;
+}
+
+function isValidHandle(h: string) {
+  return /^@[A-Za-z0-9._-]+$/.test(h);
+}
+
+function buildSavedSearchText(raw: string) {
+  const v = (raw || '').trim();
+  if (!v) return '';
+  const isHandleish = v.startsWith('@') || /^[A-Za-z0-9._-]+$/.test(v);
+  return isHandleish ? normalizeHandle(v) : v;
+}
+
+function formatNumber(n?: number | null) {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return new Intl.NumberFormat('en-IN').format(n);
+}
+
+function formatPercent(x?: number | null) {
+  if (x == null || !Number.isFinite(x)) return '—';
+  return `${(x * 100).toFixed(2)}%`;
+}
+
+function formatBool(b?: boolean | null) {
+  if (b === true) return 'Yes';
+  if (b === false) return 'No';
+  return 'Unknown';
+}
+
+function formatDate(iso?: string | null, timeZone = 'Asia/Kolkata') {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
+function asList<T>(d: any): T[] {
+  return Array.isArray(d) ? d : [];
+}
+
+function getCardId(p: InfluencerProfileDoc) {
+  return p.handleId || p._id || p.channelId || p.handle || Math.random().toString(36).slice(2);
+}
+
+function getSelectId(p: InfluencerProfileDoc) {
+  return p.handleId || '';
+}
+
+function ytVideoUrl(videoId?: string) {
+  if (!videoId) return '';
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+function ytChannelUrl(p: InfluencerProfileDoc) {
+  if (p.handle) return `https://www.youtube.com/${p.handle.replace(/^@/, '@')}`;
+  if (p.channelId) return `https://www.youtube.com/channel/${p.channelId}`;
+  return '';
+}
+
+function toDateInputValue(iso?: string | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseFollowUps(text: string) {
+  const raw = (text || '')
+    .split(/[\n,]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const cleaned: string[] = [];
+  for (const d of raw) {
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) cleaned.push(d);
+  }
+
+  return Array.from(new Set(cleaned));
+}
+
+function splitCsvOrSpace(v: string): string[] {
+  return (v || '')
+    .split(/[,\n]/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function chipText(filters: InfluencerFilters) {
+  const chips: string[] = [];
+
+  if (filters.followersMin || filters.followersMax) {
+    chips.push(
+      `Subscribers: ${filters.followersMin || '0'} - ${filters.followersMax || '∞'}`
+    );
+  }
+
+  const cs = filters.countries?.length
+    ? filters.countries
+    : filters.country
+      ? [filters.country]
+      : [];
+  if (cs.length) chips.push(`Country: ${cs.join(', ')}`);
+
+  const cats = filters.categories?.length
+    ? filters.categories
+    : filters.category
+      ? [filters.category]
+      : [];
+  if (cats.length) chips.push(`Category: ${cats.join(', ')}`);
+
+  return chips;
+}
+
+function topicFromUrl(url: string) {
+  try {
+    const last = (url || '').split('/').pop() || '';
+    return decodeURIComponent(last).replace(/_/g, ' ');
+  } catch {
+    return url;
+  }
+}
+
+function cleanTopicLabel(s: string) {
+  return String(s || '').replace(/\s*\(.*?\)\s*$/, '').trim();
+}
+
+function getTopicNames(p: InfluencerProfileDoc) {
+  const labels = asList<string>(p.topicLabels)
+    .filter(Boolean)
+    .map(cleanTopicLabel);
+
+  if (labels.length) return Array.from(new Set(labels));
+
+  const cats = asList<string>(p.topicCategories)
+    .filter(Boolean)
+    .map(topicFromUrl)
+    .map(cleanTopicLabel);
+
+  return Array.from(new Set(cats));
+}
+
+function sortToApi(mode: SortMode) {
+  if (mode === 'uploads') {
+    return { sortBy: 'uploadFrequencyPerWeek', sortOrder: 'desc' as const };
+  }
+  if (mode === 'created') {
+    return { sortBy: 'createdAt', sortOrder: 'desc' as const };
+  }
+  return { sortBy: 'engagementRateLast15', sortOrder: 'desc' as const };
+}
+
 function countryLabel(code: string) {
   const c = COUNTRY_OPTIONS.find((x) => x.code === code);
   return c ? `${c.code} — ${c.name}` : code;
@@ -392,7 +368,6 @@ function MultiCountrySelect({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const btnRef = useRef<HTMLButtonElement | null>(null);
-
   const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
 
   const filtered = useMemo(() => {
@@ -409,11 +384,7 @@ function MultiCountrySelect({
     const el = btnRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setPos({
-      left: r.left,
-      top: r.bottom + 8, // gap
-      width: r.width,
-    });
+    setPos({ left: r.left, top: r.bottom + 8, width: r.width });
   }
 
   function toggle(code: string) {
@@ -429,8 +400,6 @@ function MultiCountrySelect({
     updatePos();
 
     const onReflow = () => updatePos();
-
-    // capture scroll on any parent container too
     window.addEventListener('scroll', onReflow, true);
     window.addEventListener('resize', onReflow);
 
@@ -449,72 +418,72 @@ function MultiCountrySelect({
   const overlay =
     open && pos && typeof document !== 'undefined'
       ? createPortal(
-          <div className="fixed inset-0 z-[9999]">
-            {/* backdrop (click to close) */}
-            <div className="absolute inset-0 bg-black/10" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 z-[9999]">
+          <div className="absolute inset-0 bg-black/10" onClick={() => setOpen(false)} />
 
-            {/* panel */}
-            <div
-              className="fixed rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
-              style={{
-                left: pos.left,
-                top: pos.top,
-                width: pos.width,
-                maxHeight: 'min(70vh, 520px)',
-              }}
-            >
-              <div className="p-3 border-b border-slate-200">
-                <input
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search"
-                  autoFocus
-                />
-                <div className="mt-2 flex items-center justify-between">
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-slate-700 hover:underline"
-                    onClick={() => onChange([])}
-                  >
-                    Clear
-                  </button>
-                  <span className="text-xs text-slate-500">{value.length} selected</span>
-                </div>
-              </div>
-
-              <div className="max-h-[420px] overflow-auto p-2">
-                {filtered.map((c) => {
-                  const checked = value.includes(c.code);
-                  return (
-                    <label
-                      key={c.code}
-                      className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer"
-                    >
-                      <Checkbox checked={checked} onCheckedChange={() => toggle(c.code)} />
-                      <span className="text-sm text-slate-800">{countryLabel(c.code)}</span>
-                    </label>
-                  );
-                })}
-
-                {!filtered.length ? (
-                  <div className="px-2 py-6 text-center text-sm text-slate-500">No countries found</div>
-                ) : null}
-              </div>
-
-              <div className="p-3 border-t border-slate-200 bg-slate-50">
+          <div
+            className="fixed overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+            style={{
+              left: pos.left,
+              top: pos.top,
+              width: pos.width,
+              maxHeight: 'min(70vh, 520px)',
+            }}
+          >
+            <div className="border-b border-slate-200 p-3">
+              <input
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search country"
+                autoFocus
+              />
+              <div className="mt-2 flex items-center justify-between">
                 <button
                   type="button"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold"
-                  onClick={() => setOpen(false)}
+                  className="text-xs font-semibold text-slate-700 hover:underline"
+                  onClick={() => onChange([])}
                 >
-                  Done
+                  Clear
                 </button>
+                <span className="text-xs text-slate-500">{value.length} selected</span>
               </div>
             </div>
-          </div>,
-          document.body
-        )
+
+            <div className="max-h-[420px] overflow-auto p-2">
+              {filtered.map((c) => {
+                const checked = value.includes(c.code);
+                return (
+                  <label
+                    key={c.code}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50"
+                  >
+                    <Checkbox checked={checked} onCheckedChange={() => toggle(c.code)} />
+                    <span className="text-sm text-slate-800">{countryLabel(c.code)}</span>
+                  </label>
+                );
+              })}
+
+              {!filtered.length ? (
+                <div className="px-2 py-6 text-center text-sm text-slate-500">
+                  No countries found
+                </div>
+              ) : null}
+            </div>
+
+            <div className="border-t border-slate-200 bg-slate-50 p-3">
+              <button
+                type="button"
+                className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                onClick={() => setOpen(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
       : null;
 
   return (
@@ -522,7 +491,7 @@ function MultiCountrySelect({
       <button
         ref={btnRef}
         type="button"
-        className="w-full px-3 py-3 border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between gap-2 hover:bg-slate-50"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-3 text-left hover:bg-slate-50"
         onClick={() => {
           setOpen((v) => {
             const next = !v;
@@ -531,8 +500,10 @@ function MultiCountrySelect({
           });
         }}
       >
-        <span className="text-sm text-slate-800 truncate">{summary}</span>
-        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="truncate text-sm text-slate-800">{summary}</span>
+        <ChevronDown
+          className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
       </button>
 
       {overlay}
@@ -540,7 +511,14 @@ function MultiCountrySelect({
   );
 }
 
+function cleanStr(v: unknown) {
+  if (v === undefined || v === null) return '';
+  return String(v).trim();
+}
+
 export default function Page() {
+  const searchParams = useSearchParams();
+  const campaignId = cleanStr(searchParams.get('id'));
   const [profiles, setProfiles] = useState<InfluencerProfileDoc[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -549,40 +527,35 @@ export default function Page() {
   const [total, setTotal] = useState(0);
   const [hasNext, setHasNext] = useState(false);
 
-  // ✅ selection (keyed by handleId only)
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 
-  // Handle search (sync/open)
   const [query, setQuery] = useState('');
   const [searchHint, setSearchHint] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
-
-  // List state
   const [listLoading, setListLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
-  // ✅ Filters (draft + active)
   const [filtersDraft, setFiltersDraft] = useState<InfluencerFilters>({
-    followersMin: '1000',      // ✅ Subscribers min default
-    followersMax: '1000000',   // ✅ Subscribers max default (1M)
-    countries: [],             // ✅ Country multi-select
-    category: '',
-  });
-  const [filtersActive, setFiltersActive] = useState<InfluencerFilters>({
     followersMin: '1000',
-    followersMax: '1000000',
+    followersMax: '',
     countries: [],
     category: '',
   });
 
-  // ✅ Sorting (draft + active)
-  const [sortModeDraft, setSortModeDraft] = useState<SortMode>('engagement_upload');
-  const [sortModeActive, setSortModeActive] = useState<SortMode>('engagement_upload');
+  const [filtersActive, setFiltersActive] = useState<InfluencerFilters>({
+    followersMin: '1000',
+    followersMax: '',
+    countries: [],
+    category: '',
+  });
 
-  // ✅ CSV download (filtered)
+  const [sortModeDraft, setSortModeDraft] =
+    useState<SortMode>('engagement_upload');
+  const [sortModeActive, setSortModeActive] =
+    useState<SortMode>('engagement_upload');
+
   const [downloadLimit, setDownloadLimit] = useState('500');
-  const [downloadLoading, setDownloadLoading] = useState(false);
 
-  // ✅ Details modal
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [detailsHandleId, setDetailsHandleId] = useState('');
   const [detailsSaving, setDetailsSaving] = useState(false);
@@ -614,17 +587,37 @@ export default function Page() {
     return profilesByHandle.get(normalizedQuery.toLowerCase());
   }, [normalizedQuery, profilesByHandle]);
 
+  const typeSearchRef = useRef<any>(null);
+  const filtersActiveRef = useRef(filtersActive);
+  const sortModeActiveRef = useRef(sortModeActive);
+
+  useEffect(() => {
+    filtersActiveRef.current = filtersActive;
+  }, [filtersActive]);
+
+  useEffect(() => {
+    sortModeActiveRef.current = sortModeActive;
+  }, [sortModeActive]);
+
+  useEffect(() => {
+    return () => {
+      if (typeSearchRef.current) clearTimeout(typeSearchRef.current);
+    };
+  }, []);
+
   function buildFilterPayload(f: InfluencerFilters): InfluencerFilters {
     const out: InfluencerFilters = {};
 
-    if (String(f.followersMin || '').trim()) out.followersMin = String(f.followersMin).trim();
-    if (String(f.followersMax || '').trim()) out.followersMax = String(f.followersMax).trim();
+    if (String(f.followersMin || '').trim()) {
+      out.followersMin = String(f.followersMin).trim();
+    }
+    if (String(f.followersMax || '').trim()) {
+      out.followersMax = String(f.followersMax).trim();
+    }
 
-    // ✅ prefer multi-select countries
     if (Array.isArray(f.countries) && f.countries.length) {
       out.countries = f.countries;
     } else {
-      // legacy fallback
       const cRaw = String(f.country || '').trim();
       if (cRaw) {
         const parts = splitCsvOrSpace(cRaw);
@@ -650,6 +643,30 @@ export default function Page() {
   function clearSelection() {
     setSelectedIds({});
   }
+
+async function addOutreach() {
+  try {
+    if (!campaignId) {
+      await showErr('Campaign id missing.');
+      return;
+    }
+
+    if (!selectedHandleIds.length) {
+      await showErr('Select at least one influencer.');
+      return;
+    }
+
+    await post('/pipeline/bulk-add', {
+      campaignId,
+      youtubeHandleIds: selectedHandleIds,
+    });
+
+    swal({ title: 'Done', text: 'Added to outreach pipeline.', icon: 'success' });
+    clearSelection();
+  } catch (e: any) {
+    await showErr(e?.message || 'Failed to add to outreach.');
+  }
+}
 
   function selectAllOnPage(list: InfluencerProfileDoc[]) {
     const next: Record<string, boolean> = {};
@@ -677,9 +694,15 @@ export default function Page() {
       .map(([hid]) => hid);
   }, [selectedIds]);
 
-  const selectedCount = useMemo(() => selectedHandleIds.length, [selectedHandleIds]);
+  const selectedCount = useMemo(
+    () => selectedHandleIds.length,
+    [selectedHandleIds]
+  );
 
-  const selectableOnPage = useMemo(() => profiles.filter((p) => !!getSelectId(p)), [profiles]);
+  const selectableOnPage = useMemo(
+    () => profiles.filter((p) => !!getSelectId(p)),
+    [profiles]
+  );
 
   const allOnPageSelected = useMemo(() => {
     if (!selectableOnPage.length) return false;
@@ -697,30 +720,11 @@ export default function Page() {
     return false;
   }, [allOnPageSelected, someOnPageSelected]);
 
-  /** ✅ refs for debounced “type search” */
-  const typeSearchRef = useRef<any>(null);
-  const filtersActiveRef = useRef(filtersActive);
-  const sortModeActiveRef = useRef(sortModeActive);
-
-  useEffect(() => {
-    filtersActiveRef.current = filtersActive;
-  }, [filtersActive]);
-
-  useEffect(() => {
-    sortModeActiveRef.current = sortModeActive;
-  }, [sortModeActive]);
-
-  useEffect(() => {
-    return () => {
-      if (typeSearchRef.current) clearTimeout(typeSearchRef.current);
-    };
-  }, []);
-
   async function loadSaved(
     p = 1,
     active: InfluencerFilters = filtersActive,
     searchText = '',
-    sortMode: SortMode = sortModeActive,
+    sortMode: SortMode = sortModeActive
   ) {
     setListLoading(true);
     try {
@@ -740,20 +744,10 @@ export default function Page() {
 
       if (resp?.status !== 'ok') throw new Error('Failed to load saved data');
 
-      const list = sortProfiles(asList<InfluencerProfileDoc>(resp.data), sortMode);
-
-      setProfiles(list);
+      setProfiles(asList<InfluencerProfileDoc>(resp.data));
       setTotal(resp.total || 0);
       setHasNext(!!resp.hasNext);
       setPage(resp.page || p);
-
-      const typed = buildSavedSearchText(searchText || '');
-      if (typed && isValidHandle(typed) && Array.isArray(resp.data) && resp.data.length === 1) {
-        const one = resp.data[0];
-        if ((one.handle || '').toLowerCase() === typed.toLowerCase() && one.handleId) {
-          openAndScrollTo(one.handleId);
-        }
-      }
     } catch (e: any) {
       await showErr(e?.message || 'Failed to load saved data.');
     } finally {
@@ -776,9 +770,13 @@ export default function Page() {
     const maybeHandle = buildSavedSearchText(raw);
     if (isValidHandle(maybeHandle)) {
       const existing = profilesByHandle.get(maybeHandle.toLowerCase());
-      setSearchHint(existing ? 'Already saved. (Auto search is ON) Press Open Profile to scroll to it.' : 'Not saved yet. Press Search & Save.');
+      setSearchHint(
+        existing
+          ? 'Already saved. Press Open Profile to jump to it.'
+          : 'Not saved yet. Press Search & Save.'
+      );
     } else {
-      setSearchHint('Auto search is ON. Keep typing to filter saved influencers.');
+      setSearchHint('Typing filters the saved database list.');
     }
   }, [query, profilesByHandle]);
 
@@ -813,11 +811,22 @@ export default function Page() {
     setDetailsForm({
       email: p.email || '',
       lastSponsor: p.lastSponsor || '',
-      managedByAgency: p.managedByAgency === true ? 'yes' : p.managedByAgency === false ? 'no' : 'unknown',
+      managedByAgency:
+        p.managedByAgency === true
+          ? 'yes'
+          : p.managedByAgency === false
+            ? 'no'
+            : 'unknown',
       topAudienceCountry: p.topAudienceCountry || '',
-      averageAudienceAge: p.averageAudienceAge != null ? String(p.averageAudienceAge) : '',
+      averageAudienceAge:
+        p.averageAudienceAge != null ? String(p.averageAudienceAge) : '',
       lastContactedAt: toDateInputValue(p.lastContactedAt),
-      followUpDates: Array.isArray(p.followUpDates) ? p.followUpDates.map((x) => toDateInputValue(x)).filter(Boolean).join(', ') : '',
+      followUpDates: Array.isArray(p.followUpDates)
+        ? p.followUpDates
+          .map((x) => toDateInputValue(x))
+          .filter(Boolean)
+          .join(', ')
+        : '',
       workingHandle: p.workingHandle || '',
     });
 
@@ -829,7 +838,7 @@ export default function Page() {
 
     const h = normalizeHandle(query);
     if (!h || !isValidHandle(h)) {
-      await showErr('Please enter a valid handle like @MrBeast (or MrBeast).');
+      await showErr('Please enter a valid handle like @MrBeast.');
       return;
     }
 
@@ -841,12 +850,18 @@ export default function Page() {
 
     setSearchLoading(true);
     try {
-      const resp = await post<SyncResponse>('/youtube/handel-data', { handle: h, videosLimit: 15 });
-      if (resp?.status !== 'ok' || !resp?.data?.handleId) throw new Error('Sync failed');
+      const resp = await post<SyncResponse>('/youtube/handel-data', {
+        handle: h,
+        videosLimit: 15,
+      });
+
+      if (resp?.status !== 'ok' || !resp?.data?.handleId) {
+        throw new Error('Sync failed');
+      }
 
       upsertProfile(resp.data);
       openAndScrollTo(resp.data.handleId);
-      setSearchHint('Fetched & saved. Expanded below.');
+      setSearchHint('Fetched and saved. Expanded below.');
       setQuery(h);
     } catch (e: any) {
       await showErr(e?.message || 'Failed to fetch from YouTube.');
@@ -874,7 +889,11 @@ export default function Page() {
     payload.workingHandle = detailsForm.workingHandle.trim() || null;
 
     payload.managedByAgency =
-      detailsForm.managedByAgency === 'yes' ? true : detailsForm.managedByAgency === 'no' ? false : null;
+      detailsForm.managedByAgency === 'yes'
+        ? true
+        : detailsForm.managedByAgency === 'no'
+          ? false
+          : null;
 
     if (detailsForm.averageAudienceAge.trim()) {
       const n = Number(detailsForm.averageAudienceAge.trim());
@@ -887,12 +906,15 @@ export default function Page() {
       payload.averageAudienceAge = null;
     }
 
-    payload.lastContactedAt = detailsForm.lastContactedAt ? detailsForm.lastContactedAt : null;
+    payload.lastContactedAt = detailsForm.lastContactedAt || null;
     payload.followUpDates = parseFollowUps(detailsForm.followUpDates);
 
     setDetailsSaving(true);
     try {
-      const resp = await post<UpdateManualResponse>('/youtube/profile/update-manual', payload);
+      const resp = await post<UpdateManualResponse>(
+        '/youtube/profile/update-manual',
+        payload
+      );
       if (resp?.status !== 'ok') throw new Error('Failed to save details');
       upsertProfile(resp.data);
       setDetailsModalOpen(false);
@@ -910,31 +932,36 @@ export default function Page() {
     const sortNext = sortModeDraft;
     setSortModeActive(sortNext);
 
+    clearSelection();
     loadSaved(1, next, buildSavedSearchText(query), sortNext);
   }
 
   function clearFilters() {
     const empty: InfluencerFilters = {
       followersMin: '1000',
-      followersMax: '1000000',
       countries: [],
       category: '',
     };
+
     setFiltersDraft(empty);
     setFiltersActive(empty);
 
     setSortModeDraft('engagement_upload');
     setSortModeActive('engagement_upload');
 
+    clearSelection();
     loadSaved(1, empty, buildSavedSearchText(query), 'engagement_upload');
   }
 
-  const activeChips = useMemo(() => chipText(buildFilterPayload(filtersActive)), [filtersActive]);
+  const activeChips = useMemo(
+    () => chipText(buildFilterPayload(filtersActive)),
+    [filtersActive]
+  );
 
   async function downloadCsv() {
     const n = parseInt(downloadLimit, 10);
     if (!Number.isFinite(n) || n <= 0) {
-      await showErr('Enter a valid download count (e.g. 500).');
+      await showErr('Enter a valid download count.');
       return;
     }
 
@@ -943,8 +970,14 @@ export default function Page() {
       const filterPayload = buildFilterPayload(filtersActive);
       const apiSort = sortToApi(sortModeActive);
 
-      const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
-      const url = API_BASE ? `${API_BASE}/youtube/export-csv` : `/youtube/export-csv`;
+      const API_BASE = (
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        ''
+      ).replace(/\/$/, '');
+      const url = API_BASE
+        ? `${API_BASE}/youtube/export-csv`
+        : `/youtube/export-csv`;
 
       const resp = await fetch(url, {
         method: 'POST',
@@ -969,14 +1002,7 @@ export default function Page() {
       const cd = resp.headers.get('content-disposition') || '';
       const m = cd.match(/filename="([^"]+)"/i);
       if (m?.[1]) filename = m[1];
-
-      if (!filename) {
-        const ts = new Date();
-        const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(
-          ts.getHours(),
-        ).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}${String(ts.getSeconds()).padStart(2, '0')}`;
-        filename = `influencers_${stamp}.csv`;
-      }
+      if (!filename) filename = 'youtube_influencers.csv';
 
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1003,8 +1029,14 @@ export default function Page() {
     try {
       const apiSort = sortToApi(sortModeActive);
 
-      const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
-      const url = API_BASE ? `${API_BASE}/youtube/export-csv` : `/youtube/export-csv`;
+      const API_BASE = (
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        ''
+      ).replace(/\/$/, '');
+      const url = API_BASE
+        ? `${API_BASE}/youtube/export-csv`
+        : `/youtube/export-csv`;
 
       const resp = await fetch(url, {
         method: 'POST',
@@ -1045,46 +1077,59 @@ export default function Page() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">YouTube Influencer Profiles</h1>
+          <h1 className="mb-2 text-3xl font-bold text-slate-900">
+            YouTube Influencer Profiles
+          </h1>
           <p className="text-slate-600">
-            Saved list loads from DB. Type to search saved influencers. Press Search to fetch &amp; save from YouTube.
+            Search saved influencers instantly. Use Search & Save only if the handle
+            is not already in the database.
           </p>
         </div>
 
-        {/* Search + Filters card */}
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <StatCard title="Saved Profiles" value={formatNumber(total)} />
+          <StatCard title="Selected" value={String(selectedCount)} />
+          <StatCard
+            title="Current Sort"
+            value={
+              sortModeActive === 'engagement_upload'
+                ? 'Engagement + Uploads'
+                : sortModeActive === 'engagement'
+                  ? 'Engagement'
+                  : sortModeActive === 'uploads'
+                    ? 'Uploads / week'
+                    : 'Newest'
+            }
+          />
+        </div>
+
         <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-6 py-5">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Search Influencer</h2>
-                <p className="text-sm text-slate-600 mt-0.5">
-                  ✅ Auto-search saved influencers while typing. Use Search &amp; Save only when not saved.
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Search & Filters
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Filters, sort, export, and manual details are fully aligned now.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex flex-wrap items-center gap-2">
                 {activeChips.length ? (
-                  <>
-                    {activeChips.slice(0, 4).map((c) => (
-                      <span
-                        key={c}
-                        className="text-xs px-3 py-1 rounded-full bg-white text-slate-700 border border-slate-200 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                    {activeChips.length > 4 ? (
-                      <span className="text-xs px-3 py-1 rounded-full bg-slate-900 text-white">
-                        +{activeChips.length - 4}
-                      </span>
-                    ) : null}
-                  </>
+                  activeChips.map((c) => (
+                    <span
+                      key={c}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
+                    >
+                      {c}
+                    </span>
+                  ))
                 ) : (
-                  <span className="text-xs px-3 py-1 rounded-full bg-white text-slate-600 border border-slate-200">
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
                     No active filters
                   </span>
                 )}
@@ -1092,31 +1137,43 @@ export default function Page() {
             </div>
           </div>
 
-          <form onSubmit={onSearch} className="p-6 space-y-5">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+          <form onSubmit={onSearch} className="space-y-5 p-6">
+            <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-12">
               <div className="lg:col-span-7">
-                <label className="text-xs font-medium text-slate-600 mb-2 block">
-                  YouTube Handle (auto-search saved)
+                <label className="mb-2 block text-xs font-medium text-slate-600">
+                  YouTube Handle
                 </label>
                 <div className="relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <input
-                    className="w-full pl-12 pr-4 py-3.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3.5 pl-12 pr-4 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={query}
                     onChange={(e) => {
                       const v = e.target.value;
                       setQuery(v);
 
-                      // ✅ Debounced DB search for saved influencers
-                      if (typeSearchRef.current) clearTimeout(typeSearchRef.current);
+                      if (typeSearchRef.current) {
+                        clearTimeout(typeSearchRef.current);
+                      }
 
                       typeSearchRef.current = setTimeout(() => {
                         const searchText = buildSavedSearchText(v);
                         if (!searchText) {
-                          loadSaved(1, filtersActiveRef.current, '', sortModeActiveRef.current);
+                          loadSaved(
+                            1,
+                            filtersActiveRef.current,
+                            '',
+                            sortModeActiveRef.current
+                          );
                           return;
                         }
-                        loadSaved(1, filtersActiveRef.current, searchText, sortModeActiveRef.current);
+
+                        loadSaved(
+                          1,
+                          filtersActiveRef.current,
+                          searchText,
+                          sortModeActiveRef.current
+                        );
                       }, 350);
                     }}
                     placeholder="e.g. @MrBeast"
@@ -1124,16 +1181,16 @@ export default function Page() {
                 </div>
               </div>
 
-              <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 lg:col-span-5 sm:grid-cols-2">
                 <button
-                  className="w-full h-[52px] px-5 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   type="submit"
                   disabled={searchLoading}
-                  title={existingProfile ? 'Open saved influencer' : 'Fetch from YouTube and save'}
+                  title={existingProfile ? 'Jump to saved influencer' : 'Fetch from YouTube and save'}
                 >
                   {searchLoading ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <RefreshCw className="h-4 w-4 animate-spin" />
                       Searching…
                     </>
                   ) : existingProfile ? (
@@ -1145,46 +1202,59 @@ export default function Page() {
 
                 <button
                   type="button"
-                  className="w-full h-[52px] px-5 rounded-lg font-semibold border border-slate-300 text-slate-800 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  onClick={() => loadSaved(1, filtersActive, buildSavedSearchText(query), sortModeActive)}
+                  className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-5 font-semibold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() =>
+                    loadSaved(
+                      1,
+                      filtersActive,
+                      buildSavedSearchText(query),
+                      sortModeActive
+                    )
+                  }
                   disabled={listLoading}
-                  title="Reload list from database (keeps current typed search)"
                 >
-                  <RefreshCw className={`w-4 h-4 ${listLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw
+                    className={`h-4 w-4 ${listLoading ? 'animate-spin' : ''}`}
+                  />
                   Refresh List
                 </button>
               </div>
             </div>
 
             {searchHint ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex gap-3 items-start">
+              <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="mt-0.5">
-                  <Info className="w-5 h-5 text-slate-500" />
+                  <Info className="h-5 w-5 text-slate-500" />
                 </div>
                 <p className="text-sm text-slate-700">{searchHint}</p>
               </div>
             ) : null}
 
-            {/* Filters */}
-            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-              <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">Filters</div>
-                  <div className="text-xs text-slate-600 mt-0.5">Country is multi-select. Subscribers range default: 1K–1M.</div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Filters</div>
+                    <div className="mt-0.5 text-xs text-slate-600">
+                      Subscribers default to 1K–1M. Country is multi-select.
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    className="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={clearFilters}
                     disabled={listLoading}
                   >
                     Clear
                   </button>
+
                   <button
                     type="button"
-                    className="px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={applyFilters}
                     disabled={listLoading}
                   >
@@ -1194,136 +1264,152 @@ export default function Page() {
               </div>
 
               <div className="p-5">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  {/* Subscribers Min */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                       Subscribers Min
                     </label>
                     <input
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={filtersDraft.followersMin || ''}
-                      onChange={(e) => setFiltersDraft((p) => ({ ...p, followersMin: e.target.value }))}
+                      onChange={(e) =>
+                        setFiltersDraft((p) => ({
+                          ...p,
+                          followersMin: e.target.value,
+                        }))
+                      }
                       placeholder="1000"
                       inputMode="numeric"
-                      min={0}
-                      max={1000000}
                     />
-                    <p className="text-[11px] text-slate-500 mt-2">Default: 1,000</p>
                   </div>
 
-                  {/* Subscribers Max */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                       Subscribers Max
                     </label>
                     <input
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={filtersDraft.followersMax || ''}
-                      onChange={(e) => setFiltersDraft((p) => ({ ...p, followersMax: e.target.value }))}
+                      onChange={(e) =>
+                        setFiltersDraft((p) => ({
+                          ...p,
+                          followersMax: e.target.value,
+                        }))
+                      }
                       placeholder="1000000"
                       inputMode="numeric"
-                      min={0}
-                      max={1000000}
                     />
-                    <p className="text-[11px] text-slate-500 mt-2">Default: 1,000,000</p>
                   </div>
 
-                  {/* Country multi-select */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">
-                      Country (Multi-select)
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                      Country
                     </label>
                     <MultiCountrySelect
                       value={filtersDraft.countries || []}
-                      onChange={(next) => setFiltersDraft((p) => ({ ...p, countries: next }))}
+                      onChange={(next) =>
+                        setFiltersDraft((p) => ({ ...p, countries: next }))
+                      }
                     />
-                    <p className="text-[11px] text-slate-500 mt-2">Pick multiple (US, IN, GB…)</p>
                   </div>
 
-                  {/* Category */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                       Category
                     </label>
                     <input
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={filtersDraft.category || ''}
-                      onChange={(e) => setFiltersDraft((p) => ({ ...p, category: e.target.value }))}
-                      placeholder="Entertainment or Lifestyle"
+                      onChange={(e) =>
+                        setFiltersDraft((p) => ({ ...p, category: e.target.value }))
+                      }
+                      placeholder="Entertainment,Lifestyle"
                     />
-                    <p className="text-[11px] text-slate-500 mt-2">
-                      Multiple: <span className="font-mono">Entertainment,Lifestyle</span>
-                    </p>
                   </div>
 
-                  {/* Sort */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                       Sort
                     </label>
                     <select
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={sortModeDraft}
-                      onChange={(e) => setSortModeDraft(e.target.value as SortMode)}
+                      onChange={(e) =>
+                        setSortModeDraft(e.target.value as SortMode)
+                      }
                     >
-                      <option value="engagement_upload">Engagement ↓ then Uploads/week ↓</option>
+                      <option value="engagement_upload">
+                        Engagement ↓ then Uploads/week ↓
+                      </option>
                       <option value="engagement">Engagement ↓</option>
                       <option value="uploads">Uploads/week ↓</option>
-                      <option value="created">Newest (CreatedAt) ↓</option>
+                      <option value="created">Newest ↓</option>
                     </select>
-                    <p className="text-[11px] text-slate-500 mt-2">Default: Engagement + Uploads/week</p>
                   </div>
                 </div>
 
-                {/* ✅ CSV row */}
-                <div className="mt-5 pt-5 border-t border-slate-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="relative">
-                      <input
-                        className="w-[150px] px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white pr-14"
-                        value={downloadLimit}
-                        onChange={(e) => setDownloadLimit(e.target.value)}
-                        placeholder="500"
-                        inputMode="numeric"
-                        title="How many rows to export"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">rows</span>
+                <div className="mt-5 border-t border-slate-200 pt-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <input
+                          className="w-[150px] rounded-xl border border-slate-300 bg-white px-3 py-3 pr-14 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                          value={downloadLimit}
+                          onChange={(e) => setDownloadLimit(e.target.value)}
+                          placeholder="500"
+                          inputMode="numeric"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                          rows
+                        </span>
+                      </div>
+
+                      {!campaignId && (
+                        <>
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={downloadCsv}
+                            disabled={downloadLoading}
+                          >
+                            <Download className="h-4 w-4" />
+                            {downloadLoading ? 'Downloading…' : 'Download CSV'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={downloadSelectedCsv}
+                            disabled={downloadLoading || selectedCount === 0}
+                          >
+                            <Download className="h-4 w-4" />
+                            Download Selected ({selectedCount})
+                          </button>
+                        </>
+                      )}
+
+                      {selectedCount ? (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                          onClick={clearSelection}
+                          disabled={downloadLoading}
+                        >
+                          Clear Selection
+                        </button>
+                      ) : null}
+
+                      {selectedCount && campaignId ? (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                          onClick={addOutreach}
+                          disabled={downloadLoading}
+                        >
+                          Add to Outreach
+                        </button>
+                      ) : null}
                     </div>
-
-                    <button
-                      type="button"
-                      className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
-                      onClick={downloadCsv}
-                      disabled={downloadLoading}
-                      title="Download CSV with active filters + typed search"
-                    >
-                      <Download className="w-4 h-4" />
-                      {downloadLoading ? 'Downloading…' : 'Download CSV'}
-                    </button>
-
-                    <button
-                      type="button"
-                      className="px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
-                      onClick={downloadSelectedCsv}
-                      disabled={downloadLoading || selectedCount === 0}
-                      title="Download CSV for selected influencers only"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download Selected ({selectedCount})
-                    </button>
-
-                    {selectedCount ? (
-                      <button
-                        type="button"
-                        className="px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold transition-colors"
-                        onClick={clearSelection}
-                        disabled={downloadLoading}
-                        title="Clear selected influencers"
-                      >
-                        Clear Selection
-                      </button>
-                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1331,41 +1417,21 @@ export default function Page() {
           </form>
         </div>
 
-        {/* List */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-3 flex-wrap">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-4">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-slate-600">
                 <b className="text-slate-900">{formatNumber(total)}</b> total
               </span>
               {selectedCount ? (
-                <span className="text-xs px-3 py-1 rounded-full bg-emerald-600 text-white">Selected: {selectedCount}</span>
+                <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs text-white">
+                  Selected: {selectedCount}
+                </span>
               ) : null}
-
-              {activeChips.length ? (
-                <div className="flex flex-wrap gap-2 items-center">
-                  {activeChips.map((c) => (
-                    <span key={c} className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border">
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
-              <span className="text-xs px-3 py-1 rounded-full bg-slate-900 text-white">
-                Sort: {sortModeActive === 'engagement_upload'
-                  ? 'Engagement + Uploads'
-                  : sortModeActive === 'engagement'
-                    ? 'Engagement'
-                    : sortModeActive === 'uploads'
-                      ? 'Uploads/week'
-                      : 'Newest'}
-              </span>
             </div>
           </div>
 
-          {/* Table header */}
-          <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-50 px-6 py-3">
             <div className="grid grid-cols-12 items-center gap-3">
               <div className="col-span-1 flex items-center">
                 <Checkbox
@@ -1378,25 +1444,29 @@ export default function Page() {
               </div>
 
               <div className="col-span-9">
-                <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Handle</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                  Handle
+                </div>
               </div>
 
               <div className="col-span-2 text-right">
-                <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Actions</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                  Actions
+                </div>
               </div>
             </div>
           </div>
 
           {listLoading && profiles.length === 0 ? (
             <div className="px-6 py-12 text-center text-slate-500">
-              <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
+              <RefreshCw className="mx-auto mb-2 h-8 w-8 animate-spin" />
               Loading profiles...
             </div>
           ) : null}
 
           {!listLoading && profiles.length === 0 ? (
             <div className="px-6 py-12 text-center text-slate-500">
-              No matching saved profiles. Type a handle or press Search &amp; Save.
+              No matching saved profiles.
             </div>
           ) : null}
 
@@ -1406,17 +1476,17 @@ export default function Page() {
               const selectId = getSelectId(p);
               const isOpen = !!expanded[cardId];
               const checked = selectId ? !!selectedIds[selectId] : false;
-
-              const thumb = p.thumbnails?.default?.url || p.thumbnails?.medium?.url || p.thumbnails?.high?.url;
+              const thumb =
+                p.thumbnails?.default?.url ||
+                p.thumbnails?.medium?.url ||
+                p.thumbnails?.high?.url;
               const channelUrl = ytChannelUrl(p);
-
               const topics = getTopicNames(p);
 
               return (
-                <div key={cardId} id={`card-${cardId}`} className="hover:bg-slate-50 transition-colors">
+                <div key={cardId} id={`card-${cardId}`} className="transition-colors hover:bg-slate-50">
                   <div className="px-6 py-4">
                     <div className="grid grid-cols-12 items-start gap-3">
-                      {/* checkbox */}
                       <div className="col-span-1 pt-2">
                         <Checkbox
                           checked={checked}
@@ -1428,76 +1498,88 @@ export default function Page() {
                         />
                       </div>
 
-                      {/* handle column */}
                       <div className="col-span-9 min-w-0">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 shrink-0">
-                            {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" /> : null}
+                        <div className="mb-3 flex items-center gap-3">
+                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-200">
+                            {thumb ? (
+                              <img
+                                src={thumb}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : null}
                           </div>
 
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <h3 className="text-lg font-semibold text-slate-900 truncate">{p.handle || '—'}</h3>
+                              <h3 className="truncate text-lg font-semibold text-slate-900">
+                                {p.handle || '—'}
+                              </h3>
                               {p.platform ? (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full border border-slate-300 text-slate-600">
+                                <span className="rounded-full border border-slate-300 px-2 py-0.5 text-[10px] text-slate-600">
                                   {p.platform}
                                 </span>
                               ) : null}
                             </div>
-                            <div className="text-sm text-slate-600 truncate">{p.title || '—'}</div>
-                          </div>
-                        </div>
-
-                        {/* metrics */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-3">
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Country</div>
-                            <div className="text-sm font-medium text-slate-900">{p.country || '—'}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Subscribers</div>
-                            <div className="text-sm font-medium text-slate-900">{formatNumber(p.subscriberCount)}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Avg Views (15)</div>
-                            <div className="text-sm font-medium text-slate-900">{formatNumber(p.avgViewsLast15)}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Engagement</div>
-                            <div className="text-sm font-medium text-slate-900">{formatPercent(p.engagementRateLast15)}</div>
-                          </div>
-                          <div className="hidden lg:block">
-                            <div className="text-xs text-slate-500 mb-1">Uploads/week</div>
-                            <div className="text-sm font-medium text-slate-900">
-                              {p.uploadFrequencyPerWeek != null ? p.uploadFrequencyPerWeek : '—'}
+                            <div className="truncate text-sm text-slate-600">
+                              {p.title || '—'}
                             </div>
                           </div>
-                          <div className="hidden lg:block">
-                            <div className="text-xs text-slate-500 mb-1">Email</div>
-                            <div className="text-sm font-medium text-slate-900 truncate">{p.email || '—'}</div>
-                          </div>
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                        <div className="mb-3 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+                          <Metric label="Country" value={p.country || '—'} />
+                          <Metric
+                            label="Subscribers"
+                            value={formatNumber(p.subscriberCount)}
+                          />
+                          <Metric
+                            label="Avg Views (15)"
+                            value={formatNumber(p.avgViewsLast15)}
+                          />
+                          <Metric
+                            label="Engagement"
+                            value={formatPercent(p.engagementRateLast15)}
+                          />
+                          <Metric
+                            label="Uploads/week"
+                            value={
+                              p.uploadFrequencyPerWeek != null
+                                ? String(p.uploadFrequencyPerWeek)
+                                : '—'
+                            }
+                            className="hidden lg:block"
+                          />
+                          <Metric
+                            label="Email"
+                            value={p.email || '—'}
+                            className="hidden lg:block"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
                           <span>Synced: {formatDate(p.syncedAt)}</span>
-                          {p.lastSponsor ? <span>Last Sponsor: {p.lastSponsor}</span> : null}
-                          {p.managedByAgency != null ? <span>Agency: {formatBool(p.managedByAgency)}</span> : null}
+                          {p.lastSponsor ? (
+                            <span>Last Sponsor: {p.lastSponsor}</span>
+                          ) : null}
+                          {p.managedByAgency != null ? (
+                            <span>Agency: {formatBool(p.managedByAgency)}</span>
+                          ) : null}
                         </div>
 
-                        {/* Topic labels */}
                         {topics.length ? (
                           <div className="mt-3 flex flex-wrap gap-2">
                             {topics.slice(0, 4).map((t) => (
                               <span
                                 key={t}
-                                className="text-[11px] px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
-                                title={t}
+                                className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700"
                               >
                                 {t}
                               </span>
                             ))}
                             {topics.length > 4 ? (
-                              <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-900 text-white">
+                              <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] text-white">
                                 +{topics.length - 4}
                               </span>
                             ) : null}
@@ -1505,60 +1587,71 @@ export default function Page() {
                         ) : null}
                       </div>
 
-                      {/* actions */}
                       <div className="col-span-2 flex items-center justify-end gap-2">
                         {channelUrl ? (
                           <a
                             href={channelUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
-                            title="Open channel"
+                            className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                           >
-                            <ExternalLink className="w-4 h-4" />
+                            <ExternalLink className="h-4 w-4" />
                             Channel
                           </a>
                         ) : null}
 
                         <button
                           type="button"
-                          className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                          className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                           onClick={() => openDetailsModal(p)}
                         >
-                          <Mail className="w-4 h-4" />
-                          Add
+                          <Mail className="h-4 w-4" />
+                          Edit
                         </button>
 
                         <button
                           type="button"
-                          className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                          className="rounded-lg p-2 transition-colors hover:bg-slate-100"
                           onClick={() => toggleExpand(cardId)}
                           aria-expanded={isOpen}
-                          aria-label="Expand"
                         >
-                          <ChevronDown className={`w-5 h-5 text-slate-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                          <ChevronDown
+                            className={`h-5 w-5 text-slate-600 transition-transform ${isOpen ? 'rotate-180' : ''
+                              }`}
+                          />
                         </button>
                       </div>
                     </div>
 
                     {isOpen ? (
-                      <div className="mt-6 pt-6 border-t border-slate-200 space-y-6">
-                        {p.bannerUrl ? (
-                          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                            <img src={p.bannerUrl} alt="" className="w-full h-40 object-cover" loading="lazy" />
-                          </div>
-                        ) : null}
+                      <div className="mt-6 space-y-6 border-t border-slate-200 pt-6">
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                          <div className="bg-slate-50 rounded-xl p-4">
-                            <h4 className="font-semibold text-slate-900 mb-3">Channel Details</h4>
+                        {/* {p.bannerUrl ? (
+                          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                            <img
+                              src={p.bannerUrl}
+                              alt=""
+                              className="h-40 w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        ) : null} */}
+
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                          <div className="rounded-xl bg-slate-50 p-4">
+                            <h4 className="mb-3 font-semibold text-slate-900">
+                              Channel Details
+                            </h4>
                             <div className="space-y-2 text-sm">
                               <Row label="Language" value={p.defaultLanguage || '—'} />
                               <Row label="Channel ID" value={p.channelId || '—'} mono />
                               <Row label="Total Videos" value={formatNumber(p.totalVideoCount)} />
                               <Row label="Total Views" value={formatNumber(p.totalViewCount)} />
                               <Row label="Instagram" value={p.instagramHandle || '—'} />
-                              <Row label="Categories" value={topics.length ? topics.join(', ') : '—'} />
+                              <Row
+                                label="Categories"
+                                value={topics.length ? topics.join(', ') : '—'}
+                              />
                               <Row label="Last upload" value={formatDate(p.lastUploadAt)} />
                               <Row label="Last video" value={p.lastVideoTitle || '—'} />
 
@@ -1570,7 +1663,7 @@ export default function Page() {
                                     rel="noreferrer"
                                     className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
                                   >
-                                    <ExternalLink className="w-4 h-4" />
+                                    <ExternalLink className="h-4 w-4" />
                                     Watch latest video
                                   </a>
                                 </div>
@@ -1578,14 +1671,33 @@ export default function Page() {
                             </div>
                           </div>
 
-                          <div className="bg-slate-50 rounded-xl p-4">
-                            <h4 className="font-semibold text-slate-900 mb-3">Metrics</h4>
+                          <div className="rounded-xl bg-slate-50 p-4">
+                            <h4 className="mb-3 font-semibold text-slate-900">
+                              Metrics
+                            </h4>
                             <div className="space-y-2 text-sm">
                               <Row label="Subscribers" value={formatNumber(p.subscriberCount)} />
                               <Row label="Avg Views (last 15)" value={formatNumber(p.avgViewsLast15)} />
-                              <Row label="Engagement (last 15)" value={formatPercent(p.engagementRateLast15)} />
-                              <Row label="Uploads/week" value={p.uploadFrequencyPerWeek ?? '—'} />
-                              <Row label="Avg days between uploads" value={p.avgDaysBetweenUploads ?? '—'} />
+                              <Row
+                                label="Engagement (last 15)"
+                                value={formatPercent(p.engagementRateLast15)}
+                              />
+                              <Row
+                                label="Uploads/week"
+                                value={
+                                  p.uploadFrequencyPerWeek != null
+                                    ? p.uploadFrequencyPerWeek
+                                    : '—'
+                                }
+                              />
+                              <Row
+                                label="Avg days between uploads"
+                                value={
+                                  p.avgDaysBetweenUploads != null
+                                    ? p.avgDaysBetweenUploads
+                                    : '—'
+                                }
+                              />
                               <Row label="Created" value={formatDate(p.createdAt)} />
                               <Row label="Updated" value={formatDate(p.updatedAt)} />
                               <Row label="Synced" value={formatDate(p.syncedAt)} />
@@ -1600,8 +1712,7 @@ export default function Page() {
             })}
           </div>
 
-          {/* Pagination */}
-          <div className="px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-4">
             <div className="text-sm text-slate-600">
               Page <span className="font-semibold text-slate-900">{page}</span>
               {total ? (
@@ -1614,15 +1725,30 @@ export default function Page() {
 
             <div className="flex gap-2">
               <button
-                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => loadSaved(Math.max(1, page - 1), filtersActive, buildSavedSearchText(query), sortModeActive)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() =>
+                  loadSaved(
+                    Math.max(1, page - 1),
+                    filtersActive,
+                    buildSavedSearchText(query),
+                    sortModeActive
+                  )
+                }
                 disabled={listLoading || page <= 1}
               >
                 Previous
               </button>
+
               <button
-                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => loadSaved(page + 1, filtersActive, buildSavedSearchText(query), sortModeActive)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() =>
+                  loadSaved(
+                    page + 1,
+                    filtersActive,
+                    buildSavedSearchText(query),
+                    sortModeActive
+                  )
+                }
                 disabled={listLoading || !hasNext}
               >
                 Next
@@ -1632,122 +1758,154 @@ export default function Page() {
         </div>
       </div>
 
-      {/* Details Modal */}
       {detailsModalOpen ? (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Add / Update Details</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 p-6">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Add / Update Details
+              </h3>
               <button
                 onClick={() => setDetailsModalOpen(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className="rounded-lg p-2 transition-colors hover:bg-slate-100"
                 aria-label="Close"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="h-5 w-5 text-slate-600" />
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Email Address</label>
+            <div className="space-y-5 p-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field label="Email Address">
                   <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={detailsForm.email}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, email: e.target.value }))}
+                    onChange={(e) =>
+                      setDetailsForm((p) => ({ ...p, email: e.target.value }))
+                    }
                     placeholder="brand@domain.com"
                     type="email"
                   />
-                </div>
+                </Field>
 
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Working Handle</label>
+                <Field label="Working Handle">
                   <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={detailsForm.workingHandle}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, workingHandle: e.target.value }))}
+                    onChange={(e) =>
+                      setDetailsForm((p) => ({
+                        ...p,
+                        workingHandle: e.target.value,
+                      }))
+                    }
                     placeholder="@mrbeast_official"
                   />
-                </div>
+                </Field>
 
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Last Sponsor</label>
+                <Field label="Last Sponsor">
                   <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={detailsForm.lastSponsor}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, lastSponsor: e.target.value }))}
+                    onChange={(e) =>
+                      setDetailsForm((p) => ({
+                        ...p,
+                        lastSponsor: e.target.value,
+                      }))
+                    }
                     placeholder="Brand name"
                   />
-                </div>
+                </Field>
 
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Managed by Agency?</label>
+                <Field label="Managed by Agency?">
                   <select
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={detailsForm.managedByAgency}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, managedByAgency: e.target.value as any }))}
+                    onChange={(e) =>
+                      setDetailsForm((p) => ({
+                        ...p,
+                        managedByAgency: e.target.value as any,
+                      }))
+                    }
                   >
                     <option value="unknown">Unknown</option>
                     <option value="yes">Yes</option>
                     <option value="no">No</option>
                   </select>
-                </div>
+                </Field>
 
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Top Audience Country</label>
+                <Field label="Top Audience Country">
                   <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={detailsForm.topAudienceCountry}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, topAudienceCountry: e.target.value }))}
-                    placeholder="US / IN / UK ..."
+                    onChange={(e) =>
+                      setDetailsForm((p) => ({
+                        ...p,
+                        topAudienceCountry: e.target.value,
+                      }))
+                    }
+                    placeholder="US / IN / UK"
                   />
-                </div>
+                </Field>
 
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Average Audience Age</label>
+                <Field label="Average Audience Age">
                   <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={detailsForm.averageAudienceAge}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, averageAudienceAge: e.target.value }))}
+                    onChange={(e) =>
+                      setDetailsForm((p) => ({
+                        ...p,
+                        averageAudienceAge: e.target.value,
+                      }))
+                    }
                     placeholder="24"
                     inputMode="numeric"
                   />
-                </div>
+                </Field>
 
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Last Contacted Date</label>
+                <Field label="Last Contacted Date">
                   <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={detailsForm.lastContactedAt}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, lastContactedAt: e.target.value }))}
+                    onChange={(e) =>
+                      setDetailsForm((p) => ({
+                        ...p,
+                        lastContactedAt: e.target.value,
+                      }))
+                    }
                     type="date"
                   />
-                </div>
+                </Field>
 
                 <div className="md:col-span-2">
-                  <label className="text-sm text-slate-600 mb-1 block">Follow-up Dates</label>
-                  <textarea
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[90px]"
-                    value={detailsForm.followUpDates}
-                    onChange={(e) => setDetailsForm((p) => ({ ...p, followUpDates: e.target.value }))}
-                    placeholder="2026-02-26, 2026-03-02 (comma or new line separated)"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Tip: Use <span className="font-mono">YYYY-MM-DD</span>. Separate by comma or new line.
-                  </p>
+                  <Field label="Follow-up Dates">
+                    <textarea
+                      className="min-h-[90px] w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                      value={detailsForm.followUpDates}
+                      onChange={(e) =>
+                        setDetailsForm((p) => ({
+                          ...p,
+                          followUpDates: e.target.value,
+                        }))
+                      }
+                      placeholder="2026-02-26, 2026-03-02"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Use <span className="font-mono">YYYY-MM-DD</span>. Separate by comma or new line.
+                    </p>
+                  </Field>
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-3 p-6 border-t border-slate-200">
+            <div className="flex gap-3 border-t border-slate-200 p-6">
               <button
-                className="flex-1 px-4 py-3 border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium rounded-xl transition-colors"
+                className="flex-1 rounded-xl border border-slate-300 px-4 py-3 font-medium text-slate-700 transition-colors hover:bg-slate-50"
                 onClick={() => setDetailsModalOpen(false)}
               >
                 Cancel
               </button>
               <button
-                className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 rounded-xl bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={saveDetails}
                 disabled={detailsSaving}
               >
@@ -1761,12 +1919,67 @@ export default function Page() {
   );
 }
 
-/** Small UI helper for label/value rows */
-function Row({ label, value, mono }: { label: string; value: any; mono?: boolean }) {
+function StatCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </div>
+      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  className = '',
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="mb-1 text-xs text-slate-500">{label}</div>
+      <div className="text-sm font-medium text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm text-slate-600">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: any;
+  mono?: boolean;
+}) {
   return (
     <div className="flex justify-between gap-3">
       <span className="text-slate-600">{label}:</span>
-      <span className={`font-medium text-slate-900 text-right ${mono ? 'font-mono text-xs' : ''}`}>{String(value)}</span>
+      <span
+        className={`text-right font-medium text-slate-900 ${mono ? 'font-mono text-xs' : ''
+          }`}
+      >
+        {String(value)}
+      </span>
     </div>
   );
 }

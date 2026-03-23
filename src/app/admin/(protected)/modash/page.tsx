@@ -3,19 +3,36 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { ChevronDown, ExternalLink, Info, RefreshCw, Search, Download } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import {
+  ChevronDown,
+  ExternalLink,
+  Info,
+  RefreshCw,
+  Search,
+  Download,
+  Filter,
+  X,
+} from 'lucide-react';
 import swal from 'sweetalert';
-import { get } from '@/lib/api';
+import { get, post } from '@/lib/api';
 import { Checkbox } from '@/components/animate-ui/components/radix/checkbox';
 
 const DASH = '--';
 
 type LangObj = { code?: string; name?: string };
 
+type CategoryObj = {
+  categoryId?: string | null;
+  categoryName?: string | null;
+  subcategoryId?: string | null;
+  subcategoryName?: string | null;
+};
+
 type InfluencerDoc = {
   _id?: string;
-  provider?: string; // youtube | instagram | tiktok
-  platform?: string; // sometimes API uses platform
+  provider?: string;
+  platform?: string;
   userId?: string;
 
   fullname?: string;
@@ -25,11 +42,10 @@ type InfluencerDoc = {
   country?: string | null;
   city?: string | null;
   state?: string | null;
-  language?: LangObj | null;
+  language?: LangObj | string | null;
 
   followers?: number | null;
   averageViews?: number | null;
-
   engagements?: number | null;
   engagementRate?: number | null;
 
@@ -45,12 +61,13 @@ type InfluencerDoc = {
   influencerId?: string;
   influencer?: string;
 
-  // ✅ added for category display (backend projection includes it)
+  bio?: string | null;
   category?: string[] | string | null;
+  categories?: Array<CategoryObj | string> | string[] | null;
 };
 
 type ListResponse = {
-  page: number; // 0-indexed
+  page: number;
   limit: number;
   total: number;
   results: InfluencerDoc[];
@@ -59,18 +76,11 @@ type ListResponse = {
 type InfluencerFilters = {
   followersMin?: string;
   followersMax?: string;
-
-  // ✅ UI uses multi-select
   countries?: string[];
-
-  // ✅ keep legacy key for backend compatibility (CSV: "US,IN")
   country?: string;
-
-  provider?: string; // all | youtube | instagram | tiktok
-
-  // ✅ Category filter (comma-separated in UI)
-  category?: string; // "Lifestyle" or "Lifestyle,Tech"
-  categories?: string[]; // optional parsed form
+  provider?: string;
+  category?: string;
+  categories?: string[];
 };
 
 type Platform = 'youtube' | 'instagram' | 'tiktok';
@@ -81,97 +91,6 @@ const PLATFORM_OPTIONS: { key: Platform; label: string }[] = [
   { key: 'tiktok', label: 'TikTok' },
 ];
 
-function showErr(message: string) {
-  return swal({
-    title: 'Error',
-    text: message || 'Something went wrong.',
-    icon: 'error',
-  });
-}
-
-function formatNumber(n?: number | null) {
-  if (n == null || !Number.isFinite(n)) return DASH;
-  return new Intl.NumberFormat('en-IN').format(n);
-}
-
-function formatPercent(x?: number | null) {
-  if (x == null || !Number.isFinite(x)) return DASH;
-  return `${(x * 100).toFixed(2)}%`;
-}
-
-function formatBool(b?: boolean | null) {
-  if (b === true) return 'Yes';
-  if (b === false) return 'No';
-  return DASH;
-}
-
-function formatDate(iso?: string | null, timeZone = 'Asia/Kolkata') {
-  if (!iso) return DASH;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return DASH;
-
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone,
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(d);
-}
-
-function splitCsv(v: string): string[] {
-  return (v || '')
-    .split(/[,\n]/g)
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-
-function countriesToCsv(f: InfluencerFilters) {
-  if (Array.isArray(f.countries) && f.countries.length) return f.countries.join(',');
-  const legacy = String(f.country || '').trim();
-  return legacy;
-}
-
-function categoriesFromFilter(f: InfluencerFilters) {
-  const arr = Array.isArray(f.categories) && f.categories.length ? f.categories : splitCsv(String(f.category || ''));
-  return Array.from(new Set(arr.map((x) => x.trim()).filter(Boolean)));
-}
-
-function chipText(filters: InfluencerFilters) {
-  const chips: string[] = [];
-  if (filters.provider && filters.provider !== 'all') chips.push(`Provider: ${filters.provider}`);
-  if (filters.followersMin || filters.followersMax) {
-    chips.push(`Followers: ${filters.followersMin || '0'} - ${filters.followersMax || '∞'}`);
-  }
-
-  const cs = Array.isArray(filters.countries) && filters.countries.length ? filters.countries : splitCsv(filters.country || '');
-  if (cs.length) chips.push(`Country: ${cs.join(', ')}`);
-
-  const cats = categoriesFromFilter(filters);
-  if (cats.length) chips.push(`Category: ${cats.join(', ')}`);
-
-  return chips;
-}
-
-/**
- * ✅ USE userId as primary key.
- * Fallbacks ONLY if userId missing.
- */
-function getRowKey(p: InfluencerDoc) {
-  const base = String(p.userId || '').trim();
-  if (base) return base;
-
-  const fallback = String(p._id || p.influencerId || p.handle || p.username || p.url || '').trim();
-  return fallback || 'missing_id';
-}
-
-/** safe dom id (no special chars) */
-function toDomId(key: string) {
-  return `row_${String(key).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-}
-
-/** --- Country list for dropdown (common) --- */
 const COUNTRY_OPTIONS: Array<{ code: string; name: string }> = [
   { code: 'US', name: 'United States' },
   { code: 'IN', name: 'India' },
@@ -230,9 +149,152 @@ const COUNTRY_OPTIONS: Array<{ code: string; name: string }> = [
   { code: 'NP', name: 'Nepal' },
 ];
 
+function cleanStr(v: unknown) {
+  if (v === undefined || v === null) return '';
+  return String(v).trim();
+}
+
+function showErr(message: string) {
+  return swal({
+    title: 'Error',
+    text: message || 'Something went wrong.',
+    icon: 'error',
+  });
+}
+
+function formatNumber(n?: number | null) {
+  if (n == null || !Number.isFinite(n)) return DASH;
+  return new Intl.NumberFormat('en-IN').format(n);
+}
+
+function formatPercent(x?: number | null) {
+  if (x == null || !Number.isFinite(x)) return DASH;
+  return `${(x * 100).toFixed(2)}%`;
+}
+
+function formatBool(b?: boolean | null) {
+  if (b === true) return 'Yes';
+  if (b === false) return 'No';
+  return DASH;
+}
+
+function formatDate(iso?: string | null, timeZone = 'Asia/Kolkata') {
+  if (!iso) return DASH;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return DASH;
+
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
+function splitCsv(v: string): string[] {
+  return (v || '')
+    .split(/[,\n]/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
 function countryLabel(code: string) {
   const c = COUNTRY_OPTIONS.find((x) => x.code === code);
   return c ? `${c.code} — ${c.name}` : code;
+}
+
+function countryCodeToName(codeOrName: string) {
+  const normalized = cleanStr(codeOrName).toUpperCase();
+  const found = COUNTRY_OPTIONS.find((x) => x.code === normalized);
+  return found ? found.name : cleanStr(codeOrName);
+}
+
+function countriesToCsv(f: InfluencerFilters) {
+  if (Array.isArray(f.countries) && f.countries.length) {
+    return f.countries.map(countryCodeToName).join(',');
+  }
+  return cleanStr(f.country || '');
+}
+
+function categoriesFromFilter(f: InfluencerFilters) {
+  const arr =
+    Array.isArray(f.categories) && f.categories.length
+      ? f.categories
+      : splitCsv(String(f.category || ''));
+
+  return Array.from(new Set(arr.map((x) => x.trim()).filter(Boolean)));
+}
+
+function chipText(filters: InfluencerFilters) {
+  const chips: string[] = [];
+
+  if (filters.provider && filters.provider !== 'all') {
+    chips.push(`Provider: ${filters.provider}`);
+  }
+
+  if (filters.followersMin || filters.followersMax) {
+    chips.push(
+      `Followers: ${filters.followersMin || '0'} - ${filters.followersMax || '∞'}`
+    );
+  }
+
+  const cs =
+    Array.isArray(filters.countries) && filters.countries.length
+      ? filters.countries.map(countryCodeToName)
+      : splitCsv(filters.country || '');
+
+  if (cs.length) chips.push(`Country: ${cs.join(', ')}`);
+
+  const cats = categoriesFromFilter(filters);
+  if (cats.length) chips.push(`Category: ${cats.join(', ')}`);
+
+  return chips;
+}
+
+function getCategoryNames(doc: InfluencerDoc) {
+  const out = new Set<string>();
+
+  const push = (v?: string | null) => {
+    const s = cleanStr(v);
+    if (s) out.add(s);
+  };
+
+  if (Array.isArray(doc.category)) {
+    doc.category.forEach((x) => push(String(x)));
+  } else {
+    push(doc.category as string);
+  }
+
+  if (Array.isArray(doc.categories)) {
+    for (const item of doc.categories) {
+      if (!item) continue;
+      if (typeof item === 'string') {
+        push(item);
+      } else {
+        push(item.categoryName || null);
+        push(item.subcategoryName || null);
+      }
+    }
+  }
+
+  return Array.from(out);
+}
+
+function getRowKey(p: InfluencerDoc) {
+  const platform = cleanStr(p.provider || p.platform || 'unknown').toLowerCase();
+  const userId = cleanStr(p.userId);
+  if (userId) return `${platform}:${userId}`;
+
+  const fallback = cleanStr(
+    p._id || p.influencerId || p.handle || p.username || p.url || 'missing_id'
+  );
+  return `${platform}:${fallback}`;
+}
+
+function toDomId(key: string) {
+  return `row_${String(key).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 }
 
 function MultiCountrySelect({
@@ -250,7 +312,10 @@ function MultiCountrySelect({
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return COUNTRY_OPTIONS;
-    return COUNTRY_OPTIONS.filter((c) => c.code.toLowerCase().includes(s) || c.name.toLowerCase().includes(s));
+    return COUNTRY_OPTIONS.filter(
+      (c) =>
+        c.code.toLowerCase().includes(s) || c.name.toLowerCase().includes(s)
+    );
   }, [q]);
 
   const summary = value?.length ? value.join(', ') : 'All';
@@ -293,56 +358,82 @@ function MultiCountrySelect({
   const overlay =
     open && pos && typeof document !== 'undefined'
       ? createPortal(
-          <div className="fixed inset-0 z-[9999]">
-            <div className="absolute inset-0 bg-black/10" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 z-[9999]">
+          <div
+            className="absolute inset-0 bg-black/10"
+            onClick={() => setOpen(false)}
+          />
 
-            <div
-              className="fixed rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
-              style={{ left: pos.left, top: pos.top, width: pos.width, maxHeight: 'min(70vh, 520px)' }}
-            >
-              <div className="p-3 border-b border-slate-200">
-                <input
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search"
-                  autoFocus
-                />
-                <div className="mt-2 flex items-center justify-between">
-                  <button type="button" className="text-xs font-semibold text-slate-700 hover:underline" onClick={() => onChange([])}>
-                    Clear
-                  </button>
-                  <span className="text-xs text-slate-500">{value.length} selected</span>
-                </div>
-              </div>
-
-              <div className="max-h-[420px] overflow-auto p-2">
-                {filtered.map((c) => {
-                  const checked = value.includes(c.code);
-                  return (
-                    <label key={c.code} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer">
-                      <Checkbox checked={checked} onCheckedChange={() => toggle(c.code)} />
-                      <span className="text-sm text-slate-800">{countryLabel(c.code)}</span>
-                    </label>
-                  );
-                })}
-
-                {!filtered.length ? <div className="px-2 py-6 text-center text-sm text-slate-500">No countries found</div> : null}
-              </div>
-
-              <div className="p-3 border-t border-slate-200 bg-slate-50">
+          <div
+            className="fixed overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            style={{
+              left: pos.left,
+              top: pos.top,
+              width: pos.width,
+              maxHeight: 'min(70vh, 520px)',
+            }}
+          >
+            <div className="border-b border-slate-200 p-3">
+              <input
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search country"
+                autoFocus
+              />
+              <div className="mt-2 flex items-center justify-between">
                 <button
                   type="button"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold"
-                  onClick={() => setOpen(false)}
+                  className="text-xs font-semibold text-slate-700 hover:underline"
+                  onClick={() => onChange([])}
                 >
-                  Done
+                  Clear
                 </button>
+                <span className="text-xs text-slate-500">
+                  {value.length} selected
+                </span>
               </div>
             </div>
-          </div>,
-          document.body
-        )
+
+            <div className="max-h-[420px] overflow-auto p-2">
+              {filtered.map((c) => {
+                const checked = value.includes(c.code);
+                return (
+                  <label
+                    key={c.code}
+                    className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-2 hover:bg-slate-50"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggle(c.code)}
+                    />
+                    <span className="text-sm text-slate-800">
+                      {countryLabel(c.code)}
+                    </span>
+                  </label>
+                );
+              })}
+
+              {!filtered.length ? (
+                <div className="px-2 py-6 text-center text-sm text-slate-500">
+                  No countries found
+                </div>
+              ) : null}
+            </div>
+
+            <div className="border-t border-slate-200 bg-slate-50 p-3">
+              <button
+                type="button"
+                className="w-full rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                onClick={() => setOpen(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
       : null;
 
   return (
@@ -350,7 +441,7 @@ function MultiCountrySelect({
       <button
         ref={btnRef}
         type="button"
-        className="w-full px-3 py-3 border border-slate-300 rounded-xl bg-white text-left flex items-center justify-between gap-2 hover:bg-slate-50"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-3 text-left hover:bg-slate-50"
         onClick={() => {
           setOpen((v) => {
             const next = !v;
@@ -359,8 +450,11 @@ function MultiCountrySelect({
           });
         }}
       >
-        <span className="text-sm text-slate-800 truncate">{summary}</span>
-        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="truncate text-sm text-slate-800">{summary}</span>
+        <ChevronDown
+          className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''
+            }`}
+        />
       </button>
 
       {overlay}
@@ -369,46 +463,38 @@ function MultiCountrySelect({
 }
 
 export default function Page() {
+  const searchParams = useSearchParams();
+  const campaignId = cleanStr(searchParams.get('id'));
+
   const SAVED_ENDPOINT = '/modash/saved';
   const USERS_ENDPOINT = '/modash/users';
   const EXPORT_ENDPOINT = '/modash/export-csv';
 
   const [items, setItems] = useState<InfluencerDoc[]>([]);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
   const [usersItems, setUsersItems] = useState<InfluencerDoc[]>([]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [view, setView] = useState<'saved' | 'users'>('saved');
 
-  // paging
-  const [page, setPage] = useState(1); // UI is 1-indexed
+  const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [total, setTotal] = useState(0);
   const [hasNext, setHasNext] = useState(false);
 
-  // search
   const [query, setQuery] = useState('');
-  const [searchHint, setSearchHint] = useState('');
   const [listLoading, setListLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [downloadLimit, setDownloadLimit] = useState('');
 
-  // platform multi-select
   const [searchPlatforms, setSearchPlatforms] = useState<Record<Platform, boolean>>({
     youtube: true,
     instagram: true,
     tiktok: true,
   });
 
-  // ✅ selection keyed by rowKey (userId/fallback)
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
-
-  // ✅ store modash _id for exporting selected
   const [selectedMeta, setSelectedMeta] = useState<Record<string, { modashId?: string }>>({});
 
-  // ✅ CSV download
-  const [downloadLimit, setDownloadLimit] = useState('');
-  const [downloadLoading, setDownloadLoading] = useState(false);
-
-  // ✅ filters (draft + active)
   const [filtersDraft, setFiltersDraft] = useState<InfluencerFilters>({
     provider: 'all',
     followersMin: '',
@@ -425,21 +511,15 @@ export default function Page() {
     category: '',
   });
 
-  const activeChips = useMemo(() => chipText(filtersActive), [filtersActive]);
-
   const selectedPlatformKeys = useMemo(() => {
     return PLATFORM_OPTIONS.filter((p) => !!searchPlatforms[p.key]).map((p) => p.key);
   }, [searchPlatforms]);
 
-  const platformChip = useMemo(() => {
-    if (selectedPlatformKeys.length === 0) return 'Platforms: none';
-    if (selectedPlatformKeys.length === 3) return 'Platforms: All';
-    return `Platforms: ${selectedPlatformKeys.join(', ')}`;
-  }, [selectedPlatformKeys]);
+  const selectedCount = useMemo(
+    () => Object.values(selectedIds).filter(Boolean).length,
+    [selectedIds]
+  );
 
-  const selectedCount = useMemo(() => Object.values(selectedIds).filter(Boolean).length, [selectedIds]);
-
-  // ✅ selected modash ids (only those we actually have _id for)
   const selectedModashIds = useMemo(() => {
     return Object.entries(selectedIds)
       .filter(([, v]) => v)
@@ -447,12 +527,21 @@ export default function Page() {
       .filter(Boolean) as string[];
   }, [selectedIds, selectedMeta]);
 
-  // ✅ map handle -> rowKey (for jump)
+  const activeChips = useMemo(() => chipText(filtersActive), [filtersActive]);
+
+  const platformChip = useMemo(() => {
+    if (selectedPlatformKeys.length === 0) return 'Global search: none';
+    if (selectedPlatformKeys.length === 3) return 'Global search: all platforms';
+    return `Global search: ${selectedPlatformKeys.join(', ')}`;
+  }, [selectedPlatformKeys]);
+
+  const currentItems = view === 'saved' ? items : usersItems;
+
   const itemsByHandle = useMemo(() => {
     const map = new Map<string, { key: string; doc: InfluencerDoc }>();
     for (const x of items) {
-      const h = (x.handle || x.username || '').toLowerCase().trim();
-      if (h) map.set(h, { key: getRowKey(x), doc: x });
+      const h = cleanStr(x.handle || x.username).toLowerCase();
+      if (h) map.set(h.replace(/^@/, ''), { key: getRowKey(x), doc: x });
     }
     return map;
   }, [items]);
@@ -466,10 +555,9 @@ export default function Page() {
     setTimeout(() => {
       const el = document.getElementById(toDomId(rowKey));
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 60);
+    }, 80);
   }
 
-  // ✅ updated selection to store modashId when available
   function toggleSelect(rowKey: string, checked: boolean, modashId?: string) {
     setSelectedIds((prev) => ({ ...prev, [rowKey]: checked }));
 
@@ -488,6 +576,56 @@ export default function Page() {
     setSelectedIds({});
     setSelectedMeta({});
   }
+
+async function addOutreach() {
+  try {
+    if (!campaignId) {
+      await showErr('Campaign id missing.');
+      return;
+    }
+
+    const selectedRows = currentItems.filter((it) => selectedIds[getRowKey(it)]);
+
+    const modashIds = selectedRows
+      .map((x) => x._id)
+      .filter(Boolean);
+
+    const rawUsers = selectedRows
+      .filter((x) => !x._id)
+      .map((x) => ({
+        sourceRefId: x.userId || x.handle || x.username,
+        platform: x.platform || x.provider,
+        fullname: x.fullname,
+        username: x.username,
+        handle: x.handle,
+        userId: x.userId,
+        followers: x.followers,
+        url: x.url,
+        picture: x.picture,
+        categories: getCategoryNames(x),
+        bio: x.bio,
+        country: x.country,
+        state: x.state,
+        city: x.city,
+        language:
+          typeof x.language === 'string'
+            ? x.language
+            : x.language?.name || x.language?.code,
+        engagementRate: x.engagementRate,
+      }));
+
+    await post('/pipeline/bulk-add', {
+      campaignId,
+      modashIds,
+      rawUsers,
+    });
+
+    swal({ title: 'Done', text: 'Added to outreach pipeline.', icon: 'success' });
+    clearSelection();
+  } catch (e: any) {
+    await showErr(e?.message || 'Failed to add to outreach.');
+  }
+}
 
   function selectAllOnPage(list: InfluencerDoc[]) {
     const nextIds: Record<string, boolean> = {};
@@ -517,6 +655,19 @@ export default function Page() {
     });
   }
 
+  function getEffectiveSearchPlatforms() {
+    const checked = selectedPlatformKeys;
+
+    if (!checked.length) return [];
+
+    const provider = cleanStr(filtersActive.provider).toLowerCase();
+    if (provider && provider !== 'all') {
+      return checked.includes(provider as Platform) ? [provider as Platform] : [provider as Platform];
+    }
+
+    return checked;
+  }
+
   function buildSavedParams(pUI: number, f: InfluencerFilters, q: string) {
     const params: Record<string, any> = {
       page: Math.max(0, pUI - 1),
@@ -525,43 +676,72 @@ export default function Page() {
       dir: 'desc',
     };
 
-    const qClean = String(q || '').trim();
+    const qClean = cleanStr(q);
     if (qClean) params.q = qClean;
 
-    if (selectedPlatformKeys.length === 1) params.platform = selectedPlatformKeys[0];
-    else if (selectedPlatformKeys.length > 1) params.platforms = selectedPlatformKeys.join(',');
+    if (f.provider && f.provider !== 'all') {
+      params.provider = f.provider;
+    }
 
-    if (f.provider && f.provider !== 'all') params.provider = f.provider;
-
-    if (String(f.followersMin || '').trim()) params.minFollowers = String(f.followersMin).trim();
-    if (String(f.followersMax || '').trim()) params.maxFollowers = String(f.followersMax).trim();
+    if (cleanStr(f.followersMin)) params.minFollowers = cleanStr(f.followersMin);
+    if (cleanStr(f.followersMax)) params.maxFollowers = cleanStr(f.followersMax);
 
     const countryCsv = countriesToCsv(f);
     if (countryCsv) params.country = countryCsv;
 
-    // ✅ Category (backend supports: category OR categories; it splits by comma)
     const cats = categoriesFromFilter(f);
     if (cats.length) params.category = cats.join(',');
 
     return params;
   }
 
-  function buildUsersParams(pUI: number, q: string) {
+  function buildUsersParams(pUI: number, q: string, f: InfluencerFilters) {
     const params: Record<string, any> = {
       page: Math.max(0, pUI - 1),
       limit,
     };
 
-    const qClean = String(q || '').trim();
+    const qClean = cleanStr(q);
     if (qClean) params.q = qClean;
 
-    if (selectedPlatformKeys.length === 1) params.platform = selectedPlatformKeys[0];
-    else if (selectedPlatformKeys.length > 1) params.platforms = selectedPlatformKeys.join(',');
+    const effectivePlatforms = getEffectiveSearchPlatforms();
+    if (effectivePlatforms.length === 1) {
+      params.platform = effectivePlatforms[0];
+    } else if (effectivePlatforms.length > 1) {
+      params.platforms = effectivePlatforms.join(',');
+    }
+
+    if (f.provider && f.provider !== 'all') {
+      params.provider = f.provider;
+    }
+
+    if (cleanStr(f.followersMin)) params.minFollowers = cleanStr(f.followersMin);
+    if (cleanStr(f.followersMax)) params.maxFollowers = cleanStr(f.followersMax);
+
+    const countryCsv = countriesToCsv(f);
+    if (countryCsv) params.country = countryCsv;
+
+    const cats = categoriesFromFilter(f);
+    if (cats.length) params.category = cats.join(',');
 
     return params;
   }
 
-  async function loadSaved(pUI = 1, f: InfluencerFilters = filtersActive, q = '') {
+  function updatePaging(resp: ListResponse, fallbackLength = 0) {
+    const serverPage = Number(resp?.page ?? 0);
+    const serverLimit = Number(resp?.limit ?? limit);
+    const serverTotal = Number(resp?.total ?? fallbackLength);
+
+    setPage(serverPage + 1);
+    setHasNext((serverPage + 1) * serverLimit < serverTotal);
+    setTotal(serverTotal);
+  }
+
+  async function loadSaved(
+    pUI = 1,
+    f: InfluencerFilters = filtersActive,
+    q = ''
+  ) {
     setListLoading(true);
     try {
       const resp = await get<ListResponse>(SAVED_ENDPOINT, buildSavedParams(pUI, f, q));
@@ -571,14 +751,7 @@ export default function Page() {
 
       const results = Array.isArray(resp?.results) ? resp.results : [];
       setItems(results);
-      setTotal(resp?.total || 0);
-
-      const serverPage = Number(resp?.page ?? 0);
-      const serverLimit = Number(resp?.limit ?? limit);
-      const serverTotal = Number(resp?.total ?? 0);
-
-      setPage(serverPage + 1);
-      setHasNext((serverPage + 1) * serverLimit < serverTotal);
+      updatePaging(resp, results.length);
     } catch (e: any) {
       await showErr(e?.message || 'Failed to load saved influencers.');
     } finally {
@@ -586,24 +759,19 @@ export default function Page() {
     }
   }
 
-  async function loadUsers(pUI = 1, q = '') {
+  async function loadUsers(
+    pUI = 1,
+    q = '',
+    f: InfluencerFilters = filtersActive
+  ) {
     setListLoading(true);
     try {
-      const resp = await get<ListResponse>(USERS_ENDPOINT, buildUsersParams(pUI, q));
+      const resp = await get<ListResponse>(USERS_ENDPOINT, buildUsersParams(pUI, q, f));
 
       setView('users');
-
       const results = Array.isArray(resp?.results) ? resp.results : [];
       setUsersItems(results);
-
-      setTotal(resp?.total || results.length || 0);
-
-      const serverPage = Number(resp?.page ?? 0);
-      const serverLimit = Number(resp?.limit ?? limit);
-      const serverTotal = Number(resp?.total ?? results.length ?? 0);
-
-      setPage(serverPage + 1);
-      setHasNext((serverPage + 1) * serverLimit < serverTotal);
+      updatePaging(resp, results.length);
     } catch (e: any) {
       await showErr(e?.message || 'Failed to load users.');
     } finally {
@@ -611,48 +779,7 @@ export default function Page() {
     }
   }
 
-  // initial load
-  useEffect(() => {
-    loadSaved(1, filtersActive, '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // hint (optional)
-  useEffect(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      setSearchHint('');
-      return;
-    }
-  }, [query, itemsByHandle]);
-
-  // type search (debounced) => saved only
-  const didMount = useRef(false);
-  useEffect(() => {
-    if (!didMount.current) {
-      didMount.current = true;
-      return;
-    }
-    if (view !== 'saved') return;
-    if (selectedPlatformKeys.length === 0) return;
-
-    const q = query.trim();
-
-    if (!q) {
-      loadSaved(1, filtersActive, '');
-      return;
-    }
-
-    const t = setTimeout(() => {
-      loadSaved(1, filtersActive, q);
-    }, 350);
-
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, filtersActive, selectedPlatformKeys.join('|'), view]);
-
   function applyFilters() {
-    // normalize categories once (optional)
     const cats = categoriesFromFilter(filtersDraft);
     const next: InfluencerFilters = {
       ...filtersDraft,
@@ -660,6 +787,7 @@ export default function Page() {
     };
 
     setFiltersActive(next);
+    clearSelection();
     loadSaved(1, next, query.trim());
   }
 
@@ -673,26 +801,27 @@ export default function Page() {
       category: '',
       categories: [],
     };
+
     setFiltersDraft(empty);
     setFiltersActive(empty);
+    clearSelection();
     loadSaved(1, empty, query.trim());
   }
 
   async function onSearch(e: React.FormEvent) {
     e.preventDefault();
 
-    if (selectedPlatformKeys.length === 0) {
-      await showErr('Select at least one platform.');
-      return;
-    }
-
-    const q = query.trim();
+    const q = cleanStr(query).replace(/^@/, '');
     if (!q) {
       await showErr('Please enter a handle/username to search.');
       return;
     }
 
-    // quick jump if already loaded
+    if (!selectedPlatformKeys.length) {
+      await showErr('Select at least one platform for global search.');
+      return;
+    }
+
     const existing = itemsByHandle.get(q.toLowerCase());
     if (existing?.key) {
       setView('saved');
@@ -702,30 +831,25 @@ export default function Page() {
 
     setSearchLoading(true);
     try {
-      // 1) Search SAVED first
-      const savedResp = await get<ListResponse>(SAVED_ENDPOINT, buildSavedParams(1, filtersActive, q));
-      const savedResults = Array.isArray(savedResp?.results) ? savedResp.results : [];
+      const savedResp = await get<ListResponse>(
+        SAVED_ENDPOINT,
+        buildSavedParams(1, filtersActive, q)
+      );
+
+      const savedResults = Array.isArray(savedResp?.results)
+        ? savedResp.results
+        : [];
 
       if (savedResults.length) {
         setView('saved');
         setUsersItems([]);
         setItems(savedResults);
-
-        setTotal(savedResp?.total || savedResults.length);
-
-        const serverPage = Number(savedResp?.page ?? 0);
-        const serverLimit = Number(savedResp?.limit ?? limit);
-        const serverTotal = Number(savedResp?.total ?? savedResults.length);
-
-        setPage(serverPage + 1);
-        setHasNext((serverPage + 1) * serverLimit < serverTotal);
-
+        updatePaging(savedResp, savedResults.length);
         openAndScrollTo(getRowKey(savedResults[0]));
         return;
       }
 
-      // 2) fallback to USERS
-      await loadUsers(1, q);
+      await loadUsers(1, q, filtersActive);
     } catch (e: any) {
       await showErr(e?.message || 'Search failed.');
     } finally {
@@ -733,10 +857,36 @@ export default function Page() {
     }
   }
 
-  const currentItems = view === 'saved' ? items : usersItems;
+  useEffect(() => {
+    loadSaved(1, filtersActive, '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const didMount = useRef(false);
+  useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      return;
+    }
+
+    if (view !== 'saved') return;
+
+    const q = query.trim();
+
+    const t = setTimeout(() => {
+      loadSaved(1, filtersActive, q);
+    }, 350);
+
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, filtersActive, view]);
 
   function getApiUrl(path: string) {
-    const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+    const API_BASE = (
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      ''
+    ).replace(/\/$/, '');
     return API_BASE ? `${API_BASE}${path}` : path;
   }
 
@@ -764,21 +914,23 @@ export default function Page() {
         dir: 'desc',
       };
 
-      // ✅ Prefer provider dropdown. If provider=all and exactly 1 platform selected -> use that.
-      const providerDrop = String(filtersActive.provider || 'all').toLowerCase();
-      if (providerDrop && providerDrop !== 'all') payload.provider = providerDrop;
-      else if (selectedPlatformKeys.length === 1) payload.provider = selectedPlatformKeys[0];
+      if (filtersActive.provider && filtersActive.provider !== 'all') {
+        payload.provider = filtersActive.provider;
+      }
 
-      if (String(filtersActive.followersMin || '').trim()) payload.minFollowers = Number(String(filtersActive.followersMin).trim());
-      if (String(filtersActive.followersMax || '').trim()) payload.maxFollowers = Number(String(filtersActive.followersMax).trim());
+      if (cleanStr(filtersActive.followersMin)) {
+        payload.minFollowers = cleanStr(filtersActive.followersMin);
+      }
+      if (cleanStr(filtersActive.followersMax)) {
+        payload.maxFollowers = cleanStr(filtersActive.followersMax);
+      }
 
-      const qClean = String(query || '').trim();
+      const qClean = cleanStr(query);
       if (qClean) payload.search = qClean;
 
       const countryCsv = countriesToCsv(filtersActive);
       if (countryCsv) payload.country = countryCsv;
 
-      // ✅ Category export (backend splits comma string)
       const cats = categoriesFromFilter(filtersActive);
       if (cats.length) payload.category = cats.join(',');
 
@@ -869,50 +1021,93 @@ export default function Page() {
     }
   }
 
+  function buildMediaKitHref(p: InfluencerDoc) {
+    const userId = cleanStr(p.userId);
+    if (!userId) return '#';
+
+    const qs = new URLSearchParams();
+    qs.set(
+      'platform',
+      cleanStr(p.platform || p.provider || 'youtube').toLowerCase()
+    );
+
+    const handle = cleanStr(p.handle || p.username);
+    if (handle) qs.set('handle', handle);
+
+    if (campaignId) qs.set('campaignId', campaignId);
+
+    return `/mediakit/${encodeURIComponent(userId)}?${qs.toString()}`;
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">{view === 'saved' ? 'Modash Influencers' : 'Users Results'}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+              {view === 'saved' ? 'Modash Influencers' : 'Users Results'}
+            </h1>
+          </div>
+
+          <p className="mt-2 text-sm text-slate-600">
+            Cleaner filtering, better search flow, and stable selection/export.
+          </p>
         </div>
 
-        {/* Search + Filters */}
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <StatCard
+            title="Current View"
+            value={view === 'saved' ? 'Saved Results' : 'Global Users'}
+          />
+          <StatCard title="Total Rows" value={formatNumber(total)} />
+          <StatCard title="Selected" value={String(selectedCount)} />
+        </div>
+
         <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-6 py-5">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Search & Filters</h2>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Search & Filters
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Search saved first. If not found, it falls back to live Modash users.
+                </p>
               </div>
 
-              <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex flex-wrap items-center gap-2">
                 {activeChips.length ? (
                   activeChips.map((c) => (
                     <span
                       key={c}
-                      className="text-xs px-3 py-1 rounded-full bg-white text-slate-700 border border-slate-200 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
                     >
                       {c}
                     </span>
                   ))
                 ) : (
-                  <span className="text-xs px-3 py-1 rounded-full bg-white text-slate-600 border border-slate-200">No active filters</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+                    No active filters
+                  </span>
                 )}
 
-                <span className="text-xs px-3 py-1 rounded-full bg-slate-900 text-white">{platformChip}</span>
+                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs text-white">
+                  {platformChip}
+                </span>
               </div>
             </div>
           </div>
 
-          <form onSubmit={onSearch} className="p-6 space-y-5">
-            {/* Search row */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+          <form onSubmit={onSearch} className="space-y-5 p-6">
+            <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-12">
               <div className="lg:col-span-6">
-                <label className="text-xs font-medium text-slate-600 mb-2 block">Handle / Username</label>
+                <label className="mb-2 block text-xs font-medium text-slate-600">
+                  Handle / Username
+                </label>
                 <div className="relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <input
-                    className="w-full pl-12 pr-4 py-3.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3.5 pl-12 pr-4 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="e.g. @SamZonebd"
@@ -920,16 +1115,28 @@ export default function Page() {
                 </div>
               </div>
 
-              {/* Platforms multi-select */}
               <div className="lg:col-span-3">
-                <label className="text-xs font-medium text-slate-600 mb-2 block">Platforms</label>
+                <label className="mb-2 block text-xs font-medium text-slate-600">
+                  Platforms for Global Search
+                </label>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
                   <div className="flex flex-wrap gap-x-4 gap-y-2">
                     {PLATFORM_OPTIONS.map((p) => {
                       const checked = !!searchPlatforms[p.key];
                       return (
-                        <label key={p.key} className="flex items-center gap-2 cursor-pointer select-none">
-                          <Checkbox checked={checked} onCheckedChange={(v: any) => setSearchPlatforms((prev) => ({ ...prev, [p.key]: !!v }))} />
+                        <label
+                          key={p.key}
+                          className="flex cursor-pointer select-none items-center gap-2"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v: any) =>
+                              setSearchPlatforms((prev) => ({
+                                ...prev,
+                                [p.key]: !!v,
+                              }))
+                            }
+                          />
                           <span className="text-sm text-slate-800">{p.label}</span>
                         </label>
                       );
@@ -938,16 +1145,15 @@ export default function Page() {
                 </div>
               </div>
 
-              {/* Buttons */}
-              <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 lg:col-span-3 sm:grid-cols-2">
                 <button
-                  className="w-full h-[52px] px-5 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   type="submit"
                   disabled={searchLoading || listLoading}
                 >
                   {searchLoading ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <RefreshCw className="h-4 w-4 animate-spin" />
                       Searching…
                     </>
                   ) : (
@@ -957,41 +1163,50 @@ export default function Page() {
 
                 <button
                   type="button"
-                  className="w-full h-[52px] px-5 rounded-lg font-semibold border border-slate-300 text-slate-800 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-5 font-semibold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => {
                     setView('saved');
                     setUsersItems([]);
-                    setQuery('');
                     clearSelection();
-                    loadSaved(1, filtersActive, '');
+                    loadSaved(1, filtersActive, query.trim());
                   }}
                   disabled={listLoading}
-                  title="Reload saved list"
                 >
-                  <RefreshCw className={`w-4 h-4 ${listLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw
+                    className={`h-4 w-4 ${listLoading ? 'animate-spin' : ''}`}
+                  />
                   Refresh
                 </button>
               </div>
             </div>
 
-            {/* Filters */}
-            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-              <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">Filters</div>
-                  <div className="text-xs text-slate-600 mt-0.5">Country is multi-select. Category supports comma-separated.</div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">
+                      Filters
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-600">
+                      Country is multi-select. Category accepts comma-separated values.
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="p-5">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  {/* Provider */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">Provider</label>
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                      Provider
+                    </label>
                     <select
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={filtersDraft.provider || 'all'}
-                      onChange={(e) => setFiltersDraft((p) => ({ ...p, provider: e.target.value }))}
+                      onChange={(e) =>
+                        setFiltersDraft((p) => ({ ...p, provider: e.target.value }))
+                      }
                     >
                       <option value="all">All</option>
                       <option value="youtube">YouTube</option>
@@ -1000,34 +1215,45 @@ export default function Page() {
                     </select>
                   </div>
 
-                  {/* Followers min */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">Followers Min</label>
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                      Followers Min
+                    </label>
                     <input
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={filtersDraft.followersMin || ''}
-                      onChange={(e) => setFiltersDraft((p) => ({ ...p, followersMin: e.target.value }))}
+                      onChange={(e) =>
+                        setFiltersDraft((p) => ({
+                          ...p,
+                          followersMin: e.target.value,
+                        }))
+                      }
                       placeholder="100000"
                       inputMode="numeric"
                     />
                   </div>
 
-                  {/* Followers max */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">Followers Max</label>
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                      Followers Max
+                    </label>
                     <input
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={filtersDraft.followersMax || ''}
-                      onChange={(e) => setFiltersDraft((p) => ({ ...p, followersMax: e.target.value }))}
+                      onChange={(e) =>
+                        setFiltersDraft((p) => ({
+                          ...p,
+                          followersMax: e.target.value,
+                        }))
+                      }
                       placeholder="5000000"
                       inputMode="numeric"
                     />
                   </div>
 
-                  {/* Country multi-select */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">
-                      Country (Multi-select)
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                      Country
                     </label>
                     <MultiCountrySelect
                       value={filtersDraft.countries || []}
@@ -1035,38 +1261,41 @@ export default function Page() {
                         setFiltersDraft((p) => ({
                           ...p,
                           countries: next,
-                          country: '', // clear legacy text to avoid conflicts
+                          country: '',
                         }))
                       }
                     />
-                    <p className="text-[11px] text-slate-500 mt-2">Pick multiple (US, IN, GB…)</p>
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      Uses country names in API, even if you pick country codes.
+                    </p>
                   </div>
 
-                  {/* Category */}
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">Category</label>
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                      Category
+                    </label>
                     <input
-                      className="w-full px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       value={filtersDraft.category || ''}
                       onChange={(e) =>
                         setFiltersDraft((p) => ({
                           ...p,
                           category: e.target.value,
-                          categories: [], // normalize on Apply
+                          categories: [],
                         }))
                       }
                       placeholder="Fitness or Fitness,Beauty"
                     />
-                    <p className="text-[11px] text-slate-500 mt-2">
-                      Multiple: <span className="font-mono">Fitness,Beauty</span>
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      Example: <span className="font-mono">Fitness,Beauty</span>
                     </p>
                   </div>
                 </div>
 
-                <div className="flex gap-2 flex-wrap mt-5 justify-center">
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
                   <button
                     type="button"
-                    className="px-3 py-2 rounded-lg border cursor-pointer border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={clearFilters}
                     disabled={listLoading}
                   >
@@ -1075,7 +1304,7 @@ export default function Page() {
 
                   <button
                     type="button"
-                    className="px-3 py-2 rounded-lg bg-slate-900 cursor-pointer hover:bg-slate-800 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={applyFilters}
                     disabled={listLoading}
                   >
@@ -1083,84 +1312,105 @@ export default function Page() {
                   </button>
                 </div>
 
-                {/* CSV Download */}
-                <div className="mt-6 pt-5 border-t border-slate-200">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                {activeChips.length ? (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {activeChips.map((chip) => (
+                      <span
+                        key={chip}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700"
+                      >
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-6 border-t border-slate-200 pt-5">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                       <div className="relative">
                         <input
-                          className="w-[160px] px-3 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white pr-14"
+                          className="w-[160px] rounded-xl border border-slate-300 bg-white px-3 py-3 pr-14 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                           value={downloadLimit}
                           onChange={(e) => setDownloadLimit(e.target.value)}
-                          placeholder="No. of."
+                          placeholder="No. of"
                           inputMode="numeric"
-                          title="How many rows to export (no pagination)"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">rows</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                          rows
+                        </span>
                       </div>
 
-                      <button
-                        type="button"
-                        className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
-                        onClick={downloadCsvAll}
-                        disabled={downloadLoading || listLoading}
-                        title="Download CSV by limit (no pagination)"
-                      >
-                        <Download className="w-4 h-4" />
-                        {downloadLoading ? 'Downloading…' : 'Download CSV'}
-                      </button>
+                      {!campaignId && (
+                        <>
 
-                      <button
-                        type="button"
-                        className="px-4 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2"
-                        onClick={downloadCsvSelected}
-                        disabled={downloadLoading || selectedModashIds.length === 0}
-                        title="Download CSV for selected influencers only"
-                      >
-                        <Download className="w-4 h-4" />
-                        Download Selected ({selectedModashIds.length})
-                      </button>
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={downloadCsvAll}
+                            disabled={downloadLoading || listLoading}
+                          >
+                            <Download className="h-4 w-4" />
+                            {downloadLoading ? 'Downloading…' : 'Download CSV'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={downloadCsvSelected}
+                            disabled={downloadLoading || selectedModashIds.length === 0}
+                          >
+                            <Download className="h-4 w-4" />
+                            Download Selected ({selectedModashIds.length})
+                          </button>
+                        </>
+                      )}
 
                       {selectedCount ? (
                         <button
                           type="button"
-                          className="px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold transition-colors"
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
                           onClick={clearSelection}
                           disabled={downloadLoading}
-                          title="Clear selected"
                         >
                           Clear Selection
                         </button>
                       ) : null}
+
+                      {selectedCount && campaignId ? (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                          onClick={addOutreach}
+                          disabled={downloadLoading}
+                        >
+                          Add to Outreach
+                        </button>
+                      ) : null}
+
                     </div>
 
                     {view !== 'saved' ? (
                       <div className="text-xs text-slate-500">
-                        Note: CSV export works on <b>Saved Results</b>.
+                        CSV export works on <b>Saved Results</b> only.
                       </div>
                     ) : null}
                   </div>
                 </div>
-
-                {searchHint ? (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 flex gap-3 items-start">
-                    <div className="mt-0.5">
-                      <Info className="w-5 h-5 text-slate-500" />
-                    </div>
-                    <p className="text-sm text-slate-700">{searchHint}</p>
-                  </div>
-                ) : null}
               </div>
             </div>
           </form>
         </div>
 
-        {/* List */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <h2 className="text-lg font-semibold text-slate-900">{view === 'saved' ? 'Saved Results' : 'Users Results'}</h2>
-              <span className="text-sm text-slate-600">{formatNumber(total)} total</span>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {view === 'saved' ? 'Saved Results' : 'Users Results'}
+              </h2>
+              <span className="text-sm text-slate-600">
+                {formatNumber(total)} total
+              </span>
               {selectedCount ? (
                 <span className="text-sm text-slate-700">
                   • Selected <b>{selectedCount}</b>
@@ -1169,8 +1419,7 @@ export default function Page() {
             </div>
           </div>
 
-          {/* table header row */}
-          <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-50 px-6 py-3">
             <div className="grid grid-cols-12 items-center gap-3">
               <div className="col-span-1 flex items-center">
                 <Checkbox
@@ -1179,165 +1428,202 @@ export default function Page() {
                       ? currentItems.every((it) => !!selectedIds[getRowKey(it)])
                         ? (true as any)
                         : currentItems.some((it) => !!selectedIds[getRowKey(it)])
-                        ? ('indeterminate' as any)
-                        : (false as any)
+                          ? ('indeterminate' as any)
+                          : (false as any)
                       : (false as any)
                   }
                   onCheckedChange={(v: any) => {
                     const checked = !!v;
-                    checked ? selectAllOnPage(currentItems) : clearSelectionOnPage(currentItems);
+                    checked
+                      ? selectAllOnPage(currentItems)
+                      : clearSelectionOnPage(currentItems);
                   }}
                 />
               </div>
 
               <div className="col-span-9">
-                <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Handle</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                  Handle
+                </div>
               </div>
 
               <div className="col-span-2 text-right">
-                <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Actions</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                  Actions
+                </div>
               </div>
             </div>
           </div>
 
           {listLoading && currentItems.length === 0 ? (
             <div className="px-6 py-12 text-center text-slate-500">
-              <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
+              <RefreshCw className="mx-auto mb-2 h-8 w-8 animate-spin" />
               Loading...
             </div>
           ) : null}
 
           {!listLoading && currentItems.length === 0 ? (
-            <div className="px-6 py-12 text-center text-slate-500">Click on Search for Global Search.</div>
+            <div className="px-6 py-12 text-center text-slate-500">
+              No results found.
+            </div>
           ) : null}
 
           <div className="divide-y divide-slate-200">
             {currentItems.map((p) => {
               const rowKey = getRowKey(p);
               const domId = toDomId(rowKey);
-
               const isOpen = !!expanded[rowKey];
               const thumb = p.picture || '';
               const url = p.url || '';
               const checked = !!selectedIds[rowKey];
-
-              const providerLabel = p.provider || p.platform || DASH;
+              const providerLabel = cleanStr(p.provider || p.platform || DASH);
+              const categories = getCategoryNames(p);
 
               return (
-                <div key={rowKey} id={domId} className="hover:bg-slate-50 transition-colors">
+                <div
+                  key={rowKey}
+                  id={domId}
+                  className="transition-colors hover:bg-slate-50"
+                >
                   <div className="px-6 py-4">
                     <div className="grid grid-cols-12 items-start gap-3">
-                      {/* checkbox */}
                       <div className="col-span-1 pt-2">
-                        <Checkbox checked={checked} onCheckedChange={(v: any) => toggleSelect(rowKey, !!v, p._id ? String(p._id) : undefined)} />
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v: any) =>
+                            toggleSelect(
+                              rowKey,
+                              !!v,
+                              p._id ? String(p._id) : undefined
+                            )
+                          }
+                        />
                       </div>
 
-                      {/* handle column */}
                       <div className="col-span-9 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 shrink-0">
-                            {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" /> : null}
+                        <div className="mb-2 flex items-center gap-3">
+                          <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-slate-200">
+                            {thumb ? (
+                              <img
+                                src={thumb}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : null}
                           </div>
 
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-lg font-semibold text-slate-900 truncate">{p.handle || p.username || DASH}</h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="truncate text-lg font-semibold text-slate-900">
+                                {p.handle || p.username || DASH}
+                              </h3>
 
-                              <span className="text-[10px] px-2 py-0.5 rounded-full border border-slate-300 text-slate-600">{providerLabel}</span>
+                              <span className="rounded-full border border-slate-300 px-2 py-0.5 text-[10px] text-slate-600">
+                                {providerLabel}
+                              </span>
 
                               {p.isVerified ? (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
                                   Verified
                                 </span>
                               ) : null}
                             </div>
 
-                            <div className="text-sm text-slate-600 truncate">{p.fullname || DASH}</div>
+                            <div className="truncate text-sm text-slate-600">
+                              {p.fullname || DASH}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-3">
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Country</div>
-                            <div className="text-sm font-medium text-slate-900">{p.country || DASH}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Followers</div>
-                            <div className="text-sm font-medium text-slate-900">{formatNumber(p.followers)}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Avg Views</div>
-                            <div className="text-sm font-medium text-slate-900">{formatNumber(p.averageViews)}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-slate-500 mb-1">Engagement</div>
-                            <div className="text-sm font-medium text-slate-900">{formatPercent(p.engagementRate)}</div>
-                          </div>
-                          <div className="hidden lg:block">
-                            <div className="text-xs text-slate-500 mb-1">Engagements</div>
-                            <div className="text-sm font-medium text-slate-900">{formatNumber(p.engagements)}</div>
-                          </div>
-                          <div className="hidden lg:block">
-                            <div className="text-xs text-slate-500 mb-1">{view === 'saved' ? 'Updated' : 'Created'}</div>
-                            <div className="text-sm font-medium text-slate-900">{view === 'saved' ? formatDate(p.updatedAt) : formatDate(p.createdAt)}</div>
-                          </div>
+                        <div className="mb-3 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+                          <Metric label="Country" value={p.country || DASH} />
+                          <Metric label="Followers" value={formatNumber(p.followers)} />
+                          <Metric label="Avg Views" value={formatNumber(p.averageViews)} />
+                          <Metric
+                            label="Engagement"
+                            value={formatPercent(p.engagementRate)}
+                          />
+                          <Metric
+                            label="Engagements"
+                            value={formatNumber(p.engagements)}
+                            className="hidden lg:block"
+                          />
+                          <Metric
+                            label={view === 'saved' ? 'Updated' : 'Created'}
+                            value={
+                              view === 'saved'
+                                ? formatDate(p.updatedAt)
+                                : formatDate(p.createdAt)
+                            }
+                            className="hidden lg:block"
+                          />
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
                           <span>Private: {formatBool(p.isPrivate)}</span>
-                          {p.userId ? <span>UserId: {p.userId}</span> : <span>UserId: {DASH}</span>}
+                          <span>UserId: {p.userId || DASH}</span>
+                          {categories.length ? (
+                            <span className="max-w-full truncate">
+                              Category: {categories.join(', ')}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
-                      {/* actions */}
                       <div className="col-span-2 flex flex-col items-end gap-2">
                         {url ? (
                           <a
                             href={url}
                             target="_blank"
                             rel="noreferrer"
-                            className="w-full px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                            title="Open profile"
+                            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                           >
-                            <ExternalLink className="w-4 h-4" />
+                            <ExternalLink className="h-4 w-4" />
                             Open
                           </a>
                         ) : null}
 
                         {p.userId ? (
                           <Link
-                            href={`/mediakit/${encodeURIComponent(p.userId)}?platform=${encodeURIComponent(
-                              String((p.platform || p.provider || 'youtube')).toLowerCase()
-                            )}&handle=${encodeURIComponent(String(p.handle || p.username || ''))}`}
-                            className="w-full px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                            title="View MediaKit"
+                            href={buildMediaKitHref(p)}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                           >
-                            <Info className="w-4 h-4" />
+                            <Info className="h-4 w-4" />
                             View
                           </Link>
                         ) : (
                           <button
                             type="button"
-                            className="w-full px-4 py-2 border border-slate-200 text-slate-400 text-sm font-medium rounded-lg cursor-not-allowed flex items-center justify-center gap-2"
+                            className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-400"
                             disabled
-                            title="No userId found"
                           >
-                            <Info className="w-4 h-4" />
+                            <Info className="h-4 w-4" />
                             View
                           </button>
                         )}
 
-                        <button type="button" className="p-2 hover:bg-slate-100 rounded-lg transition-colors" onClick={() => toggleExpand(rowKey)} aria-expanded={isOpen} aria-label="Expand">
-                          <ChevronDown className={`w-5 h-5 text-slate-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        <button
+                          type="button"
+                          className="rounded-lg p-2 transition-colors hover:bg-slate-100"
+                          onClick={() => toggleExpand(rowKey)}
+                          aria-expanded={isOpen}
+                        >
+                          <ChevronDown
+                            className={`h-5 w-5 text-slate-600 transition-transform ${isOpen ? 'rotate-180' : ''
+                              }`}
+                          />
                         </button>
                       </div>
                     </div>
 
                     {isOpen ? (
-                      <div className="mt-6 pt-6 border-t border-slate-200 space-y-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                          <div className="bg-slate-50 rounded-xl p-4">
-                            <h4 className="font-semibold text-slate-900 mb-3">Profile Details</h4>
+                      <div className="mt-6 space-y-6 border-t border-slate-200 pt-6">
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <h4 className="mb-3 font-semibold text-slate-900">
+                              Profile Details
+                            </h4>
                             <div className="space-y-2 text-sm">
                               <Row label="User ID" value={p.userId || DASH} mono />
                               <Row label="Username" value={p.username || DASH} />
@@ -1345,18 +1631,40 @@ export default function Page() {
                               <Row label="City" value={p.city || DASH} />
                               <Row label="State" value={p.state || DASH} />
                               <Row label="Country" value={p.country || DASH} />
-                              <Row label="Language" value={p.language?.name || p.language?.code || DASH} />
-                              <Row label="Category" value={Array.isArray(p.category) ? p.category.join(', ') : p.category || DASH} />
+                              <Row
+                                label="Language"
+                                value={
+                                  typeof p.language === 'string'
+                                    ? p.language
+                                    : p.language?.name || p.language?.code || DASH
+                                }
+                              />
+                              <Row
+                                label="Category"
+                                value={categories.length ? categories.join(', ') : DASH}
+                              />
+                              <Row label="Bio" value={p.bio || DASH} />
                             </div>
                           </div>
 
-                          <div className="bg-slate-50 rounded-xl p-4">
-                            <h4 className="font-semibold text-slate-900 mb-3">Metrics</h4>
+                          <div className="rounded-2xl bg-slate-50 p-4">
+                            <h4 className="mb-3 font-semibold text-slate-900">
+                              Metrics
+                            </h4>
                             <div className="space-y-2 text-sm">
                               <Row label="Followers" value={formatNumber(p.followers)} />
-                              <Row label="Average Views" value={formatNumber(p.averageViews)} />
-                              <Row label="Engagement Rate" value={formatPercent(p.engagementRate)} />
-                              <Row label="Engagements" value={formatNumber(p.engagements)} />
+                              <Row
+                                label="Average Views"
+                                value={formatNumber(p.averageViews)}
+                              />
+                              <Row
+                                label="Engagement Rate"
+                                value={formatPercent(p.engagementRate)}
+                              />
+                              <Row
+                                label="Engagements"
+                                value={formatNumber(p.engagements)}
+                              />
                               <Row label="Verified" value={formatBool(p.isVerified)} />
                               <Row label="Private" value={formatBool(p.isPrivate)} />
                               <Row label="Created" value={formatDate(p.createdAt)} />
@@ -1372,8 +1680,7 @@ export default function Page() {
             })}
           </div>
 
-          {/* Pagination footer */}
-          <div className="px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-4">
             <div className="text-sm text-slate-600">
               Page <span className="font-semibold text-slate-900">{page}</span>
               {total ? (
@@ -1386,10 +1693,12 @@ export default function Page() {
 
             <div className="flex gap-2">
               <button
-                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => {
                   const next = Math.max(1, page - 1);
-                  view === 'saved' ? loadSaved(next, filtersActive, query.trim()) : loadUsers(next, query.trim());
+                  view === 'saved'
+                    ? loadSaved(next, filtersActive, query.trim())
+                    : loadUsers(next, query.trim(), filtersActive);
                 }}
                 disabled={listLoading || page <= 1}
               >
@@ -1397,10 +1706,12 @@ export default function Page() {
               </button>
 
               <button
-                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => {
                   const next = page + 1;
-                  view === 'saved' ? loadSaved(next, filtersActive, query.trim()) : loadUsers(next, query.trim());
+                  view === 'saved'
+                    ? loadSaved(next, filtersActive, query.trim())
+                    : loadUsers(next, query.trim(), filtersActive);
                 }}
                 disabled={listLoading || !hasNext}
               >
@@ -1414,11 +1725,52 @@ export default function Page() {
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: any; mono?: boolean }) {
+function StatCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </div>
+      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  className = '',
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="mb-1 text-xs text-slate-500">{label}</div>
+      <div className="text-sm font-medium text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: any;
+  mono?: boolean;
+}) {
   return (
     <div className="flex justify-between gap-3">
       <span className="text-slate-600">{label}:</span>
-      <span className={`font-medium text-slate-900 text-right ${mono ? 'font-mono text-xs' : ''}`}>{String(value)}</span>
+      <span
+        className={`text-right font-medium text-slate-900 ${mono ? 'font-mono text-xs' : ''
+          }`}
+      >
+        {String(value)}
+      </span>
     </div>
   );
 }
