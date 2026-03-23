@@ -22,7 +22,7 @@ export type AdminMini = {
   proxyEmail?: string;
   role?: AdminRole | string;
   parentAdmin?: string | null;
-  rootAdmin?: string | null;
+  rootAdmin?: string | null;  
 };
 
 export type AdminEmailThreadDto = {

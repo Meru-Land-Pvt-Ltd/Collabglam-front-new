@@ -23,7 +23,7 @@ import {
   Loader2,
   ArrowRightLeft,
   CheckCircle2,
-  AlertTriangle,
+  AlertTriangle,  
   RefreshCcw,
 } from "lucide-react";
 import EmailEditor from "@/components/ui/EmailEditor";
