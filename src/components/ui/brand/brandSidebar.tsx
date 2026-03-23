@@ -44,7 +44,7 @@ const ROUTES: Record<string, string> = {
   campaigns_all: "/brand/campaign/all",
   campaigns_active: "/brand/campaign/active",
   campaigns_draft: "/brand/campaign/draft",
-  campaigns_scheduled: "/brand/campaign/scheduled",
+  campaigns_scheduled: "/brand/campaign/scheduled",  
   browse: "/brand/browse-influencer",
   inbox: "/brand/inbox",
   wallet: "/brand/wallet",
