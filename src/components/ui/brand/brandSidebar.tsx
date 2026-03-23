@@ -345,7 +345,7 @@ export default function BrandSidebar({
   const didFetchPlanRef = useRef(false);
   const campaignHoverRef = useRef(false);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
-
+  const hasInitializedCollapsed = useRef(false);
   /* -------------------------------- derived -------------------------------- */
 
   const tight = isShort;
@@ -535,7 +535,7 @@ export default function BrandSidebar({
       if (storedBrandId) setBrandId(storedBrandId);
       if (cachedPlanId) setPlanId(cachedPlanId);
       if (cachedPlanName) setPlanName(cachedPlanName.toLowerCase());
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -567,7 +567,7 @@ export default function BrandSidebar({
 
           if (latestName) window.localStorage.setItem("brandPlanName", latestName);
           else window.localStorage.removeItem("brandPlanName");
-        } catch {}
+        } catch { }
       } catch {
         // keep cached values on failure
       }
@@ -580,15 +580,26 @@ export default function BrandSidebar({
 
   useEffect(() => {
     if (isDesktop) {
-      setDrawerOpenProp?.(false);
+      setDrawerOpen?.(false);
       if (!setDrawerOpenProp) setDrawerOpenInternal(false);
-      setCollapsed(true);
       setIsClosing(false);
-      setWidthCollapsed(true);
+
+      if (!hasInitializedCollapsed.current) {
+        // Restore persisted preference, default to true (collapsed)
+        let initialCollapsed = true;
+        try {
+          const stored = window.localStorage.getItem("sidebar-collapsed");
+          if (stored !== null) initialCollapsed = stored === "true";
+        } catch { }
+        setCollapsed(initialCollapsed);
+        setWidthCollapsed(initialCollapsed);
+        hasInitializedCollapsed.current = true;
+      }
     } else {
       setCollapsed(false);
       setIsClosing(false);
       setWidthCollapsed(false);
+      hasInitializedCollapsed.current = false; // reset so re-entering desktop re-reads storage
     }
   }, [isDesktop, setDrawerOpenProp]);
 
@@ -676,6 +687,7 @@ export default function BrandSidebar({
     setCollapsed(false);
     setIsClosing(false);
     setWidthCollapsed(false);
+    try { window.localStorage.setItem("sidebar-collapsed", "false"); } catch { }
   }, []);
 
   const beginCloseDesktop = useCallback(() => {
@@ -684,6 +696,7 @@ export default function BrandSidebar({
     campaignHoverRef.current = false;
     setWorkspaceOpen(false);
     setWidthCollapsed(true);
+    try { window.localStorage.setItem("sidebar-collapsed", "true"); } catch { }
   }, []);
 
   const openCampaignsFromRail = useCallback(() => {
@@ -982,8 +995,8 @@ export default function BrandSidebar({
                   <div
                     key={item.key}
                     className="w-full"
-                    onMouseEnter={handleCampaignMouseEnter}
-                    onMouseLeave={handleCampaignMouseLeave}
+                    // onMouseEnter={handleCampaignMouseEnter}
+                    // onMouseLeave={handleCampaignMouseLeave}
                   >
                     <RowButton
                       icon={item.icon}
