@@ -347,11 +347,11 @@ export default function Sidebar({
       //   href: "/influencer/earnings",
       // },
       {
-        key: "inbox",
-        label: "Inbox",
+        key: "messages",
+        label: "Inbox/Messages",
         icon: ChatCenteredText,
         section: "main",
-        href: "/influencer/inbox",
+        href: "/influencer/messages",
         right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
       },
       {
@@ -394,7 +394,7 @@ export default function Sidebar({
         label: "Support",
         icon: Question,
         section: "footer",
-        href: "/influencer/support-centre",
+        href: "/influencer/support-center",
       },
     ],
     [campaignBadge, appliedBadge, messagesBadge]

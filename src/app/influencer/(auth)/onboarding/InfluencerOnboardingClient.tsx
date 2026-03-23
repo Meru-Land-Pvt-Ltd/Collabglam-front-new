@@ -848,7 +848,7 @@ export default function InfluencerOnboardingPage() {
 
       const msg = resp ? getBackendMessage(resp) : "Onboarding skipped";
       setRedirectToast({ icon: "success", title: "Done", text: msg });
-      router.push("/influencer/dashboard");
+      router.push("/influencer/campaign");
     } catch (e) {
       const msg = getApiErrorMessage(e, "Failed to skip step");
       setFormError(msg);

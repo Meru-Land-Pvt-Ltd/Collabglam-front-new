@@ -17,14 +17,17 @@ import { TopbarAction, useBrandTopbar } from "@/components/ui/brand/brandTopbarP
 import {
   apiCampaignCreate,
   apiCampaignEditDraft,
+  apiCampaignGetById,
   apiCampaignPrefillAI,
+  apiGetTimezonesByCountries,
   getApiErrorMessage,
   CampaignStatus,
   CreateCampaignManualPayload,
   EditDraftPayload,
   EnrichedCampaignDoc,
   PrefillCampaignAIPayload,
-} from "../../services/brandApi";
+  GetTimezonesByCountriesResponse,
+} from "../../../../brand/services/brandApi";
 
 import {
   CAMPAIGN_TYPES,
@@ -33,7 +36,9 @@ import {
   countryKey,
   filesToDataUrls,
   getBrandId,
+  getDefaultScheduleTime,
   idsOf,
+  isObjectId,
   isValidDateRange,
   LAYOUT,
   MANUAL_PLATFORM_OPTIONS,
@@ -45,16 +50,18 @@ import {
   safeDateInput,
   SEARCHABLE_UI,
   SEEN_KEY,
+  splitCountrySelection,
   useSearchProps,
   validateFiles,
   mergeOptions,
   prettyTierValue,
 } from "./create-campaign.utils";
 
+import { ScheduleCampaignOverlay, normalizeTimeZone } from "./ScheduleCampaignOverlay";
 import { useCampaignLists, useCategoryPicker, useResponsivePreviewWidth, useSidebarOffsetPx } from "./create-campaign.hooks";
 
-import { CaretDown, CaretUp, Eye, EyeClosed, Info, PaperPlaneTilt, SparkleIcon } from "@phosphor-icons/react";
-import { useRouter } from "next/navigation";
+import { CaretDown, CaretUp, Clock, Eye, EyeClosed, Info, PaperPlaneTilt, SparkleIcon } from "@phosphor-icons/react";
+import { useRouter, useSearchParams } from "next/navigation";
 import SparkleAnimation from "@/components/ui/StarTwinkle";
 
 /* ============================================================================
@@ -140,7 +147,6 @@ function FixedBottomBar({
   const viewportW = useViewportWidth();
   const barRef = React.useRef<HTMLDivElement | null>(null);
 
-  // ✅ Keep --cg-bottombar-h always correct (wraps on mobile, shrinks on desktop, etc.)
   React.useLayoutEffect(() => {
     if (!barRef.current || typeof window === "undefined") return;
 
@@ -168,7 +174,6 @@ function FixedBottomBar({
     };
   }, []);
 
-  // ✅ Always recompute when viewport or sidebar changes
   const clampedMaxW = React.useMemo(() => {
     const contentW = Math.max(0, viewportW - (sidebarOffsetPx || 0));
     return Math.max(0, Math.min(containerMaxWidth, contentW || containerMaxWidth));
@@ -325,11 +330,8 @@ type TierRange = { min?: number; max?: number };
 const parseAbbrevNumber = (raw: string): number | null => {
   if (!raw) return null;
   let s = String(raw).trim().toUpperCase();
-
-  // remove commas/spaces and trailing plus
   s = s.replace(/[, ]+/g, "").replace(/\+$/, "");
 
-  // allow plain numbers too
   const m = s.match(/^(\d+(?:\.\d+)?)([KMB])?$/);
   if (!m) return null;
 
@@ -345,7 +347,6 @@ const parseAbbrevNumber = (raw: string): number | null => {
 const parseRangeFromText = (text?: string): TierRange | null => {
   if (!text) return null;
 
-  // try inside "(...)" first if exists
   const paren = text.match(/\(([^)]+)\)/)?.[1] ?? text;
 
   const normalized = String(paren)
@@ -353,7 +354,6 @@ const parseRangeFromText = (text?: string): TierRange | null => {
     .replace(/[–—]/g, "-")
     .replace(/\bto\b/gi, "-");
 
-  // ex: "1K-10K" or "1000 - 5000"
   const parts = normalized
     .split("-")
     .map((x) => x.trim())
@@ -418,19 +418,13 @@ const addDaysISO = (iso: string, days: number) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-const isBeforeISO = (a?: string, b?: string) => {
-  const da = toLocalDate(a);
-  const db = toLocalDate(b);
-  if (!da || !db) return false;
-  return da.getTime() < db.getTime();
-};
-
 const isSameOrBeforeISO = (a?: string, b?: string) => {
   const da = toLocalDate(a);
   const db = toLocalDate(b);
   if (!da || !db) return false;
   return da.getTime() <= db.getTime();
 };
+
 const TODAY = todayISO();
 
 /* ============================================================================
@@ -451,7 +445,6 @@ async function buildCreateAIPayload(form: CampaignForm, opts?: { saveDraft?: boo
     productLink: form.productLink.trim() || undefined,
     targetCountryIds: form.country,
     targetAgeRanges: form.ageGroup,
-
     saveDraft: opts?.saveDraft ?? false,
   };
 }
@@ -544,7 +537,7 @@ function buildEditDraftPayload(brandId: string, campaignId: string, form: Manual
 }
 
 /* ============================================================================
-   ✅ Validation (manual)
+   ✅ Validation
 ============================================================================ */
 function validateManualForm(args: { form: ManualForm; dateOk: boolean; blockingFileErrors: string[] }) {
   const { form, dateOk, blockingFileErrors } = args;
@@ -592,7 +585,7 @@ function validateManualForm(args: { form: ManualForm; dateOk: boolean; blockingF
 }
 
 /* ============================================================================
-   ✅ Accordion + Chips (same UI behavior)
+   ✅ Accordion + Chips
 ============================================================================ */
 function AccordionCard({
   title,
@@ -692,7 +685,7 @@ function useMediaQuery(query: string) {
 }
 
 /* ============================================================================
-   ✅ AI Screen (unchanged behavior)
+   ✅ AI Screen
 ============================================================================ */
 function CreateByAIScreen({
   sidebarOffsetPx,
@@ -745,9 +738,7 @@ function CreateByAIScreen({
   }, [form, fileErrors]);
 
   const stateFor = useCallback((_key: string, msg: string) => (submitAttempted && msg ? ("error" as const) : undefined), [submitAttempted]);
-
   const msgFor = useCallback((_key: string, msg: string) => (submitAttempted ? msg : ""), [submitAttempted]);
-
   const canContinueAI = useMemo(() => Object.values(aiErrors).every((x) => !x), [aiErrors]);
 
   const submitAI = useCallback(async () => {
@@ -773,24 +764,19 @@ function CreateByAIScreen({
   }, [form, onCreated, pushAiError]);
 
   const handleContinue = useCallback(async () => {
-    console.log("HandleContinue with AI");
     setSubmitAttempted(true);
-
     if (!canContinueAI || submitting) return;
 
-    onSwitchToManual(); // go to manual immediately
+    onSwitchToManual();
     setShowSparkle(true);
+
     try {
       const res = await submitAI();
-
-      if (res === false) {
-        throw new Error("submitAI failed");
-      }
+      if (res === false) throw new Error("submitAI failed");
       setShowSparkle(false);
     } catch (err) {
       console.error("submitAI error:", err);
       setShowSparkle(false);
-
       onBack();
     }
   }, [canContinueAI, submitting, submitAI, onSwitchToManual, onBack, setShowSparkle]);
@@ -990,7 +976,6 @@ function SideModalPreview({
   children: React.ReactNode;
   widthPx?: number;
 }) {
-  // ESC close
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1000,7 +985,6 @@ function SideModalPreview({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // lock background scroll
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -1014,10 +998,8 @@ function SideModalPreview({
 
   return (
     <div className="fixed inset-0 z-[60] lg:hidden">
-      {/* Backdrop */}
       <button type="button" aria-label="Close preview" className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      {/* Drawer */}
       <aside
         className="absolute right-0 top-0 h-full bg-brand-50 border-l border-neutral-200 shadow-2xl flex flex-col"
         style={{
@@ -1044,7 +1026,7 @@ function SideModalPreview({
 }
 
 /* ============================================================================
-   ✅ Manual Screen (UPDATED: backend errors -> toast + field errors)
+   ✅ Manual Screen
 ============================================================================ */
 function CreateManualScreen({
   sidebarOffsetPx,
@@ -1071,7 +1053,7 @@ function CreateManualScreen({
   showSparkle: boolean;
   setShowSparkle: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
-  const router = useRouter(); // ✅ hook at top-level (valid)
+  const router = useRouter();
   const { setActions, clearActions } = useBrandTopbar();
   const [form, setForm] = useState<ManualForm>(EMPTY_MANUAL);
 
@@ -1092,8 +1074,6 @@ function CreateManualScreen({
   const loadedInitialRef = useRef<EnrichedCampaignDoc | null>(null);
 
   const isBelowLg = useMediaQuery("(max-width: 1023px)");
-
-  // ✅ Desktop default = open, Mobile default = closed
   const lastDesktopPreviewRef = useRef(true);
   const prevIsBelowLgRef = useRef<boolean | null>(null);
 
@@ -1118,7 +1098,6 @@ function CreateManualScreen({
     }
   }, [isBelowLg, previewOpen]);
 
-  // ✅ backend field errors
   const [serverFieldErrors, setServerFieldErrors] = useState<Record<string, string>>({});
 
   const setField = useCallback(<K extends keyof ManualForm>(key: K, value: ManualForm[K]) => {
@@ -1138,7 +1117,6 @@ function CreateManualScreen({
     const d = e?.response?.data ?? e?.data ?? e;
 
     if (typeof d === "string") return d;
-
     if (typeof d?.message === "string") return d.message;
     if (typeof d?.error === "string") return d.error;
     if (typeof d?.detail === "string") return d.detail;
@@ -1153,11 +1131,9 @@ function CreateManualScreen({
     const d = res?.data ?? res;
 
     if (typeof d === "string") return d;
-
     if (typeof d?.message === "string" && d.message.trim()) return d.message;
     if (typeof d?.successMessage === "string" && d.successMessage.trim()) return d.successMessage;
     if (typeof d?.detail === "string" && d.detail.trim()) return d.detail;
-
     if (typeof d?.msg === "string" && d.msg.trim()) return d.msg;
 
     return fallback;
@@ -1166,11 +1142,9 @@ function CreateManualScreen({
   const extractBackendFieldErrors = useCallback((e: any) => {
     const d = e?.response?.data ?? e?.data ?? e;
 
-    // direct map
     const fe = d?.fieldErrors || d?.errorsByField || d?.validationErrors;
     if (fe && typeof fe === "object" && !Array.isArray(fe)) return fe as Record<string, string>;
 
-    // express-validator like: { errors: [{ param/field, msg/message }] }
     const arr = d?.errors;
     if (Array.isArray(arr)) {
       const out: Record<string, string> = {};
@@ -1182,7 +1156,6 @@ function CreateManualScreen({
       return out;
     }
 
-    // zod like: { issues: [{ path: ['field'], message }] }
     const issues = d?.issues;
     if (Array.isArray(issues)) {
       const out: Record<string, string> = {};
@@ -1198,7 +1171,6 @@ function CreateManualScreen({
     return null;
   }, []);
 
-  // Preview toggle action
   useEffect(() => {
     const previewAction: TopbarAction = {
       key: "preview",
@@ -1213,7 +1185,146 @@ function CreateManualScreen({
 
   useEffect(() => () => clearActions(), [clearActions]);
 
-  // Load AI draft -> manual form
+  const scheduleBtnRef = useRef<HTMLButtonElement | null>(null);
+  const isMobileSchedule = useMediaQuery("(max-width: 768px)");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  const [scheduleDate, setScheduleDate] = useState<string>(() => safeDateInput(new Date().toISOString()));
+  const [scheduleTime, setScheduleTime] = useState<string>(() => getDefaultScheduleTime());
+
+  const baseTimeZone = (typeof window !== "undefined" && Intl.DateTimeFormat().resolvedOptions().timeZone) || "UTC";
+
+  const [tzRes, setTzRes] = useState<GetTimezonesByCountriesResponse | null>(null);
+  const [tzLoading, setTzLoading] = useState(false);
+  const [tzError, setTzError] = useState("");
+
+  type ScheduleTZ = {
+    timezone: string;
+    isValid?: boolean;
+    offsetMinutes?: number;
+    offsetMinutesFromCurrent?: number;
+    nowLocal?: string;
+  };
+
+  type ScheduleCountry = { id: string; label: string; timezones: ScheduleTZ[] };
+
+  const scheduleCountries = useMemo((): ScheduleCountry[] => {
+    const rawMap = new Map<string, any>();
+
+    for (const c of lists.raw.countries ?? []) {
+      const k1 = countryKey(c);
+      const cc = String(c?.countryCode ?? "").trim();
+
+      if (k1) {
+        rawMap.set(k1, c);
+        rawMap.set(k1.toUpperCase(), c);
+        rawMap.set(k1.toLowerCase(), c);
+      }
+
+      if (cc) {
+        rawMap.set(cc, c);
+        rawMap.set(cc.toUpperCase(), c);
+        rawMap.set(cc.toLowerCase(), c);
+      }
+    }
+
+    const tzPayload = tzRes as any;
+    const targets = (tzPayload?.data?.targets ?? tzPayload?.targets ?? []) as any[];
+
+    const byId = new Map(targets.map((t: any) => [String(t?.id ?? "").trim(), t]));
+    const byCode = new Map(targets.map((t: any) => [String(t?.countryCode ?? "").trim().toUpperCase(), t]));
+
+    return (form.targetCountry ?? [])
+      .map((sel) => {
+        const key = String(sel ?? "").trim();
+        if (!key) return null;
+
+        const upperKey = key.toUpperCase();
+
+        const t = isObjectId(key) ? byId.get(key) : byCode.get(upperKey);
+        const raw = rawMap.get(key) || rawMap.get(upperKey) || rawMap.get(key.toLowerCase());
+
+        const name = String(t?.countryName ?? t?.countryNameEn ?? raw?.countryNameEn ?? raw?.countryName ?? "").trim();
+        const flag = String(t?.flag ?? raw?.flag ?? "").trim();
+        const label = `${flag ? `${flag} ` : ""}${name || key}`;
+
+        const tzs: ScheduleTZ[] = (t?.timezones ?? [])
+          .map((z: any) => {
+            const tzName = String(z?.timezone ?? "").trim();
+            const normalized = normalizeTimeZone(tzName, baseTimeZone);
+
+            return {
+              timezone: normalized,
+              isValid: Boolean(z?.isValid),
+              offsetMinutes: Number.isFinite(Number(z?.offsetMinutes)) ? Number(z.offsetMinutes) : undefined,
+              offsetMinutesFromCurrent: Number.isFinite(Number(z?.offsetMinutesFromCurrent))
+                ? Number(z.offsetMinutesFromCurrent)
+                : undefined,
+              nowLocal: String(z?.nowLocal ?? "").trim() || undefined,
+            };
+          })
+          .filter((x: any) => x.timezone);
+
+        const timezones = tzs.length ? tzs : [{ timezone: baseTimeZone, isValid: true }];
+
+        return {
+          id: key,
+          label,
+          timezones,
+        };
+      })
+      .filter(Boolean) as ScheduleCountry[];
+  }, [form.targetCountry, lists.raw.countries, tzRes, baseTimeZone]);
+
+  useEffect(() => {
+    if (!scheduleOpen) return;
+
+    const selected = form.targetCountry ?? [];
+    const { ids, codes } = splitCountrySelection(selected);
+
+    if (!ids.length && !codes.length) {
+      setTzRes(null);
+      setTzError("");
+      setTzLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setTzLoading(true);
+      setTzError("");
+      try {
+        const res = await apiGetTimezonesByCountries({
+          targetCountryIds: ids.length ? ids : undefined,
+          targetCountryCodes: codes.length ? codes : undefined,
+          current: { timezone: baseTimeZone },
+        });
+        if (!cancelled) setTzRes(res);
+      } catch (e) {
+        const msg = getApiErrorMessage(e);
+        if (!cancelled) setTzError(msg);
+        toastError("Failed to load timezones", msg);
+      } finally {
+        if (!cancelled) setTzLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleOpen, form.targetCountry, baseTimeZone]);
+
+  useEffect(() => {
+    if (!scheduleOpen) return;
+    setScheduleDate((prev) => {
+      const prevSafe = safeDateInput(prev);
+      if (prevSafe) return prevSafe;
+      const start = safeDateInput(form.startDate);
+      return start || safeDateInput(new Date().toISOString());
+    });
+  }, [scheduleOpen, form.startDate]);
+
   const loadCampaignIntoForm = useCallback(
     (doc: any) => {
       const normalizePaymentType = (v: any) => {
@@ -1231,7 +1342,16 @@ function CreateManualScreen({
       setLoadedDetails(details);
 
       const nextCategoryId = String(doc?.categoryId ?? details?.category?.id ?? "").trim();
-      const nextCategoryName = String(doc?.categoryName ?? details?.category?.name ?? "").trim();
+
+      const categoryFromPicker = categoryPicker.categoryOptions.find((o) => o.value === nextCategoryId);
+
+      const nextCategoryName = String(
+        doc?.categoryName ??
+        doc?.category?.name ??
+        details?.category?.name ??
+        categoryFromPicker?.label ??
+        ""
+      ).trim();
 
       const next: ManualForm = {
         ...EMPTY_MANUAL,
@@ -1278,13 +1398,9 @@ function CreateManualScreen({
     if (!initialFromCampaign) return;
     if (loadedInitialRef.current === initialFromCampaign) return;
     loadedInitialRef.current = initialFromCampaign;
-
     loadCampaignIntoForm(initialFromCampaign);
-
-    console.log("LoadCampignIntoForm after AI");
   }, [initialFromCampaign, loadCampaignIntoForm]);
 
-  // Options merged with seeded values from doc.details
   const seededHashtagOptions = useMemo<Option[]>(
     () =>
       (loadedDetails?.preferredHashtags ?? [])
@@ -1314,6 +1430,27 @@ function CreateManualScreen({
         })
         .filter((x: any) => x.label && x.value),
     [loadedDetails]
+  );
+
+  const seededCategoryOption = useMemo<Option[]>(() => {
+    const id = String(form.categoryId || loadedDetails?.category?.id || "").trim();
+
+    const fromPicker = categoryPicker.categoryOptions.find((o) => o.value === id);
+
+    const label = String(
+      form.categoryName ||
+      loadedDetails?.category?.name ||
+      fromPicker?.label ||
+      ""
+    ).trim();
+
+    if (!id || !label) return [];
+    return [{ value: id, label }];
+  }, [form.categoryId, form.categoryName, loadedDetails, categoryPicker.categoryOptions]);
+
+  const categoryOptionsMerged = useMemo(
+    () => mergeOptions(categoryPicker.categoryOptions, seededCategoryOption),
+    [categoryPicker.categoryOptions, seededCategoryOption]
   );
 
   const seededFormatOptions = useMemo<Option[]>(
@@ -1382,18 +1519,15 @@ function CreateManualScreen({
       if (fromLabel) out.set(key, fromLabel);
     };
 
-    // 1) seeded details from AI doc/details
     for (const t of (loadedDetails?.influencerTiers ?? []) as any[]) {
       add(t?.id, t?.value, `${String(t?.category ?? "")} (${prettyTierValue(t?.value)})`);
     }
 
-    // 2) if your lists hook exposes raw influencer tiers (common pattern like raw.countries)
     const rawTiers = (lists as any)?.raw?.influencerTiers ?? [];
     for (const t of rawTiers as any[]) {
       add(t?.id, t?.value, `${String(t?.category ?? "")} (${prettyTierValue(t?.value)})`);
     }
 
-    // 3) fallback: parse from rendered option labels
     for (const opt of tierOptions) {
       add(opt.value, null, opt.label);
     }
@@ -1417,7 +1551,6 @@ function CreateManualScreen({
 
   const countryOptionsForSelect = useMemo(() => mergeOptions(countryNameOptions, selectedCountryOptions), [countryNameOptions, selectedCountryOptions]);
 
-  // Progress
   const dateOk = isValidDateRange(form.startDate, form.endDate);
   const datesFilled = !!form.startDate && !!form.endDate;
 
@@ -1454,7 +1587,6 @@ function CreateManualScreen({
 
   const computedBottomBarMaxW = bottomBarMaxWidth ?? (previewOpen && !isBelowLg ? formMaxWidth + effectivePreviewWidth + 120 : formMaxWidth + 120);
 
-  // Reset
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const resetForm = useCallback(() => {
@@ -1475,11 +1607,17 @@ function CreateManualScreen({
       draftSavedTimerRef.current = null;
     }
 
+    setScheduleOpen(false);
+    setScheduleDate(safeDateInput(new Date().toISOString()));
+    setScheduleTime(getDefaultScheduleTime());
+    setTzRes(null);
+    setTzLoading(false);
+    setTzError("");
+
     setSubmitAttempted(false);
     setServerFieldErrors({});
   }, [categoryPicker]);
 
-  // Save draft
   const saveDraftManually = useCallback(async () => {
     const brandId = getBrandId();
     if (!brandId) {
@@ -1528,7 +1666,6 @@ function CreateManualScreen({
     };
   }, []);
 
-  // ✅ FE errors + backend field errors combined (only shown after publish click)
   const manualErrors = useMemo(() => validateManualForm({ form, dateOk, blockingFileErrors: productFileErrors }), [form, dateOk, productFileErrors]);
 
   const combinedErrors = useMemo(() => {
@@ -1536,16 +1673,14 @@ function CreateManualScreen({
   }, [manualErrors, serverFieldErrors]);
 
   const stateFor = useCallback((key: string) => (submitAttempted && combinedErrors[key] ? ("error" as const) : undefined), [submitAttempted, combinedErrors]);
-
   const msgFor = useCallback((key: string) => (submitAttempted ? combinedErrors[key] : ""), [submitAttempted, combinedErrors]);
 
   const doPublish = useCallback(
-    async (status: CampaignStatus) => {
+    async (status: CampaignStatus, scheduledAtIso?: string) => {
       setSubmitAttempted(true);
       setServerFieldErrors({});
       setApiError("");
 
-      // ✅ FE validation first
       const errs = validateManualForm({ form, dateOk, blockingFileErrors: productFileErrors });
       if (Object.values(errs).some(Boolean)) return;
 
@@ -1556,19 +1691,17 @@ function CreateManualScreen({
       }
 
       setPublishing(true);
-
-      // ✅ always resolve a campaign id for routing
       let cid: string | undefined;
 
       try {
         const productImages = await filesToDataUrls(form.productFiles ?? []);
 
         if (campaignId) {
-          // ✅ UPDATE (existing)
           const payload: EditDraftPayload = compact({
             brandId,
             campaignId,
             status,
+            ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
             campaignTitle: form.title.trim(),
             description: form.description.trim(),
             campaignType: form.campaignType,
@@ -1594,36 +1727,52 @@ function CreateManualScreen({
             endAt: form.endDate || undefined,
           }) as EditDraftPayload;
 
-          const updated: any = await apiCampaignCreate(payload);
+          const updated: any = await apiCampaignEditDraft(payload);
 
           cid = pickCampaignId(updated) || campaignId;
           if (cid) setCampaignId(cid);
 
-          toastSuccess(extractBackendSuccessMessage(updated, status === "active" ? "Campaign published" : "Campaign updated"));
+          toastSuccess(
+            extractBackendSuccessMessage(
+              updated,
+              status === "scheduled" ? "Campaign scheduled" : status === "active" ? "Campaign published" : "Campaign updated"
+            )
+          );
         } else {
-          // ✅ CREATE (new)
           const payload = await buildCreateManualPayload(form, true);
           const created: any = await apiCampaignCreate({
             ...(payload as CreateCampaignManualPayload),
             status,
+            ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
           });
 
           cid = pickCampaignId(created);
           if (cid) setCampaignId(cid);
 
-          toastSuccess(extractBackendSuccessMessage(created, status === "active" ? "Campaign published" : "Campaign created"));
+          toastSuccess(
+            extractBackendSuccessMessage(
+              created,
+              status === "scheduled" ? "Campaign scheduled" : status === "active" ? "Campaign published" : "Campaign created"
+            )
+          );
         }
 
         cid = cid || campaignId;
 
-        if (status === "active") {
+        if (status === "scheduled") {
           resetForm();
-          router.replace(`/brand/created-campaign`);
+          router.replace(`/brand/campaign`);
           onAfterPublish?.();
           return;
         }
 
-        // other statuses
+        if (status === "active") {
+          resetForm();
+          router.replace(`/brand/campaign`);
+          onAfterPublish?.();
+          return;
+        }
+
         resetForm();
         onAfterPublish?.();
       } catch (e: any) {
@@ -1677,7 +1826,6 @@ function CreateManualScreen({
     <>
       <div className="cg-page-frame flex min-h-0 w-full flex-col overflow-hidden h-[100dvh]">
         <div className={cn("grid h-full min-h-0 w-full", previewOpen ? "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-1")}>
-          {/* LEFT */}
           <section className="min-h-0 min-w-0 flex flex-col">
             <div className="cg-panel flex flex-col min-h-0">
               <div className="shrink-0 px-4 sm:px-6 lg:px-10 pt-5">
@@ -1727,7 +1875,7 @@ function CreateManualScreen({
                         />
 
                         {showSparkle && (
-                          <div className="fixed inset-0 flex items-center justify-center pointer-events-none bg-gray-950/60  z-[9999]">
+                          <div className="fixed inset-0 flex items-center justify-center pointer-events-none bg-gray-950/60 z-[9999]">
                             <SparkleAnimation key={String(showSparkle)} className="scale-[1.8]" />
                           </div>
                         )}
@@ -1756,7 +1904,7 @@ function CreateManualScreen({
                             value={form.categoryId}
                             onValueChange={(id) => {
                               categoryPicker.selectCategoryId(id);
-                              const opt = categoryPicker.categoryOptions.find((o) => o.value === id);
+                              const opt = categoryOptionsMerged.find((o) => o.value === id);
                               setField("categoryId", id);
                               setField("categoryName", opt?.label ?? "");
                               setField("subcategories", []);
@@ -1765,7 +1913,7 @@ function CreateManualScreen({
                             errorText={msgFor("categoryId")}
                             clientFilter={false}
                           >
-                            {categoryPicker.categoryOptions.map((x) => (
+                            {categoryOptionsMerged.map((x) => (
                               <SelectItem key={x.value} value={x.value}>
                                 {x.label}
                               </SelectItem>
@@ -1843,7 +1991,6 @@ function CreateManualScreen({
                               setForm((prev) => {
                                 const selected = next ?? [];
 
-                                // ✅ if all tiers removed, clear min/max too
                                 if (selected.length === 0) {
                                   followersTouchedRef.current.min = false;
                                   followersTouchedRef.current.max = false;
@@ -1859,9 +2006,7 @@ function CreateManualScreen({
                                 const ranges = selected.map((id) => tierRangeById.get(id));
                                 const agg = aggregateRanges(ranges);
 
-                                // If user already manually edited min/max, don't override.
                                 const nextMin = !followersTouchedRef.current.min && agg?.min != null ? agg.min : prev.minFollowers;
-
                                 const nextMax = !followersTouchedRef.current.max && agg?.max != null ? agg.max : prev.maxFollowers;
 
                                 return {
@@ -1883,7 +2028,6 @@ function CreateManualScreen({
                             value={String(form.minFollowers || "")}
                             onValueChange={(v) => {
                               const n = clampNonNegative(v);
-                              // if user clears to 0, allow auto-prefill again
                               followersTouchedRef.current.min = n > 0;
                               setField("minFollowers", n);
                             }}
@@ -1957,11 +2101,9 @@ function CreateManualScreen({
                             required
                             type="date"
                             value={form.startDate}
-                            min={TODAY} // ✅ start date cannot be before today
+                            min={TODAY}
                             onValueChange={(v) => {
                               setField("startDate", v);
-
-                              // ✅ if endDate exists and is <= new startDate, push it to next day
                               if (form.endDate && isSameOrBeforeISO(form.endDate, v)) {
                                 setField("endDate", addDaysISO(v, 1));
                               }
@@ -2079,12 +2221,32 @@ function CreateManualScreen({
             </aside>
           ) : null}
 
-          {/* RIGHT PREVIEW (Tablet/Mobile Side Modal) */}
           <SideModalPreview open={Boolean(previewOpen && isBelowLg)} onClose={() => setPreviewOpen(false)} title="Card Preview" widthPx={previewWidth}>
             <ManualPreviewCardStack form={form} meta={previewMeta} />
           </SideModalPreview>
         </div>
       </div>
+
+      {scheduleOpen && (
+        <ScheduleCampaignOverlay
+          open={true}
+          isMobile={isMobileSchedule}
+          anchorRef={scheduleBtnRef}
+          date={scheduleDate}
+          time={scheduleTime}
+          baseTimeZone={baseTimeZone}
+          countries={scheduleCountries}
+          tzLoading={tzLoading}
+          tzError={tzError}
+          onClose={() => setScheduleOpen(false)}
+          onDateChange={setScheduleDate}
+          onTimeChange={setScheduleTime}
+          onConfirm={(iso) => {
+            setScheduleOpen(false);
+            doPublish("scheduled" as CampaignStatus, iso);
+          }}
+        />
+      )}
 
       <FixedBottomBar
         sidebarOffsetPx={sidebarOffsetPx}
@@ -2110,6 +2272,17 @@ function CreateManualScreen({
         }
         right={
           <>
+            <Button
+              ref={scheduleBtnRef}
+              variant="outline"
+              onClick={() => setScheduleOpen(true)}
+              className="shadow-none"
+              disabled={publishing}
+            >
+              <Clock size={16} className="mr-2" />
+              {publishing ? "Saving…" : "Schedule Campaign"}
+            </Button>
+
             <Button onClick={() => doPublish("active")} disabled={publishing}>
               <PaperPlaneTilt size={16} className="mr-2" />
               {publishing ? "Publishing…" : "Publish Campaign"}
@@ -2127,6 +2300,9 @@ function CreateManualScreen({
 export default function CreateCampaignPage() {
   const { clearActions } = useBrandTopbar();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editCampaignId = searchParams.get("campaignId");
+
   const [view, setView] = useState<"loading" | "intro" | "manual" | "ai">("loading");
   const sidebarOffsetPx = useSidebarOffsetPx();
   const [showSparkle, setShowSparkle] = useState(false);
@@ -2137,13 +2313,46 @@ export default function CreateCampaignPage() {
   const lists = useCampaignLists(listsEnabled);
 
   useEffect(() => {
+    if (editCampaignId) {
+      setView("loading");
+      return;
+    }
+
     try {
       const seen = localStorage.getItem(SEEN_KEY) === "1";
       setView(seen ? "manual" : "intro");
     } catch {
       setView("intro");
     }
-  }, []);
+  }, [editCampaignId]);
+
+  useEffect(() => {
+    if (!editCampaignId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res: any = await apiCampaignGetById({
+          campaignId: editCampaignId,
+          brandId: getBrandId() || undefined,
+        });
+        if (cancelled) return;
+
+        const doc = res?.data ?? res;
+        setManualFromCampaign(doc as EnrichedCampaignDoc);
+        setView("manual");
+      } catch (e) {
+        if (cancelled) return;
+        toastError("Failed to load campaign", getApiErrorMessage(e));
+        setView("manual");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editCampaignId]);
 
   useEffect(() => {
     if (view === "manual") return;
@@ -2154,7 +2363,7 @@ export default function CreateCampaignPage() {
   const markSeen = useCallback(() => {
     try {
       localStorage.setItem(SEEN_KEY, "1");
-    } catch {}
+    } catch { }
   }, []);
 
   const openManual = useCallback(() => {

@@ -21,7 +21,7 @@ type AddMilestoneCardProps = {
   campaignId?: string;
   influencerId?: string;
   influencerName?: string;
-  onSubmit?: () => void | Promise<void>;
+  onSubmit?: () => void;
 };
 
 type WalletShortfallState = {
@@ -153,7 +153,7 @@ function WalletTopupModal({
                 <div className="mt-1">
                   Minimum suggested top-up:{" "}
                   <span className="font-semibold">
-                    ${Number(defaultAmount || 0).toFixed(2)}
+                    ₹{Number(defaultAmount || 0).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -282,16 +282,22 @@ export default function AddMilestoneCard({
     return `for ${influencerName}`;
   }, [influencerName]);
 
-  const primaryButtonLabel = submitting
-    ? "Creating..."
-    : walletShortfall
-    ? "Add Wallet Balance"
-    : "Create Milestone";
+  const primaryButtonLabel = submitting ? "Creating..." : "Create Milestone";
+
+  const openTopupModalFromShortfall = () => {
+    if (!walletShortfall) return;
+    setWalletModalOpen(true);
+  };
 
   const handleCreateMilestone = async () => {
     try {
       setError("");
       setTopupSuccess("");
+
+      if (walletShortfall) {
+        openTopupModalFromShortfall();
+        return;
+      }
 
       if (!brandId) {
         setError("Brand ID is missing.");
@@ -332,7 +338,7 @@ export default function AddMilestoneCard({
       });
 
       setWalletShortfall(null);
-      await onSubmit?.();
+      onSubmit?.();
       onClose();
     } catch (err: any) {
       const message = getApiErrorMessage(err, "Failed to create milestone");
@@ -358,15 +364,6 @@ export default function AddMilestoneCard({
     }
   };
 
-  const handlePrimaryButtonClick = () => {
-    if (walletShortfall) {
-      setWalletModalOpen(true);
-      return;
-    }
-
-    handleCreateMilestone();
-  };
-
   const handleWalletTopupSuccess = (payload: {
     brandId: string;
     amount: number;
@@ -378,7 +375,7 @@ export default function AddMilestoneCard({
     setWalletShortfall(null);
     setError("");
     setTopupSuccess(
-      `Wallet balance added successfully. $${Number(payload.amount || 0).toFixed(
+      `Wallet balance added successfully. ₹${Number(payload.amount || 0).toFixed(
         2
       )} was added. You can now create the milestone.`
     );
@@ -460,7 +457,7 @@ export default function AddMilestoneCard({
                   <div className="mt-1">
                     Please add{" "}
                     <span className="font-semibold">
-                      ${Number(walletShortfall.needToAdd || 0).toFixed(2)}
+                      ₹{Number(walletShortfall.needToAdd || 0).toFixed(2)}
                     </span>{" "}
                     to continue.
                   </div>
@@ -494,7 +491,7 @@ export default function AddMilestoneCard({
 
             <Button
               type="button"
-              onClick={handlePrimaryButtonClick}
+              onClick={handleCreateMilestone}
               disabled={submitting}
               className="h-10 w-full rounded-lg bg-[#1A1A1A] px-4 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >

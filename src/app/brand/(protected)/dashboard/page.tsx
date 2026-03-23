@@ -360,7 +360,7 @@ export default function BrandDashboardHome() {
                     </Button>
 
                     <Button
-                      onClick={() => router.push("/brand/create-campaign")}                    >
+                      onClick={() => router.push("/brand/add-edit-campaign")}                    >
                       Create New Campaign
                     </Button>
                   </div>
@@ -595,7 +595,7 @@ export default function BrandDashboardHome() {
 
                   <button
                     type="button"
-                    onClick={() => router.push("/brand/email")}
+                    onClick={() => router.push("/brand/inbox")}
                     className="text-xs font-semibold px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition"
                     title="Open full inbox"
                   >

@@ -35,7 +35,6 @@ import {
   getApiErrorMessage,
   type ActiveCampaignItem,
 } from "@/services/influencerApi";
-import { useRouter } from "next/navigation";
 
 /* -------------------------------------------------------------------------- */
 /*                                   TYPES                                    */
@@ -153,9 +152,9 @@ function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
 
   const platforms: string[] = Array.isArray(campaign?.platformSelection)
     ? campaign.platformSelection
-      .filter((p: unknown): p is string => typeof p === "string")
-      .map((p: string) => normalizePlatformLabel(p))
-      .filter((p: any): p is string => Boolean(p))
+        .filter((p: unknown): p is string => typeof p === "string")
+        .map((p: string) => normalizePlatformLabel(p))
+        .filter((p: any): p is string => Boolean(p))
     : [];
 
   const normalizedPlatforms: string[] = Array.from(new Set(platforms));
@@ -257,7 +256,6 @@ function campaignToPreview(campaign: UICampaign) {
 /* -------------------------------------------------------------------------- */
 
 export default function DiscoverCampaigns() {
-  const router = useRouter();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -325,8 +323,8 @@ export default function DiscoverCampaigns() {
         setServerTotal(
           Number(
             (res as any)?.data?.pagination?.total ??
-            (res as any)?.meta?.total ??
-            mapped.length,
+              (res as any)?.meta?.total ??
+              mapped.length,
           ),
         );
       } catch (err) {
@@ -623,14 +621,7 @@ export default function DiscoverCampaigns() {
 
                 return (
                   <div key={campaign.id}>
-                    <ManualPreviewCard
-                      key={campaign.id}
-                      form={form}
-                      meta={meta}
-                      onViewClick={() =>
-                        router.push(`/influencer/discover-campaigns/${campaign.id}`)
-                      }
-                    />
+                    <ManualPreviewCard form={form} meta={meta} />
                   </div>
                 );
               })}

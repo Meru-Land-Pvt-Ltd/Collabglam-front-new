@@ -1,26 +1,10 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import {
-  Users,
-  Loader2,
-  AlertCircle,
-  X,
-  Send,
-  Paperclip,
-  Mail,
-  Megaphone,
-} from 'lucide-react';
+import { Users, Loader2, AlertCircle, X, Send, Paperclip, Mail } from 'lucide-react';
 import { post, get } from '@/lib/api';
-import {
-  apiGetCampaignInvitationsByBrand,
-  getApiErrorMessage,
-} from '@/app/brand/services/brandApi';
 
-/* -------------------------------------------------------------------------- */
-/* TYPES                                                                       */
-/* -------------------------------------------------------------------------- */
-
+// Types aligned with your Invitation model / backend
 type InvitationStatus = 'invited' | 'available';
 
 type Invitation = {
@@ -31,11 +15,13 @@ type Invitation = {
   status: InvitationStatus;
   campaignId?: string | null;
   campaignName?: string | null;
-  missingEmailId?: string | null;
+  missingEmailId?: string | null; // ✅ IMPORTANT
   createdAt: string;
   updatedAt: string;
 };
 
+// Node controller response:
+// { page, limit, total, hasNext, data: docs }
 type InvitationListResponse = {
   page: number;
   limit: number;
@@ -60,48 +46,7 @@ type AttachmentPayload = {
   size: number;
 };
 
-type EligibilityState = 'allowed' | 'cooldown' | 'blocked' | 'missing_email';
-
-type InvitationEligibility = {
-  canSend: boolean;
-  state: EligibilityState;
-  reason: string;
-  nextAllowedAt?: string | null;
-  threadId?: string | null;
-  outgoingCount?: number;
-};
-
-type BrandPlanRes = {
-  brandPlanId: string | null;
-  brandPlanName: string | null;
-};
-
-type CampaignInvitationRow = {
-  _id?: string;
-  brandId: string;
-  campaignId: string;
-  influencerId: string;
-  influencerName?: string;
-  influencerEmail?: string;
-  campaignTitle?: string;
-  campaignName?: string;
-  status?: string;
-  sentAt?: string;
-  createdAt?: string;
-  failedAt?: string | null;
-  failReason?: string | null;
-  platform?: string;
-  handle?: string;
-  modashUserId?: string;
-  emailTo?: string | null;
-  [key: string]: any;
-};
-
-const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
-
-/* -------------------------------------------------------------------------- */
-/* HELPERS                                                                     */
-/* -------------------------------------------------------------------------- */
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // 20MB
 
 function unwrap<T>(res: any): T {
   return res as T;
@@ -112,13 +57,25 @@ async function listInvitations(body: ListInvitationsRequest): Promise<Invitation
   return unwrap<InvitationListResponse>(res);
 }
 
-const prettyDate = (iso?: string | null) =>
+const prettyDate = (iso: string) =>
   iso
     ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-    : '-';
+    : '';
 
 const truncateText = (value: string, max = 60) =>
   value.length > max ? `${value.slice(0, max)}…` : value;
+
+// Eligibility response from backend
+type EligibilityState = 'allowed' | 'cooldown' | 'blocked' | 'missing_email';
+
+type InvitationEligibility = {
+  canSend: boolean;
+  state: EligibilityState;
+  reason: string;
+  nextAllowedAt?: string | null;
+  threadId?: string | null;
+  outgoingCount?: number;
+};
 
 function formatWaitUntil(iso?: string | null) {
   if (!iso) return '';
@@ -136,52 +93,27 @@ function formatWaitUntil(iso?: string | null) {
   return `${m}m`;
 }
 
-function getCampaignInvitationName(inv: CampaignInvitationRow) {
-  return (
-    inv.campaignTitle ||
-    inv.campaignName ||
-    inv.title ||
-    'Untitled Campaign'
-  );
-}
-
-function getCampaignInvitationInfluencerName(inv: CampaignInvitationRow) {
-  return (
-    inv.influencerName ||
-    inv.handle ||
-    inv.influencerEmail ||
-    'Unknown Influencer'
-  );
-}
-
-function getCampaignInvitationDate(inv: CampaignInvitationRow) {
-  return inv.sentAt || inv.createdAt || null;
-}
-
-/* -------------------------------------------------------------------------- */
-/* PAGE                                                                        */
-/* -------------------------------------------------------------------------- */
+type BrandPlanRes = {
+  brandPlanId: string | null;
+  brandPlanName: string | null;
+};
 
 export default function InvitedInfluencersPage() {
   const [brandId, setBrandId] = useState<string | null>(null);
   const [brandAliasEmail, setBrandAliasEmail] = useState<string>('');
 
+  // ✅ Plan gating
   const [planLoading, setPlanLoading] = useState(true);
   const [brandPlanName, setBrandPlanName] = useState<string>('free');
   const isFullyManaged = brandPlanName === 'fully_managed';
 
-  // General invitations
   const [items, setItems] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // Campaign invitations
-  const [campaignInvitations, setCampaignInvitations] = useState<CampaignInvitationRow[]>([]);
-  const [campaignLoading, setCampaignLoading] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
 
   const hasAnyCampaign = items.some((inv) => !!inv.campaignName);
 
+  // ✅ eligibility cache
   const [eligibilityByInvitationId, setEligibilityByInvitationId] = useState<
     Record<string, InvitationEligibility>
   >({});
@@ -196,11 +128,11 @@ export default function InvitedInfluencersPage() {
   const [composeError, setComposeError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
+  // Attachments
   const [composeAttachments, setComposeAttachments] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const invitedCount = items.length;
-  const campaignInvitedCount = campaignInvitations.length;
 
   const resetComposeState = () => {
     setComposeSubject('');
@@ -210,7 +142,7 @@ export default function InvitedInfluencersPage() {
     setSelectedEligibility(null);
   };
 
-  // Read brandId once
+  // 1) Read brandId once
   useEffect(() => {
     try {
       const storedBrandId = window.localStorage.getItem('brandId');
@@ -223,6 +155,7 @@ export default function InvitedInfluencersPage() {
       setBrandId(storedBrandId || null);
       setBrandAliasEmail(storedAliasEmail || '');
 
+      // quick cache for plan (avoid flash)
       const cachedPlan = window.localStorage.getItem('brandPlanName');
       if (cachedPlan) setBrandPlanName(String(cachedPlan).toLowerCase());
     } catch {
@@ -231,7 +164,7 @@ export default function InvitedInfluencersPage() {
     }
   }, []);
 
-  // Fetch plan
+  // 2) Fetch plan (server source of truth)
   useEffect(() => {
     if (!brandId) return;
 
@@ -252,9 +185,7 @@ export default function InvitedInfluencersPage() {
 
         try {
           window.localStorage.setItem('brandPlanName', latestName);
-          if (data?.brandPlanId) {
-            window.localStorage.setItem('brandPlanId', String(data.brandPlanId));
-          }
+          if (data?.brandPlanId) window.localStorage.setItem('brandPlanId', String(data.brandPlanId));
         } catch {}
       } catch {
         // keep cached plan if call fails
@@ -268,16 +199,16 @@ export default function InvitedInfluencersPage() {
     };
   }, [brandId]);
 
-  // Fetch general invitations
+  // 3) Fetch invitations (status: 'all')
   useEffect(() => {
     if (!brandId) return;
 
-    const fetchGeneralInvitations = async () => {
+    const fetchData = async () => {
       setLoading(true);
       setError(null);
       try {
         const res = await listInvitations({
-          brandId,
+          brandId: brandId || undefined,
           page: 1,
           limit: 100,
           status: 'all',
@@ -291,32 +222,7 @@ export default function InvitedInfluencersPage() {
       }
     };
 
-    fetchGeneralInvitations();
-  }, [brandId]);
-
-  // Fetch campaign invitations
-  useEffect(() => {
-    if (!brandId) return;
-
-    const fetchCampaignInvitations = async () => {
-      setCampaignLoading(true);
-      try {
-        const res = await apiGetCampaignInvitationsByBrand({
-          brandId,
-          page: 1,
-          limit: 100,
-        });
-
-        setCampaignInvitations(res?.invitations || []);
-      } catch (err: any) {
-        console.error(err);
-        setError(getApiErrorMessage(err, 'Failed to load campaign invitations'));
-      } finally {
-        setCampaignLoading(false);
-      }
-    };
-
-    fetchCampaignInvitations();
+    fetchData();
   }, [brandId]);
 
   const fetchEligibility = async (invitationId: string): Promise<InvitationEligibility | null> => {
@@ -342,7 +248,7 @@ export default function InvitedInfluencersPage() {
     }
   };
 
-  // Prefetch eligibility
+  // ✅ Prefetch eligibility ONLY if not fully managed (since there’s no email sending anyway)
   useEffect(() => {
     if (!brandId) return;
     if (!items.length) return;
@@ -365,9 +271,11 @@ export default function InvitedInfluencersPage() {
     return () => {
       cancelled = true;
     };
-  }, [brandId, items, isFullyManaged, eligibilityByInvitationId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandId, items, isFullyManaged]);
 
   const openComposeForInvitation = async (inv: Invitation) => {
+    // ✅ Hard block
     if (isFullyManaged) {
       setError('Email sending is disabled for Fully Managed plan (CollabGlam handles outreach).');
       return;
@@ -379,7 +287,7 @@ export default function InvitedInfluencersPage() {
     }
 
     if (!inv.missingEmailId) {
-      setError(`No email found yet for ${inv.handle}. Wait until the system resolves the email.`);
+      setError(`No email found yet for ${inv.handle}. Wait until the system resolves the email (MissingEmailId).`);
       return;
     }
 
@@ -400,6 +308,7 @@ export default function InvitedInfluencersPage() {
     const outgoingCount = eligibility?.outgoingCount ?? 0;
     if (outgoingCount >= 1) return;
 
+    // First email → prefill
     if (!inv.campaignId) {
       const subjectBase = 'Collaboration opportunity';
       const subject = inv.campaignName ? `${subjectBase} – ${inv.campaignName}` : subjectBase;
@@ -506,6 +415,7 @@ CollabGlam Brand Team
             };
 
             reader.onerror = () => reject(new Error(`Failed to read attachment: ${file.name}`));
+
             reader.readAsDataURL(file);
           })
       )
@@ -515,6 +425,7 @@ CollabGlam Brand Team
   };
 
   const handleSend = async () => {
+    // ✅ Hard block
     if (isFullyManaged) {
       setComposeError('Email sending is disabled for Fully Managed plan.');
       return;
@@ -594,21 +505,17 @@ CollabGlam Brand Team
               <Users className="w-5 h-5 text-orange-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Invited Influencers</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Invited Handles</h1>
               <p className="text-sm text-gray-600">
-                View general invitations and campaign invitations in separate sections.
+                Creators you&apos;ve reached out to, with invite status and campaign (if any).
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+          <div className="flex items-center gap-3 text-xs text-gray-500">
             <span className="inline-flex items-center rounded-full bg-white border border-gray-200 px-3 py-1">
               <span className="mr-1 h-1.5 w-1.5 rounded-full bg-amber-500" />
-              {invitedCount} general invitation{invitedCount === 1 ? '' : 's'}
-            </span>
-            <span className="inline-flex items-center rounded-full bg-white border border-gray-200 px-3 py-1">
-              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-blue-500" />
-              {campaignInvitedCount} campaign invitation{campaignInvitedCount === 1 ? '' : 's'}
+              {invitedCount} handle{invitedCount === 1 ? '' : 's'}
             </span>
           </div>
         </header>
@@ -621,13 +528,10 @@ CollabGlam Brand Team
           </div>
         )}
 
-        {/* -------------------- GENERAL INVITATIONS -------------------- */}
-        <section className="mb-8 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-orange-600" />
-              <span className="text-sm font-medium text-gray-700">General Invitations</span>
-            </div>
+            <span className="text-sm font-medium text-gray-700">Invited Influencers</span>
             {invitedCount > 0 && (
               <span className="text-xs text-gray-500">
                 Showing {invitedCount} item{invitedCount === 1 ? '' : 's'}
@@ -635,23 +539,26 @@ CollabGlam Brand Team
             )}
           </div>
 
+          {/* Loading */}
           {loading && (
             <div className="p-8 flex items-center justify-center gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-              <span className="text-gray-600 text-sm">Loading general invitations...</span>
+              <span className="text-gray-600 text-sm">Loading invited handles...</span>
             </div>
           )}
 
+          {/* Empty */}
           {!loading && items.length === 0 && (
             <div className="p-8 text-center text-gray-500 text-sm">
               <Users className="w-10 h-10 mx-auto mb-3 opacity-40" />
-              <p className="font-medium">No general invitations yet</p>
+              <p className="font-medium">No invited handles yet</p>
               <p className="text-xs mt-1">
-                Invite creators from the browse page to see them here.
+                Invite creators from the Browse Influencers page to see them here.
               </p>
             </div>
           )}
 
+          {/* Table */}
           {!loading && items.length > 0 && (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -662,6 +569,7 @@ CollabGlam Brand Team
                     <Th>Status</Th>
                     <Th className="hidden sm:table-cell">Platform</Th>
                     <Th className="hidden md:table-cell">Invited At</Th>
+
                     {!(!planLoading && isFullyManaged) && <Th className="text-right pr-6">Action</Th>}
                   </tr>
                 </thead>
@@ -671,6 +579,7 @@ CollabGlam Brand Team
                     const elig = rowEligibility[inv.invitationId];
                     const missingEmail = !inv.missingEmailId;
                     const ruleBlocks = elig ? !elig.canSend : false;
+
                     const disabled = isSending || missingEmail || ruleBlocks;
 
                     let btnLabel = 'Send Email';
@@ -733,17 +642,14 @@ CollabGlam Brand Team
                         <Td>
                           <span
                             className={[
-                              'inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium border',
+                              'inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium',
                               inv.status === 'invited'
                                 ? 'border-amber-200 bg-amber-50 text-amber-700'
                                 : 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                              'border',
                             ].join(' ')}
                           >
-                            {inv.status === 'invited'
-                              ? 'Pending'
-                              : inv.status === 'available'
-                              ? 'Available'
-                              : inv.status}
+                            {inv.status === 'invited' ? 'Pending' : inv.status === 'available' ? 'Available' : inv.status}
                           </span>
                         </Td>
 
@@ -757,6 +663,7 @@ CollabGlam Brand Team
                           <span className="text-gray-500 text-xs">{prettyDate(inv.createdAt)}</span>
                         </Td>
 
+                        {/* ✅ Action cell hidden for fully managed */}
                         {!(!planLoading && isFullyManaged) && (
                           <Td className="text-right">
                             <button
@@ -771,7 +678,7 @@ CollabGlam Brand Team
                                   : elig?.reason || undefined
                               }
                               className={`
-                                inline-flex items-center gap-1.5 rounded-full border border-orange-200 px-3 py-1
+                                inline-flex items-center gap-1.5 rounded-full border border-orange-200 px-3 py-1 
                                 text-xs font-medium transition-colors
                                 ${
                                   disabled
@@ -792,111 +699,7 @@ CollabGlam Brand Team
               </table>
             </div>
           )}
-        </section>
-
-        {/* -------------------- CAMPAIGN INVITATIONS -------------------- */}
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Megaphone className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-medium text-gray-700">Campaign Invitations</span>
-            </div>
-            {campaignInvitedCount > 0 && (
-              <span className="text-xs text-gray-500">
-                Showing {campaignInvitedCount} item{campaignInvitedCount === 1 ? '' : 's'}
-              </span>
-            )}
-          </div>
-
-          {campaignLoading && (
-            <div className="p-8 flex items-center justify-center gap-3">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-              <span className="text-gray-600 text-sm">Loading campaign invitations...</span>
-            </div>
-          )}
-
-          {!campaignLoading && campaignInvitations.length === 0 && (
-            <div className="p-8 text-center text-gray-500 text-sm">
-              <Megaphone className="w-10 h-10 mx-auto mb-3 opacity-40" />
-              <p className="font-medium">No campaign invitations yet</p>
-              <p className="text-xs mt-1">
-                Campaign-based invitations will appear here.
-              </p>
-            </div>
-          )}
-
-          {!campaignLoading && campaignInvitations.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <Th>Campaign Name</Th>
-                    <Th>Influencer Name</Th>
-                    <Th className="hidden md:table-cell">Invited At</Th>
-                    <Th>Status</Th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-gray-100">
-                  {campaignInvitations.map((inv, idx) => (
-                    <tr
-                      key={inv._id || `${inv.campaignId}-${inv.influencerId}-${idx}`}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <Td>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-gray-900">
-                            {getCampaignInvitationName(inv)}
-                          </span>
-                          {inv.platform ? (
-                            <span className="mt-1 inline-flex w-fit items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-slate-700">
-                              {inv.platform}
-                            </span>
-                          ) : null}
-                        </div>
-                      </Td>
-
-                      <Td>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-gray-900">
-                            {getCampaignInvitationInfluencerName(inv)}
-                          </span>
-                          {(inv.handle || inv.influencerEmail || inv.emailTo) && (
-                            <span className="text-xs text-gray-500 mt-0.5">
-                              {inv.handle || inv.influencerEmail || inv.emailTo}
-                            </span>
-                          )}
-                        </div>
-                      </Td>
-
-                      <Td className="hidden md:table-cell">
-                        <span className="text-gray-500 text-xs">
-                          {prettyDate(getCampaignInvitationDate(inv))}
-                        </span>
-                      </Td>
-
-                      <Td>
-                        <span
-                          className={[
-                            'inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium border',
-                            inv.status === 'sent'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                              : inv.status === 'failed'
-                              ? 'border-red-200 bg-red-50 text-red-700'
-                              : 'border-amber-200 bg-amber-50 text-amber-700',
-                          ].join(' ')}
-                          title={inv.failReason || undefined}
-                        >
-                          {inv.status || 'Pending'}
-                        </span>
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+        </div>
 
         <p className="mt-4 text-[11px] text-gray-500">
           Rule: if a creator has never replied, you can send 1 email anytime, the 2nd only after 48 hours,
@@ -904,10 +707,11 @@ CollabGlam Brand Team
         </p>
       </div>
 
-      {/* Compose modal */}
+      {/* ✅ Compose modal (only when NOT fully managed) */}
       {!(!planLoading && isFullyManaged) && isComposeOpen && selectedInvitation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-sm px-4">
           <div className="bg-white/95 w-full max-w-2xl rounded-2xl shadow-2xl border border-orange-100 flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-white via-white to-[#FFF3E1]">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-[#FFA135] to-[#FF7236] flex items-center justify-center text-white shadow-md">
@@ -932,7 +736,9 @@ CollabGlam Brand Team
               </button>
             </div>
 
+            {/* Body */}
             <div className="px-6 py-4 space-y-3 overflow-y-auto">
+              {/* Rule banner */}
               {selectedEligibility && (
                 <div
                   className={[
@@ -955,6 +761,7 @@ CollabGlam Brand Team
                 </div>
               )}
 
+              {/* From */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium text-gray-500">From</label>
                 <input
@@ -965,6 +772,7 @@ CollabGlam Brand Team
                 />
               </div>
 
+              {/* To */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium text-gray-500">To</label>
                 <input
@@ -975,6 +783,7 @@ CollabGlam Brand Team
                 />
               </div>
 
+              {/* Subject */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium text-gray-500">Subject</label>
                 <input
@@ -985,6 +794,7 @@ CollabGlam Brand Team
                 />
               </div>
 
+              {/* Message */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium text-gray-500">Message</label>
                 <textarea
@@ -1022,6 +832,7 @@ CollabGlam Brand Team
               {composeError && <p className="text-[11px] text-red-500">{composeError}</p>}
             </div>
 
+            {/* Footer */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/80">
               <div className="flex items-center gap-2">
                 <button
@@ -1064,10 +875,6 @@ CollabGlam Brand Team
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* TABLE HELPERS                                                               */
-/* -------------------------------------------------------------------------- */
 
 function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (

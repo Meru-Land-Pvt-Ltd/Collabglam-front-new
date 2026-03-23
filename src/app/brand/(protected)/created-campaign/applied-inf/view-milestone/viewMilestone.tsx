@@ -260,12 +260,19 @@ export default function BrandMilestonesPage() {
             }))
             .sort((a, b) => a.influencerName.localeCompare(b.influencerName));
     }, [milestones, influencerIdFilter]);
-    
+
+    const handleView = (row: CampaignMilestoneRow) => {
+        setSelectedMilestone(row);
+        setViewOpen(true);
+    };
+
     const handleSeeDeliverable = (row: CampaignMilestoneRow) => {
+        // Adjust this route if your deliverable page uses a different URL.
         router.push(
-            `/brand/deleverables?campaignId=${row.campaignId}&brandId=${brandId}&influencerId=${row.influencerId}`
+            `/brand/deliverables?campaignId=${row.campaignId}&brandId=${brandId}&influencerId=${row.influencerId}`
         );
     };
+
     const handleRelease = async (row: CampaignMilestoneRow) => {
         if (row.released || row.payoutStatus === "initiated" || row.payoutStatus === "paid") {
             return;
