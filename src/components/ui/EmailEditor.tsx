@@ -32,7 +32,7 @@ export type EmailEditorAttachment = {
   contentType: string;
   size: number;
   contentBase64: string;
-};
+};  
 
 export type EmailEditorProps = {
   open: boolean;
