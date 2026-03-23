@@ -15,8 +15,14 @@ import {
   HiUserGroup,
   HiPencil,
   HiOutlineDocumentText,
+  HiPlus,
 } from "react-icons/hi";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,16 +32,6 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card } from "@/components/ui/card";
-import { HiPlus } from "react-icons/hi";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -69,7 +65,7 @@ interface ListResponse {
 type StatusFilter = 0 | 1 | 2;
 
 type SortKey =
-  | "productOrServiceName"
+  | "campaignTitle"
   | "goal"
   | "startDate"
   | "endDate"
@@ -78,6 +74,7 @@ type SortKey =
   | "isActive";
 
 const MAX_NAME_LENGTH = 60;
+
 const formatName = (name?: string) => {
   if (!name) return "—";
   const trimmed = name.trim();
@@ -102,9 +99,10 @@ export default function AdminCampaignsPage() {
 
   const [page, setPage] = useState<number>(1);
   const [limit] = useState<number>(10);
-  const [sortKey, setSortKey] = useState<SortKey>("productOrServiceName");
+  const [sortKey, setSortKey] = useState<SortKey>("campaignTitle");
   const [sortAsc, setSortAsc] = useState<boolean>(true);
-
+  const actionBtnClass =
+    "rounded-md text-black hover:!bg-[#EDEDED] hover:!text-black focus-visible:!bg-[#EDEDED] focus-visible:!text-black focus-visible:!ring-0 active:!bg-[#EDEDED] data-[state=open]:!bg-[#EDEDED]";
   const fetchCampaigns = async () => {
     setLoading(true);
     try {
@@ -116,14 +114,15 @@ export default function AdminCampaignsPage() {
         sortOrder: sortAsc ? "asc" : "desc",
         type: statusFilter,
       };
+
       const data = await post<ListResponse>("/admin/campaign/getlist", payload);
-      setCampaigns(data.campaigns);
-      setTotal(data.total);
-      setTotalPages(data.totalPages);
-      setPage(data.page);
+      setCampaigns(data.campaigns || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
+      setPage(data.page || 1);
       setError(null);
     } catch (err: any) {
-      setError(err.message || "Failed to load campaigns.");
+      setError(err?.message || "Failed to load campaigns.");
     } finally {
       setLoading(false);
     }
@@ -137,36 +136,40 @@ export default function AdminCampaignsPage() {
   const handleRefresh = () => fetchCampaigns();
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortAsc(!sortAsc);
-    else {
+    if (sortKey === key) {
+      setSortAsc((prev) => !prev);
+    } else {
       setSortKey(key);
       setSortAsc(true);
     }
     setPage(1);
   };
 
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString(undefined, {
+  const formatDate = (iso?: string) => {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
+  };
 
   const renderSortIcon = (key: SortKey) =>
     sortKey === key ? (
       sortAsc ? (
-        <HiChevronUp className="ml-1" />
+        <HiChevronUp className="h-4 w-4" />
       ) : (
-        <HiChevronDown className="ml-1" />
+        <HiChevronDown className="h-4 w-4" />
       )
     ) : null;
 
   return (
     <TooltipProvider>
-      <div className="p-6 bg-white min-h-screen">
-        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6">
-          <h1 className="text-3xl font-semibold">All Campaigns (Admin)</h1>
-          <div className="flex flex-wrap gap-3 items-center">
+      <div className="min-h-screen bg-white p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <h1 className="text-3xl font-semibold text-black">All Campaigns (Admin)</h1>
+
+          <div className="flex flex-wrap items-center gap-3">
             <Input
               placeholder="Search campaigns..."
               value={search}
@@ -176,6 +179,7 @@ export default function AdminCampaignsPage() {
               }}
               className="w-full sm:w-64"
             />
+
             <Select
               value={statusFilter.toString()}
               onValueChange={(val) => {
@@ -194,140 +198,171 @@ export default function AdminCampaignsPage() {
                 ))}
               </SelectContent>
             </Select>
+
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
-              <HiOutlineRefresh className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              <HiOutlineRefresh
+                className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
               Refresh
             </Button>
           </div>
         </div>
 
         {loading ? (
-          <Card className="space-y-3 p-4">
+          <div className="mt-8 space-y-3">
             {Array.from({ length: limit }).map((_, i) => (
-              <div key={i} className="h-6 w-full bg-gray-200 animate-pulse rounded" />
+              <div key={i} className="h-12 w-full animate-pulse rounded bg-gray-100" />
             ))}
-          </Card>
+          </div>
         ) : error ? (
-          <Card className="text-center py-20 text-red-600">{error}</Card>
+          <div className="mt-8 py-16 text-center text-red-600">{error}</div>
         ) : campaigns.length === 0 ? (
-          <Card className="text-center py-20 text-gray-600">No campaigns found.</Card>
+          <div className="mt-8 py-16 text-center text-gray-500">No campaigns found.</div>
         ) : (
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
+          <div className="mt-8 rounded-2xl border border-gray-300 bg-white overflow-hidden">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-50">
                   {[
-                    { label: "Name", key: "productOrServiceName" },
+                    { label: "Name", key: "campaignTitle" },
                     { label: "Goal", key: "goal" },
                     { label: "Start", key: "startDate" },
                     { label: "End", key: "endDate" },
                     { label: "Budget", key: "budget" },
                     { label: "Applicants", key: "applicantCount" },
-                    { label: "Status", key: "isActive" }, // ✅ was "status" (not in SortKey)
+                    { label: "Status", key: "isActive" },
                     { label: "Actions", key: "" },
                   ].map((col) => (
-                    <TableHead
+                    <th
                       key={col.label}
-                      className={col.key ? "cursor-pointer select-none" : ""}
                       onClick={() => col.key && toggleSort(col.key as SortKey)}
+                      className={`border-r border-gray-300 px-5 py-5 text-left text-[15px] font-semibold text-gray-700 last:border-r-0 ${col.key ? "cursor-pointer select-none" : ""
+                        }`}
                     >
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center gap-1">
                         {col.label}
                         {col.key && renderSortIcon(col.key as SortKey)}
                       </div>
-                    </TableHead>
+                    </th>
                   ))}
-                </TableRow>
-              </TableHeader>
+                </tr>
+              </thead>
 
-              <TableBody>
-                {campaigns.map((c) => (
-                  <TableRow key={c._id}>
-                    <TableCell className="font-medium" title={c.campaignTitle}>
+              <tbody>
+                {campaigns.map((c, index) => (
+                  <tr
+                    key={c._id}
+                    className={index !== campaigns.length - 1 ? "border-t border-gray-300" : "border-t border-gray-300"}
+                  >
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] font-medium text-black last:border-r-0">
                       {formatName(c.campaignTitle)}
-                    </TableCell>
-                    <TableCell>{c.goal || "—"}</TableCell>
-                    <TableCell>{c.timeline?.startDate ? formatDate(c.timeline.startDate) : "—"}</TableCell>
-                    <TableCell>{c.timeline?.endDate ? formatDate(c.timeline.endDate) : "—"}</TableCell>
-                    <TableCell>${(c.budget ?? 0).toLocaleString()}</TableCell>
-                    <TableCell>{c.applicantCount || 0}</TableCell>
-                    <TableCell>
+                    </td>
+
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
+                      {c.goal || "—"}
+                    </td>
+
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
+                      {formatDate(c.timeline?.startDate)}
+                    </td>
+
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
+                      {formatDate(c.timeline?.endDate)}
+                    </td>
+
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
+                      ${(c.budget ?? 0).toLocaleString()}
+                    </td>
+
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
+                      {c.applicantCount || 0}
+                    </td>
+
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px]">
                       {c.isDraft === 1 ? (
-                        <span className="inline-flex items-center space-x-1 text-yellow-600">
+                        <span className="inline-flex items-center gap-1 text-yellow-600">
                           <HiOutlineRefresh className="h-4 w-4" />
-                          <span>Draft</span>
+                          Draft
                         </span>
                       ) : c.isActive === 1 ? (
-                        <span className="inline-flex items-center space-x-1 text-green-600">
-                          <HiCheckCircle />
-                          <span>Active</span>
+                        <span className="inline-flex items-center gap-1 text-green-600">
+                          <HiCheckCircle className="h-4 w-4" />
+                          Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center space-x-1 text-red-600">
-                          <HiXCircle />
-                          <span>Inactive</span>
+                        <span className="inline-flex items-center gap-1 text-red-600">
+                          <HiXCircle className="h-4 w-4" />
+                          Inactive
                         </span>
                       )}
-                    </TableCell>
+                    </td>
 
-                    <TableCell>
-                      {/* View */}
-                      <div className="flex items-center gap-1">
-                        {/* View */}
+                    <td className="px-5 py-5">
+                      <div className="flex items-center gap-2">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Link href={`/admin/campaigns/view?id=${c._id}`}>
-                              <Button variant="ghost" size="icon" title="View Campaign">
-                                <HiOutlineEye />
-                              </Button>
-                            </Link>
+                            <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
+                              <Link href={`/admin/campaigns/view?id=${c._id}`} aria-label="View Campaign">
+                                <HiOutlineEye className="h-5 w-5 text-black" />
+                              </Link>
+                            </Button>
                           </TooltipTrigger>
                           <TooltipContent>View Details</TooltipContent>
                         </Tooltip>
 
-                        {/* Edit */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Link href={`/admin/brands/create-campaign?brandId=${c.brandId}&id=${c._id}`}>
-                              <Button variant="ghost" size="icon" title="Edit Campaign">
-                                <HiPencil />
-                              </Button>
-                            </Link>
+                            <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
+                              <Link
+                                href={`/admin/brands/create-campaign?brandId=${c.brandId}&id=${c._id}`}
+                                aria-label="Edit Campaign"
+                              >
+                                <HiPencil className="h-5 w-5 text-black" />
+                              </Link>
+                            </Button>
                           </TooltipTrigger>
                           <TooltipContent>Edit Campaign</TooltipContent>
                         </Tooltip>
 
-                        {/* Applicants */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Link href={`/admin/campaigns/applicants?campaignId=${c._id}`}>
-                              <Button variant="ghost" size="icon" aria-label="View Applicants">
-                                <HiUserGroup className="h-5 w-5" />
-                              </Button>
-                            </Link>
+                            <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
+                              <Link
+                                href={`/admin/campaigns/applicants?campaignId=${c._id}`}
+                                aria-label="View Applicants"
+                              >
+                                <HiUserGroup className="h-5 w-5 text-black" />
+                              </Link>
+                            </Button>
                           </TooltipTrigger>
                           <TooltipContent>View Applicants</TooltipContent>
                         </Tooltip>
 
-                        {/* Deliverables */}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Link href={`/admin/campaigns/deliverables/${c._id}`}>
-                              <Button variant="ghost" size="icon" aria-label="See Deliverables">
-                                <HiOutlineDocumentText className="h-5 w-5" />
-                              </Button>
-                            </Link>
+                            <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
+                              <Link
+                                href={`/admin/campaigns/deliverables/${c._id}`}
+                                aria-label="See Deliverables"
+                              >
+                                <HiOutlineDocumentText className="h-5 w-5 text-black" />
+                              </Link>
+                            </Button>
                           </TooltipTrigger>
                           <TooltipContent>See Deliverables</TooltipContent>
                         </Tooltip>
 
-                        {/* New Plus Dropdown */}
                         <DropdownMenu>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" aria-label="More Actions">
-                                  <HiPlus className="h-5 w-5" />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="More Actions"
+                                  className={actionBtnClass}
+                                >
+                                  <HiPlus className="h-5 w-5 text-black" />
                                 </Button>
                               </DropdownMenuTrigger>
                             </TooltipTrigger>
@@ -335,39 +370,46 @@ export default function AdminCampaignsPage() {
                           </Tooltip>
 
                           <DropdownMenuContent align="end" className="w-44 bg-white">
-                            <DropdownMenuItem asChild>
+                            <DropdownMenuItem asChild className="cursor-pointer hover:!bg-[#EDEDED] focus:!bg-[#EDEDED]">
                               <Link href={`/admin/youtube?id=${c._id}`}>Youtube Data</Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
+                            <DropdownMenuItem asChild className="cursor-pointer hover:!bg-[#EDEDED] focus:!bg-[#EDEDED]">
                               <Link href={`/admin/modash?id=${c._id}`}>Modash Data</Link>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
-          </Card>
+              </tbody>
+            </table>
+          </div>
         )}
 
         {!loading && !error && campaigns.length > 0 && (
-          <div className="flex justify-between items-center p-4">
+          <div className="mt-9 flex items-center justify-between">
             <div className="text-sm text-gray-700">
               Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
             </div>
-            <div className="space-x-2">
-              <Button variant="outline" size="icon" disabled={page === 1} onClick={() => setPage((p) => Math.max(p - 1, 1))}>
-                <HiChevronLeft />
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+              >
+                <HiChevronLeft className="h-4 w-4" />
               </Button>
+
               <Button
                 variant="outline"
                 size="icon"
                 disabled={page === totalPages}
                 onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
               >
-                <HiChevronRight />
+                <HiChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
