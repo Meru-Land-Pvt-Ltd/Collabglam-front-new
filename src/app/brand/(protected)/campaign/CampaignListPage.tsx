@@ -413,7 +413,7 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         window.location.href = `/brand/campaign/${campaignTitle}?id=${campaignId}`;
       }
     };
-
+    
     const handleEdit = () => {
       if (typeof window !== "undefined") {
         window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(campaignId)}`;
