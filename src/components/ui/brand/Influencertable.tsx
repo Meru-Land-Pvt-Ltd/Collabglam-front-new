@@ -80,27 +80,35 @@ function formatCompact(n: number) {
   return `${n}`;
 }
 
+function normalizePlatformType(value: unknown): PlatformType | null {
+  const v = String(value ?? "").trim().toLowerCase();
+
+  if (v === "instagram") return "instagram";
+  if (v === "youtube") return "youtube";
+  if (v === "tiktok" || v === "tik tok") return "tiktok";
+
+  return null;
+}
+
+function toEngagementPercent(value: unknown) {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return 0;
+  return num <= 1 ? num * 100 : num;
+}
+
 function getPlatformRows(r: InfluencerRow) {
   if (r.platforms?.length) return r.platforms;
 
-  const baseFollowers = r.followers ?? 0;
-  const baseEng = r.engagement ?? 0;
+  const raw = (r as any)?.__raw ?? {};
+  const platform = normalizePlatformType(raw?.primaryPlatform ?? raw?.platform);
 
-  const ig = Math.round(baseFollowers * 0.55);
-  const yt = Math.round(baseFollowers * 0.25);
-  const tt = Math.max(0, baseFollowers - ig - yt);
+  if (!platform) return [];
 
   return [
-    { platform: "instagram" as const, followers: ig, engagement: baseEng },
     {
-      platform: "youtube" as const,
-      followers: yt,
-      engagement: Math.max(0, baseEng * 0.5),
-    },
-    {
-      platform: "tiktok" as const,
-      followers: tt,
-      engagement: Math.max(0, baseEng * 0.3),
+      platform,
+      followers: Number(raw?.audienceSize ?? r.followers ?? 0) || 0,
+      engagement: toEngagementPercent(raw?.engagementRate ?? r.engagement ?? 0),
     },
   ];
 }
@@ -195,78 +203,110 @@ function PillTag({ text, title }: { text: string; title?: string }) {
   );
 }
 
+// ─── ActionGroup ────────────────────────────────────────────────────────────
+// disabledAction: only "isRejected" and "isUndicided" are ever disabled.
+// "isShortlisted" is intentionally excluded — shortlisted tab uses different
+// action buttons entirely and this component is not shown there.
 function ActionGroup({
   row,
   onAction,
+  disabledAction,
 }: {
   row: InfluencerRow;
   onAction?: (row: InfluencerRow, action: DecisionAction) => void;
+  disabledAction?: DecisionAction;
 }) {
   const b = "var(--Light-Border-Primary,#D6D6D6)";
 
+  const disabledStyle: React.CSSProperties = {
+    opacity: 0.35,
+    cursor: "not-allowed",
+    pointerEvents: "none",
+  };
+
+  const actions: {
+    key: DecisionAction;
+    label: string;
+    icon: React.ReactNode;
+    hoverBg: string;
+    borderRadius: string;
+    borderRight?: string;
+  }[] = [
+      {
+        key: "isRejected",
+        label: "Reject",
+        icon: <X size={18} weight="bold" />,
+        hoverBg: "var(--Light-Background-Negative-Subtle, #F9CACA)",
+        borderRadius: "0.5rem 0 0 0.5rem",
+      },
+      {
+        key: "isUndicided",
+        label: "Undecided",
+        icon: <QuestionMark size={18} weight="bold" />,
+        hoverBg: "var(--Light-Background-BrandSubtle, #FFF9E6)",
+        borderRadius: "0",
+      },
+      {
+        key: "isShortlisted",
+        label: "Shortlist",
+        icon: <Check size={18} weight="bold" />,
+        hoverBg: "var(--Success-50, #EAF6EC)",
+        borderRadius: "0 0.5rem 0.5rem 0",
+        borderRight: `1px solid ${b}`,
+      },
+    ];
+
   return (
     <div className="inline-flex items-stretch justify-center h-[3.375rem] w-fit">
-      <button
-        type="button"
-        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
-        style={{
-          borderTop: `1px solid ${b}`,
-          borderBottom: `1px solid ${b}`,
-          borderLeft: `1px solid ${b}`,
-          borderRadius: "0.5rem 0 0 0.5rem",
-        }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background =
-            "var(--Light-Background-Negative-Subtle, #F9CACA)")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        aria-label="Reject"
-        onClick={() => onAction?.(row, "isRejected")}
-      >
-        <X size={18} weight="bold" />
-      </button>
-
-      <button
-        type="button"
-        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
-        style={{
-          borderTop: `1px solid ${b}`,
-          borderBottom: `1px solid ${b}`,
-          borderLeft: `1px solid ${b}`,
-          borderRadius: 0,
-        }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background =
-            "var(--Light-Background-BrandSubtle, #FFF9E6)")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        aria-label="Undecided"
-        onClick={() => onAction?.(row, "isUndicided")}
-      >
-        <QuestionMark size={18} weight="bold" />
-      </button>
-
-      <button
-        type="button"
-        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
-        style={{
-          borderTop: `1px solid ${b}`,
-          borderBottom: `1px solid ${b}`,
-          borderLeft: `1px solid ${b}`,
-          borderRight: `1px solid ${b}`,
-          borderRadius: "0 0.5rem 0.5rem 0",
-        }}
-        onMouseEnter={(e) =>
-          (e.currentTarget.style.background = "var(--Success-50, #EAF6EC)")
-        }
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        aria-label="Shortlist"
-        onClick={() => onAction?.(row, "isShortlisted")}
-      >
-        <Check size={18} weight="bold" />
-      </button>
+      {actions.map((a) => {
+        const isDisabled = disabledAction === a.key;
+        return (
+          <button
+            key={a.key}
+            type="button"
+            aria-label={a.label}
+            disabled={isDisabled}
+            onClick={() => !isDisabled && onAction?.(row, a.key)}
+            style={{
+              borderTop: `1px solid ${b}`,
+              borderBottom: `1px solid ${b}`,
+              borderLeft: `1px solid ${b}`,
+              borderRight: a.borderRight ?? "none",
+              borderRadius: a.borderRadius,
+              ...(isDisabled ? disabledStyle : {}),
+            }}
+            className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
+            onMouseEnter={(e) => {
+              if (!isDisabled) e.currentTarget.style.background = a.hoverBg;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            {a.icon}
+          </button>
+        );
+      })}
     </div>
   );
+}
+
+// ─── Helper ──────────────────────────────────────────────────────────────────
+// Maps a row's status string to which ActionGroup button should be disabled.
+// "isShortlisted" is excluded because the shortlisted tab renders different
+// action buttons (Send contract / Manage) — not ActionGroup.
+const STATUS_TO_DISABLED: Record<string, DecisionAction> = {
+  isRejected: "isRejected",
+  isUndicided: "isUndicided",
+};
+
+function getDisabledAction(status?: string): DecisionAction | undefined {
+  const normalized = String(status ?? "").trim().toLowerCase();
+
+  if (normalized === "rejected") return "isRejected";
+  if (normalized === "undecided") return "isUndicided";
+
+  return undefined;
 }
 
 function XScroll({ children }: { children: React.ReactNode }) {
@@ -302,6 +342,9 @@ const colShort = {
   actions: "min-w-[22rem] flex-[3_1_0%] shrink-0",
 };
 
+// ─── DefaultTable ─────────────────────────────────────────────────────────────
+// Used by: All Influencers, Undecided, Rejected tabs.
+// Derives disabledAction per-row from r.status so the correct button is greyed out.
 function DefaultTable({
   rows,
   onActionClick,
@@ -311,8 +354,10 @@ function DefaultTable({
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
-  const allChecked = rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
-  const someChecked = rows.some((r) => Boolean(selected[r.id])) && !allChecked;
+  const allChecked =
+    rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
+  const someChecked =
+    rows.some((r) => Boolean(selected[r.id])) && !allChecked;
 
   const toggleAll = (checked: boolean) => {
     const next: Record<string, boolean> = {};
@@ -328,6 +373,7 @@ function DefaultTable({
     <div className="flex w-full flex-col">
       <XScroll>
         <div className="min-w-full w-max">
+          {/* Header */}
           <div
             className="
               flex h-14 w-full min-w-full items-center
@@ -341,7 +387,9 @@ function DefaultTable({
               <div className="flex h-14 items-center justify-center gap-1 py-[0.625rem] pl-[1rem] pr-[0.75rem] rounded-tl-[0.75rem]">
                 <Checkbox
                   className="cursor-pointer"
-                  checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                  checked={
+                    allChecked ? true : someChecked ? "indeterminate" : false
+                  }
                   onCheckedChange={(v) => toggleAll(Boolean(v))}
                   aria-label="Select all influencers"
                 />
@@ -381,17 +429,25 @@ function DefaultTable({
               <HeaderCarets />
             </div>
 
-            <div className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}>
+            <div
+              className={`${colDefault.actions} flex h-14 items-center pl-4 pr-4`}
+            >
               <span style={headerTextStyle}>Action</span>
             </div>
           </div>
 
+          {/* Rows */}
           <div className="mt-[2rem] w-full space-y-3">
             {rows.map((r) => {
               const plat = getPlatformRows(r);
-              const appliedText = r.appliedDate.toLowerCase().startsWith("applied")
+              const appliedText = r.appliedDate
+                .toLowerCase()
+                .startsWith("applied")
                 ? r.appliedDate
                 : `applied ${r.appliedDate}`;
+
+              // Derive which button (if any) should be disabled for this row
+              const disabledAction = getDisabledAction(r.status);
 
               return (
                 <div
@@ -404,6 +460,7 @@ function DefaultTable({
                     overflow-hidden
                   "
                 >
+                  {/* Profile */}
                   <div
                     className={`${colDefault.profile} flex h-[5.5rem] items-center bg-white rounded-l-[12px] px-4 py-[10px]`}
                   >
@@ -467,16 +524,21 @@ function DefaultTable({
                     </div>
                   </div>
 
+                  {/* Category */}
                   <div
                     className={`${colDefault.category} flex h-[5.5rem] items-center justify-center bg-white px-4 py-[0.625rem]`}
                   >
                     <PillTag text={r.category} />
                   </div>
 
-                  <div className={`${colDefault.followers} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}>
+                  {/* Followers */}
+                  {plat.length > 0 ? (
                     <div className="mx-auto flex w-fit flex-col justify-center gap-2">
                       {plat.map((p) => (
-                        <div key={`f-${r.id}-${p.platform}`} className="flex w-fit items-center gap-2">
+                        <div
+                          key={`f-${r.id}-${p.platform}`}
+                          className="flex w-fit items-center gap-2"
+                        >
                           <span
                             className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--Light-Border-Subtle,#E6E6E6)] bg-white"
                             style={{ borderWidth: "0.5px", padding: "0.25rem" }}
@@ -505,12 +567,18 @@ function DefaultTable({
                         </div>
                       ))}
                     </div>
-                  </div>
+                  ) : (
+                    <span className="mx-auto text-[0.75rem] text-[#969696]">—</span>
+                  )}
 
-                  <div className={`${colDefault.engagement} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}>
+                  {/* Engagement */}
+                  {plat.length > 0 ? (
                     <div className="mx-auto flex w-fit flex-col justify-center gap-2">
                       {plat.map((p) => (
-                        <div key={`e-${r.id}-${p.platform}`} className="flex w-fit items-center gap-2">
+                        <div
+                          key={`e-${r.id}-${p.platform}`}
+                          className="flex w-fit items-center gap-2"
+                        >
                           <ChartLine size={16} weight="bold" color="#D6D6D6" />
                           <span
                             style={{
@@ -527,8 +595,11 @@ function DefaultTable({
                         </div>
                       ))}
                     </div>
-                  </div>
+                  ) : (
+                    <span className="mx-auto text-[0.75rem] text-[#969696]">—</span>
+                  )}
 
+                  {/* Applied Date */}
                   <div
                     className={`${colDefault.applied} flex h-[5.5rem] items-center justify-center bg-white px-4 py-[0.625rem]`}
                   >
@@ -553,10 +624,15 @@ function DefaultTable({
                     </span>
                   </div>
 
+                  {/* Actions */}
                   <div
                     className={`${colDefault.actions} flex h-[5.5rem] items-center justify-end gap-2 bg-white pl-4 pr-4 py-[0.625rem] rounded-r-[0.75rem]`}
                   >
-                    <ActionGroup row={r} onAction={onActionClick} />
+                    <ActionGroup
+                      row={r}
+                      onAction={onActionClick}
+                      disabledAction={disabledAction}
+                    />
 
                     <button
                       type="button"
@@ -576,6 +652,9 @@ function DefaultTable({
   );
 }
 
+// ─── PipelineTable ────────────────────────────────────────────────────────────
+// Used by: Shortlisted, Active tabs.
+// No changes here — shortlisted uses completely different action buttons.
 function PipelineTable({
   rows,
   mode,
@@ -587,8 +666,10 @@ function PipelineTable({
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
-  const allChecked = rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
-  const someChecked = rows.some((r) => Boolean(selected[r.id])) && !allChecked;
+  const allChecked =
+    rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
+  const someChecked =
+    rows.some((r) => Boolean(selected[r.id])) && !allChecked;
 
   const toggleAll = (checked: boolean) => {
     const next: Record<string, boolean> = {};
@@ -647,6 +728,7 @@ function PipelineTable({
     <div className="flex w-full flex-col">
       <XScroll>
         <div className="min-w-full w-max">
+          {/* Header */}
           <div
             className="
               flex w-full min-w-[73rem] items-center
@@ -655,45 +737,62 @@ function PipelineTable({
               h-14
             "
           >
-            <div className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}>
+            <div
+              className={`${colShort.checkbox} flex h-14 items-center justify-center rounded-tl-[0.75rem]`}
+            >
               <Checkbox
                 className="cursor-pointer"
-                checked={allChecked ? true : someChecked ? "indeterminate" : false}
+                checked={
+                  allChecked ? true : someChecked ? "indeterminate" : false
+                }
                 onCheckedChange={(v) => toggleAll(Boolean(v))}
                 aria-label="Select all"
               />
             </div>
 
-            <div className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.profile} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Profile</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Status</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.platform} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Platform</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.budget} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Budget</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.date} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Date</span>
               <HeaderCarets />
             </div>
 
-            <div className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}>
+            <div
+              className={`${colShort.actions} flex h-14 items-center pl-8 pr-4 py-[0.625rem]`}
+            >
               <span style={headerTextStyle}>Action</span>
             </div>
           </div>
 
+          {/* Rows */}
           <div className="mt-[2rem] w-full space-y-3">
             {rows.map((r) => {
               const platRows = getPlatformRows(r);
@@ -714,7 +813,10 @@ function PipelineTable({
                     overflow-hidden
                   "
                 >
-                  <div className={`${colShort.checkbox} flex ${rowHeightClass} items-center justify-center`}>
+                  {/* Checkbox */}
+                  <div
+                    className={`${colShort.checkbox} flex ${rowHeightClass} items-center justify-center`}
+                  >
                     <Checkbox
                       className="cursor-pointer"
                       checked={Boolean(selected[r.id])}
@@ -723,7 +825,10 @@ function PipelineTable({
                     />
                   </div>
 
-                  <div className={`${colShort.profile} flex ${rowHeightClass} items-center px-4`}>
+                  {/* Profile */}
+                  <div
+                    className={`${colShort.profile} flex ${rowHeightClass} items-center px-4`}
+                  >
                     <div className="flex items-center gap-3 min-w-0">
                       <div
                         className="h-12 w-12 shrink-0 rounded-[0.5rem] border bg-black"
@@ -764,7 +869,11 @@ function PipelineTable({
                             minWidth: 0,
                           }}
                         >
-                          <span className="truncate" style={handleStyle} title={r.profile.handle ?? ""}>
+                          <span
+                            className="truncate"
+                            style={handleStyle}
+                            title={r.profile.handle ?? ""}
+                          >
                             {r.profile.handle ?? ""}
                           </span>
 
@@ -785,19 +894,31 @@ function PipelineTable({
                     </div>
                   </div>
 
-                  <div className={`${colShort.status} flex ${rowHeightClass} items-center justify-center px-4`}>
+                  {/* Status */}
+                  <div
+                    className={`${colShort.status} flex ${rowHeightClass} items-center justify-center px-4`}
+                  >
                     <PillTag text={statusText} />
                   </div>
 
-                  <div className={`${colShort.platform} flex ${rowHeightClass} items-center justify-center px-4`}>
+                  {/* Platform */}
+                  <div
+                    className={`${colShort.platform} flex ${rowHeightClass} items-center justify-center px-4`}
+                  >
                     <PlatformOverlap platforms={platforms} />
                   </div>
 
-                  <div className={`${colShort.budget} flex ${rowHeightClass} items-center justify-center px-4`}>
+                  {/* Budget */}
+                  <div
+                    className={`${colShort.budget} flex ${rowHeightClass} items-center justify-center px-4`}
+                  >
                     <PillTag text={budgetText} />
                   </div>
 
-                  <div className={`${colShort.date} flex ${rowHeightClass} items-center justify-center pl-4 pr-9`}>
+                  {/* Date */}
+                  <div
+                    className={`${colShort.date} flex ${rowHeightClass} items-center justify-center pl-4 pr-9`}
+                  >
                     <span
                       style={{
                         flex: "1 0 0",
@@ -816,7 +937,10 @@ function PipelineTable({
                     </span>
                   </div>
 
-                  <div className={`${colShort.actions} flex ${actionCellClass} justify-end pl-9 pr-4`}>
+                  {/* Actions — fully delegated to parent, no changes */}
+                  <div
+                    className={`${colShort.actions} flex ${actionCellClass} justify-end pl-9 pr-4`}
+                  >
                     {renderActions ? renderActions(r) : null}
                   </div>
                 </div>
@@ -829,6 +953,8 @@ function PipelineTable({
   );
 }
 
+// ─── RecommendedTable ─────────────────────────────────────────────────────────
+// No changes — recommended tab is unaffected.
 const RECO_MID_GRID =
   "grid flex-1 grid-cols-[minmax(8rem,0.9fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_minmax(10rem,1fr)]";
 
@@ -848,12 +974,15 @@ function RecommendedTable({
           {rows.map((r) => {
             const plat = getPlatformRows(r);
 
-            const appliedText = r.appliedDate?.toLowerCase?.().startsWith("applied")
+            const appliedText = r.appliedDate
+              ?.toLowerCase?.()
+              .startsWith("applied")
               ? r.appliedDate
               : `applied ${r.appliedDate}`;
 
             return (
               <div key={r.id} className="flex w-full min-w-[60rem]">
+                {/* Profile cell */}
                 <div
                   style={{
                     display: "flex",
@@ -920,6 +1049,7 @@ function RecommendedTable({
                   </div>
                 </div>
 
+                {/* Mid grid */}
                 <div
                   className={`${RECO_MID_GRID} h-[5.5rem] items-center bg-white py-[0.625rem]`}
                   style={{
@@ -1015,6 +1145,7 @@ function RecommendedTable({
                   </div>
                 </div>
 
+                {/* Actions cell */}
                 <div
                   className="flex items-center justify-center bg-white"
                   style={{
@@ -1044,6 +1175,7 @@ function RecommendedTable({
   );
 }
 
+// ─── InfluencerTable (public export) ─────────────────────────────────────────
 export function InfluencerTable({
   rows,
   onActionClick,
@@ -1053,7 +1185,9 @@ export function InfluencerTable({
   renderActiveActions,
 }: InfluencerTableProps) {
   if (variant === "recommended") {
-    return <RecommendedTable rows={rows} renderActions={renderRecommendedActions} />;
+    return (
+      <RecommendedTable rows={rows} renderActions={renderRecommendedActions} />
+    );
   }
 
   if (variant === "shortlisted") {
@@ -1076,5 +1210,7 @@ export function InfluencerTable({
     );
   }
 
+  // default — covers All Influencers, Undecided, Rejected tabs.
+  // disabledAction is derived per-row from r.status inside DefaultTable.
   return <DefaultTable rows={rows} onActionClick={onActionClick} />;
 }

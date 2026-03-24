@@ -44,11 +44,11 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 
 const INFLUENCER_TYPE_OPTIONS = [
     "All",
-    "Recommended",
+    // "Recommended",
     "Applied",
-    "Sortlisted",
+    "Shortlisted",
     "Invited",
-    "Selected",
+    // "Selected",
     "Active",
     "Rejected",
     "Completed",

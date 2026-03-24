@@ -12,7 +12,7 @@ import {
   type InfluencerRow,
 } from "@/components/ui/brand/Influencertable";
 import AddMilestoneCard from "@/components/ui/brand/AddMilestoneCard";
-
+import { InfluencerContextMenu } from "@/components/ui/brand/InfluencerContextMenu";
 import { Button } from "@/components/ui/button";
 import {
   CircleNotch,
@@ -29,10 +29,11 @@ import {
   getApiErrorMessage,
 } from "@/app/brand/services/brandApi";
 import ContractSidebarExtracted from "./ContractSidebar";
+import { useInfluencerCounts } from "./InfluencerCountsContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "all" | "active" | "shortlisted" | "undecided" | "rejected";
+type Tab = "all" | "applied" | "active" | "shortlisted" | "undecided" | "rejected";
 
 type ContractMeta = {
   contractId: string;
@@ -78,6 +79,7 @@ const PAGE_LIMIT = 20;
 
 function getTabFromPath(pathname: string | null): Tab {
   const p = pathname ?? "";
+  if (p.includes("/brand/influ/applied")) return "applied";
   if (p.includes("/brand/influ/shortlisted")) return "shortlisted";
   if (p.includes("/brand/influ/active")) return "active";
   if (p.includes("/brand/influ/undecided")) return "undecided";
@@ -108,32 +110,115 @@ function doesApplicantBelongToTab(raw: any, tab: Tab) {
   const isUndicided = Number(raw?.isUndicided) === 1;
   const isRejected = Number(raw?.isRejected) === 1;
 
-  if (tab === "all") return !isShortlisted && !isUndicided && !isRejected;
+  const isApplied =
+    !isAccepted && !isShortlisted && !isUndicided && !isRejected;
+
+  if (tab === "all") return true;
+  if (tab === "applied") return isApplied;
   if (tab === "shortlisted") return isShortlisted;
   if (tab === "undecided") return isUndicided;
   if (tab === "rejected") return isRejected;
   if (tab === "active") return isAccepted;
   return true;
 }
+function normalizePlatformType(value: unknown): PlatformType | null {
+  const v = String(value ?? "").trim().toLowerCase();
 
+  if (v === "instagram") return "instagram";
+  if (v === "youtube") return "youtube";
+  if (v === "tiktok" || v === "tik tok") return "tiktok";
+
+  return null;
+}
+
+function toEngagementPercent(value: unknown) {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return 0;
+
+  // handles both 0.266667 and 26.67
+  return num <= 1 ? num * 100 : num;
+}
+
+function buildAvailablePlatforms(a: any): InfluencerRow["platforms"] {
+  const result: NonNullable<InfluencerRow["platforms"]> = [];
+  const seen = new Set<string>();
+
+  const pushPlatform = (
+    platformValue: unknown,
+    followersValue: unknown,
+    engagementValue: unknown
+  ) => {
+    const platform = normalizePlatformType(platformValue);
+    if (!platform || seen.has(platform)) return;
+
+    seen.add(platform);
+    result.push({
+      platform,
+      followers: Number(followersValue ?? 0) || 0,
+      engagement: toEngagementPercent(engagementValue),
+    });
+  };
+
+  // 1. Prefer modashProfiles array if available
+  if (Array.isArray(a?.modashProfiles) && a.modashProfiles.length > 0) {
+    a.modashProfiles.forEach((profile: any) => {
+      pushPlatform(
+        profile?.provider,
+        profile?.followers,
+        profile?.engagementRate
+      );
+    });
+  }
+
+  // 2. Fallback to single modashProfile
+  if (a?.modashProfile) {
+    pushPlatform(
+      a.modashProfile?.provider,
+      a.modashProfile?.followers,
+      a.modashProfile?.engagementRate
+    );
+  }
+
+  // 3. Fallback to top-level API fields
+  if (result.length === 0) {
+    pushPlatform(
+      a?.primaryPlatform ?? a?.platform,
+      a?.audienceSize,
+      a?.engagementRate
+    );
+  }
+
+  return result;
+}
 function mapApplicantToRow(a: any): InfluencerRow {
   const influencerId = String(a?.influencerId ?? "").trim();
   const name = String(a?.name ?? "Influencer").trim();
-  const createdAtRaw = a?.createdAt ? String(a.createdAt) : "";
+  const createdAtRaw = a?.appliedAt || a?.createdAt ? String(a?.appliedAt || a?.createdAt) : "";
   const appliedDate = createdAtRaw ? createdAtRaw.slice(0, 10) : "—";
+
+  const platforms = buildAvailablePlatforms(a);
 
   const row: any = {
     id: influencerId,
-    profile: { name, handle: a?.handle ? toHandle(a.handle) : "—" },
+    profile: {
+      name,
+      handle: a?.handle ? toHandle(a.handle) : "—",
+      avatarUrl:
+        a?.modashProfile?.picture ||
+        a?.modashProfiles?.[0]?.picture ||
+        undefined,
+    },
     category: String(a?.category ?? "—").trim() || "—",
+    platforms,
     followers: Number(a?.audienceSize ?? 0) || 0,
-    engagement: 0,
+    engagement: toEngagementPercent(a?.engagementRate),
     appliedDate,
     status: getApplicantDisplayStatus(a),
     budget: Number(a?.feeAmount ?? 0) > 0 ? String(a.feeAmount) : "—",
     __source: "applicant",
     __raw: a,
   };
+
   return row as InfluencerRow;
 }
 
@@ -253,7 +338,7 @@ function ActionButtons({
   onPrimary,
   onManage,
   onMail,
-  onMore,
+  moreMenu,
   showAccept,
   onAccept,
   showSign,
@@ -263,7 +348,7 @@ function ActionButtons({
   onPrimary: () => void;
   onManage: () => void;
   onMail: () => void;
-  onMore: () => void;
+  moreMenu?: React.ReactNode;
   showAccept?: boolean;
   onAccept?: () => void;
   showSign?: boolean;
@@ -322,14 +407,7 @@ function ActionButtons({
         />
       </button>
 
-      <button
-        type="button"
-        onClick={onMore}
-        aria-label="More actions"
-        className="flex h-8 w-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white hover:bg-[#F7F7F7]"
-      >
-        <DotsThree size={18} weight="bold" />
-      </button>
+      {moreMenu}
     </div>
   );
 }
@@ -342,7 +420,7 @@ function ActiveMilestoneActions({
   onViewMilestone,
   onManage,
   onMail,
-  onMore,
+  moreMenu,
   showAccept,
   onAccept,
   showSign,
@@ -353,7 +431,7 @@ function ActiveMilestoneActions({
   onViewMilestone: () => void;
   onManage: () => void;
   onMail: () => void;
-  onMore: () => void;
+  moreMenu?: React.ReactNode;
   showAccept?: boolean;
   onAccept?: () => void;
   showSign?: boolean;
@@ -424,14 +502,7 @@ function ActiveMilestoneActions({
         />
       </button>
 
-      <button
-        type="button"
-        onClick={onMore}
-        aria-label="More actions"
-        className="flex h-8 w-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white hover:bg-[#F7F7F7]"
-      >
-        <DotsThree size={18} weight="bold" />
-      </button>
+      {moreMenu}
     </div>
   );
 }
@@ -616,8 +687,8 @@ function SignatureModal({
           <div
             ref={dropRef}
             className={`cursor-pointer select-none rounded-xl border-2 border-dashed p-5 text-center text-sm transition-all ${isDragging
-                ? "border-[#1A1A1A] bg-neutral-100"
-                : "border-gray-300 bg-gray-50 hover:bg-gray-100/80"
+              ? "border-[#1A1A1A] bg-neutral-100"
+              : "border-gray-300 bg-gray-50 hover:bg-gray-100/80"
               }`}
           >
             <div className="flex flex-col items-center gap-2">
@@ -708,7 +779,7 @@ export default function InfluencerList() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-
+  const { setCounts } = useInfluencerCounts();
   const tab = useMemo(() => getTabFromPath(pathname), [pathname]);
 
   const [filters, setFilters] = useState<FilterState>({
@@ -812,7 +883,142 @@ export default function InfluencerList() {
       }
     })();
   }, [campaignId]);
+  function getFilterStatusFromTab(tab: Tab):
+    | "all"
+    | "applied"
+    | "active"
+    | "shortlisted"
+    | "undecided"
+    | "rejected" {
+    if (tab === "applied") return "applied";
+    if (tab === "active") return "active";
+    if (tab === "shortlisted") return "shortlisted";
+    if (tab === "undecided") return "undecided";
+    if (tab === "rejected") return "rejected";
+    return "all";
+  }
 
+  function getFilterStatusFromInfluencerType(value: string):
+    | "all"
+    | "applied"
+    | "active"
+    | "shortlisted"
+    | "undecided"
+    | "rejected"
+    | "invited"
+    | "completed"
+    | undefined {
+    const v = String(value || "").trim().toLowerCase();
+
+    if (!v || v === "all") return "all";
+    if (v === "applied") return "applied";
+    if (v === "active") return "active";
+    if (v === "shortlisted") return "shortlisted";
+    if (v === "undecided") return "undecided";
+    if (v === "rejected") return "rejected";
+    if (v === "invited") return "invited";
+    if (v === "completed") return "completed";
+
+    return undefined;
+  }
+
+  function getApiDate(value: string): "today" | "last7days" | "last30days" | undefined {
+    const v = String(value || "").trim().toLowerCase();
+    if (!v || v === "all") return undefined;
+    if (v === "today") return "today";
+    if (v === "last 7 days") return "last7days";
+    if (v === "last 30 days") return "last30days";
+    return undefined;
+  }
+
+  function getApiEngagementRate(value: string):
+    | "0-2%"
+    | "2-5%"
+    | "5-8%"
+    | "8-12%"
+    | "12%+"
+    | undefined {
+    const v = String(value || "").trim();
+    if (!v || v === "All") return undefined;
+    if (v === "0-2%" || v === "2-5%" || v === "5-8%" || v === "8-12%" || v === "12%+") {
+      return v;
+    }
+    return undefined;
+  }
+
+  function getApiInfluencerTier(value: string):
+    | "Nano"
+    | "Micro"
+    | "Mid-tier"
+    | "Macro"
+    | "Mega"
+    | undefined {
+    const v = String(value || "").trim();
+    if (!v || v === "All") return undefined;
+
+    // Handles values like "Tier • Micro"
+    const parts = v.split("•").map((s) => s.trim());
+    const last = parts[parts.length - 1];
+
+    if (last === "Nano" || last === "Micro" || last === "Mid-tier" || last === "Macro" || last === "Mega") {
+      return last;
+    }
+
+    return undefined;
+  }
+
+  function getApiPlatform(values: string[]): "Instagram" | "Youtube" | "TikTok" | Array<"Instagram" | "Youtube" | "TikTok"> | undefined {
+    const selected = (values || []).filter((v) => v && v !== "All") as Array<"Instagram" | "Youtube" | "TikTok">;
+    if (selected.length === 0) return undefined;
+    if (selected.length === 1) return selected[0];
+    return selected;
+  }
+
+  function getApiSortBy(value: string):
+    | "priority"
+    | "recentlyAdded"
+    | "highestEngagement"
+    | "highestFollower"
+    | "priceLowToHigh"
+    | "priceHighToLow"
+    | undefined {
+    const v = String(value || "").trim().toLowerCase();
+
+    if (!v || v === "priority") return "priority";
+    if (v === "recently added") return "recentlyAdded";
+    if (v === "highest engagement") return "highestEngagement";
+    if (v === "highest follower") return "highestFollower";
+    if (v === "price: low to high") return "priceLowToHigh";
+    if (v === "price: high to low") return "priceHighToLow";
+
+    return "priority";
+  }
+
+  function getApiSortField(value: string):
+    | "name"
+    | "audienceSize"
+    | "engagementRate"
+    | "createdAt"
+    | "feeAmount"
+    | "category"
+    | "primaryPlatform"
+    | undefined {
+    const v = String(value || "").trim().toLowerCase();
+
+    if (!v || v === "priority") return undefined;
+    if (v === "recently added") return "createdAt";
+    if (v === "highest engagement") return "engagementRate";
+    if (v === "highest follower") return "audienceSize";
+    if (v === "price: low to high" || v === "price: high to low") return "feeAmount";
+
+    return undefined;
+  }
+
+  function getApiSortOrder(value: string): 0 | 1 {
+    const v = String(value || "").trim().toLowerCase();
+    if (v === "price: high to low") return 1;
+    return 0;
+  }
   // ── Fetch applicants ───────────────────────────────────────────────────────
   const fetchApplicants = useCallback(async () => {
     if (!campaignId) {
@@ -825,19 +1031,73 @@ export default function InfluencerList() {
     setErrApplicants("");
 
     try {
+      const trimmedSearch = search.trim();
+
+      const tabStatus = getFilterStatusFromTab(tab);
+      const influencerTypeStatus = getFilterStatusFromInfluencerType(filters["Influencer Type"]);
+
+      // Tab drives the page. If tab is "all", allow influencer-type dropdown to narrow it.
+      const effectiveFilterStatus =
+        tab === "all"
+          ? (influencerTypeStatus ?? "all")
+          : tabStatus;
+
+      const selectedCategoryIds = (filters.Category || []).filter((v) => v && v !== "All");
+
       const payload: any = {
         campaignId,
         page: 1,
         limit: 100,
-        search: search.trim() || undefined,
+        search: trimmedSearch || undefined,
+
+        filterStatus: effectiveFilterStatus,
+
+        engagementRate: getApiEngagementRate(filters["Engagement Rate"]),
+        influencerTier: getApiInfluencerTier(filters.Follower),
+        platform: getApiPlatform(filters.Platform),
+        date: getApiDate(filters.Date),
+
+        sortBy: getApiSortBy(sortValue),
+        sortField: getApiSortField(sortValue),
+        sortOrder: getApiSortOrder(sortValue),
       };
 
-      if (tab === "shortlisted") payload.isShortlisted = 1;
-      if (tab === "undecided") payload.isUndicided = 1;
-      if (tab === "rejected") payload.isRejected = 1;
+      if (selectedCategoryIds.length === 1) {
+        payload.categoryId = selectedCategoryIds[0];
+      } else if (selectedCategoryIds.length > 1) {
+        payload.categoryIds = selectedCategoryIds;
+      }
 
       const res: any = await apiGetListByCampaign(payload);
       const influencers = Array.isArray(res?.influencers) ? res.influencers : [];
+
+      const totalCount = res?.applicantCount ?? 0;
+      const appliedCount =
+        res?.statusCounts?.applied ??
+        influencers.filter((inf: any) => {
+          const isAccepted = Number(inf?.isAccepted) === 1;
+          const isShortlisted = Number(inf?.isShortlisted) === 1;
+          const isUndicided = Number(inf?.isUndicided) === 1;
+          const isRejected = Number(inf?.isRejected) === 1;
+          return !isAccepted && !isShortlisted && !isUndicided && !isRejected;
+        }).length;
+
+      const activeCount =
+        res?.statusCounts?.active ??
+        influencers.filter((inf: any) => Number(inf?.isAccepted) === 1).length;
+
+      const shortlistedCount = res?.statusCounts?.shortlisted ?? 0;
+      const undecidedCount = res?.statusCounts?.undecided ?? 0;
+      const rejectedCount = res?.statusCounts?.rejected ?? 0;
+
+      setCounts({
+        all: totalCount,
+        applied: appliedCount,
+        active: activeCount,
+        shortlisted: shortlistedCount,
+        undecided: undecidedCount,
+        rejected: rejectedCount,
+      });
 
       let mapped = influencers
         .map(mapApplicantToRow)
@@ -855,7 +1115,7 @@ export default function InfluencerList() {
     } finally {
       setLoadingApplicants(false);
     }
-  }, [campaignId, search, tab]);
+  }, [campaignId, search, tab, filters, sortValue, setCounts]);
 
   useEffect(() => {
     fetchApplicants();
@@ -1180,7 +1440,19 @@ export default function InfluencerList() {
                     }
                     onManage={() => handleManage(row)}
                     onMail={() => handleMail(row)}
-                    onMore={() => handleMore(row)}
+                    moreMenu={
+                      <InfluencerContextMenu
+                        type="shortlisted"
+                        onViewProfile={() => handleManage(row)}
+                        onCopyProfileLink={() => console.log("copy profile link", row.id)}
+                        onSaveToHub={(hubId) => console.log("save to hub", row.id, hubId)}
+                        onMoveToWorkspace={(workspaceId) =>
+                          console.log("move to workspace", row.id, workspaceId)
+                        }
+                        onCompare={() => console.log("compare", row.id)}
+                        onDelete={() => console.log("remove", row.id)}
+                      />
+                    }
                     showAccept={showAccept}
                     onAccept={() => handleBrandAccept(row)}
                     showSign={showSign}
@@ -1204,7 +1476,21 @@ export default function InfluencerList() {
                     onViewMilestone={() => handleViewMilestone(row)}
                     onManage={() => handleManage(row)}
                     onMail={() => handleMail(row)}
-                    onMore={() => handleMore(row)}
+                    moreMenu={
+                      <InfluencerContextMenu
+                        type="active"
+                        onViewProfile={() => handleManage(row)}
+                        onCopyProfileLink={() => console.log("copy profile link", row.id)}
+                        onAddMilestone={() => handleOpenMilestoneModal(row)}
+                        onAssignDeliverables={() => console.log("assign deliverables", row.id)}
+                        onSaveToHub={(hubId) => console.log("save to hub", row.id, hubId)}
+                        onMoveToWorkspace={(workspaceId) =>
+                          console.log("move to workspace", row.id, workspaceId)
+                        }
+                        onRaiseDispute={() => console.log("raise dispute", row.id)}
+                        onDelete={() => console.log("remove", row.id)}
+                      />
+                    }
                     showAccept={showAccept}
                     onAccept={() => handleBrandAccept(row)}
                     showSign={showSign}

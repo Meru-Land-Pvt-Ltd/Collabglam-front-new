@@ -1436,14 +1436,53 @@ export async function apiCampaignHistory(payload: CampaignHistoryPayload) {
 /** -------- Applicant List By Campaign (NEW) -------- */
 
 /** -------- Applicant List By Campaign (UPDATED) -------- */
-
 export type ApplyListSortField =
   | "name"
   | "primaryPlatform"
   | "category"
   | "audienceSize"
   | "handle"
-  | "createdAt";
+  | "createdAt"
+  | "engagementRate"
+  | "feeAmount";
+
+export type FilterStatus =
+  | "all"
+  | "applied"
+  | "active"
+  | "shortlisted"
+  | "undecided"
+  | "rejected"
+  | "invited"
+  | "completed";
+
+export type EngagementRateFilter =
+  | "0-2%"
+  | "2-5%"
+  | "5-8%"
+  | "8-12%"
+  | "12%+";
+
+export type InfluencerTierFilter =
+  | "Nano"
+  | "Micro"
+  | "Mid-tier"
+  | "Macro"
+  | "Mega";
+
+export type PlatformFilter = "Instagram" | "Youtube" | "TikTok";
+
+export type DateFilter = "today" | "last7days" | "last30days";
+
+export type ApplyListSortBy =
+  | "priority"
+  | "recentlyAdded"
+  | "highestEngagement"
+  | "highestFollower"
+  | "priceLowToHigh"
+  | "priceHighToLow";
+
+
 
 export type ApplicantDecisionFilter = 0 | 1 | boolean | "0" | "1" | "true" | "false";
 
@@ -1452,14 +1491,20 @@ export type GetListByCampaignPayload = {
   page?: number;
   limit?: number;
   search?: string;
-  sortField?: ApplyListSortField;
   createdPage?: boolean | "true" | "false";
-  sortOrder?: 0 | 1; // 0 = asc, 1 = desc
+  sortOrder?: 0 | 1;
 
-  // new applicant decision filters
-  isShortlisted?: ApplicantDecisionFilter;
-  isUndicided?: ApplicantDecisionFilter;
-  isRejected?: ApplicantDecisionFilter;
+  filterStatus?: "all" | "applied" | "active" | "shortlisted" | "undecided" | "rejected" | "invited" | "completed";
+
+  engagementRate?: "0-2%" | "2-5%" | "5-8%" | "8-12%" | "12%+";
+  influencerTier?: "Nano" | "Micro" | "Mid-tier" | "Macro" | "Mega";
+  platform?: "Instagram" | "Youtube" | "TikTok" | Array<"Instagram" | "Youtube" | "TikTok">;
+  categoryId?: string;
+  categoryIds?: string[];
+  date?: "today" | "last7days" | "last30days";
+
+  sortBy?: "priority" | "recentlyAdded" | "highestEngagement" | "highestFollower" | "priceLowToHigh" | "priceHighToLow";
+  sortField?: "name" | "audienceSize" | "engagementRate" | "createdAt" | "feeAmount" | "category" | "primaryPlatform";
 };
 
 export type CampaignApplicantInfluencerRow = {
@@ -1499,26 +1544,53 @@ export type GetListByCampaignResponse = {
   isContracted: 0 | 1;
   contractId: string | null;
   influencers: CampaignApplicantInfluencerRow[];
+  statusCounts?: {
+    applied?: number;
+    active?: number;
+    shortlisted?: number;
+    undecided?: number;
+    rejected?: number;
+    invited?: number;
+    completed?: number;
+  };
 };
+function cleanBody<T extends Record<string, any>>(obj: T) {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => {
+      if (value === undefined || value === null || value === "") return false;
+      if (Array.isArray(value) && value.length === 0) return false;
+      return true;
+    })
+  );
+}
 
 export async function apiGetListByCampaign(
   payload: GetListByCampaignPayload
 ) {
-  return apiPost<GetListByCampaignResponse>(
-    `${Apply_Base}/list`,
-    {
-      campaignId: payload.campaignId,
-      page: payload.page ?? 1,
-      limit: payload.limit ?? 10,
-      search: payload.search,
-      sortField: payload.sortField,
-      createdPage: payload.createdPage,
-      sortOrder: payload.sortOrder ?? 0,
-      isShortlisted: payload.isShortlisted,
-      isUndicided: payload.isUndicided,
-      isRejected: payload.isRejected,
-    }
-  );
+  const body = cleanBody({
+    campaignId: payload.campaignId,
+    page: payload.page ?? 1,
+    limit: payload.limit ?? 10,
+
+    search: payload.search,
+
+    filterStatus: payload.filterStatus,
+
+    engagementRate: payload.engagementRate,
+    influencerTier: payload.influencerTier,
+    platform: payload.platform,
+    categoryId: payload.categoryId,
+    categoryIds: payload.categoryIds,
+    date: payload.date,
+
+    sortBy: payload.sortBy,
+    sortField: payload.sortField,
+    sortOrder: payload.sortOrder ?? 0,
+
+    createdPage: payload.createdPage,
+  });
+
+  return apiPost<GetListByCampaignResponse>(`${Apply_Base}/list`, body);
 }
 
 export type ApplicantDecisionField =
