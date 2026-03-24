@@ -28,7 +28,7 @@ const outfit = Outfit({
 type IconType = React.ComponentType<{ className?: string }>;
 
 type NavItem = {
-  key: string;  
+  key: string;
   label: string;
   href: string;
   icon?: IconType;
@@ -76,6 +76,12 @@ const navItems: NavItem[] = [
     label: "Influencer Pipeline",
     href: "/admin/influencer-pipeline",
     icon: List,
+  },
+  {
+    key: "inbound-emails",
+    label: "Inbound Emails",
+    href: "/admin/inbound-emails",
+    icon: MailCheckIcon,
   },
   {
     key: "subscriptions",
@@ -284,15 +290,15 @@ export default function AdminSidebar() {
             {docsOpen ? (
               <ChevronUp
                 className={`h-4 w-4 ${docsActive
-                    ? "text-white"
-                    : "text-black/50 group-hover:text-white"
+                  ? "text-white"
+                  : "text-black/50 group-hover:text-white"
                   }`}
               />
             ) : (
               <ChevronDown
                 className={`h-4 w-4 ${docsActive
-                    ? "text-white"
-                    : "text-black/50 group-hover:text-white"
+                  ? "text-white"
+                  : "text-black/50 group-hover:text-white"
                   }`}
               />
             )}
@@ -318,8 +324,8 @@ export default function AdminSidebar() {
                       if (isMobile) setDrawerOpen(false);
                     }}
                     className={`${linkBase} ${active
-                        ? linkActive
-                        : "text-black/70 hover:bg-black hover:text-white"
+                      ? linkActive
+                      : "text-black/70 hover:bg-black hover:text-white"
                       }`}
                   >
                     {doc.label}

@@ -124,7 +124,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/list`, {
+      const res = await fetch(`${API_BASE}admins/list`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -157,7 +157,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/status`, {
+      const res = await fetch(`${API_BASE}admins/status`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -200,7 +200,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/invite`, {
+      const res = await fetch(`${API_BASE}admins/invite`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -253,7 +253,7 @@ export default function AdminsPage() {
     try {
       const token = getToken();
 
-      const res = await fetch(`${API_BASE}/admins/update`, {
+      const res = await fetch(`${API_BASE}admins/update`, {
         method: "PUT",
         credentials: "include",
         headers: {

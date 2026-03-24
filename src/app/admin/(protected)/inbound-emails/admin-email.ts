@@ -1,7 +1,24 @@
-
 import { get, post, postFormData } from "@/lib/api";
 
 export type AdminRole = "super_admin" | "revenue_head" | "ime" | "bme";
+export type ScopeType = "ALL" | "TREE" | "SELF";
+export type ThreadStatus = "ACTIVE" | "ARCHIVED" | "CLOSED";
+export type MessageDirection = "INBOUND" | "OUTBOUND";
+
+export type ProviderStatus =
+  | "QUEUED"
+  | "SENT"
+  | "DELIVERED"
+  | "BOUNCED"
+  | "COMPLAINED"
+  | "FAILED"
+  | "RECEIVED";
+
+export type ApiSuccess<T> = {
+  success: true;
+  message?: string;
+  data: T;
+};
 
 export type AdminMini = {
   _id: string;
@@ -13,19 +30,18 @@ export type AdminMini = {
   rootAdmin?: string | null;
 };
 
-export type MailboxScopeResponse = {
-  success: boolean;
-  data: {
-    actor: AdminMini;
-    scope: {
-      type: "ALL" | "TREE" | "SELF";
-      visibleAdminIds: string[] | null;
-      canCompose: boolean;
-      canReply: boolean;
-      canEditThread: boolean;
-    };
+export type MailboxScope = {
+  actor: AdminMini;
+  scope: {
+    type: ScopeType;
+    visibleAdminIds: string[] | null;
+    canCompose: boolean;
+    canReply: boolean;
+    canEditThread: boolean;
   };
 };
+
+export type MailboxScopeResponse = ApiSuccess<MailboxScope>;
 
 export type AdminEmailThreadDto = {
   _id: string;
@@ -37,27 +53,18 @@ export type AdminEmailThreadDto = {
   replyToEmail: string;
   subject: string;
   lastMessageAt?: string;
-  lastMessageDirection?: "INBOUND" | "OUTBOUND";
-  status?: "ACTIVE" | "ARCHIVED" | "CLOSED";
+  lastMessageDirection?: MessageDirection;
+  status?: ThreadStatus;
   createdAt?: string;
   updatedAt?: string;
 };
-
-export type ProviderStatus =
-  | "QUEUED"
-  | "SENT"
-  | "DELIVERED"
-  | "BOUNCED"
-  | "COMPLAINED"
-  | "FAILED"
-  | "RECEIVED";
 
 export type AdminEmailMessageDto = {
   _id: string;
   threadId: string;
   actorAdminId?: string | AdminMini | null;
   ownerAdminId?: string | AdminMini | null;
-  direction: "INBOUND" | "OUTBOUND";
+  direction: MessageDirection;
   subject: string;
   from?: string | null;
   to?: string[];
@@ -68,56 +75,26 @@ export type AdminEmailMessageDto = {
   textPreview?: string | null;
   htmlPreview?: string | null;
   createdAt?: string;
+  updatedAt?: string;
 };
 
-export async function fetchMailboxScope() {
-  return get<MailboxScopeResponse>("/admin-email/me");
-}
+export type ThreadListData = {
+  page: number;
+  limit: number;
+  total: number;
+  items: AdminEmailThreadDto[];
+};
 
-export async function fetchEmailThreads(params?: {
-  page?: number;
-  limit?: number;
-  search?: string;
-  status?: string;
-  ownerAdminId?: string;
-}) {
-  return get<{ success: boolean; data: { page: number; limit: number; total: number; items: AdminEmailThreadDto[] } }>(
-    "/admin-email/threads",
-    params
-  );
-}
+export type ThreadListResponse = ApiSuccess<ThreadListData>;
 
-export async function fetchThreadMessages(threadId: string) {
-  return get<{ success: boolean; data: { thread: AdminEmailThreadDto; messages: AdminEmailMessageDto[] } }>(
-    `/admin-email/threads/${threadId}/messages`
-  );
-}
+export type ThreadMessagesData = {
+  thread: AdminEmailThreadDto;
+  messages: AdminEmailMessageDto[];
+};
 
-export async function replyToEmailThread(input: {
-  threadId: string;
-  subject?: string;
-  text?: string;
-  html?: string;
-  cc?: string[] | string;
-  bcc?: string[] | string;
-}) {
-  return post(`/admin-email/threads/${input.threadId}/reply`, input);
-}
+export type ThreadMessagesResponse = ApiSuccess<ThreadMessagesData>;
 
-export async function updateEmailThread(input: {
-  threadId: string;
-  subject?: string;
-  status?: "ACTIVE" | "ARCHIVED" | "CLOSED";
-  ownerAdminId?: string;
-}) {
-  return post(`/admin-email/threads/${input.threadId}`, {
-    subject: input.subject,
-    status: input.status,
-    ownerAdminId: input.ownerAdminId,
-  });
-}
-
-export async function composeAdminEmail(input: {
+export type ComposeEmailInput = {
   ownerAdminId?: string;
   to: string[] | string;
   cc?: string[] | string;
@@ -125,43 +102,204 @@ export async function composeAdminEmail(input: {
   subject?: string;
   text?: string;
   html?: string;
-}) {
-  return post(`/admin-email/compose`, input);
-}
+};
 
-export async function sendBulkCsvEmail(input: {
+export type ComposeEmailResult = {
+  total: number;
+  sent: number;
+  failed: number;
+  results: Array<{
+    email: string;
+    success: boolean;
+    threadId?: string;
+    emailMessageId?: string;
+    sesMessageId?: string | null;
+    replyToEmail?: string;
+    s3Key?: string | null;
+    error?: string;
+  }>;
+};
+
+export type ComposeEmailResponse = ApiSuccess<ComposeEmailResult>;
+
+export type ReplyToThreadInput = {
+  threadId: string;
+  subject?: string;
+  text?: string;
+  html?: string;
+  cc?: string[] | string;
+  bcc?: string[] | string;
+};
+
+export type ReplyToThreadResult = {
+  threadId: string;
+  emailMessageId: string;
+  sesMessageId: string | null;
+  replyToEmail?: string;
+  s3Key?: string | null;
+};
+
+export type ReplyToThreadResponse = ApiSuccess<ReplyToThreadResult>;
+
+export type UpdateThreadInput = {
+  threadId: string;
+  subject?: string;
+  status?: ThreadStatus;
+  ownerAdminId?: string;
+};
+
+export type UpdateThreadResponse = ApiSuccess<AdminEmailThreadDto>;
+
+export type BulkCsvSendInput = {
   file: File;
   subject?: string;
   text?: string;
   html?: string;
   ownerAdminId?: string;
-}) {
+};
+
+export type BulkCsvSendResult = {
+  executiveId: string;
+  from: string;
+  role?: AdminRole;
+  total: number;
+  sent: number;
+  failed: number;
+  results: Array<{
+    email: string;
+    name?: string;
+    threadId?: string;
+    emailMessageId?: string;
+    sesMessageId?: string | null;
+    replyToEmail?: string;
+    s3Key?: string | null;
+    success: boolean;
+    error?: string;
+  }>;
+};
+
+export type BulkCsvSendResponse = ApiSuccess<BulkCsvSendResult>;
+
+export type PipelineRecipientDto = {
+  pipelineId: string;
+  campaignId?: string;
+  name: string;
+  email: string;
+  company?: string;
+  niche?: string[];
+  status?: string;
+  threadId?: string | null;
+  replyToEmail?: string | null;
+};
+
+export type PipelineRecipientsResponse = ApiSuccess<{
+  items: PipelineRecipientDto[];
+}>;
+
+export type SendSelectedPipelineEmailsInput = {
+  campaignId: string;
+  pipelineIds: string[];
+  ownerAdminId?: string;
+  subject?: string;
+  text?: string;
+  html?: string;
+};
+
+export type SendSelectedPipelineEmailsResult = {
+  total: number;
+  sent: number;
+  failed: number;
+  results: Array<{
+    pipelineId: string;
+    email: string;
+    name?: string;
+    threadId?: string;
+    emailMessageId?: string;
+    sesMessageId?: string | null;
+    replyToEmail?: string;
+    s3Key?: string | null;
+    success: boolean;
+    error?: string;
+  }>;
+};
+
+export type SendSelectedPipelineEmailsResponse =
+  ApiSuccess<SendSelectedPipelineEmailsResult>;
+
+export type FetchThreadsParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  ownerAdminId?: string;
+};
+
+function appendIfPresent(formData: FormData, key: string, value?: string) {
+  if (value != null && value !== "") {
+    formData.append(key, value);
+  }
+}
+
+export async function fetchMailboxScope() {
+  return get<MailboxScopeResponse>("/admin-email/me");
+}
+
+export async function fetchEmailThreads(params?: FetchThreadsParams) {
+  return get<ThreadListResponse>("/admin-email/threads", params);
+}
+
+export async function fetchThreadMessages(threadId: string) {
+  return get<ThreadMessagesResponse>(
+    `/admin-email/threads/${threadId}/messages`
+  );
+}
+
+export async function replyToEmailThread(input: ReplyToThreadInput) {
+  const { threadId, ...payload } = input;
+
+  return post<ReplyToThreadResponse>(
+    `/admin-email/threads/${threadId}/reply`,
+    payload
+  );
+}
+
+export async function updateEmailThread(input: UpdateThreadInput) {
+  const { threadId, ...payload } = input;
+
+  return post<UpdateThreadResponse>(`/admin-email/threads/${threadId}`, payload);
+}
+
+export async function composeAdminEmail(input: ComposeEmailInput) {
+  return post<ComposeEmailResponse>("/admin-email/compose", input);
+}
+
+export async function sendBulkCsvEmail(input: BulkCsvSendInput) {
   const formData = new FormData();
   formData.append("file", input.file);
-  if (input.subject) formData.append("subject", input.subject);
-  if (input.text) formData.append("text", input.text);
-  if (input.html) formData.append("html", input.html);
-  if (input.ownerAdminId) formData.append("ownerAdminId", input.ownerAdminId);
-  return postFormData("/admin-email/bulk/csv", formData);
+
+  appendIfPresent(formData, "subject", input.subject);
+  appendIfPresent(formData, "text", input.text);
+  appendIfPresent(formData, "html", input.html);
+  appendIfPresent(formData, "ownerAdminId", input.ownerAdminId);
+
+  return postFormData<BulkCsvSendResponse>("/admin-email/bulk/csv", formData);
 }
 
 export async function fetchPipelineRecipients(input: {
   campaignId: string;
   pipelineIds: string[];
 }) {
-  return post<{ success: boolean; data: { items: any[] } }>(
+  return post<PipelineRecipientsResponse>(
     "/admin-email/pipeline/recipients",
     input
   );
 }
 
-export async function sendSelectedPipelineEmails(input: {
-  campaignId: string;
-  pipelineIds: string[];
-  ownerAdminId?: string;
-  subject?: string;
-  text?: string;
-  html?: string;
-}) {
-  return post(`/admin-email/pipeline/send-selected`, input);
+export async function sendSelectedPipelineEmails(
+  input: SendSelectedPipelineEmailsInput
+) {
+  return post<SendSelectedPipelineEmailsResponse>(
+    "/admin-email/pipeline/send-selected",
+    input
+  );
 }

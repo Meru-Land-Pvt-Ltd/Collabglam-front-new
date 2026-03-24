@@ -2,48 +2,67 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Search,
-  Send,
-  Users,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  FileSpreadsheet,
+  Filter,
+  Inbox,
+  Loader2,
   Mail,
   MessageSquare,
-  ChevronRight,
-  Filter,
-  Clock3,
-  Sparkles,
-  Eye,
-  UserCircle2,
-  Inbox,
   PanelLeft,
-  LayoutGrid,
-  X,
-  Upload,
-  FileSpreadsheet,
-  Trash2,
-  Loader2,
-  ArrowRightLeft,
-  CheckCircle2,
-  AlertTriangle,
+  PencilLine,
   RefreshCcw,
+  Search,
+  Send,
+  Sparkles,
+  Trash2,
+  Upload,
+  UserCircle2,
+  Users,
+  X,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import EmailEditor from "@/components/ui/EmailEditor";
 import {
   type AdminRole,
-  type AdminEmailThreadDto,
   type AdminEmailMessageDto,
+  type AdminEmailThreadDto,
   type PipelineRecipientDto,
-  sendBulkCsvEmail,
+  composeAdminEmail,
   fetchEmailThreads,
+  fetchMailboxScope,
+  fetchPipelineRecipients,
   fetchThreadMessages,
   replyToEmailThread,
-  fetchPipelineRecipients,
+  sendBulkCsvEmail,
   sendSelectedPipelineEmails,
+  updateEmailThread,
 } from "./admin-email";
-import { useSearchParams } from "next/navigation";
 
 type RecipientStatus = "Ready" | "Sent" | "Replied" | "Bounced" | "Failed";
 type ThreadStatusUi = "Waiting" | "Replied" | "Closed" | "Archived";
-type AudienceType = "Admin outreach";
+type ThreadStatusApi = "ACTIVE" | "ARCHIVED" | "CLOSED";
+type EditorMode = "compose" | "reply";
+
+type MailboxScopeData = {
+  actor: {
+    _id: string;
+    name?: string;
+    email?: string;
+    proxyEmail?: string;
+    role?: AdminRole | string;
+  };
+  scope: {
+    type: "ALL" | "TREE" | "SELF";
+    visibleAdminIds: string[] | null;
+    canCompose: boolean;
+    canReply: boolean;
+    canEditThread: boolean;
+  };
+};
 
 type Recipient = {
   id: string;
@@ -75,7 +94,6 @@ type Thread = {
   subject: string;
   recipientName: string;
   recipientEmail: string;
-  audience: AudienceType;
   role: AdminRole;
   status: ThreadStatusUi;
   unread: number;
@@ -108,46 +126,39 @@ type EmailEditorAttachment = {
 
 const ADMIN_REPLY_DOMAIN = "reply.collabglam.cloud";
 
-const roleConfig: Record<
+const ROLE_META: Record<
   AdminRole,
   {
     title: string;
-    subtitle: string;
-    deskEmail: string;
     badge: string;
+    deskEmail: string;
+    subtitle: string;
   }
 > = {
   super_admin: {
     title: "Super Admin",
-    subtitle: "Full admin email operations across all visible thread trees.",
-    deskEmail: "admin@collabglam.cloud",
     badge: "Super Admin",
+    deskEmail: "admin@collabglam.cloud",
+    subtitle: "Can view and manage every admin thread.",
   },
   revenue_head: {
     title: "Revenue Head",
-    subtitle: "Own threads plus IME and BME threads within the managed tree.",
-    deskEmail: "revenue@collabglam.cloud",
     badge: "Revenue Head",
+    deskEmail: "revenue@collabglam.cloud",
+    subtitle: "Can view own threads plus IME and BME inside the same tree.",
   },
   ime: {
-    title: "Influencer Marketing Executive",
-    subtitle: "Personal outbound threads and replies for your own mailbox.",
-    deskEmail: "ime@collabglam.cloud",
+    title: "IME",
     badge: "IME",
+    deskEmail: "ime@collabglam.cloud",
+    subtitle: "Can view and manage only own threads.",
   },
   bme: {
-    title: "Brand Marketing Executive",
-    subtitle: "Personal outbound threads and replies for your own mailbox.",
-    deskEmail: "bme@collabglam.cloud",
+    title: "BME",
     badge: "BME",
+    deskEmail: "bme@collabglam.cloud",
+    subtitle: "Can view and manage only own threads.",
   },
-};
-
-const threadStatusPillClass: Record<ThreadStatusUi, string> = {
-  Waiting: "bg-amber-50 text-amber-700 border border-amber-200",
-  Replied: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-  Closed: "bg-slate-100 text-slate-700 border border-slate-200",
-  Archived: "bg-slate-100 text-slate-500 border border-slate-200",
 };
 
 const recipientStatusPillClass: Record<RecipientStatus, string> = {
@@ -158,21 +169,19 @@ const recipientStatusPillClass: Record<RecipientStatus, string> = {
   Failed: "bg-rose-50 text-rose-700 border border-rose-200",
 };
 
+const threadStatusPillClass: Record<ThreadStatusUi, string> = {
+  Waiting: "bg-amber-50 text-amber-700 border border-amber-200",
+  Replied: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  Closed: "bg-slate-100 text-slate-700 border border-slate-200",
+  Archived: "bg-slate-100 text-slate-500 border border-slate-200",
+};
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function formatRelativeNow() {
-  return new Date().toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function formatDateTime(value?: string | number | Date | null) {
@@ -187,6 +196,15 @@ function formatDateTime(value?: string | number | Date | null) {
   } catch {
     return String(value);
   }
+}
+
+function formatRelativeNow() {
+  return new Date().toLocaleString([], {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function normalizeHeader(value: string) {
@@ -232,15 +250,23 @@ function parseCsv(text: string) {
     .split("\n")
     .filter((line) => line.trim().length > 0);
 
-  if (lines.length === 0) return { headers: [], rows: [] as string[][] };
+  if (!lines.length) return { headers: [], rows: [] as string[][] };
 
-  const headers = parseCsvLine(lines[0]);
-  const rows = lines.slice(1).map(parseCsvLine);
-  return { headers, rows };
+  return {
+    headers: parseCsvLine(lines[0]),
+    rows: lines.slice(1).map(parseCsvLine),
+  };
 }
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function splitEmailList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function extractCell(
@@ -265,6 +291,7 @@ function recipientsToCsv(recipients: Recipient[]) {
     "replyToEmail",
     "tags",
   ];
+
   const lines = recipients.map((item) =>
     [
       item.name,
@@ -280,6 +307,11 @@ function recipientsToCsv(recipients: Recipient[]) {
   );
 
   return [header.join(","), ...lines].join("\n");
+}
+
+function stripHtml(html?: string | null) {
+  if (!html) return "";
+  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 }
 
 function getThreadOwner(thread: AdminEmailThreadDto) {
@@ -311,25 +343,46 @@ function getThreadOwner(thread: AdminEmailThreadDto) {
   };
 }
 
-function getRoleScopeText(role: AdminRole) {
-  if (role === "super_admin") {
-    return "Can see every admin thread across the system.";
+function getRoleMeta(role?: string) {
+  if (role && role in ROLE_META) {
+    return ROLE_META[role as AdminRole];
   }
 
-  if (role === "revenue_head") {
-    return "Can see own threads plus all IME and BME threads under the managed tree.";
-  }
+  return {
+    title: "Admin",
+    badge: "Admin",
+    deskEmail: "admin@collabglam.cloud",
+    subtitle: "Mailbox access is controlled by backend scope.",
+  };
+}
 
-  return "Can see only own threads.";
+function getScopeText(scope?: "ALL" | "TREE" | "SELF") {
+  if (scope === "ALL") return "Can see every admin thread and conversation.";
+  if (scope === "TREE")
+    return "Can see own threads plus IME and BME inside the managed tree.";
+  return "Can see only own threads and conversation.";
+}
+
+function mapThreadStatus(thread: AdminEmailThreadDto): ThreadStatusUi {
+  if (thread.status === "CLOSED") return "Closed";
+  if (thread.status === "ARCHIVED") return "Archived";
+  if (thread.lastMessageDirection === "INBOUND") return "Replied";
+  return "Waiting";
+}
+
+function mapUiStatusToApi(status: ThreadStatusUi): ThreadStatusApi {
+  if (status === "Closed") return "CLOSED";
+  if (status === "Archived") return "ARCHIVED";
+  return "ACTIVE";
+}
+
+function mapApiStatusToUi(status?: ThreadStatusApi): ThreadStatusUi {
+  if (status === "CLOSED") return "Closed";
+  if (status === "ARCHIVED") return "Archived";
+  return "Waiting";
 }
 
 function mapBackendThreadToUi(thread: AdminEmailThreadDto): Thread {
-  let status: ThreadStatusUi = "Waiting";
-
-  if (thread.status === "CLOSED") status = "Closed";
-  else if (thread.status === "ARCHIVED") status = "Archived";
-  else if (thread.lastMessageDirection === "INBOUND") status = "Replied";
-
   const owner = getThreadOwner(thread);
 
   return {
@@ -337,9 +390,8 @@ function mapBackendThreadToUi(thread: AdminEmailThreadDto): Thread {
     subject: thread.subject || "(no subject)",
     recipientName: thread.recipientEmail || "Recipient",
     recipientEmail: thread.recipientEmail || "",
-    audience: "Admin outreach",
     role: thread.role,
-    status,
+    status: mapThreadStatus(thread),
     unread: 0,
     lastMessageAt: formatDateTime(thread.lastMessageAt),
     lastMessageDirection: thread.lastMessageDirection,
@@ -362,18 +414,16 @@ function mapBackendMessageToUi(
   msg: AdminEmailMessageDto,
   thread: Thread | null
 ): Message {
-  const body =
-    msg.textPreview ||
-    (typeof msg.htmlPreview === "string"
-      ? msg.htmlPreview.replace(/<[^>]+>/g, "")
-      : "") ||
-    "";
+  const body = msg.textPreview || stripHtml(msg.htmlPreview) || "";
 
   return {
     id: msg._id,
     sender:
       msg.direction === "OUTBOUND"
-        ? thread?.senderEmail || thread?.ownerAdminName || thread?.role || "Admin"
+        ? thread?.ownerAdminName ||
+          thread?.senderEmail ||
+          thread?.role?.toUpperCase() ||
+          "Admin"
         : msg.from || "Recipient",
     email:
       msg.direction === "OUTBOUND" ? thread?.senderEmail || "" : msg.from || "",
@@ -387,28 +437,42 @@ function mapBackendMessageToUi(
 
 export default function Page() {
   const searchParams = useSearchParams();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const campaignId = searchParams.get("campaignId") || "";
   const pipelineIds = useMemo(() => {
     const raw = searchParams.get("pipelineIds") || "";
-    return raw.split(",").map((x) => x.trim()).filter(Boolean);
+    return raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
   }, [searchParams]);
 
   const pipelineSelectionMode = !!campaignId && pipelineIds.length > 0;
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [mailboxScope, setMailboxScope] = useState<MailboxScopeData | null>(null);
+  const [loadingScope, setLoadingScope] = useState(true);
 
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
 
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [recipientStatusFilter, setRecipientStatusFilter] =
+    useState<string>("All");
+
+  const [threadSearch, setThreadSearch] = useState("");
+  const [threadStatusFilter, setThreadStatusFilter] = useState<string>("All");
+
+  const [threadDraftSubject, setThreadDraftSubject] = useState("");
+  const [threadDraftStatus, setThreadDraftStatus] =
+    useState<ThreadStatusApi>("ACTIVE");
+  const [savingThread, setSavingThread] = useState(false);
+
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState<EditorMode>("reply");
   const [editorSending, setEditorSending] = useState(false);
-
-  const [mobileRecipientsOpen, setMobileRecipientsOpen] = useState(false);
-  const [mobileThreadsOpen, setMobileThreadsOpen] = useState(false);
-
   const [editorPayload, setEditorPayload] = useState({
     toLabel: "",
     subject: "",
@@ -416,97 +480,103 @@ export default function Page() {
     toAvatar: "",
   });
 
+  const [mobileRecipientsOpen, setMobileRecipientsOpen] = useState(false);
+  const [mobileThreadsOpen, setMobileThreadsOpen] = useState(false);
+
   const [uploadedCsvFile, setUploadedCsvFile] = useState<File | null>(null);
+  const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
+
   const [uploadingCsv, setUploadingCsv] = useState(false);
   const [sendingBulk, setSendingBulk] = useState(false);
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
   const [apiError, setApiError] = useState<string | null>(null);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
 
-  const [uploadSummary, setUploadSummary] = useState<
-    Record<AdminRole, UploadSummary | null>
-  >({
-    super_admin: null,
-    revenue_head: null,
-    ime: null,
-    bme: null,
-  });
-
-  const [recipientsByDesk, setRecipientsByDesk] = useState<
-    Record<AdminRole, Recipient[]>
-  >({
-    super_admin: [],
-    revenue_head: [],
-    ime: [],
-    bme: [],
-  });
-
-  const [threadsByDesk, setThreadsByDesk] = useState<Record<AdminRole, Thread[]>>({
-    super_admin: [],
-    revenue_head: [],
-    ime: [],
-    bme: [],
-  });
-
-  const config = roleConfig[role];
-  const recipients = recipientsByDesk[role];
-  const threads = threadsByDesk[role];
+  const actorRole = mailboxScope?.actor?.role as AdminRole | undefined;
+  const config = getRoleMeta(actorRole);
 
   const filteredRecipients = useMemo(() => {
-    return recipients.filter((item) => {
-      const q = search.toLowerCase();
+    const q = recipientSearch.toLowerCase();
 
+    return recipients.filter((item) => {
       const matchesSearch =
-        !search ||
+        !recipientSearch ||
         item.name.toLowerCase().includes(q) ||
         item.email.toLowerCase().includes(q) ||
         item.company?.toLowerCase().includes(q) ||
         item.niche?.toLowerCase().includes(q) ||
         item.tags.some((tag) => tag.toLowerCase().includes(q));
 
-      const matchesStatus = statusFilter === "All" || item.status === statusFilter;
+      const matchesStatus =
+        recipientStatusFilter === "All" ||
+        item.status === recipientStatusFilter;
+
       return matchesSearch && matchesStatus;
     });
-  }, [recipients, search, statusFilter]);
+  }, [recipients, recipientSearch, recipientStatusFilter]);
 
   const filteredThreads = useMemo(() => {
-    return threads.filter((thread) => {
-      const q = search.toLowerCase();
+    const q = threadSearch.toLowerCase();
 
+    return threads.filter((thread) => {
       const matchesSearch =
-        !search ||
+        !threadSearch ||
         thread.subject.toLowerCase().includes(q) ||
         thread.recipientName.toLowerCase().includes(q) ||
         thread.recipientEmail.toLowerCase().includes(q) ||
-        thread.replyToEmail?.toLowerCase().includes(q) ||
-        thread.senderEmail?.toLowerCase().includes(q) ||
         thread.ownerAdminName?.toLowerCase().includes(q) ||
         thread.ownerAdminEmail?.toLowerCase().includes(q) ||
+        thread.senderEmail?.toLowerCase().includes(q) ||
+        thread.replyToEmail?.toLowerCase().includes(q) ||
         thread.tags.some((tag) => tag.toLowerCase().includes(q));
 
-      const matchesStatus = statusFilter === "All" || thread.status === statusFilter;
+      const matchesStatus =
+        threadStatusFilter === "All" || thread.status === threadStatusFilter;
+
       return matchesSearch && matchesStatus;
     });
-  }, [threads, search, statusFilter]);
-
-  const selectedThread =
-    filteredThreads.find((thread) => thread.id === selectedThreadId) ||
-    filteredThreads[0] ||
-    null;
+  }, [threads, threadSearch, threadStatusFilter]);
 
   const selectedRecipients = recipients.filter((item) =>
     selectedRecipientIds.includes(item.id)
   );
 
+  const selectedThread =
+    filteredThreads.find((item) => item.id === selectedThreadId) ||
+    threads.find((item) => item.id === selectedThreadId) ||
+    filteredThreads[0] ||
+    threads[0] ||
+    null;
+
   const totalRecipients = recipients.length;
-  const repliedCount = recipients.filter((r) => r.status === "Replied").length;
-  const sentCount = recipients.filter((r) => r.status === "Sent").length;
+  const sentCount = recipients.filter((item) => item.status === "Sent").length;
+  const repliedCount = threads.filter(
+    (item) => item.lastMessageDirection === "INBOUND"
+  ).length;
   const failedCount = recipients.filter(
-    (r) => r.status === "Bounced" || r.status === "Failed"
+    (item) => item.status === "Failed" || item.status === "Bounced"
   ).length;
   const activeSelectionCount = selectedRecipients.length;
-  const summary = uploadSummary[role];
+
+  const loadMailboxScope = async () => {
+    try {
+      setLoadingScope(true);
+      setApiError(null);
+
+      const response = await fetchMailboxScope();
+      setMailboxScope(response.data);
+    } catch (error: any) {
+      setApiError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to load mailbox scope"
+      );
+    } finally {
+      setLoadingScope(false);
+    }
+  };
 
   const loadThreadsFromApi = async () => {
     try {
@@ -521,11 +591,7 @@ export default function Page() {
       const items = response?.data?.items || [];
       const mappedThreads = items.map(mapBackendThreadToUi);
 
-      setThreadsByDesk((prev) => ({
-        ...prev,
-        [role]: mappedThreads,
-      }));
-
+      setThreads(mappedThreads);
       setSelectedThreadId((prev) => {
         if (prev && mappedThreads.some((item) => item.id === prev)) return prev;
         return mappedThreads[0]?.id || null;
@@ -533,8 +599,8 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load threads"
+          error?.message ||
+          "Failed to load threads"
       );
     } finally {
       setLoadingThreads(false);
@@ -552,157 +618,34 @@ export default function Page() {
       const backendThread = response?.data?.thread;
       const baseThread = backendThread
         ? mapBackendThreadToUi(backendThread)
-        : selectedThread;
+        : threads.find((item) => item.id === threadId) || null;
 
       const backendMessages = (response?.data?.messages || []).map(
-        (msg: AdminEmailMessageDto) => mapBackendMessageToUi(msg, baseThread || null)
+        (msg: AdminEmailMessageDto) => mapBackendMessageToUi(msg, baseThread)
       );
 
-      setThreadsByDesk((prev) => ({
-        ...prev,
-        [role]: prev[role].map((thread) =>
-          thread.id === threadId
+      setThreads((prev) =>
+        prev.map((item) =>
+          item.id === threadId
             ? {
-              ...thread,
-              ...(baseThread ? baseThread : {}),
-              messages: backendMessages,
-            }
-            : thread
-        ),
-      }));
+                ...(baseThread || item),
+                messages: backendMessages,
+              }
+            : item
+        )
+      );
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load thread messages"
+          error?.message ||
+          "Failed to load thread messages"
       );
     } finally {
       setLoadingMessages(false);
     }
   };
 
-  useEffect(() => {
-    loadThreadsFromApi();
-  }, [role]);
-
-  useEffect(() => {
-    if (selectedThreadId) {
-      loadThreadMessagesFromApi(selectedThreadId);
-    }
-  }, [selectedThreadId]);
-
-  const toggleRecipient = (id: string) => {
-    setSelectedRecipientIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const toggleSelectAllVisible = () => {
-    const visibleIds = filteredRecipients.map((item) => item.id);
-    const allVisibleSelected = visibleIds.every((id) =>
-      selectedRecipientIds.includes(id)
-    );
-
-    if (allVisibleSelected) {
-      setSelectedRecipientIds((prev) =>
-        prev.filter((id) => !visibleIds.includes(id))
-      );
-    } else {
-      setSelectedRecipientIds((prev) => [...new Set([...prev, ...visibleIds])]);
-    }
-  };
-
-  const handleRoleChange = (item: AdminRole) => {
-    setRole(item);
-    setSelectedRecipientIds([]);
-    setSearch("");
-    setStatusFilter("All");
-    setSelectedThreadId(null);
-    setApiError(null);
-    setBannerMessage(null);
-  };
-
-  const handleCsvUpload = async (file: File) => {
-    const text = await file.text();
-    const { headers, rows } = parseCsv(text);
-
-    if (!headers.length) return;
-
-    const headerMap = new Map(
-      headers.map((header, index) => [normalizeHeader(header), index])
-    );
-
-    const nextRecipients: Recipient[] = [];
-    let invalidRows = 0;
-    let duplicateRows = 0;
-
-    setRecipientsByDesk((prev) => {
-      const existingEmails = new Set(
-        prev[role].map((item) => item.email.toLowerCase())
-      );
-
-      for (const row of rows) {
-        const email = extractCell(row, headerMap, ["email", "e mail", "mail"]).toLowerCase();
-        const name = extractCell(row, headerMap, ["name", "full name", "fullname"]);
-        const company = extractCell(row, headerMap, [
-          "company",
-          "brand",
-          "organization",
-          "organisation",
-        ]);
-        const niche = extractCell(row, headerMap, ["niche", "category", "industry"]);
-        const rawTags = extractCell(row, headerMap, ["tags", "tag"]);
-
-        if (!email || !isValidEmail(email)) {
-          invalidRows += 1;
-          continue;
-        }
-
-        if (existingEmails.has(email)) {
-          duplicateRows += 1;
-          continue;
-        }
-
-        existingEmails.add(email);
-
-        nextRecipients.push({
-          id: makeId("recipient"),
-          name: name || email.split("@")[0],
-          email,
-          company: company || undefined,
-          niche: niche || undefined,
-          status: "Ready",
-          tags: rawTags
-            ? rawTags
-              .split(/[|,]/)
-              .map((item) => item.trim())
-              .filter(Boolean)
-            : [],
-          createdAt: Date.now(),
-        });
-      }
-
-      return {
-        ...prev,
-        [role]: [...prev[role], ...nextRecipients],
-      };
-    });
-
-    setUploadSummary((prev) => ({
-      ...prev,
-      [role]: {
-        fileName: file.name,
-        totalRows: rows.length,
-        importedRows: nextRecipients.length,
-        duplicateRows,
-        invalidRows,
-      },
-    }));
-  };
-
   const loadPipelineRecipients = async () => {
-    if (!pipelineSelectionMode) return;
-
     try {
       setLoadingThreads(true);
       setApiError(null);
@@ -714,30 +657,28 @@ export default function Page() {
 
       const items = response?.data?.items || [];
 
-      const mappedRecipients: Recipient[] = items.map((item: PipelineRecipientDto) => ({
-        id: item.pipelineId,
-        name: item.name || item.email,
-        email: item.email,
-        company: item.company,
-        niche: Array.isArray(item.niche) ? item.niche.join(", ") : undefined,
-        status: item.threadId ? "Sent" : "Ready",
-        tags: [item.status || "outreach"].filter(Boolean),
-        createdAt: Date.now(),
-        threadId: item.threadId || undefined,
-        replyToEmail: item.replyToEmail || undefined,
-      }));
+      const mappedRecipients: Recipient[] = items.map(
+        (item: PipelineRecipientDto) => ({
+          id: item.pipelineId,
+          name: item.name || item.email,
+          email: item.email,
+          company: item.company,
+          niche: Array.isArray(item.niche) ? item.niche.join(", ") : undefined,
+          status: item.threadId ? "Sent" : "Ready",
+          tags: [item.status || "outreach"].filter(Boolean),
+          createdAt: Date.now(),
+          threadId: item.threadId || undefined,
+          replyToEmail: item.replyToEmail || undefined,
+        })
+      );
 
-      setRecipientsByDesk((prev) => ({
-        ...prev,
-        [role]: mappedRecipients,
-      }));
-
-      setSelectedRecipientIds(mappedRecipients.map((r) => r.id));
+      setRecipients(mappedRecipients);
+      setSelectedRecipientIds(mappedRecipients.map((item) => item.id));
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load selected pipeline recipients"
+          error?.message ||
+          "Failed to load selected pipeline recipients"
       );
     } finally {
       setLoadingThreads(false);
@@ -745,12 +686,131 @@ export default function Page() {
   };
 
   useEffect(() => {
+    loadMailboxScope();
+  }, []);
+
+  useEffect(() => {
+    if (!mailboxScope) return;
+
     if (pipelineSelectionMode) {
       loadPipelineRecipients();
     } else {
       loadThreadsFromApi();
     }
-  }, [role, pipelineSelectionMode, campaignId, pipelineIds.join(",")]);
+  }, [mailboxScope, pipelineSelectionMode, campaignId, pipelineIds.join(",")]);
+
+  useEffect(() => {
+    if (selectedThreadId) {
+      loadThreadMessagesFromApi(selectedThreadId);
+    }
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (!selectedThread) {
+      setThreadDraftSubject("");
+      setThreadDraftStatus("ACTIVE");
+      return;
+    }
+
+    setThreadDraftSubject(selectedThread.subject);
+    setThreadDraftStatus(mapUiStatusToApi(selectedThread.status));
+  }, [selectedThread?.id, selectedThread?.subject, selectedThread?.status]);
+
+  const toggleRecipient = (id: string) => {
+    setSelectedRecipientIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filteredRecipients.map((item) => item.id);
+    const allVisibleSelected =
+      visibleIds.length > 0 &&
+      visibleIds.every((id) => selectedRecipientIds.includes(id));
+
+    if (allVisibleSelected) {
+      setSelectedRecipientIds((prev) =>
+        prev.filter((id) => !visibleIds.includes(id))
+      );
+    } else {
+      setSelectedRecipientIds((prev) => [...new Set([...prev, ...visibleIds])]);
+    }
+  };
+
+  const handleCsvUpload = async (file: File) => {
+    const text = await file.text();
+    const { headers, rows } = parseCsv(text);
+    if (!headers.length) return;
+
+    const headerMap = new Map(
+      headers.map((header, index) => [normalizeHeader(header), index])
+    );
+
+    const nextRecipients: Recipient[] = [];
+    const existingEmails = new Set(recipients.map((item) => item.email.toLowerCase()));
+
+    let invalidRows = 0;
+    let duplicateRows = 0;
+
+    for (const row of rows) {
+      const email = extractCell(row, headerMap, [
+        "email",
+        "e mail",
+        "mail",
+      ]).toLowerCase();
+      const name = extractCell(row, headerMap, ["name", "full name", "fullname"]);
+      const company = extractCell(row, headerMap, [
+        "company",
+        "brand",
+        "organization",
+        "organisation",
+      ]);
+      const niche = extractCell(row, headerMap, [
+        "niche",
+        "category",
+        "industry",
+      ]);
+      const rawTags = extractCell(row, headerMap, ["tags", "tag"]);
+
+      if (!email || !isValidEmail(email)) {
+        invalidRows += 1;
+        continue;
+      }
+
+      if (existingEmails.has(email)) {
+        duplicateRows += 1;
+        continue;
+      }
+
+      existingEmails.add(email);
+
+      nextRecipients.push({
+        id: makeId("recipient"),
+        name: name || email.split("@")[0],
+        email,
+        company: company || undefined,
+        niche: niche || undefined,
+        status: "Ready",
+        tags: rawTags
+          ? rawTags
+              .split(/[|,]/)
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : [],
+        createdAt: Date.now(),
+      });
+    }
+
+    setRecipients((prev) => [...prev, ...nextRecipients]);
+
+    setUploadSummary({
+      fileName: file.name,
+      totalRows: rows.length,
+      importedRows: nextRecipients.length,
+      duplicateRows,
+      invalidRows,
+    });
+  };
 
   const onFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -770,42 +830,70 @@ export default function Page() {
     }
   };
 
-  const clearRecipientsForRole = () => {
-    setRecipientsByDesk((prev) => ({ ...prev, [role]: [] }));
-    setUploadSummary((prev) => ({ ...prev, [role]: null }));
+  const clearRecipients = () => {
+    setRecipients([]);
     setSelectedRecipientIds([]);
+    setUploadSummary(null);
     setUploadedCsvFile(null);
-    setApiError(null);
     setBannerMessage(null);
+    setApiError(null);
   };
 
-  const exportRecipientsForRole = () => {
+  const exportRecipients = () => {
     if (!recipients.length) return;
+
     const blob = new Blob([recipientsToCsv(recipients)], {
       type: "text/csv;charset=utf-8;",
     });
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${role}-admin-recipients.csv`;
+    a.download = "admin-recipients.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleSendBulkCsvToBackend = async () => {
+  const markRecipientsFromSendResult = (
+    resultItems: Array<any>,
+    key: "email" | "pipelineId"
+  ) => {
+    const resultMap = new Map(
+      resultItems.map((item) => [String(item[key] || "").toLowerCase(), item])
+    );
+
+    setRecipients((prev) =>
+      prev.map((recipient) => {
+        const lookup =
+          key === "email"
+            ? recipient.email.toLowerCase()
+            : String(recipient.id).toLowerCase();
+
+        const apiItem = resultMap.get(lookup);
+        if (!apiItem) return recipient;
+
+        return {
+          ...recipient,
+          status: apiItem.success ? "Sent" : "Failed",
+          lastContact: apiItem.success ? formatRelativeNow() : recipient.lastContact,
+          threadId: apiItem.threadId || recipient.threadId,
+          replyToEmail: apiItem.replyToEmail || recipient.replyToEmail,
+        };
+      })
+    );
+  };
+
+  const handleSendTemplateBulk = async () => {
     try {
       setSendingBulk(true);
       setApiError(null);
       setBannerMessage(null);
 
       if (pipelineSelectionMode) {
-        const selectedPipelineIds =
-          selectedRecipients.length > 0
-            ? selectedRecipients.map((r) => r.id)
-            : [];
+        const selectedPipelineIds = selectedRecipients.map((item) => item.id);
 
         if (!selectedPipelineIds.length) {
-          setApiError("Please select at least one recipient first.");
+          setApiError("Please select at least one recipient.");
           return;
         }
 
@@ -814,35 +902,12 @@ export default function Page() {
           pipelineIds: selectedPipelineIds,
         });
 
-        const resultMap = new Map(
-          (response?.data?.results || []).map((item: any) => [
-            String(item.pipelineId || ""),
-            item,
-          ])
-        );
-
-        setRecipientsByDesk((prev) => ({
-          ...prev,
-          [role]: prev[role].map((recipient) => {
-            const apiItem = resultMap.get(recipient.id);
-            if (!apiItem) return recipient;
-
-            return {
-              ...recipient,
-              status: apiItem.success ? "Sent" : "Failed",
-              lastContact: apiItem.success ? formatRelativeNow() : recipient.lastContact,
-              threadId: apiItem.threadId,
-              replyToEmail: apiItem.replyToEmail,
-            };
-          }),
-        }));
-
+        markRecipientsFromSendResult(response?.data?.results || [], "pipelineId");
         await loadThreadsFromApi();
 
         setBannerMessage(
-          `Email sent to ${selectedPipelineIds.length} selected recipient(s). Sent: ${response.data.sent}, Failed: ${response.data.failed}.`
+          `Template email sent. Sent: ${response.data.sent}, Failed: ${response.data.failed}.`
         );
-
         return;
       }
 
@@ -855,29 +920,7 @@ export default function Page() {
         file: uploadedCsvFile,
       });
 
-      const resultMap = new Map(
-        (response?.data?.results || []).map((item: any) => [
-          String(item.email || "").toLowerCase(),
-          item,
-        ])
-      );
-
-      setRecipientsByDesk((prev) => ({
-        ...prev,
-        [role]: prev[role].map((recipient) => {
-          const apiItem = resultMap.get(recipient.email.toLowerCase());
-          if (!apiItem) return recipient;
-
-          return {
-            ...recipient,
-            status: apiItem.success ? "Sent" : "Failed",
-            lastContact: apiItem.success ? formatRelativeNow() : recipient.lastContact,
-            threadId: apiItem.threadId,
-            replyToEmail: apiItem.replyToEmail,
-          };
-        }),
-      }));
-
+      markRecipientsFromSendResult(response?.data?.results || [], "email");
       await loadThreadsFromApi();
 
       setBannerMessage(
@@ -886,17 +929,34 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to send bulk email"
+          error?.message ||
+          "Failed to send bulk email"
       );
     } finally {
       setSendingBulk(false);
     }
   };
 
+  const openComposeEditor = () => {
+    const toList =
+      selectedRecipients.length > 0
+        ? selectedRecipients.map((item) => item.email).join(", ")
+        : "";
+
+    setEditorMode("compose");
+    setEditorPayload({
+      toLabel: toList,
+      subject: "",
+      initialBody: "",
+      toAvatar: "",
+    });
+    setEditorOpen(true);
+  };
+
   const openReplyEditor = () => {
     if (!selectedThread) return;
 
+    setEditorMode("reply");
     setEditorPayload({
       toLabel: selectedThread.recipientEmail,
       subject: `Re: ${selectedThread.subject}`,
@@ -919,33 +979,97 @@ export default function Page() {
     try {
       setEditorSending(true);
       setApiError(null);
+      setBannerMessage(null);
 
-      if (!selectedThread) throw new Error("No thread selected");
+      if (editorMode === "reply") {
+        if (!selectedThread) throw new Error("No thread selected");
 
-      await replyToEmailThread({
-        threadId: selectedThread.id,
-        subject: payload.subject,
-        text: payload.body,
-        html: payload.htmlBody,
-      });
+        await replyToEmailThread({
+          threadId: selectedThread.id,
+          subject: payload.subject,
+          text: payload.body,
+          html: payload.htmlBody,
+          cc: payload.cc,
+          bcc: payload.bcc,
+        });
 
-      await loadThreadsFromApi();
-      await loadThreadMessagesFromApi(selectedThread.id);
+        await loadThreadsFromApi();
+        await loadThreadMessagesFromApi(selectedThread.id);
+
+        setBannerMessage(
+          "Reply sent successfully. Future replies will continue in the same thread."
+        );
+      } else {
+        const response = await composeAdminEmail({
+          to: splitEmailList(payload.to),
+          cc: splitEmailList(payload.cc),
+          bcc: splitEmailList(payload.bcc),
+          subject: payload.subject,
+          text: payload.body,
+          html: payload.htmlBody,
+        });
+
+        markRecipientsFromSendResult(response?.data?.results || [], "email");
+        await loadThreadsFromApi();
+
+        const firstThreadId = response?.data?.results?.find(
+          (item: any) => item.success && item.threadId
+        )?.threadId;
+
+        if (firstThreadId) {
+          setSelectedThreadId(firstThreadId);
+        }
+
+        setBannerMessage(
+          `Email sent successfully to ${response?.data?.sent || 0} recipient(s).`
+        );
+      }
 
       setEditorOpen(false);
-      setBannerMessage(
-        "Reply sent. Future responses should continue in the same admin thread."
-      );
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to send reply"
+          error?.message ||
+          "Failed to send email"
       );
     } finally {
       setEditorSending(false);
     }
   };
+
+  const handleSaveThread = async () => {
+    if (!selectedThread) return;
+
+    try {
+      setSavingThread(true);
+      setApiError(null);
+      setBannerMessage(null);
+
+      await updateEmailThread({
+        threadId: selectedThread.id,
+        subject: threadDraftSubject,
+        status: threadDraftStatus,
+      });
+
+      await loadThreadsFromApi();
+      await loadThreadMessagesFromApi(selectedThread.id);
+
+      setBannerMessage("Thread updated successfully.");
+    } catch (error: any) {
+      setApiError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to update thread"
+      );
+    } finally {
+      setSavingThread(false);
+    }
+  };
+
+  const threadHasUnsavedChanges =
+    !!selectedThread &&
+    (threadDraftSubject !== selectedThread.subject ||
+      threadDraftStatus !== mapUiStatusToApi(selectedThread.status));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900">
@@ -958,7 +1082,7 @@ export default function Page() {
       />
 
       <div className="mx-auto flex max-w-[1600px] gap-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-[270px] shrink-0 rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur xl:flex xl:flex-col">
+        <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-[280px] shrink-0 rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur xl:flex xl:flex-col">
           <div>
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
@@ -968,34 +1092,38 @@ export default function Page() {
                 <div className="text-sm font-semibold tracking-wide text-slate-900">
                   CollabGlam
                 </div>
-                <div className="text-xs text-slate-500">
-                  Admin Email Console
-                </div>
+                <div className="text-xs text-slate-500">Admin Email Console</div>
               </div>
             </div>
 
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Active role
+                Logged in as
               </div>
               <div className="mt-2 text-sm font-semibold text-slate-900">
-                {config.title}
+                {mailboxScope?.actor?.name || config.title}
               </div>
-              <div className="mt-1 text-xs leading-5 text-slate-500">
+              <div className="mt-1 text-xs text-slate-500">
+                {config.badge}
+                {mailboxScope?.actor?.email ? ` · ${mailboxScope.actor.email}` : ""}
+              </div>
+              <div className="mt-3 text-xs leading-5 text-slate-500">
                 {config.subtitle}
               </div>
               <div className="mt-2 text-xs leading-5 text-slate-500">
-                {getRoleScopeText(role)}
+                {getScopeText(mailboxScope?.scope?.type)}
               </div>
             </div>
           </div>
 
           <div className="mt-8 space-y-2">
-            <SidebarItem icon={<LayoutGrid className="h-4 w-4" />} label="Overview" active />
-            <SidebarItem icon={<Users className="h-4 w-4" />} label="Bulk CSV send" />
-            <SidebarItem icon={<Inbox className="h-4 w-4" />} label="Threads" />
-            <SidebarItem icon={<ArrowRightLeft className="h-4 w-4" />} label="Inbound replies" />
-            <SidebarItem icon={<Mail className="h-4 w-4" />} label="SES status" />
+            <SidebarItem icon={<Inbox className="h-4 w-4" />} label="Threads" active />
+            <SidebarItem icon={<Users className="h-4 w-4" />} label="Recipients" />
+            <SidebarItem icon={<Mail className="h-4 w-4" />} label="Email editor" />
+            <SidebarItem
+              icon={<MessageSquare className="h-4 w-4" />}
+              label="Conversation"
+            />
           </div>
 
           <div className="mt-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1004,7 +1132,7 @@ export default function Page() {
               Live summary
             </div>
             <div className="space-y-2 text-sm text-slate-600">
-              <MetricRow label="Imported recipients" value={String(totalRecipients)} />
+              <MetricRow label="Recipients" value={String(totalRecipients)} />
               <MetricRow label="Threads" value={String(threads.length)} />
               <MetricRow label="Selected" value={String(activeSelectionCount)} />
             </div>
@@ -1031,22 +1159,35 @@ export default function Page() {
                   <div className="max-w-3xl">
                     <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-medium text-white/90 backdrop-blur">
                       <Sparkles className="h-3.5 w-3.5" />
-                      Admin bulk CSV and reply thread workflow
+                      Scope-based admin mail workflow
                     </div>
                     <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl xl:text-[2rem]">
                       Admin Outreach Console
                     </h1>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                      Send bulk admin emails, track outbound threads, and continue recipient replies through
-                      the admin inbound flow on{" "}
-                      <span className="font-semibold text-white">
-                        {ADMIN_REPLY_DOMAIN}
-                      </span>
-                      .
+                      Super Admin can see everyone’s threads and conversation.
+                      Revenue Head can see only its own plus BME and IME in its
+                      tree. BME and IME can see only their own. All compose and
+                      reply actions run through the email editor and backend RBAC.
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:flex-col xl:items-end">
+                    <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/90 backdrop-blur">
+                      {loadingScope ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading mailbox scope...
+                        </span>
+                      ) : (
+                        <>
+                          <div className="font-semibold">{config.badge}</div>
+                          <div className="text-white/75">
+                            {getScopeText(mailboxScope?.scope?.type)}
+                          </div>
+                        </>
+                      )}
+                    </div>
 
                     <div className="flex flex-wrap gap-2 xl:hidden">
                       <button
@@ -1073,25 +1214,25 @@ export default function Page() {
                   icon={<Users className="h-5 w-5" />}
                   label="Imported recipients"
                   value={String(totalRecipients)}
-                  hint="Recipients loaded from current CSV"
+                  hint="CSV or pipeline recipients in the current workspace"
                 />
                 <StatCard
                   icon={<Send className="h-5 w-5" />}
                   label="Sent"
                   value={String(sentCount)}
-                  hint="Bulk send results marked successful"
+                  hint="Recipients marked successful after send"
                 />
                 <StatCard
                   icon={<CheckCircle2 className="h-5 w-5" />}
                   label="Replies received"
                   value={String(repliedCount)}
-                  hint="Threads with latest inbound direction"
+                  hint="Threads whose latest direction is inbound"
                 />
                 <StatCard
                   icon={<AlertTriangle className="h-5 w-5" />}
                   label="Failed or bounced"
                   value={String(failedCount)}
-                  hint="Rows that failed in the bulk send response"
+                  hint="Recipients marked failed by the backend"
                 />
               </div>
             </section>
@@ -1101,16 +1242,12 @@ export default function Page() {
                 <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
-                      Bulk CSV send workspace
+                      Recipient workspace
                     </h2>
                     <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                      Upload a CSV with at least <span className="font-semibold text-slate-700">name</span> and{" "}
-                      <span className="font-semibold text-slate-700">email</span>. The backend bulk send flow will
-                      create admin threads and assign a unique reply address on{" "}
-                      <span className="font-semibold text-slate-700">
-                        {ADMIN_REPLY_DOMAIN}
-                      </span>
-                      .
+                      Upload a CSV or use selected pipeline rows. Then open the
+                      Email Editor to write custom emails, or send the default
+                      template in one click.
                     </p>
                   </div>
 
@@ -1121,12 +1258,26 @@ export default function Page() {
                       </span>{" "}
                       selected
                     </div>
+
                     <button
-                      onClick={handleSendBulkCsvToBackend}
+                      onClick={openComposeEditor}
                       disabled={
-                        pipelineSelectionMode
-                          ? !selectedRecipients.length || sendingBulk
-                          : !uploadedCsvFile || sendingBulk
+                        !mailboxScope?.scope?.canCompose ||
+                        (!selectedRecipients.length && !recipients.length)
+                      }
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Mail className="h-4 w-4" />
+                      Open Email Editor
+                    </button>
+
+                    <button
+                      onClick={handleSendTemplateBulk}
+                      disabled={
+                        sendingBulk ||
+                        (pipelineSelectionMode
+                          ? !selectedRecipients.length
+                          : !uploadedCsvFile)
                       }
                       className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -1135,7 +1286,7 @@ export default function Page() {
                       ) : (
                         <Send className="h-4 w-4" />
                       )}
-                      {sendingBulk ? "Sending..." : "Send bulk email"}
+                      {sendingBulk ? "Sending..." : "Send default template"}
                     </button>
                   </div>
                 </div>
@@ -1149,7 +1300,7 @@ export default function Page() {
                           CSV import
                         </div>
                         <h3 className="mt-3 text-lg font-semibold text-slate-900">
-                          Upload admin recipient file
+                          Upload recipient CSV
                         </h3>
                         <p className="mt-1 text-sm text-slate-500">
                           Accepted headers: name, email, company, niche, tags.
@@ -1158,7 +1309,8 @@ export default function Page() {
 
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-100"
+                        disabled={pipelineSelectionMode}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-900 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {uploadingCsv ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1169,19 +1321,31 @@ export default function Page() {
                       </button>
                     </div>
 
-                    {summary ? (
+                    {pipelineSelectionMode ? (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                        Pipeline selection mode is active for this campaign. Recipients are coming from selected pipeline rows.
+                      </div>
+                    ) : uploadSummary ? (
                       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <InfoCard title="File" value={summary.fileName} />
-                        <InfoCard title="Rows read" value={String(summary.totalRows)} />
-                        <InfoCard title="Imported" value={String(summary.importedRows)} />
+                        <InfoCard title="File" value={uploadSummary.fileName} />
+                        <InfoCard
+                          title="Rows read"
+                          value={String(uploadSummary.totalRows)}
+                        />
+                        <InfoCard
+                          title="Imported"
+                          value={String(uploadSummary.importedRows)}
+                        />
                         <InfoCard
                           title="Skipped"
-                          value={String(summary.invalidRows + summary.duplicateRows)}
+                          value={String(
+                            uploadSummary.invalidRows + uploadSummary.duplicateRows
+                          )}
                         />
                       </div>
                     ) : (
                       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-                        No CSV uploaded for this role yet.
+                        No CSV uploaded yet.
                       </div>
                     )}
                   </div>
@@ -1189,33 +1353,43 @@ export default function Page() {
                   <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="font-semibold text-slate-900">Flow summary</h3>
+                        <h3 className="font-semibold text-slate-900">
+                          Flow summary
+                        </h3>
                         <p className="mt-1 text-sm text-slate-500">
-                          Final admin email setup uses thread-based routing and hierarchy-aware visibility.
+                          Compose mails in the editor, reply in-thread, and keep
+                          routing through{" "}
+                          <span className="font-semibold">{ADMIN_REPLY_DOMAIN}</span>.
                         </p>
                       </div>
-                      <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
-                        <Eye className="h-4 w-4" />
-                        Review
-                      </button>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <FeaturePill text="Bulk CSV send" />
-                      <FeaturePill text="Thread-based replies" />
+                      <FeaturePill text="RBAC by backend" />
+                      <FeaturePill text="Editable Email Editor" />
+                      <FeaturePill text="Thread replies" />
+                      <FeaturePill text="Thread editing" />
                     </div>
 
                     <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                      <div className="font-semibold text-slate-900">Admin outbound</div>
+                      <div className="font-semibold text-slate-900">
+                        Active mailbox
+                      </div>
                       <div className="mt-1">
-                        From: sender on{" "}
-                        <span className="font-medium">{ADMIN_REPLY_DOMAIN}</span>
+                        {mailboxScope?.actor?.name || config.title}{" "}
+                        <span className="font-medium">
+                          &lt;
+                          {mailboxScope?.actor?.proxyEmail ||
+                            mailboxScope?.actor?.email ||
+                            config.deskEmail}
+                          &gt;
+                        </span>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={exportRecipientsForRole}
+                        onClick={exportRecipients}
                         disabled={!recipients.length}
                         className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
                       >
@@ -1224,7 +1398,7 @@ export default function Page() {
                       </button>
 
                       <button
-                        onClick={clearRecipientsForRole}
+                        onClick={clearRecipients}
                         disabled={!recipients.length}
                         className="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
                       >
@@ -1273,18 +1447,19 @@ export default function Page() {
                     <div>
                       <h3 className="font-semibold text-slate-900">Recipients</h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Review imported recipients and bulk send results.
+                        Review recipients and choose who should receive email.
                       </p>
                     </div>
+
                     <button
                       onClick={toggleSelectAllVisible}
                       disabled={!filteredRecipients.length}
                       className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
                     >
                       {filteredRecipients.length > 0 &&
-                        filteredRecipients.every((item) =>
-                          selectedRecipientIds.includes(item.id)
-                        )
+                      filteredRecipients.every((item) =>
+                        selectedRecipientIds.includes(item.id)
+                      )
                         ? "Clear visible"
                         : "Select visible"}
                     </button>
@@ -1294,8 +1469,8 @@ export default function Page() {
                     <label className="relative block">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        value={recipientSearch}
+                        onChange={(e) => setRecipientSearch(e.target.value)}
                         placeholder="Search recipients"
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
                       />
@@ -1304,8 +1479,8 @@ export default function Page() {
                     <label className="relative block">
                       <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                        value={recipientStatusFilter}
+                        onChange={(e) => setRecipientStatusFilter(e.target.value)}
                         className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
                       >
                         <option>All</option>
@@ -1314,9 +1489,6 @@ export default function Page() {
                         <option>Replied</option>
                         <option>Bounced</option>
                         <option>Failed</option>
-                        <option>Waiting</option>
-                        <option>Closed</option>
-                        <option>Archived</option>
                       </select>
                     </label>
                   </div>
@@ -1325,12 +1497,13 @@ export default function Page() {
                     <EmptyState
                       icon={<Users className="h-6 w-6" />}
                       title="No recipients available"
-                      description="Upload a CSV to populate the recipient table."
+                      description="Upload a CSV or load pipeline recipients to populate this list."
                     />
                   ) : (
                     <div className="space-y-3 max-xl:max-h-[560px] max-xl:overflow-y-auto xl:max-h-[640px] xl:overflow-y-auto xl:pr-1">
                       {filteredRecipients.map((recipient) => {
                         const checked = selectedRecipientIds.includes(recipient.id);
+
                         return (
                           <button
                             key={recipient.id}
@@ -1377,7 +1550,9 @@ export default function Page() {
 
                                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                                   <span>
-                                    {recipient.company || recipient.niche || "Admin recipient"}
+                                    {recipient.company ||
+                                      recipient.niche ||
+                                      "Admin recipient"}
                                   </span>
                                   {recipient.lastContact ? (
                                     <>
@@ -1395,7 +1570,7 @@ export default function Page() {
                                   ) : null}
                                 </div>
 
-                                {recipient.tags.length > 0 && (
+                                {recipient.tags.length > 0 ? (
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {recipient.tags.map((tag) => (
                                       <span
@@ -1406,7 +1581,7 @@ export default function Page() {
                                       </span>
                                     ))}
                                   </div>
-                                )}
+                                ) : null}
                               </div>
                             </div>
                           </button>
@@ -1424,7 +1599,7 @@ export default function Page() {
                       Quick actions
                     </h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      Useful controls for the admin mail flow.
+                      Mailbox and workflow shortcuts.
                     </p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-500">
@@ -1436,35 +1611,41 @@ export default function Page() {
                   <QuickAction
                     icon={<Upload className="h-4 w-4" />}
                     title="Import recipient CSV"
-                    subtitle="Load recipients into the active admin role"
+                    subtitle="Load recipients into the current workspace"
                     onClick={() => fileInputRef.current?.click()}
+                    disabled={pipelineSelectionMode}
+                  />
+                  <QuickAction
+                    icon={<Mail className="h-4 w-4" />}
+                    title="Open email editor"
+                    subtitle="Write fully editable mails for selected recipients"
+                    onClick={openComposeEditor}
+                    disabled={!mailboxScope?.scope?.canCompose || !recipients.length}
                   />
                   <QuickAction
                     icon={<Send className="h-4 w-4" />}
-                    title="Send bulk email"
-                    subtitle="Create backend admin threads and outbound emails"
-                    onClick={handleSendBulkCsvToBackend}
-                    disabled={!uploadedCsvFile || sendingBulk}
+                    title="Send default template"
+                    subtitle="Use backend bulk send with the default template"
+                    onClick={handleSendTemplateBulk}
+                    disabled={
+                      sendingBulk ||
+                      (pipelineSelectionMode
+                        ? !selectedRecipients.length
+                        : !uploadedCsvFile)
+                    }
                   />
                   <QuickAction
                     icon={<Inbox className="h-4 w-4" />}
                     title="Refresh threads"
-                    subtitle="Reload admin threads and latest inbound state"
+                    subtitle="Reload all visible admin threads"
                     onClick={loadThreadsFromApi}
                     disabled={loadingThreads}
                   />
                   <QuickAction
-                    icon={<FileSpreadsheet className="h-4 w-4" />}
-                    title="Export current list"
-                    subtitle="Download current imported recipients as CSV"
-                    onClick={exportRecipientsForRole}
-                    disabled={!recipients.length}
-                  />
-                  <QuickAction
                     icon={<Trash2 className="h-4 w-4" />}
-                    title="Clear current desk"
-                    subtitle="Reset imported recipients for this role"
-                    onClick={clearRecipientsForRole}
+                    title="Clear recipients"
+                    subtitle="Reset the current recipient workspace"
+                    onClick={clearRecipients}
                     disabled={!recipients.length}
                   />
                 </div>
@@ -1475,7 +1656,7 @@ export default function Page() {
                     Activity summary
                   </div>
                   <div className="space-y-3 text-sm text-slate-600">
-                    <MetricRow label="Imported recipients" value={String(totalRecipients)} />
+                    <MetricRow label="Recipients" value={String(totalRecipients)} />
                     <MetricRow label="Threads" value={String(threads.length)} />
                     <MetricRow label="Sent" value={String(sentCount)} />
                     <MetricRow label="Replies received" value={String(repliedCount)} />
@@ -1491,12 +1672,40 @@ export default function Page() {
                     <div>
                       <h2 className="text-lg font-semibold">Threads</h2>
                       <p className="mt-1 text-sm text-slate-500">
-                        Backend admin email threads
+                        Only the threads allowed by backend scope appear here.
                       </p>
                     </div>
+
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                       {loadingThreads ? "Loading..." : `${filteredThreads.length} threads`}
                     </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                    <label className="relative block">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        value={threadSearch}
+                        onChange={(e) => setThreadSearch(e.target.value)}
+                        placeholder="Search threads"
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
+                      />
+                    </label>
+
+                    <label className="relative block">
+                      <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <select
+                        value={threadStatusFilter}
+                        onChange={(e) => setThreadStatusFilter(e.target.value)}
+                        className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50"
+                      >
+                        <option>All</option>
+                        <option>Waiting</option>
+                        <option>Replied</option>
+                        <option>Closed</option>
+                        <option>Archived</option>
+                      </select>
+                    </label>
                   </div>
                 </div>
 
@@ -1506,7 +1715,7 @@ export default function Page() {
                       <EmptyState
                         icon={<Inbox className="h-6 w-6" />}
                         title="No threads yet"
-                        description="Threads appear after bulk sends or inbound replies."
+                        description="Threads appear after emails are sent or recipients reply."
                       />
                     </div>
                   ) : (
@@ -1526,13 +1735,11 @@ export default function Page() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
-                              <div className="mb-1 flex items-center gap-2">
-                                <div className="truncate font-semibold text-slate-900">
-                                  {thread.recipientName}
-                                </div>
+                              <div className="truncate font-semibold text-slate-900">
+                                {thread.recipientName}
                               </div>
 
-                              <div className="truncate text-sm text-slate-500">
+                              <div className="mt-1 truncate text-sm text-slate-500">
                                 {thread.subject}
                               </div>
 
@@ -1547,8 +1754,10 @@ export default function Page() {
 
                               {thread.senderEmail ? (
                                 <div className="mt-1 truncate text-[11px] text-slate-500">
-                                  Sender mailbox:{" "}
-                                  <span className="font-mono">{thread.senderEmail}</span>
+                                  Mailbox:{" "}
+                                  <span className="font-mono">
+                                    {thread.senderEmail}
+                                  </span>
                                 </div>
                               ) : null}
 
@@ -1584,62 +1793,128 @@ export default function Page() {
                 {selectedThread ? (
                   <>
                     <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">
-                              {selectedThread.subject}
-                            </h2>
-                            <span
-                              className={cn(
-                                "rounded-full px-2.5 py-1 text-xs font-medium",
-                                threadStatusPillClass[selectedThread.status]
-                              )}
-                            >
-                              {selectedThread.status}
-                            </span>
-                          </div>
-                          <p className="mt-1 truncate text-sm text-slate-500">
-                            {selectedThread.recipientName} · {selectedThread.recipientEmail}
-                          </p>
-
-                          <div className="mt-2 space-y-1 text-xs text-slate-500">
-                            <div>
-                              Thread owner:{" "}
-                              <span className="font-medium text-slate-700">
-                                {selectedThread.ownerAdminName ||
-                                  selectedThread.ownerAdminEmail ||
-                                  "Admin"}
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                              <span
+                                className={cn(
+                                  "rounded-full px-2.5 py-1 text-xs font-medium",
+                                  threadStatusPillClass[selectedThread.status]
+                                )}
+                              >
+                                {selectedThread.status}
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                {selectedThread.lastMessageAt}
                               </span>
                             </div>
 
-                            {selectedThread.senderEmail ? (
+                            <div className="space-y-3">
                               <div>
-                                Sender mailbox:{" "}
-                                <span className="font-mono text-slate-700">
-                                  {selectedThread.senderEmail}
-                                </span>
+                                <label className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                  <PencilLine className="h-3.5 w-3.5" />
+                                  Subject
+                                </label>
+                                <input
+                                  value={threadDraftSubject}
+                                  onChange={(e) =>
+                                    setThreadDraftSubject(e.target.value)
+                                  }
+                                  disabled={!mailboxScope?.scope?.canEditThread}
+                                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 outline-none focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                                />
                               </div>
-                            ) : null}
 
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div>
+                                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                    Thread status
+                                  </label>
+                                  <select
+                                    value={threadDraftStatus}
+                                    onChange={(e) =>
+                                      setThreadDraftStatus(
+                                        e.target.value as ThreadStatusApi
+                                      )
+                                    }
+                                    disabled={!mailboxScope?.scope?.canEditThread}
+                                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                                  >
+                                    <option value="ACTIVE">Active</option>
+                                    <option value="ARCHIVED">Archived</option>
+                                    <option value="CLOSED">Closed</option>
+                                  </select>
+                                </div>
+
+                                <div className="flex items-end">
+                                  <button
+                                    onClick={handleSaveThread}
+                                    disabled={
+                                      !mailboxScope?.scope?.canEditThread ||
+                                      !threadHasUnsavedChanges ||
+                                      savingThread
+                                    }
+                                    className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {savingThread ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <PencilLine className="h-4 w-4" />
+                                    )}
+                                    Save thread
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {selectedThread.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2 text-xs text-slate-500 md:grid-cols-2">
+                          <div>
+                            Thread owner:{" "}
+                            <span className="font-medium text-slate-700">
+                              {selectedThread.ownerAdminName ||
+                                selectedThread.ownerAdminEmail ||
+                                "Admin"}
+                            </span>
+                          </div>
+
+                          <div>
+                            Recipient:{" "}
+                            <span className="font-medium text-slate-700">
+                              {selectedThread.recipientEmail}
+                            </span>
+                          </div>
+
+                          {selectedThread.senderEmail ? (
+                            <div>
+                              Sender mailbox:{" "}
+                              <span className="font-mono text-slate-700">
+                                {selectedThread.senderEmail}
+                              </span>
+                            </div>
+                          ) : null}
+
+                          {selectedThread.replyToEmail ? (
                             <div>
                               Reply address:{" "}
                               <span className="font-mono text-slate-700">
                                 {selectedThread.replyToEmail}
                               </span>
                             </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {selectedThread.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600"
-                            >
-                              {tag}
-                            </span>
-                          ))}
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -1657,7 +1932,10 @@ export default function Page() {
                           return (
                             <div
                               key={message.id}
-                              className={cn("flex", isExecutive ? "justify-end" : "justify-start")}
+                              className={cn(
+                                "flex",
+                                isExecutive ? "justify-end" : "justify-start"
+                              )}
                             >
                               <div
                                 className={cn(
@@ -1679,6 +1957,7 @@ export default function Page() {
                                     </>
                                   ) : null}
                                 </div>
+
                                 <p className="whitespace-pre-wrap text-sm leading-6">
                                   {message.body}
                                 </p>
@@ -1696,14 +1975,19 @@ export default function Page() {
                     <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                          <h3 className="font-semibold text-slate-900">Reply composer</h3>
+                          <h3 className="font-semibold text-slate-900">
+                            Reply composer
+                          </h3>
                           <p className="mt-1 text-sm text-slate-500">
-                            Continue the admin thread. Replies should keep routing through the same thread address.
+                            Continue the conversation inside the same thread with
+                            fully editable email content.
                           </p>
                         </div>
+
                         <button
                           onClick={openReplyEditor}
-                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+                          disabled={!mailboxScope?.scope?.canReply}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Send className="h-4 w-4" />
                           Open reply editor
@@ -1716,7 +2000,7 @@ export default function Page() {
                     <EmptyState
                       icon={<MessageSquare className="h-7 w-7" />}
                       title="No thread selected"
-                      description="Send a bulk email first. Admin threads and inbound replies will appear here."
+                      description="Threads will appear here after emails are sent or replies come in."
                     />
                   </div>
                 )}
@@ -1736,7 +2020,7 @@ export default function Page() {
             <EmptyState
               icon={<Users className="h-6 w-6" />}
               title="No recipients"
-              description="Upload a CSV to populate this view."
+              description="Upload a CSV or load pipeline recipients."
             />
           ) : (
             filteredRecipients.map((recipient) => {
@@ -1760,6 +2044,7 @@ export default function Page() {
                         {recipient.email}
                       </div>
                     </div>
+
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-1 text-xs font-medium",
@@ -1827,15 +2112,21 @@ export default function Page() {
         onClose={() => setEditorOpen(false)}
         toLabel={editorPayload.toLabel}
         toAvatar={editorPayload.toAvatar}
-        fromName={selectedThread?.ownerAdminName || config.title}
-        fromEmail={selectedThread?.senderEmail || config.deskEmail}
+        fromName={mailboxScope?.actor?.name || config.title}
+        fromEmail={
+          mailboxScope?.actor?.proxyEmail ||
+          mailboxScope?.actor?.email ||
+          config.deskEmail
+        }
         subject={editorPayload.subject}
         initialBody={editorPayload.initialBody}
         sending={editorSending}
         onSend={handleEditorSend}
         onSaveDraft={async (payload) => {
           localStorage.setItem(
-            "collabglam-admin-thread-reply-draft",
+            editorMode === "reply"
+              ? "collabglam-admin-thread-reply-draft"
+              : "collabglam-admin-compose-draft",
             JSON.stringify(payload)
           );
         }}
