@@ -28,7 +28,7 @@ const outfit = Outfit({
 type IconType = React.ComponentType<{ className?: string }>;
 
 type NavItem = {
-  key: string;
+  key: string;  
   label: string;
   href: string;
   icon?: IconType;

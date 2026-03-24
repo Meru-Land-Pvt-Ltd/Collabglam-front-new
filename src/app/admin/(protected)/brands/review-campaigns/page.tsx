@@ -19,7 +19,7 @@ type CampaignStatus = "open" | "paused";
 
 interface Campaign {
   id: string; // campaignsId
-  productOrServiceName: string;
+  campaignTitle: string;
   description: string;
   timeline: { startDate: string; endDate: string };
   isActive: number;
@@ -150,7 +150,7 @@ export default function AdminReviewCampaignsPage() {
 
     const results = await Promise.allSettled(
       list.map(async (c) => {
-        const campaignsId = c.id;
+        const campaignId = c.id;
 
         let shortlistedCount = c.shortlistedCount ?? 0;
         let favoriteCount = c.favoriteCount ?? 0;
@@ -158,13 +158,13 @@ export default function AdminReviewCampaignsPage() {
         // ✅ Shortlisted count (deliverables) - try campaign2 first
         try {
           const r2 = await get(
-            `/deliverable/influencer/campaign2/${encodeURIComponent(campaignsId)}`
+            `/deliverable/influencer/campaign2/${encodeURIComponent(campaignId)}`
           );
           shortlistedCount = getShortlistedCountFromDeliverablesResp(r2);
         } catch {
           try {
             const r1 = await get(
-              `/deliverable/influencer/campaign/${encodeURIComponent(campaignsId)}`
+              `/deliverable/influencer/campaign/${encodeURIComponent(campaignId)}`
             );
             shortlistedCount = getShortlistedCountFromDeliverablesResp(r1);
           } catch {
@@ -174,8 +174,8 @@ export default function AdminReviewCampaignsPage() {
 
         // ✅ Favorite count (admin invitations)
         try {
-          const favResp = await post(`/admin-invitations/get-by-campaign`, {
-            campaignsId,
+          const favResp = await post(`/campaign-invitation/get-by-campaign`, {
+            campaignId,
             page: 1,
             limit: 1, // only need total
           });
@@ -184,7 +184,7 @@ export default function AdminReviewCampaignsPage() {
           // keep existing
         }
 
-        return { id: campaignsId, shortlistedCount, favoriteCount };
+        return { id: campaignId, shortlistedCount, favoriteCount };
       })
     );
 
@@ -318,7 +318,7 @@ export default function AdminReviewCampaignsPage() {
 
           return {
             id: String(merged.campaignsId ?? merged.id ?? merged._id),
-            productOrServiceName: merged.productOrServiceName ?? "",
+            campaignTitle: merged.campaignTitle ?? "",
             description: merged.description ?? "",
             timeline: merged.timeline ?? { startDate: "", endDate: "" },
             isActive: merged.isActive ?? 0,
@@ -572,10 +572,10 @@ function TableView({
                           )}`
                         )}
                         className="inline-flex items-center gap-2 group"
-                        title={c.productOrServiceName}
+                        title={c.campaignTitle}
                       >
                         <span className="font-semibold text-black group-hover:underline">
-                          {sliceText(c.productOrServiceName, 40)}
+                          {sliceText(c.campaignTitle, 40)}
                         </span>
                       </Link>
                     </div>
@@ -683,7 +683,7 @@ function TableView({
                         </Link>
                       )}
 
-                      <button
+                      {/* <button
                         onClick={() => onApprove(c)}
                         disabled={isApproving || isApproved}
                         className={[
@@ -701,7 +701,7 @@ function TableView({
                           : isApproving
                           ? "Approving..."
                           : "Approve"}
-                      </button>
+                      </button> */}
                     </div>
                   </td>
                 </tr>
