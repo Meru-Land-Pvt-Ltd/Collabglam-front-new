@@ -1,0 +1,643 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ArrowUpDown,
+  Clock,
+  Dumbbell,
+  Globe,
+  LayoutGrid,
+  MapPin,
+  Search,
+  Shirt,
+  TrendingDown,
+  TrendingUp,
+  Utensils,
+  Video,
+  X,
+} from "lucide-react";
+import { InstagramLogoIcon, YoutubeLogoIcon } from "@phosphor-icons/react";
+
+import { Button } from "@/components/ui/buttonComp";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
+import {
+  FloatingSelect,
+  FloatingMultiSelect,
+  SelectItem,
+} from "@/components/ui/selectComp";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ManualPreviewCard } from "@/components/ui/cardPreview";
+
+import {
+  apiGetAllActiveCampaigns,
+  getApiErrorMessage,
+  type ActiveCampaignItem,
+} from "@/services/influencerApi";
+import { useRouter } from "next/navigation";
+
+/* -------------------------------------------------------------------------- */
+/*                                   TYPES                                    */
+/* -------------------------------------------------------------------------- */
+
+type UICampaign = {
+  id: string;
+  title: string;
+  description: string;
+  budgetMin: number;
+  budgetMax: number;
+  daysLeft: number;
+  match: number;
+  category: string;
+  platforms: string[];
+  platformLabel: string;
+  location: string;
+  applications: number;
+  brand: string;
+  brandLogo?: string;
+  image?: string;
+  raw: ActiveCampaignItem | any;
+};
+
+type SelectOption = {
+  value: string;
+  label: string;
+  icon: React.ElementType;
+};
+
+/* -------------------------------------------------------------------------- */
+/*                                  HELPERS                                   */
+/* -------------------------------------------------------------------------- */
+
+const sortOptions: SelectOption[] = [
+  { value: "match", label: "Best Match", icon: ArrowUpDown },
+  { value: "budget-high", label: "Highest Budget", icon: TrendingUp },
+  { value: "budget-low", label: "Lowest Budget", icon: TrendingDown },
+  { value: "ending", label: "Ending Soon", icon: Clock },
+];
+
+function normalizePlatformLabel(value?: string) {
+  const v = String(value || "").trim().toLowerCase();
+
+  if (!v) return "Unknown";
+  if (v.includes("instagram") || v === "insta") return "Instagram";
+  if (v.includes("youtube") || v === "yt") return "YouTube";
+  if (v.includes("tiktok") || v === "tt") return "TikTok";
+
+  return value || "Unknown";
+}
+
+function getPlatformIcon(platform: string) {
+  const normalized = normalizePlatformLabel(platform);
+
+  if (normalized === "Instagram") return InstagramLogoIcon;
+  if (normalized === "YouTube") return YoutubeLogoIcon;
+  if (normalized === "TikTok") return Video;
+
+  return Globe;
+}
+
+function getCategoryIcon(category: string) {
+  const normalized = String(category || "").toLowerCase();
+
+  if (normalized.includes("fashion")) return Shirt;
+  if (normalized.includes("food")) return Utensils;
+  if (normalized.includes("fitness")) return Dumbbell;
+
+  return LayoutGrid;
+}
+
+function getDaysLeft(endAt?: string | null) {
+  if (!endAt) return 0;
+
+  const end = new Date(endAt);
+  if (Number.isNaN(end.getTime())) return 0;
+
+  const now = new Date();
+  const diff = end.getTime() - now.getTime();
+  return Math.max(Math.ceil(diff / (1000 * 60 * 60 * 24)), 0);
+}
+
+function getStoredValue(keys: string[]) {
+  if (typeof window === "undefined") return "";
+
+  for (const key of keys) {
+    const value = window.localStorage.getItem(key);
+    if (value) return value;
+  }
+
+  return "";
+}
+
+function getInfluencerAuth() {
+  const influencerId = getStoredValue([
+    "influencerId",
+    "influencer_id",
+    "userId",
+    "user_id",
+  ]);
+
+  const token = getStoredValue([
+    "token",
+    "authToken",
+    "accessToken",
+    "influencerToken",
+  ]);
+
+  return { influencerId, token };
+}
+
+function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
+  const budget = Number(campaign?.campaignBudget ?? campaign?.budget ?? 0);
+
+  const platforms: string[] = Array.isArray(campaign?.platformSelection)
+    ? campaign.platformSelection
+      .filter((p: unknown): p is string => typeof p === "string")
+      .map((p: string) => normalizePlatformLabel(p))
+      .filter((p: any): p is string => Boolean(p))
+    : [];
+
+  const normalizedPlatforms: string[] = Array.from(new Set(platforms));
+
+  const brandName =
+    campaign?.brandName ||
+    campaign?.brand?.name ||
+    campaign?.companyName ||
+    "Brand Campaign";
+
+  const applications =
+    Number(campaign?.applicationsCount) ||
+    Number(campaign?.contractsCount) ||
+    Number(campaign?.emailsSent) ||
+    Number(campaign?.applicantCount) ||
+    0;
+
+  const id = String(campaign?.campaignId || campaign?._id || "");
+
+  const category =
+    campaign?.category?.name ||
+    campaign?.campaignCategory ||
+    campaign?.categories?.[0]?.categoryName ||
+    "Uncategorized";
+
+  const location =
+    campaign?.targetCountries?.[0]?.name ||
+    campaign?.targetCountry ||
+    campaign?.createdLocation?.country ||
+    "Remote";
+
+  const firstImage =
+    Array.isArray(campaign?.productImages) && campaign.productImages.length > 0
+      ? campaign.productImages[0]
+      : "";
+
+  return {
+    id,
+    title: campaign?.campaignTitle || "Untitled Campaign",
+    description: campaign?.description || "No description available.",
+    budgetMin: budget,
+    budgetMax: budget,
+    daysLeft: getDaysLeft(campaign?.endAt),
+    match: Number(campaign?.matchScore ?? 0),
+    category,
+    platforms: normalizedPlatforms.length ? normalizedPlatforms : ["Unknown"],
+    platformLabel:
+      normalizedPlatforms.length > 1
+        ? "Multiple"
+        : normalizedPlatforms[0] ?? "Unknown",
+    location,
+    applications,
+    brand: brandName,
+    brandLogo: campaign?.brandLogo || "",
+    image:
+      typeof firstImage === "string"
+        ? firstImage
+        : firstImage?.url || firstImage?.path || "",
+    raw: campaign,
+  };
+}
+
+function campaignToPreview(campaign: UICampaign) {
+  const ageRanges =
+    campaign.raw?.targetAgeRangesDetails?.map((item: any) => item.range) || [];
+
+  return {
+    form: {
+      title: campaign.title,
+      description: campaign.description,
+      categoryName: campaign.category,
+      targetCountry: [campaign.location],
+      targetAgeGroups: ageRanges,
+      goals: campaign.platforms.length ? campaign.platforms : ["Brand Awareness"],
+      campaignBudget: campaign.budgetMax,
+    },
+    meta: {
+      countryMap: {
+        [campaign.location]: campaign.location,
+      },
+      ageMap: ageRanges.reduce((acc: Record<string, string>, item: string) => {
+        acc[item] = item;
+        return acc;
+      }, {}),
+      goalsMap: campaign.platforms.reduce(
+        (acc: Record<string, string>, item: string) => {
+          acc[item] = item;
+          return acc;
+        },
+        {},
+      ),
+      campaignBudget: campaign.budgetMax,
+    },
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    PAGE                                    */
+/* -------------------------------------------------------------------------- */
+
+export default function DiscoverCampaigns() {
+  const router = useRouter();
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedPlatform, setSelectedPlatform] = useState<string[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState("all");
+  const [sortBy, setSortBy] = useState("match");
+  const [budgetRange, setBudgetRange] = useState<[number, number]>([0, 100000]);
+
+  const [campaigns, setCampaigns] = useState<UICampaign[]>([]);
+  const [serverTotal, setServerTotal] = useState(0);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  /* ----------------------------- DEBOUNCE SEARCH ---------------------------- */
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  /* ------------------------------- FETCH DATA ------------------------------- */
+
+  useEffect(() => {
+    let ignore = false;
+
+    const fetchCampaigns = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const { influencerId, token } = getInfluencerAuth();
+
+        if (!influencerId) {
+          throw new Error("Influencer ID not found. Please sign in again.");
+        }
+
+        const res = await apiGetAllActiveCampaigns(
+          {
+            influencerId,
+            page: 1,
+            limit: 100,
+            search: debouncedSearch,
+          },
+          token,
+        );
+
+        if (ignore) return;
+
+        const items = Array.isArray((res as any)?.data?.items)
+          ? (res as any).data.items
+          : Array.isArray((res as any)?.items)
+            ? (res as any).items
+            : [];
+
+        const mapped = items
+          .map(mapApiCampaignToUi)
+          .filter((item: { id: any; }) => Boolean(item.id));
+
+        setCampaigns(mapped);
+        setServerTotal(
+          Number(
+            (res as any)?.data?.pagination?.total ??
+            (res as any)?.meta?.total ??
+            mapped.length,
+          ),
+        );
+      } catch (err) {
+        if (ignore) return;
+        setCampaigns([]);
+        setServerTotal(0);
+        setError(getApiErrorMessage(err, "Failed to load campaigns."));
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+
+    fetchCampaigns();
+
+    return () => {
+      ignore = true;
+    };
+  }, [debouncedSearch]);
+
+  /* ------------------------------ FILTER OPTIONS ---------------------------- */
+
+  const categories = useMemo<SelectOption[]>(() => {
+    const unique = [...new Set(campaigns.map((c) => c.category).filter(Boolean))];
+
+    return [
+      { value: "all", label: "All Categories", icon: LayoutGrid },
+      ...unique.map((category) => ({
+        value: category,
+        label: category,
+        icon: getCategoryIcon(category),
+      })),
+    ];
+  }, [campaigns]);
+
+  const platforms = useMemo<SelectOption[]>(() => {
+    const flat = campaigns.flatMap((c) => c.platforms || []);
+    const unique = [...new Set(flat.filter(Boolean))];
+
+    return unique.map((platform) => ({
+      value: platform,
+      label: platform,
+      icon: getPlatformIcon(platform),
+    }));
+  }, [campaigns]);
+
+  const locations = useMemo<SelectOption[]>(() => {
+    const unique = [...new Set(campaigns.map((c) => c.location).filter(Boolean))];
+
+    return [
+      { value: "all", label: "All Locations", icon: Globe },
+      ...unique.map((location) => ({
+        value: location,
+        label: location,
+        icon: location.toLowerCase() === "remote" ? Globe : MapPin,
+      })),
+    ];
+  }, [campaigns]);
+
+  const maxBudget = useMemo(() => {
+    const max = Math.max(...campaigns.map((c) => c.budgetMax || 0), 0);
+    return max > 0 ? Math.ceil(max / 1000) * 1000 : 100000;
+  }, [campaigns]);
+
+  useEffect(() => {
+    setBudgetRange([0, maxBudget]);
+  }, [maxBudget]);
+
+  /* ------------------------------ FILTER LOGIC ------------------------------ */
+
+  const filteredCampaigns = useMemo(() => {
+    const filtered = campaigns.filter((campaign) => {
+      const matchesCategory =
+        selectedCategory === "all" || campaign.category === selectedCategory;
+
+      const matchesPlatform =
+        selectedPlatform.length === 0 ||
+        campaign.platforms.some((platform) => selectedPlatform.includes(platform));
+
+      const matchesLocation =
+        selectedLocation === "all" || campaign.location === selectedLocation;
+
+      const matchesBudget =
+        campaign.budgetMax >= budgetRange[0] &&
+        campaign.budgetMin <= budgetRange[1];
+
+      return (
+        matchesCategory &&
+        matchesPlatform &&
+        matchesLocation &&
+        matchesBudget
+      );
+    });
+
+    switch (sortBy) {
+      case "budget-high":
+        filtered.sort((a, b) => b.budgetMax - a.budgetMax);
+        break;
+      case "budget-low":
+        filtered.sort((a, b) => a.budgetMin - b.budgetMin);
+        break;
+      case "ending":
+        filtered.sort((a, b) => a.daysLeft - b.daysLeft);
+        break;
+      default:
+        filtered.sort((a, b) => b.match - a.match);
+        break;
+    }
+
+    return filtered;
+  }, [
+    campaigns,
+    selectedCategory,
+    selectedPlatform,
+    selectedLocation,
+    sortBy,
+    budgetRange,
+  ]);
+
+  /* -------------------------------------------------------------------------- */
+
+  return (
+    <TooltipProvider>
+      <div className="min-h-screen">
+        <div className="mx-auto max-w-[1400px] space-y-10 px-6 py-10">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Discover Campaigns
+              </h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Explore brand collaborations matched to your profile.
+              </p>
+            </div>
+
+            <Badge variant="outline" className="px-3 py-1">
+              {filteredCampaigns.length}
+              {serverTotal > 0 ? ` of ${serverTotal}` : ""} campaigns found
+            </Badge>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              placeholder="Search campaigns, brands, or keywords..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-12 rounded-xl pl-11 pr-10"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+              >
+                <X className="h-4 w-4 text-gray-400" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="w-[220px] shrink-0">
+              <FloatingSelect
+                label="Category"
+                value={selectedCategory}
+                onValueChange={setSelectedCategory}
+                searchable
+                size="small"
+              >
+                {categories.map((cat) => {
+                  const Icon = cat.icon;
+                  return (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-gray-500" />
+                        {cat.label}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </FloatingSelect>
+            </div>
+
+            <div className="w-[240px] shrink-0">
+              <FloatingMultiSelect
+                label="Platform"
+                options={platforms.map((p) => ({
+                  value: p.value,
+                  label: p.label,
+                }))}
+                value={selectedPlatform}
+                onValueChange={setSelectedPlatform}
+                searchable
+                includeAll={false}
+              />
+            </div>
+
+            <div className="flex min-h-[4rem] w-[320px] shrink-0 flex-col justify-center rounded-lg border bg-white p-4 shadow-sm md:min-h-[4.25rem] xl:min-h-[4.5rem] 2xl:min-h-[5rem]">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm text-gray-500">Budget</span>
+                <span className="text-sm font-medium text-gray-700">
+                  ${budgetRange[0]} - ${budgetRange[1]}
+                </span>
+              </div>
+
+              <Slider
+                min={0}
+                max={maxBudget}
+                step={500}
+                value={budgetRange}
+                onValueChange={(value) =>
+                  setBudgetRange(value as [number, number])
+                }
+              />
+            </div>
+
+            <div className="w-[220px] shrink-0">
+              <FloatingSelect
+                label="Location"
+                value={selectedLocation}
+                onValueChange={setSelectedLocation}
+                searchable
+              >
+                {locations.map((loc) => {
+                  const Icon = loc.icon;
+                  return (
+                    <SelectItem key={loc.value} value={loc.value}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-gray-500" />
+                        {loc.label}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </FloatingSelect>
+            </div>
+
+            <div className="w-[220px] shrink-0">
+              <FloatingSelect
+                label="Sort by"
+                value={sortBy}
+                onValueChange={setSortBy}
+                searchable={false}
+              >
+                {sortOptions.map((opt) => {
+                  const Icon = opt.icon;
+                  return (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-gray-500" />
+                        {opt.label}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </FloatingSelect>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="h-[320px] animate-pulse rounded-2xl border bg-gray-100"
+                />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
+              <p className="text-sm font-medium text-red-700">{error}</p>
+              <Button
+                className="mt-4"
+                onClick={() => {
+                  setDebouncedSearch((prev) => prev + " ");
+                  setTimeout(() => setDebouncedSearch(search.trim()), 0);
+                }}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : filteredCampaigns.length === 0 ? (
+            <div className="rounded-2xl border bg-white p-10 text-center">
+              <h3 className="text-lg font-semibold text-gray-900">
+                No campaigns found
+              </h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Try changing your search or filter selection.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+              {filteredCampaigns.map((campaign) => {
+                const { form, meta } = campaignToPreview(campaign);
+
+                return (
+                  <div key={campaign.id}>
+                    <ManualPreviewCard
+                      key={campaign.id}
+                      form={form}
+                      meta={meta}
+                      onViewClick={() =>
+                        router.push(`/influencer/discover-campaigns/${campaign.id}`)
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </TooltipProvider>
+  );
+}
