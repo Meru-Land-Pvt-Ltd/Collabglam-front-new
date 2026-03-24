@@ -23,7 +23,7 @@ import {
   Loader2,
   ArrowRightLeft,
   CheckCircle2,
-  AlertTriangle,  
+  AlertTriangle,
   RefreshCcw,
 } from "lucide-react";
 import EmailEditor from "@/components/ui/EmailEditor";
@@ -31,11 +31,15 @@ import {
   type AdminRole,
   type AdminEmailThreadDto,
   type AdminEmailMessageDto,
+  type PipelineRecipientDto,
   sendBulkCsvEmail,
   fetchEmailThreads,
   fetchThreadMessages,
   replyToEmailThread,
+  fetchPipelineRecipients,
+  sendSelectedPipelineEmails,
 } from "./admin-email";
+import { useSearchParams } from "next/navigation";
 
 type RecipientStatus = "Ready" | "Sent" | "Replied" | "Bounced" | "Failed";
 type ThreadStatusUi = "Waiting" | "Replied" | "Closed" | "Archived";
@@ -382,9 +386,18 @@ function mapBackendMessageToUi(
 }
 
 export default function Page() {
+  const searchParams = useSearchParams();
+
+  const campaignId = searchParams.get("campaignId") || "";
+  const pipelineIds = useMemo(() => {
+    const raw = searchParams.get("pipelineIds") || "";
+    return raw.split(",").map((x) => x.trim()).filter(Boolean);
+  }, [searchParams]);
+
+  const pipelineSelectionMode = !!campaignId && pipelineIds.length > 0;
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [role, setRole] = useState<AdminRole>("ime");
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -687,6 +700,58 @@ export default function Page() {
     }));
   };
 
+  const loadPipelineRecipients = async () => {
+    if (!pipelineSelectionMode) return;
+
+    try {
+      setLoadingThreads(true);
+      setApiError(null);
+
+      const response = await fetchPipelineRecipients({
+        campaignId,
+        pipelineIds,
+      });
+
+      const items = response?.data?.items || [];
+
+      const mappedRecipients: Recipient[] = items.map((item: PipelineRecipientDto) => ({
+        id: item.pipelineId,
+        name: item.name || item.email,
+        email: item.email,
+        company: item.company,
+        niche: Array.isArray(item.niche) ? item.niche.join(", ") : undefined,
+        status: item.threadId ? "Sent" : "Ready",
+        tags: [item.status || "outreach"].filter(Boolean),
+        createdAt: Date.now(),
+        threadId: item.threadId || undefined,
+        replyToEmail: item.replyToEmail || undefined,
+      }));
+
+      setRecipientsByDesk((prev) => ({
+        ...prev,
+        [role]: mappedRecipients,
+      }));
+
+      setSelectedRecipientIds(mappedRecipients.map((r) => r.id));
+    } catch (error: any) {
+      setApiError(
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to load selected pipeline recipients"
+      );
+    } finally {
+      setLoadingThreads(false);
+    }
+  };
+
+  useEffect(() => {
+    if (pipelineSelectionMode) {
+      loadPipelineRecipients();
+    } else {
+      loadThreadsFromApi();
+    }
+  }, [role, pipelineSelectionMode, campaignId, pipelineIds.join(",")]);
+
   const onFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -728,15 +793,63 @@ export default function Page() {
   };
 
   const handleSendBulkCsvToBackend = async () => {
-    if (!uploadedCsvFile) {
-      setApiError("Please upload a CSV file first.");
-      return;
-    }
-
     try {
       setSendingBulk(true);
       setApiError(null);
       setBannerMessage(null);
+
+      if (pipelineSelectionMode) {
+        const selectedPipelineIds =
+          selectedRecipients.length > 0
+            ? selectedRecipients.map((r) => r.id)
+            : [];
+
+        if (!selectedPipelineIds.length) {
+          setApiError("Please select at least one recipient first.");
+          return;
+        }
+
+        const response = await sendSelectedPipelineEmails({
+          campaignId,
+          pipelineIds: selectedPipelineIds,
+        });
+
+        const resultMap = new Map(
+          (response?.data?.results || []).map((item: any) => [
+            String(item.pipelineId || ""),
+            item,
+          ])
+        );
+
+        setRecipientsByDesk((prev) => ({
+          ...prev,
+          [role]: prev[role].map((recipient) => {
+            const apiItem = resultMap.get(recipient.id);
+            if (!apiItem) return recipient;
+
+            return {
+              ...recipient,
+              status: apiItem.success ? "Sent" : "Failed",
+              lastContact: apiItem.success ? formatRelativeNow() : recipient.lastContact,
+              threadId: apiItem.threadId,
+              replyToEmail: apiItem.replyToEmail,
+            };
+          }),
+        }));
+
+        await loadThreadsFromApi();
+
+        setBannerMessage(
+          `Email sent to ${selectedPipelineIds.length} selected recipient(s). Sent: ${response.data.sent}, Failed: ${response.data.failed}.`
+        );
+
+        return;
+      }
+
+      if (!uploadedCsvFile) {
+        setApiError("Please upload a CSV file first.");
+        return;
+      }
 
       const response = await sendBulkCsvEmail({
         file: uploadedCsvFile,
@@ -757,11 +870,7 @@ export default function Page() {
 
           return {
             ...recipient,
-            status: apiItem.success
-              ? "Sent"
-              : apiItem.error?.toLowerCase().includes("bounce")
-                ? "Bounced"
-                : "Failed",
+            status: apiItem.success ? "Sent" : "Failed",
             lastContact: apiItem.success ? formatRelativeNow() : recipient.lastContact,
             threadId: apiItem.threadId,
             replyToEmail: apiItem.replyToEmail,
@@ -772,7 +881,7 @@ export default function Page() {
       await loadThreadsFromApi();
 
       setBannerMessage(
-        `Bulk email finished. Sent: ${response.data.sent}, Failed: ${response.data.failed}. Replies will route through ${ADMIN_REPLY_DOMAIN}.`
+        `Bulk email finished. Sent: ${response.data.sent}, Failed: ${response.data.failed}.`
       );
     } catch (error: any) {
       setApiError(
@@ -938,27 +1047,6 @@ export default function Page() {
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:flex-col xl:items-end">
-                    <div className="inline-flex flex-wrap rounded-2xl border border-white/10 bg-white/10 p-1 backdrop-blur">
-                      {(["super_admin", "revenue_head", "ime", "bme"] as AdminRole[]).map(
-                        (item) => {
-                          const active = role === item;
-                          return (
-                            <button
-                              key={item}
-                              onClick={() => handleRoleChange(item)}
-                              className={cn(
-                                "rounded-xl px-4 py-2 text-sm font-medium transition",
-                                active
-                                  ? "bg-white text-slate-950 shadow-sm"
-                                  : "text-slate-200 hover:bg-white/10"
-                              )}
-                            >
-                              {roleConfig[item].badge}
-                            </button>
-                          );
-                        }
-                      )}
-                    </div>
 
                     <div className="flex flex-wrap gap-2 xl:hidden">
                       <button
@@ -1035,7 +1123,11 @@ export default function Page() {
                     </div>
                     <button
                       onClick={handleSendBulkCsvToBackend}
-                      disabled={!uploadedCsvFile || sendingBulk}
+                      disabled={
+                        pipelineSelectionMode
+                          ? !selectedRecipients.length || sendingBulk
+                          : !uploadedCsvFile || sendingBulk
+                      }
                       className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {sendingBulk ? (
