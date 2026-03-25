@@ -26,7 +26,7 @@ type AdminAccess = {
   isManager?: boolean;
 };
 
-type AdminRow = {
+type AdminRow = { 
   _id: string;
   email: string;
   name?: string;

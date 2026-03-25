@@ -362,20 +362,6 @@ export default function InfluencerDetailFullPage({
 
                   {/* ✅ Always show Campaign dropdown + Send Invite (no Send Invitation button anymore) */}
                   <DropdownMenu open={dropdownOpen} onOpenChange={(v) => setDropdownOpen(v)}>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        disabled={!canAct}
-                        className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
-                          ${
-                            canAct
-                              ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
-                              : 'bg-gray-300 cursor-not-allowed opacity-70'
-                          }`}
-                      >
-                        <Send className="h-4 w-4" />
-                        Add to Favourite
-                      </button>
-                    </DropdownMenuTrigger>
 
                     <DropdownMenuContent align="end" className="w-72 bg-white ring-1 ring-gray-200 shadow-lg">
                       <DropdownMenuLabel>Campaigns</DropdownMenuLabel>
