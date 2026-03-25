@@ -78,21 +78,17 @@ export type AdminEmailMessageDto = {
   updatedAt?: string;
 };
 
-export type ThreadListData = {
+export type ThreadListResponse = ApiSuccess<{
   page: number;
   limit: number;
   total: number;
   items: AdminEmailThreadDto[];
-};
+}>;
 
-export type ThreadListResponse = ApiSuccess<ThreadListData>;
-
-export type ThreadMessagesData = {
+export type ThreadMessagesResponse = ApiSuccess<{
   thread: AdminEmailThreadDto;
   messages: AdminEmailMessageDto[];
-};
-
-export type ThreadMessagesResponse = ApiSuccess<ThreadMessagesData>;
+}>;
 
 export type ComposeEmailInput = {
   ownerAdminId?: string;
@@ -104,7 +100,7 @@ export type ComposeEmailInput = {
   html?: string;
 };
 
-export type ComposeEmailResult = {
+export type ComposeEmailResponse = ApiSuccess<{
   total: number;
   sent: number;
   failed: number;
@@ -118,9 +114,7 @@ export type ComposeEmailResult = {
     s3Key?: string | null;
     error?: string;
   }>;
-};
-
-export type ComposeEmailResponse = ApiSuccess<ComposeEmailResult>;
+}>;
 
 export type ReplyToThreadInput = {
   threadId: string;
@@ -131,24 +125,13 @@ export type ReplyToThreadInput = {
   bcc?: string[] | string;
 };
 
-export type ReplyToThreadResult = {
+export type ReplyToThreadResponse = ApiSuccess<{
   threadId: string;
   emailMessageId: string;
   sesMessageId: string | null;
   replyToEmail?: string;
   s3Key?: string | null;
-};
-
-export type ReplyToThreadResponse = ApiSuccess<ReplyToThreadResult>;
-
-export type UpdateThreadInput = {
-  threadId: string;
-  subject?: string;
-  status?: ThreadStatus;
-  ownerAdminId?: string;
-};
-
-export type UpdateThreadResponse = ApiSuccess<AdminEmailThreadDto>;
+}>;
 
 export type BulkCsvSendInput = {
   file: File;
@@ -158,7 +141,7 @@ export type BulkCsvSendInput = {
   ownerAdminId?: string;
 };
 
-export type BulkCsvSendResult = {
+export type BulkCsvSendResponse = ApiSuccess<{
   executiveId: string;
   from: string;
   role?: AdminRole;
@@ -176,9 +159,7 @@ export type BulkCsvSendResult = {
     success: boolean;
     error?: string;
   }>;
-};
-
-export type BulkCsvSendResponse = ApiSuccess<BulkCsvSendResult>;
+}>;
 
 export type PipelineRecipientDto = {
   pipelineId: string;
@@ -205,7 +186,7 @@ export type SendSelectedPipelineEmailsInput = {
   html?: string;
 };
 
-export type SendSelectedPipelineEmailsResult = {
+export type SendSelectedPipelineEmailsResponse = ApiSuccess<{
   total: number;
   sent: number;
   failed: number;
@@ -221,10 +202,30 @@ export type SendSelectedPipelineEmailsResult = {
     success: boolean;
     error?: string;
   }>;
+}>;
+
+export type EmailTemplateVisibility = "GLOBAL" | "TREE" | "PERSONAL";
+
+export type EmailTemplateDto = {
+  _id: string;
+  name: string;
+  subject?: string;
+  body?: string;
+  visibility: EmailTemplateVisibility;
+  status: "ACTIVE" | "ARCHIVED";
+  createdByRole: AdminRole;
+  createdByAdminId?: AdminMini | string;
+  ownerAdminId?: string | AdminMini | null;
+  treeAdminId?: string | AdminMini | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
-export type SendSelectedPipelineEmailsResponse =
-  ApiSuccess<SendSelectedPipelineEmailsResult>;
+export type EmailTemplateListResponse = ApiSuccess<{
+  items: EmailTemplateDto[];
+}>;
+
+export type EmailTemplateSingleResponse = ApiSuccess<EmailTemplateDto>;
 
 export type FetchThreadsParams = {
   page?: number;
@@ -256,17 +257,10 @@ export async function fetchThreadMessages(threadId: string) {
 
 export async function replyToEmailThread(input: ReplyToThreadInput) {
   const { threadId, ...payload } = input;
-
   return post<ReplyToThreadResponse>(
     `/admin-email/threads/${threadId}/reply`,
     payload
   );
-}
-
-export async function updateEmailThread(input: UpdateThreadInput) {
-  const { threadId, ...payload } = input;
-
-  return post<UpdateThreadResponse>(`/admin-email/threads/${threadId}`, payload);
 }
 
 export async function composeAdminEmail(input: ComposeEmailInput) {
@@ -301,5 +295,40 @@ export async function sendSelectedPipelineEmails(
   return post<SendSelectedPipelineEmailsResponse>(
     "/admin-email/pipeline/send-selected",
     input
+  );
+}
+
+export async function fetchEmailTemplates() {
+  return get<EmailTemplateListResponse>("/admin-email/templates");
+}
+
+export async function createEmailTemplate(input: {
+  name: string;
+  subject?: string;
+  body?: string;
+}) {
+  return post<EmailTemplateSingleResponse>("/admin-email/templates", input);
+}
+
+export async function updateEmailTemplateById(input: {
+  templateId: string;
+  name?: string;
+  subject?: string;
+  body?: string;
+}) {
+  return post<EmailTemplateSingleResponse>(
+    `/admin-email/templates/${input.templateId}/update`,
+    {
+      name: input.name,
+      subject: input.subject,
+      body: input.body,
+    }
+  );
+}
+
+export async function deleteEmailTemplateById(templateId: string) {
+  return post<ApiSuccess<{ deleted: boolean; templateId: string }>>(
+    `/admin-email/templates/${templateId}/delete`,
+    {}
   );
 }

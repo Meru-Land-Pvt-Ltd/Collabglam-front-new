@@ -119,35 +119,45 @@ export default function MessagesList() {
 
   const renderedGroups = useMemo(() => groups || [], [groups]);
 
-const normalizedRole = String(adminRole || "").toLowerCase();
-const canCreateGroup =
-  normalizedRole === "revenue_head" || normalizedRole === "super_admin";
+  const normalizedRole = String(adminRole || "").toLowerCase();
+  const canCreateGroup =
+    normalizedRole === "revenue_head" || normalizedRole === "super_admin";
 
   return (
     <>
-      <div className="flex flex-col h-full">
-        <div className="px-4 py-3 flex items-center justify-between border-b gap-2">
-          <h2 className="text-lg font-semibold">Messages</h2>
+      <div className="flex h-full flex-col bg-background">
+        <div className="border-b border-border px-4 py-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Messages</h2>
+              <p className="text-sm text-muted-foreground">
+                Group chats and live updates
+              </p>
+            </div>
 
-         {canCreateGroup && adminId && (
-            <Button
-              size="sm"
-              type="button"
-              onClick={() => setCreateOpen(true)}
-            >
-              Create Group
-            </Button>
-          )}
+            {canCreateGroup && adminId ? (
+              <Button
+                size="sm"
+                type="button"
+                className="rounded-full"
+                onClick={() => setCreateOpen(true)}
+              >
+                Create Group
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {loading ? (
-          <div className="p-4 text-center text-sm text-gray-500">Loading…</div>
+          <div className="p-4 text-center text-sm text-muted-foreground">
+            Loading...
+          </div>
         ) : error ? (
-          <div className="p-4 text-center text-sm text-red-500 break-words whitespace-normal">
+          <div className="p-4 text-center text-sm text-destructive">
             {error}
           </div>
         ) : (
-          <div className="overflow-y-auto flex-1 divide-y divide-border">
+          <div className="flex-1 overflow-y-auto px-2 py-2">
             {renderedGroups.map((group) => {
               const isActive = pathname?.endsWith(group.groupId);
 
@@ -175,52 +185,78 @@ const canCreateGroup =
                 <Link
                   key={group.groupId}
                   href={`/admin/messages/${group.groupId}`}
-                  className={`block px-4 py-3 hover:bg-gray-100 transition-colors ${
-                    isActive ? "bg-white border-l-4 border-primary" : ""
+                  className={`mb-2 block rounded-2xl border px-3 py-3 transition-all ${
+                    isActive
+                      ? "border-foreground/15 bg-card shadow-sm"
+                      : "border-transparent hover:border-border hover:bg-muted/40"
                   }`}
                 >
-                  <div className="flex items-center space-x-3">
-                    <Avatar className="h-10 w-10 flex-shrink-0">
-                      <AvatarFallback>{groupName.charAt(0) || "G"}</AvatarFallback>
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-11 w-11 shrink-0">
+                      <AvatarFallback className="bg-muted font-semibold text-foreground">
+                        {groupName.charAt(0) || "G"}
+                      </AvatarFallback>
                     </Avatar>
 
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate" title={groupName}>
-                        {nameLabel}
-                      </p>
-                      <p className="text-sm text-muted-foreground truncate" title={preview}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate font-medium text-foreground" title={groupName}>
+                          {nameLabel}
+                        </p>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                          {lastTime}
+                        </span>
+                      </div>
+
+                      <p
+                        className="mt-1 truncate text-sm text-muted-foreground"
+                        title={preview}
+                      >
                         {textLabel}
                       </p>
-                    </div>
 
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {group.unseenCount > 0 && (
-                        <span
-                          className="flex h-5 min-w-5 px-1 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground"
-                          aria-label={`${group.unseenCount} unread`}
-                          title={`${group.unseenCount} unread`}
-                        >
-                          {group.unseenCount > 99 ? "99+" : group.unseenCount}
-                        </span>
-                      )}
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(group.participants || []).slice(0, 3).map((p) => (
+                            <span
+                              key={p.adminId}
+                              className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground"
+                            >
+                              {p.name}
+                            </span>
+                          ))}
+                          {(group.participants?.length || 0) > 3 ? (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                              +{(group.participants?.length || 0) - 3}
+                            </span>
+                          ) : null}
+                        </div>
 
-                      <span className="text-xs text-muted-foreground">{lastTime}</span>
+                        {group.unseenCount > 0 ? (
+                          <span
+                            className="flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium text-background"
+                            title={`${group.unseenCount} unread`}
+                          >
+                            {group.unseenCount > 99 ? "99+" : group.unseenCount}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </Link>
               );
             })}
 
-            {!renderedGroups.length && (
-              <div className="p-4 text-center text-sm text-gray-500">
+            {!renderedGroups.length ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">
                 No group chats found.
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>
 
-      {canCreateGroup && adminId && (
+      {canCreateGroup && adminId ? (
         <CreateGroupModal
           open={createOpen}
           onClose={() => setCreateOpen(false)}
@@ -229,7 +265,7 @@ const canCreateGroup =
             loadGroups(adminId);
           }}
         />
-      )}
+      ) : null}
     </>
   );
 }

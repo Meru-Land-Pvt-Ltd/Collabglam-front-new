@@ -3,25 +3,60 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
+    Building2,
     Check,
     Edit3,
+    FolderKanban,
+    Link2,
+    Loader2,
+    Mail,
+    Plus,
     RefreshCw,
     Save,
+    Send,
+    Sparkles,
+    Users,
     X,
-    Building2,
-    FolderKanban,
-    Plus,
 } from 'lucide-react';
 import swal from 'sweetalert';
+
 import { get, post } from '@/lib/api';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 
 type TabKey = 'outreach' | 'roster' | 'pitch';
+
+type InvitationStatus = '' | 'sent' | 'accepted' | 'reject' | 'failed';
 
 type PipelineRow = {
     _id: string;
     campaignId?: string;
     status?: string;
     createdAt?: string;
+    updatedAt?: string;
 
     name?: string;
     followers?: number | null;
@@ -30,6 +65,9 @@ type PipelineRow = {
     niche?: string[];
     email?: string;
     country?: string;
+    platform?: string;
+    username?: string;
+    handle?: string;
 
     outreachDate?: string | null;
     outreached?: boolean | null;
@@ -60,6 +98,13 @@ type PipelineRow = {
     rateUsd?: number | null;
     ourFeePct?: number | null;
     comments?: string;
+
+    linkedInfluencerId?: string | null;
+    campaignInvitationId?: string | null;
+    campaignInvitationStatus?: InvitationStatus;
+    campaignInvitationSentAt?: string | null;
+    hasInvited?: boolean;
+    hasInvitedAt?: string | null;
 };
 
 type PipelineListResponse = {
@@ -99,6 +144,8 @@ type CampaignListResponse = {
     data: CampaignItem[];
 };
 
+type DraftState = Record<string, any>;
+
 const DASH = '--';
 
 function showErr(message: string) {
@@ -107,6 +154,36 @@ function showErr(message: string) {
         text: message || 'Something went wrong.',
         icon: 'error',
     });
+}
+
+function showSuccess(message: string) {
+    return swal({
+        title: 'Success',
+        text: message,
+        icon: 'success',
+    });
+}
+
+function asText(v: unknown) {
+    if (v === undefined || v === null) return '';
+    return String(v).trim();
+}
+
+function joinList(v?: string[] | null) {
+    return Array.isArray(v) && v.length ? v.join(', ') : DASH;
+}
+
+function parseCsv(v: string) {
+    return (v || '')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean);
+}
+
+function toNullableNumber(v: any) {
+    if (v === '' || v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
 }
 
 function formatNumber(n?: number | null) {
@@ -132,30 +209,8 @@ function formatDate(iso?: string | null) {
     }).format(d);
 }
 
-function asText(v: unknown) {
-    if (v === undefined || v === null) return '';
-    return String(v).trim();
-}
-
-function joinList(v?: string[] | null) {
-    return Array.isArray(v) && v.length ? v.join(', ') : DASH;
-}
-
-function parseCsv(v: string) {
-    return (v || '')
-        .split(',')
-        .map((x) => x.trim())
-        .filter(Boolean);
-}
-
-function toNullableNumber(v: any) {
-    if (v === '' || v === null || v === undefined) return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-}
-
-function getDefaultCreateDraft(tab: TabKey) {
-    const base = {
+function getDefaultCreateDraft() {
+    return {
         name: '',
         followers: '',
         links: '',
@@ -175,37 +230,105 @@ function getDefaultCreateDraft(tab: TabKey) {
         ourFeePct: '',
         comments: '',
     };
-
-    return base;
 }
 
-function TabButton({
-    active,
-    count,
-    children,
-    onClick,
+function getInvitationTone(status?: InvitationStatus, hasInvited?: boolean) {
+    if (status === 'accepted') return 'default';
+    if (status === 'failed') return 'destructive';
+    if (status === 'reject') return 'secondary';
+    if (status === 'sent' || hasInvited) return 'outline';
+    return 'secondary';
+}
+
+function getInvitationLabel(row: PipelineRow) {
+    if (row.campaignInvitationStatus === 'accepted') return 'Accepted';
+    if (row.campaignInvitationStatus === 'failed') return 'Failed';
+    if (row.campaignInvitationStatus === 'reject') return 'Rejected';
+    if (row.campaignInvitationStatus === 'sent' || row.hasInvited) return 'Invited';
+    return 'Not invited';
+}
+
+function isInvitationLocked(row: PipelineRow) {
+    return row.campaignInvitationStatus === 'accepted' || row.hasInvited === true;
+}
+
+function getBestRosterLink(row: PipelineRow) {
+    const direct = [row.mediaKit, row.primaryLink, ...(row.links || [])]
+        .map((item) => asText(item))
+        .find((item) => /^https?:\/\//i.test(item));
+
+    if (direct) return direct;
+
+    const fallback = [row.mediaKit, row.primaryLink, ...(row.links || [])]
+        .map((item) => asText(item))
+        .find(Boolean);
+
+    return fallback || '';
+}
+
+function StatCard({
+    label,
+    value,
+    icon,
 }: {
-    active: boolean;
-    count?: number;
-    children: React.ReactNode;
-    onClick: () => void;
+    label: string;
+    value: string | number;
+    icon: React.ReactNode;
 }) {
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${active
-                ? 'bg-slate-900 text-white'
-                : 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
-                }`}
-        >
-            <span>{children}</span>
-            {typeof count === 'number' ? (
-                <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${active ? 'bg-white/20' : 'bg-slate-100'}`}>
-                    {count}
-                </span>
-            ) : null}
-        </button>
+        <Card className="rounded-2xl shadow-sm">
+            <CardContent className="flex items-center justify-between p-5">
+                <div>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
+                </div>
+                <div className="rounded-2xl border bg-muted/50 p-3 text-muted-foreground">
+                    {icon}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function SectionCard({
+    title,
+    description,
+    action,
+    children,
+}: {
+    title: string;
+    description?: string;
+    action?: React.ReactNode;
+    children: React.ReactNode;
+}) {
+    return (
+        <Card className="rounded-2xl shadow-sm">
+            <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                <div>
+                    <CardTitle className="text-lg">{title}</CardTitle>
+                    {description ? <CardDescription className="mt-1">{description}</CardDescription> : null}
+                </div>
+                {action}
+            </CardHeader>
+            <CardContent>{children}</CardContent>
+        </Card>
+    );
+}
+
+function Field({
+    label,
+    children,
+}: {
+    label: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {label}
+            </Label>
+            {children}
+        </div>
     );
 }
 
@@ -222,14 +345,13 @@ export default function CampaignPipelinePage() {
     const [loading, setLoading] = useState(false);
     const [metaLoading, setMetaLoading] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [sendingInviteId, setSendingInviteId] = useState<string>('');
 
     const [editingId, setEditingId] = useState<string>('');
-    const [draft, setDraft] = useState<Record<string, any>>({});
+    const [draft, setDraft] = useState<DraftState>({});
 
     const [showCreateRow, setShowCreateRow] = useState(false);
-    const [createDraft, setCreateDraft] = useState<Record<string, any>>(
-        getDefaultCreateDraft('outreach')
-    );
+    const [createDraft, setCreateDraft] = useState<DraftState>(getDefaultCreateDraft());
 
     const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 
@@ -257,16 +379,6 @@ export default function CampaignPipelinePage() {
     const selectedOutreachRows = useMemo(() => {
         return rows.filter((row) => !!selectedIds[row._id] && !!row.email);
     }, [rows, selectedIds]);
-
-    function goToBulkEmailSend() {
-        if (!selectedOutreachRows.length) {
-            showErr('Please select at least one outreach row with an email.');
-            return;
-        }
-
-        const ids = selectedOutreachRows.map((row) => row._id).join(',');
-        router.push(`/admin/inbound-emails?campaignId=${campaignId}&pipelineIds=${ids}`);
-    }
 
     async function loadCampaignMeta() {
         if (!campaignId) return;
@@ -347,7 +459,9 @@ export default function CampaignPipelinePage() {
         if (!campaignId) return;
         setSelectedIds({});
         setShowCreateRow(false);
-        setCreateDraft(getDefaultCreateDraft(activeTab));
+        setEditingId('');
+        setDraft({});
+        setCreateDraft(getDefaultCreateDraft());
         refreshAll(activeTab);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [campaignId, activeTab]);
@@ -387,12 +501,12 @@ export default function CampaignPipelinePage() {
         setEditingId('');
         setDraft({});
         setShowCreateRow(true);
-        setCreateDraft(getDefaultCreateDraft(activeTab));
+        setCreateDraft(getDefaultCreateDraft());
     }
 
     function cancelCreateRow() {
         setShowCreateRow(false);
-        setCreateDraft(getDefaultCreateDraft(activeTab));
+        setCreateDraft(getDefaultCreateDraft());
     }
 
     function setField(key: string, value: any) {
@@ -415,6 +529,16 @@ export default function CampaignPipelinePage() {
         setSelectedIds(next);
     }
 
+    function goToBulkEmailSend() {
+        if (!selectedOutreachRows.length) {
+            showErr('Please select at least one outreach row with an email.');
+            return;
+        }
+
+        const ids = selectedOutreachRows.map((row) => row._id).join(',');
+        router.push(`/admin/inbound-emails?campaignId=${campaignId}&pipelineIds=${ids}`);
+    }
+
     async function saveRow() {
         try {
             const id = asText(draft.id);
@@ -431,8 +555,7 @@ export default function CampaignPipelinePage() {
                 await post('/pipeline/roster/update', {
                     id,
                     demographics: asText(draft.demographics),
-                    engagementRate:
-                        draft.engagementRate === '' ? null : Number(draft.engagementRate),
+                    engagementRate: draft.engagementRate === '' ? null : Number(draft.engagementRate),
                     deliverables: asText(draft.deliverables),
                     rates: draft.rates === '' ? null : Number(draft.rates),
                     mediaKit: asText(draft.mediaKit),
@@ -457,6 +580,7 @@ export default function CampaignPipelinePage() {
             setEditingId('');
             setDraft({});
             await refreshAll(activeTab);
+            await showSuccess('Row updated successfully.');
         } catch (e: any) {
             await showErr(e?.message || 'Failed to save row.');
         }
@@ -494,8 +618,9 @@ export default function CampaignPipelinePage() {
             });
 
             setShowCreateRow(false);
-            setCreateDraft(getDefaultCreateDraft(activeTab));
+            setCreateDraft(getDefaultCreateDraft());
             await refreshAll(activeTab);
+            await showSuccess('Pipeline row created successfully.');
         } catch (e: any) {
             await showErr(e?.message || 'Failed to create row.');
         } finally {
@@ -507,6 +632,7 @@ export default function CampaignPipelinePage() {
         try {
             await post('/pipeline/move-to-roster', { id });
             await refreshAll('outreach');
+            await showSuccess('Moved to roster successfully.');
         } catch (e: any) {
             await showErr(e?.message || 'Failed to move to roster.');
         }
@@ -516,722 +642,552 @@ export default function CampaignPipelinePage() {
         try {
             await post('/pipeline/move-to-pitch', { id });
             await refreshAll('roster');
+            await showSuccess('Moved to pitch successfully.');
         } catch (e: any) {
             await showErr(e?.message || 'Failed to move to pitch.');
         }
     }
 
-    function openBrandPitchSheet(id: string) {
-        const url = `/influencer-sheet?id=${id}`;
-        window.open(url, '_blank');
+    async function sendCampaignInvitation(pipelineId: string) {
+        try {
+            setSendingInviteId(pipelineId);
+            await post('/pipeline/pitch/send-invitation', {
+                campaignId,
+                pipelineId,
+            });
+
+            await refreshAll('pitch');
+            await showSuccess('Campaign invitation sent successfully.');
+        } catch (e: any) {
+            await showErr(e?.message || 'Failed to send campaign invitation.');
+        } finally {
+            setSendingInviteId('');
+        }
+    }
+
+    async function handleGetRosterLink(row: PipelineRow) {
+        try {
+            const provider = asText(row.platform).toLowerCase();
+            const username =
+                asText(row.username).replace(/^@/, '') ||
+                asText(row.handle).replace(/^@/, '');
+
+            if (!provider) {
+                await showErr('Platform is missing for this creator.');
+                return;
+            }
+
+            if (!username) {
+                await showErr('Username/handle is missing for this creator.');
+                return;
+            }
+
+            const resp = await get<{
+                success: boolean;
+                data?: {
+                    modashId: string;
+                    link: string;
+                    username?: string;
+                    platform?: string;
+                };
+                error?: string;
+            }>('/modash/media-kit-link', {
+                platform: provider,
+                username,
+            });
+
+            const link = resp?.data?.link;
+
+            if (!link) {
+                await showErr(resp?.error || 'Could not generate media kit link.');
+                return;
+            }
+
+            await navigator.clipboard.writeText(link);
+            await showSuccess('Media kit link copied.');
+        } catch (e: any) {
+            await showErr(e?.message || 'Failed to copy media kit link.');
+        }
     }
 
     const campaignTitle = campaign?.campaignTitle || initialName || 'Campaign Pipeline';
     const brandName = campaign?.brandName || DASH;
 
-    function textCell(value: React.ReactNode) {
-        return <div className="min-w-[140px] text-sm text-slate-800">{value || DASH}</div>;
-    }
-
-    function inputCell(
-        key: string,
-        type: 'text' | 'number' | 'date' = 'text',
-        placeholder = ''
-    ) {
-        return (
-            <input
-                type={type}
-                value={draft[key] ?? ''}
-                onChange={(e) => setField(key, e.target.value)}
-                placeholder={placeholder}
-                className="min-w-[140px] rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-            />
-        );
-    }
-
-    function createInputCell(
-        key: string,
-        type: 'text' | 'number' | 'date' = 'text',
-        placeholder = ''
-    ) {
-        return (
-            <input
-                type={type}
-                value={createDraft[key] ?? ''}
-                onChange={(e) => setCreateField(key, e.target.value)}
-                placeholder={placeholder}
-                className="min-w-[140px] rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-            />
-        );
-    }
-
-    function textareaCell(key: string, placeholder = '') {
-        return (
-            <textarea
-                value={draft[key] ?? ''}
-                onChange={(e) => setField(key, e.target.value)}
-                placeholder={placeholder}
-                className="min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                rows={2}
-            />
-        );
-    }
-
-    function createTextareaCell(key: string, placeholder = '') {
-        return (
-            <textarea
-                value={createDraft[key] ?? ''}
-                onChange={(e) => setCreateField(key, e.target.value)}
-                placeholder={placeholder}
-                className="min-w-[180px] rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                rows={2}
-            />
-        );
-    }
-
-    function checkboxCell(key: string) {
-        return (
-            <input
-                type="checkbox"
-                checked={!!draft[key]}
-                onChange={(e) => setField(key, e.target.checked)}
-                className="h-4 w-4"
-            />
-        );
-    }
-
-    function createCheckboxCell(key: string) {
-        return (
-            <input
-                type="checkbox"
-                checked={!!createDraft[key]}
-                onChange={(e) => setCreateField(key, e.target.checked)}
-                className="h-4 w-4"
-            />
-        );
-    }
-
     if (!campaignId) {
         return (
-            <div className="min-h-screen bg-slate-50">
+            <div className="min-h-screen overflow-x-hidden bg-background">
                 <div className="mx-auto max-w-4xl px-4 py-12">
-                    <div className="rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
-                        <h1 className="text-2xl font-bold text-slate-900">Invalid Campaign</h1>
-                        <p className="mt-2 text-slate-600">
-                            Campaign id is missing in URL. Open this page with
-                            <span className="mx-1 font-mono">?id=campaignId</span>
-                        </p>
-                    </div>
+                    <Card className="rounded-3xl shadow-sm">
+                        <CardHeader>
+                            <CardTitle>Invalid Campaign</CardTitle>
+                            <CardDescription>
+                                Campaign id is missing in the URL. Open this page with <span className="font-mono">?id=campaignId</span>.
+                            </CardDescription>
+                        </CardHeader>
+                    </Card>
                 </div>
             </div>
         );
     }
 
-    const renderSelectionHeader = () => (
-        <th className="px-4 py-3">
-            <input
-                type="checkbox"
-                checked={allSelected}
-                ref={(el) => {
-                    if (el) el.indeterminate = !allSelected && someSelected;
-                }}
-                onChange={(e) => toggleSelectAll(e.target.checked)}
-                className="h-4 w-4"
-            />
-        </th>
-    );
-
-    const renderSelectionCell = (rowId: string) => (
-        <td className="px-4 py-3">
-            <input
-                type="checkbox"
-                checked={!!selectedIds[rowId]}
-                onChange={(e) => toggleRowSelection(rowId, e.target.checked)}
-                className="h-4 w-4"
-            />
-        </td>
-    );
-
     return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="mx-auto max-w-full px-4 py-8 sm:px-6 lg:px-8">
-                <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                                <FolderKanban className="h-6 w-6" />
-                            </div>
+        <div className="min-h-screen bg-background">
+            <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+                <Card className="overflow-hidden rounded-3xl border shadow-sm">
+                    <CardContent className="p-0">
+                        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-6 py-7 text-white sm:px-8">
+                            <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+                                <div className="space-y-3">
+                                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
+                                        <Sparkles className="h-3.5 w-3.5" />
+                                        Campaign workflow
+                                    </div>
 
-                            <div>
-                                <h1 className="text-3xl font-bold text-slate-900">{campaignTitle}</h1>
-                                <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-600">
-                                    <span className="inline-flex items-center gap-2">
-                                        <Building2 className="h-4 w-4" />
-                                        Brand: <b className="text-slate-800">{brandName}</b>
-                                    </span>
-                                    <span>
-                                        Status: <b className="capitalize text-slate-800">{campaign?.status || DASH}</b>
-                                    </span>
-                                    <span>
-                                        Platforms:{' '}
-                                        <b className="text-slate-800">{campaign?.platformSelection?.join(', ') || DASH}</b>
-                                    </span>
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+                                            <FolderKanban className="h-7 w-7" />
+                                        </div>
+                                        <div>
+                                            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{campaignTitle}</h1>
+                                            <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-white/80">
+                                                <span className="inline-flex items-center gap-2">
+                                                    <Building2 className="h-4 w-4" />
+                                                    Brand: <b className="text-white">{brandName}</b>
+                                                </span>
+                                                <span>Status: <b className="capitalize text-white">{campaign?.status || DASH}</b></span>
+                                                <span>Platforms: <b className="text-white">{campaign?.platformSelection?.join(', ') || DASH}</b></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2 xl:w-[430px]">
+                                    <StatCard label="Outreach" value={counts.outreach} icon={<Mail className="h-5 w-5" />} />
+                                    <StatCard label="Roster" value={counts.roster} icon={<Users className="h-5 w-5" />} />
+                                    <StatCard label="Pitch" value={counts.pitch} icon={<Sparkles className="h-5 w-5" />} />
+                                    <StatCard label="Selected" value={selectedCount} icon={<Check className="h-5 w-5" />} />
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </CardContent>
+                </Card>
+
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabKey)}>
+                        <TabsList className="h-auto rounded-2xl p-1">
+                            <TabsTrigger value="outreach" className="rounded-xl px-4 py-2.5">Outreach ({counts.outreach})</TabsTrigger>
+                            <TabsTrigger value="roster" className="rounded-xl px-4 py-2.5">Roster ({counts.roster})</TabsTrigger>
+                            <TabsTrigger value="pitch" className="rounded-xl px-4 py-2.5">Pitch ({counts.pitch})</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
 
                     <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={openCreateRow}
-                            className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                        >
-                            <Plus className="h-4 w-4" />
+                        <Button variant="outline" className="rounded-xl" onClick={() => refreshAll(activeTab)}>
+                            {loading || metaLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                            Refresh
+                        </Button>
+                        <Button className="rounded-xl" onClick={openCreateRow}>
+                            <Plus className="mr-2 h-4 w-4" />
                             Add New
-                        </button>
-
+                        </Button>
                         {activeTab === 'outreach' ? (
                             <>
-                                <button
-                                    type="button"
-                                    onClick={goToBulkEmailSend}
-                                    disabled={!selectedOutreachRows.length}
-                                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                                >
+                                <Button className="rounded-xl" onClick={goToBulkEmailSend} disabled={!selectedOutreachRows.length}>
+                                    <Send className="mr-2 h-4 w-4" />
                                     Bulk Email Send
-                                </button>
-
-                                <button onClick={() => router.push(`/admin/modash?id=${campaign?._id}`)} className='cursor-pointer inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800'>
+                                </Button>
+                                <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/admin/modash?id=${campaign?._id}`)}>
                                     Add from Modash
-                                </button>
-
-                                <button onClick={() => router.push(`/admin/modash?id=${campaign?._id}`)} className='cursor-pointer inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800'>
+                                </Button>
+                                <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/admin/modash?id=${campaign?._id}`)}>
                                     Add from Youtube
-                                </button>
+                                </Button>
                             </>
                         ) : null}
-
-                        {activeTab === 'pitch' && (
-                            <button
-                                type="button"
-                                onClick={() => {
+                        {activeTab === 'pitch' ? (
+                            <Button
+                                variant="outline"
+                                className="rounded-xl"
+                                onClick={async () => {
                                     const link = `${window.location.origin}/influencer-sheet?campaignId=${campaignId}`;
-                                    navigator.clipboard.writeText(link);
-                                    swal({
-                                        title: 'Pitch sheet link copied',
-                                        text: link,
-                                        icon: 'success',
-                                    });
+                                    await navigator.clipboard.writeText(link);
+                                    await showSuccess('Pitch sheet link copied.');
                                 }}
-                                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                             >
+                                <Link2 className="mr-2 h-4 w-4" />
                                 Copy Pitch Sheet Link
-                            </button>
-                        )}
+                            </Button>
+                        ) : null}
                     </div>
                 </div>
 
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap gap-2">
-                        <TabButton
-                            active={activeTab === 'outreach'}
-                            count={counts.outreach}
-                            onClick={() => setActiveTab('outreach')}
-                        >
-                            Outreach
-                        </TabButton>
-
-                        <TabButton
-                            active={activeTab === 'roster'}
-                            count={counts.roster}
-                            onClick={() => setActiveTab('roster')}
-                        >
-                            Roster
-                        </TabButton>
-
-                        <TabButton
-                            active={activeTab === 'pitch'}
-                            count={counts.pitch}
-                            onClick={() => setActiveTab('pitch')}
-                        >
-                            Pitch
-                        </TabButton>
-                    </div>
-
-                    <div className="text-sm text-slate-600">
-                        Selected: <b className="text-slate-900">{selectedCount}</b>
-                    </div>
-                </div>
-
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="border-b border-slate-200 px-6 py-4">
-                        <h2 className="text-lg font-semibold text-slate-900">
-                            {activeTab === 'outreach' && 'Outreach'}
-                            {activeTab === 'roster' && 'Roster'}
-                            {activeTab === 'pitch' && 'Pitch'}
-                        </h2>
-                    </div>
-
+                <SectionCard
+                    title={`${activeTab.charAt(0).toUpperCase()}${activeTab.slice(1)} Pipeline`}
+                    description={
+                        activeTab === 'pitch'
+                            ? 'Manage shortlisted creators and send campaign invitations to signed-up influencers.'
+                            : activeTab === 'roster'
+                                ? 'Track creators who replied and are ready for pitch qualification.'
+                                : 'Monitor outreach, replies, and progression to roster.'
+                    }
+                    action={
+                        loading ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" /> Loading rows
+                            </div>
+                        ) : null
+                    }
+                >
                     {loading ? (
-                        <div className="px-6 py-16 text-center text-slate-500">
-                            <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin" />
-                            Loading...
+                        <div className="space-y-3">
+                            <Skeleton className="h-12 w-full rounded-xl" />
+                            <Skeleton className="h-12 w-full rounded-xl" />
+                            <Skeleton className="h-12 w-full rounded-xl" />
                         </div>
                     ) : !rows.length && !showCreateRow ? (
-                        <div className="px-6 py-16 text-center text-slate-500">
+                        <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
                             No rows found in {activeTab}.
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            {activeTab === 'outreach' && (
-                                <table className="min-w-full text-left">
-                                    <thead className="bg-slate-50">
-                                        <tr className="text-xs uppercase tracking-wide text-slate-600">
-                                            {renderSelectionHeader()}
-                                            <th className="px-4 py-3">Name</th>
-                                            <th className="px-4 py-3">Followers</th>
-                                            <th className="px-4 py-3">Links</th>
-                                            <th className="px-4 py-3">Niche</th>
-                                            <th className="px-4 py-3">Email</th>
-                                            <th className="px-4 py-3">Date</th>
-                                            <th className="px-4 py-3">Outreached</th>
-                                            <th className="px-4 py-3">Follow Up 1</th>
-                                            <th className="px-4 py-3">Follow Up 2</th>
-                                            <th className="px-4 py-3">Reply</th>
-                                            <th className="px-4 py-3">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {showCreateRow && (
-                                            <tr className="border-t border-blue-200 bg-blue-50/40 align-top">
-                                                <td className="px-4 py-3">New</td>
-                                                <td className="px-4 py-3">{createInputCell('name')}</td>
-                                                <td className="px-4 py-3">{createInputCell('followers', 'number')}</td>
-                                                <td className="px-4 py-3">{createInputCell('links')}</td>
-                                                <td className="px-4 py-3">{createInputCell('niche')}</td>
-                                                <td className="px-4 py-3">{createInputCell('email')}</td>
-                                                <td className="px-4 py-3">{textCell(DASH)}</td>
-                                                <td className="px-4 py-3">{textCell('No')}</td>
-                                                <td className="px-4 py-3">{textCell(DASH)}</td>
-                                                <td className="px-4 py-3">{textCell(DASH)}</td>
-                                                <td className="px-4 py-3">{textCell('No')}</td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={createRow}
-                                                            disabled={creating}
-                                                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                                        >
-                                                            <Save className="h-4 w-4" />
-                                                            {creating ? 'Saving...' : 'Save'}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={cancelCreateRow}
-                                                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
+                        <div className="w-full overflow-x-auto">
+                            <div className="min-w-[1100px]">
+                                <Table className="w-full table-auto">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-[56px]">
+                                                <Checkbox
+                                                    checked={allSelected || (someSelected ? 'indeterminate' : false)}
+                                                    onCheckedChange={(checked) => toggleSelectAll(Boolean(checked))}
+                                                    aria-label="Select all"
+                                                />
+                                            </TableHead>
+
+                                            {activeTab === 'outreach' ? (
+                                                <>
+                                                    <TableHead>Name</TableHead>
+                                                    <TableHead>Followers</TableHead>
+                                                    <TableHead>Links</TableHead>
+                                                    <TableHead>Niche</TableHead>
+                                                    <TableHead>Email</TableHead>
+                                                    <TableHead>Date</TableHead>
+                                                    <TableHead>Outreached</TableHead>
+                                                    <TableHead>Follow Up 1</TableHead>
+                                                    <TableHead>Follow Up 2</TableHead>
+                                                    <TableHead>Reply</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
+                                                </>
+                                            ) : null}
+
+                                            {activeTab === 'roster' ? (
+                                                <>
+                                                    <TableHead>Name</TableHead>
+                                                    <TableHead>Followers</TableHead>
+                                                    <TableHead>Links</TableHead>
+                                                    <TableHead>Niche</TableHead>
+                                                    <TableHead>Email</TableHead>
+                                                    <TableHead>Demographics</TableHead>
+                                                    <TableHead>Engagement Rate</TableHead>
+                                                    <TableHead>Deliverables</TableHead>
+                                                    <TableHead>Rates</TableHead>
+                                                    <TableHead>Media Kit</TableHead>
+                                                    <TableHead>Address</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
+                                                </>
+                                            ) : null}
+
+                                            {activeTab === 'pitch' ? (
+                                                <>
+                                                    <TableHead>Name</TableHead>
+                                                    <TableHead>Followers</TableHead>
+                                                    <TableHead>Links</TableHead>
+                                                    <TableHead>Niche</TableHead>
+                                                    <TableHead>Country</TableHead>
+                                                    <TableHead>Additional Info</TableHead>
+                                                    <TableHead>Selection Reason</TableHead>
+                                                    <TableHead>Good Fit</TableHead>
+                                                    <TableHead>Rate USD</TableHead>
+                                                    <TableHead>Our Fee (%)</TableHead>
+                                                    <TableHead>Invitation</TableHead>
+                                                    <TableHead className="text-right">Actions</TableHead>
+                                                </>
+                                            ) : null}
+                                        </TableRow>
+                                    </TableHeader>
+
+                                    <TableBody>
+                                        {showCreateRow ? (
+                                            <TableRow className="bg-muted/40">
+                                                <TableCell />
+
+                                                {activeTab === 'outreach' ? (
+                                                    <>
+                                                        <TableCell><Input value={createDraft.name} onChange={(e) => setCreateField('name', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" value={createDraft.followers} onChange={(e) => setCreateField('followers', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.links} onChange={(e) => setCreateField('links', e.target.value)} placeholder="comma separated" /></TableCell>
+                                                        <TableCell><Input value={createDraft.niche} onChange={(e) => setCreateField('niche', e.target.value)} placeholder="comma separated" /></TableCell>
+                                                        <TableCell><Input value={createDraft.email} onChange={(e) => setCreateField('email', e.target.value)} /></TableCell>
+                                                        <TableCell>{DASH}</TableCell>
+                                                        <TableCell>{DASH}</TableCell>
+                                                        <TableCell>{DASH}</TableCell>
+                                                        <TableCell>{DASH}</TableCell>
+                                                        <TableCell>{DASH}</TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <Button size="sm" onClick={createRow} disabled={creating}>
+                                                                    {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save
+                                                                </Button>
+                                                                <Button size="sm" variant="outline" onClick={cancelCreateRow}><X className="mr-2 h-4 w-4" />Cancel</Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </>
+                                                ) : null}
+
+                                                {activeTab === 'roster' ? (
+                                                    <>
+                                                        <TableCell><Input value={createDraft.name} onChange={(e) => setCreateField('name', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" value={createDraft.followers} onChange={(e) => setCreateField('followers', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.links} onChange={(e) => setCreateField('links', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.niche} onChange={(e) => setCreateField('niche', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.email} onChange={(e) => setCreateField('email', e.target.value)} /></TableCell>
+                                                        <TableCell><Textarea value={createDraft.demographics} onChange={(e) => setCreateField('demographics', e.target.value)} rows={2} /></TableCell>
+                                                        <TableCell><Input type="number" value={createDraft.engagementRate} onChange={(e) => setCreateField('engagementRate', e.target.value)} /></TableCell>
+                                                        <TableCell><Textarea value={createDraft.deliverables} onChange={(e) => setCreateField('deliverables', e.target.value)} rows={2} /></TableCell>
+                                                        <TableCell><Input type="number" value={createDraft.rates} onChange={(e) => setCreateField('rates', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.mediaKit} onChange={(e) => setCreateField('mediaKit', e.target.value)} /></TableCell>
+                                                        <TableCell><Textarea value={createDraft.address} onChange={(e) => setCreateField('address', e.target.value)} rows={2} /></TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <Button size="sm" onClick={createRow} disabled={creating}>
+                                                                    {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save
+                                                                </Button>
+                                                                <Button size="sm" variant="outline" onClick={cancelCreateRow}><X className="mr-2 h-4 w-4" />Cancel</Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </>
+                                                ) : null}
+
+                                                {activeTab === 'pitch' ? (
+                                                    <>
+                                                        <TableCell><Input value={createDraft.name} onChange={(e) => setCreateField('name', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" value={createDraft.followers} onChange={(e) => setCreateField('followers', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.links} onChange={(e) => setCreateField('links', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.niche} onChange={(e) => setCreateField('niche', e.target.value)} /></TableCell>
+                                                        <TableCell><Input value={createDraft.country} onChange={(e) => setCreateField('country', e.target.value)} /></TableCell>
+                                                        <TableCell><Textarea value={createDraft.additionalInfo} onChange={(e) => setCreateField('additionalInfo', e.target.value)} rows={2} /></TableCell>
+                                                        <TableCell><Textarea value={createDraft.selectionReason} onChange={(e) => setCreateField('selectionReason', e.target.value)} rows={2} /></TableCell>
+                                                        <TableCell>
+                                                            <Checkbox checked={!!createDraft.goodFit} onCheckedChange={(checked) => setCreateField('goodFit', !!checked)} />
+                                                        </TableCell>
+                                                        <TableCell><Input type="number" value={createDraft.rateUsd} onChange={(e) => setCreateField('rateUsd', e.target.value)} /></TableCell>
+                                                        <TableCell><Input type="number" value={createDraft.ourFeePct} onChange={(e) => setCreateField('ourFeePct', e.target.value)} /></TableCell>
+                                                        <TableCell><Badge variant="secondary">Not invited</Badge></TableCell>
+                                                        <TableCell className="text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <Button size="sm" onClick={createRow} disabled={creating}>
+                                                                    {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save
+                                                                </Button>
+                                                                <Button size="sm" variant="outline" onClick={cancelCreateRow}><X className="mr-2 h-4 w-4" />Cancel</Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </>
+                                                ) : null}
+                                            </TableRow>
+                                        ) : null}
 
                                         {rows.map((row) => {
                                             const isEdit = editingId === row._id;
 
                                             return (
-                                                <tr key={row._id} className="border-t border-slate-200 align-top">
-                                                    {renderSelectionCell(row._id)}
-                                                    <td className="px-4 py-3">{textCell(row.name || DASH)}</td>
-                                                    <td className="px-4 py-3">{textCell(formatNumber(row.followers))}</td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(
-                                                            row.primaryLink ? (
-                                                                <a
-                                                                    href={row.primaryLink}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="text-blue-600 underline"
-                                                                >
-                                                                    Open
-                                                                </a>
-                                                            ) : joinList(row.links)
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3">{textCell(joinList(row.niche))}</td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('email') : textCell(row.email || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(formatDate(row.outreachDate || row.createdAt))}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(row.outreached ? 'Yes' : 'No')}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(formatDate(row.followUp1SentAt))}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(formatDate(row.followUp2SentAt))}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(row.replyChecked ? 'Yes' : 'No')}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {isEdit ? (
-                                                                <>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={saveRow}
-                                                                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                                                                    >
-                                                                        <Save className="h-4 w-4" />
-                                                                        Save
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={cancelEdit}
-                                                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                                    >
-                                                                        <X className="h-4 w-4" />
-                                                                        Cancel
-                                                                    </button>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => startEdit(row)}
-                                                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                                    >
-                                                                        <Edit3 className="h-4 w-4" />
-                                                                        Edit
-                                                                    </button>
+                                                <TableRow key={row._id}>
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            checked={!!selectedIds[row._id]}
+                                                            onCheckedChange={(checked) => toggleRowSelection(row._id, !!checked)}
+                                                            aria-label={`Select ${row.name || 'row'}`}
+                                                        />
+                                                    </TableCell>
 
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => moveToRoster(row._id)}
-                                                                        disabled={!row.replyChecked}
-                                                                        className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                                                                    >
-                                                                        <Check className="h-4 w-4" />
-                                                                        Move to Roster
-                                                                    </button>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                                    {activeTab === 'outreach' ? (
+                                                        <>
+                                                            <TableCell className="font-medium">{row.name || DASH}</TableCell>
+                                                            <TableCell>{formatNumber(row.followers)}</TableCell>
+                                                            <TableCell>
+                                                                {row.primaryLink ? (
+                                                                    <a href={row.primaryLink} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary underline underline-offset-4">
+                                                                        Open
+                                                                    </a>
+                                                                ) : (
+                                                                    joinList(row.links)
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>{joinList(row.niche)}</TableCell>
+                                                            <TableCell>{isEdit ? <Input value={draft.email ?? ''} onChange={(e) => setField('email', e.target.value)} /> : (row.email || DASH)}</TableCell>
+                                                            <TableCell>{formatDate(row.outreachDate || row.createdAt)}</TableCell>
+                                                            <TableCell><Badge variant={row.outreached ? 'default' : 'secondary'}>{row.outreached ? 'Yes' : 'No'}</Badge></TableCell>
+                                                            <TableCell>{formatDate(row.followUp1SentAt)}</TableCell>
+                                                            <TableCell>{formatDate(row.followUp2SentAt)}</TableCell>
+                                                            <TableCell><Badge variant={row.replyChecked ? 'default' : 'secondary'}>{row.replyChecked ? 'Yes' : 'No'}</Badge></TableCell>
+                                                            <TableCell className="text-right">
+                                                                <div className="flex justify-end gap-2">
+                                                                    {isEdit ? (
+                                                                        <>
+                                                                            <Button size="sm" onClick={saveRow}><Save className="mr-2 h-4 w-4" />Save</Button>
+                                                                            <Button size="sm" variant="outline" onClick={cancelEdit}><X className="mr-2 h-4 w-4" />Cancel</Button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Button size="sm" variant="outline" onClick={() => startEdit(row)}><Edit3 className="mr-2 h-4 w-4" />Edit</Button>
+                                                                            <Button size="sm" onClick={() => moveToRoster(row._id)} disabled={!row.replyChecked}><Check className="mr-2 h-4 w-4" />Move to Roster</Button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                        </>
+                                                    ) : null}
+
+                                                    {activeTab === 'roster' ? (
+                                                        <>
+                                                            <TableCell className="font-medium">{row.name || DASH}</TableCell>
+                                                            <TableCell>{formatNumber(row.followers)}</TableCell>
+                                                            <TableCell>
+                                                                {row.primaryLink ? (
+                                                                    <a href={row.primaryLink} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary underline underline-offset-4">
+                                                                        Open
+                                                                    </a>
+                                                                ) : (
+                                                                    joinList(row.links)
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>{joinList(row.niche)}</TableCell>
+                                                            <TableCell>{isEdit ? <Input value={draft.email ?? ''} onChange={(e) => setField('email', e.target.value)} /> : (row.email || DASH)}</TableCell>
+                                                            <TableCell>{isEdit ? <Textarea value={draft.demographics ?? ''} onChange={(e) => setField('demographics', e.target.value)} rows={2} /> : (row.demographics || DASH)}</TableCell>
+                                                            <TableCell>{isEdit ? <Input type="number" value={draft.engagementRate ?? ''} onChange={(e) => setField('engagementRate', e.target.value)} /> : formatPercent(row.engagementRate)}</TableCell>
+                                                            <TableCell>{isEdit ? <Textarea value={draft.deliverables ?? ''} onChange={(e) => setField('deliverables', e.target.value)} rows={2} /> : (row.deliverables || DASH)}</TableCell>
+                                                            <TableCell>{isEdit ? <Input type="number" value={draft.rates ?? ''} onChange={(e) => setField('rates', e.target.value)} /> : formatNumber(row.rates)}</TableCell>
+                                                            <TableCell>{isEdit ? <Input value={draft.mediaKit ?? ''} onChange={(e) => setField('mediaKit', e.target.value)} /> : (row.mediaKit || DASH)}</TableCell>
+                                                            <TableCell>{isEdit ? <Textarea value={draft.address ?? ''} onChange={(e) => setField('address', e.target.value)} rows={2} /> : (row.address || DASH)}</TableCell>
+                                                            <TableCell className="text-right">
+                                                                <div className="flex justify-end gap-2">
+                                                                    {isEdit ? (
+                                                                        <>
+                                                                            <Button size="sm" onClick={saveRow}><Save className="mr-2 h-4 w-4" />Save</Button>
+                                                                            <Button size="sm" variant="outline" onClick={cancelEdit}><X className="mr-2 h-4 w-4" />Cancel</Button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                onClick={() => handleGetRosterLink(row)}
+                                                                                disabled={!row.platform || !(row.username || row.handle)}
+                                                                            >
+                                                                                <Link2 className="mr-2 h-4 w-4" />
+                                                                                Get Link
+                                                                            </Button>
+                                                                            <Button size="sm" variant="outline" onClick={() => startEdit(row)}><Edit3 className="mr-2 h-4 w-4" />Edit</Button>
+                                                                            <Button size="sm" onClick={() => moveToPitch(row._id)}><Check className="mr-2 h-4 w-4" />Move to Pitch</Button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                        </>
+                                                    ) : null}
+
+                                                    {activeTab === 'pitch' ? (
+                                                        <>
+                                                            <TableCell className="font-medium">{row.name || DASH}</TableCell>
+                                                            <TableCell>{formatNumber(row.followers)}</TableCell>
+                                                            <TableCell>
+                                                                {row.primaryLink ? (
+                                                                    <a href={row.primaryLink} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary underline underline-offset-4">
+                                                                        Open
+                                                                    </a>
+                                                                ) : (
+                                                                    joinList(row.links)
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>{joinList(row.niche)}</TableCell>
+                                                            <TableCell>{isEdit ? <Input value={draft.country ?? ''} onChange={(e) => setField('country', e.target.value)} /> : (row.country || DASH)}</TableCell>
+                                                            <TableCell>{isEdit ? <Textarea value={draft.additionalInfo ?? ''} onChange={(e) => setField('additionalInfo', e.target.value)} rows={2} /> : (row.additionalInfo || DASH)}</TableCell>
+                                                            <TableCell>{isEdit ? <Textarea value={draft.selectionReason ?? ''} onChange={(e) => setField('selectionReason', e.target.value)} rows={2} /> : (row.selectionReason || DASH)}</TableCell>
+                                                            <TableCell>
+                                                                {isEdit ? (
+                                                                    <Checkbox checked={!!draft.goodFit} onCheckedChange={(checked) => setField('goodFit', !!checked)} />
+                                                                ) : (
+                                                                    <Badge variant={row.goodFit ? 'default' : 'secondary'}>{row.goodFit ? 'Yes' : 'No'}</Badge>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>{isEdit ? <Input type="number" value={draft.rateUsd ?? ''} onChange={(e) => setField('rateUsd', e.target.value)} /> : formatNumber(row.rateUsd)}</TableCell>
+                                                            <TableCell>{isEdit ? <Input type="number" value={draft.ourFeePct ?? ''} onChange={(e) => setField('ourFeePct', e.target.value)} /> : (row.ourFeePct ?? DASH)}</TableCell>
+                                                            <TableCell>
+                                                                <div className="space-y-2">
+                                                                    <Badge variant={getInvitationTone(row.campaignInvitationStatus, row.hasInvited) as any}>
+                                                                        {getInvitationLabel(row)}
+                                                                    </Badge>
+                                                                    {(row.hasInvitedAt || row.campaignInvitationSentAt) ? (
+                                                                        <p className="text-xs text-muted-foreground">{formatDate(row.hasInvitedAt || row.campaignInvitationSentAt)}</p>
+                                                                    ) : null}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <div className="flex justify-end gap-2">
+                                                                    {isEdit ? (
+                                                                        <>
+                                                                            <Button size="sm" onClick={saveRow}><Save className="mr-2 h-4 w-4" />Save</Button>
+                                                                            <Button size="sm" variant="outline" onClick={cancelEdit}><X className="mr-2 h-4 w-4" />Cancel</Button>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                onClick={() => sendCampaignInvitation(row._id)}
+                                                                                disabled={sendingInviteId === row._id || isInvitationLocked(row)}
+                                                                            >
+                                                                                {sendingInviteId === row._id ? (
+                                                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                                                ) : (
+                                                                                    <Send className="mr-2 h-4 w-4" />
+                                                                                )}
+                                                                                {row.hasInvited ? 'Invited' : 'Campaign Invitation'}
+                                                                            </Button>
+                                                                            <Button size="sm" variant="outline" onClick={() => startEdit(row)}><Edit3 className="mr-2 h-4 w-4" />Edit</Button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                        </>
+                                                    ) : null}
+                                                </TableRow>
                                             );
                                         })}
-                                    </tbody>
-                                </table>
-                            )}
-
-                            {activeTab === 'roster' && (
-                                <table className="min-w-full text-left">
-                                    <thead className="bg-slate-50">
-                                        <tr className="text-xs uppercase tracking-wide text-slate-600">
-                                            {renderSelectionHeader()}
-                                            <th className="px-4 py-3">Name</th>
-                                            <th className="px-4 py-3">Followers</th>
-                                            <th className="px-4 py-3">Links</th>
-                                            <th className="px-4 py-3">Niche</th>
-                                            <th className="px-4 py-3">Email</th>
-                                            <th className="px-4 py-3">Demographics</th>
-                                            <th className="px-4 py-3">Engagement Rate</th>
-                                            <th className="px-4 py-3">Deliverables</th>
-                                            <th className="px-4 py-3">Rates</th>
-                                            <th className="px-4 py-3">Media Kit</th>
-                                            <th className="px-4 py-3">Address</th>
-                                            <th className="px-4 py-3">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {showCreateRow && (
-                                            <tr className="border-t border-blue-200 bg-blue-50/40 align-top">
-                                                <td className="px-4 py-3">New</td>
-                                                <td className="px-4 py-3">{createInputCell('name')}</td>
-                                                <td className="px-4 py-3">{createInputCell('followers', 'number')}</td>
-                                                <td className="px-4 py-3">{createInputCell('links')}</td>
-                                                <td className="px-4 py-3">{createInputCell('niche')}</td>
-                                                <td className="px-4 py-3">{createInputCell('email')}</td>
-                                                <td className="px-4 py-3">{createTextareaCell('demographics')}</td>
-                                                <td className="px-4 py-3">{createInputCell('engagementRate', 'number')}</td>
-                                                <td className="px-4 py-3">{createTextareaCell('deliverables')}</td>
-                                                <td className="px-4 py-3">{createInputCell('rates', 'number')}</td>
-                                                <td className="px-4 py-3">{createInputCell('mediaKit')}</td>
-                                                <td className="px-4 py-3">{createTextareaCell('address')}</td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={createRow}
-                                                            disabled={creating}
-                                                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                                        >
-                                                            <Save className="h-4 w-4" />
-                                                            {creating ? 'Saving...' : 'Save'}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={cancelCreateRow}
-                                                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-
-                                        {rows.map((row) => {
-                                            const isEdit = editingId === row._id;
-
-                                            return (
-                                                <tr key={row._id} className="border-t border-slate-200 align-top">
-                                                    {renderSelectionCell(row._id)}
-                                                    <td className="px-4 py-3">{textCell(row.name || DASH)}</td>
-                                                    <td className="px-4 py-3">{textCell(formatNumber(row.followers))}</td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(
-                                                            row.primaryLink ? (
-                                                                <a
-                                                                    href={row.primaryLink}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="text-blue-600 underline"
-                                                                >
-                                                                    Open
-                                                                </a>
-                                                            ) : joinList(row.links)
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3">{textCell(joinList(row.niche))}</td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('email') : textCell(row.email || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? textareaCell('demographics') : textCell(row.demographics || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('engagementRate', 'number') : textCell(formatPercent(row.engagementRate))}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? textareaCell('deliverables') : textCell(row.deliverables || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('rates', 'number') : textCell(formatNumber(row.rates))}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('mediaKit') : textCell(row.mediaKit || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? textareaCell('address') : textCell(row.address || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {isEdit ? (
-                                                                <>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={saveRow}
-                                                                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                                                                    >
-                                                                        <Save className="h-4 w-4" />
-                                                                        Save
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={cancelEdit}
-                                                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                                    >
-                                                                        <X className="h-4 w-4" />
-                                                                        Cancel
-                                                                    </button>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => startEdit(row)}
-                                                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                                    >
-                                                                        <Edit3 className="h-4 w-4" />
-                                                                        Edit
-                                                                    </button>
-
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => moveToPitch(row._id)}
-                                                                        className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                                                                    >
-                                                                        <Check className="h-4 w-4" />
-                                                                        Move to Pitch
-                                                                    </button>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            )}
-
-                            {activeTab === 'pitch' && (
-                                <table className="min-w-full text-left">
-                                    <thead className="bg-slate-50">
-                                        <tr className="text-xs uppercase tracking-wide text-slate-600">
-                                            {renderSelectionHeader()}
-                                            <th className="px-4 py-3">Name</th>
-                                            <th className="px-4 py-3">Followers</th>
-                                            <th className="px-4 py-3">Links</th>
-                                            <th className="px-4 py-3">Niche</th>
-                                            <th className="px-4 py-3">Country</th>
-                                            <th className="px-4 py-3">Additional Info</th>
-                                            <th className="px-4 py-3">Selection Reason</th>
-                                            <th className="px-4 py-3">Good Fit</th>
-                                            <th className="px-4 py-3">Rate USD</th>
-                                            <th className="px-4 py-3">Our Fee (%)</th>
-                                            <th className="px-4 py-3">Comments</th>
-                                            <th className="px-4 py-3">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {showCreateRow && (
-                                            <tr className="border-t border-blue-200 bg-blue-50/40 align-top">
-                                                <td className="px-4 py-3">New</td>
-                                                <td className="px-4 py-3">{createInputCell('name')}</td>
-                                                <td className="px-4 py-3">{createInputCell('followers', 'number')}</td>
-                                                <td className="px-4 py-3">{createInputCell('links')}</td>
-                                                <td className="px-4 py-3">{createInputCell('niche')}</td>
-                                                <td className="px-4 py-3">{createInputCell('country')}</td>
-                                                <td className="px-4 py-3">{createTextareaCell('additionalInfo')}</td>
-                                                <td className="px-4 py-3">{createTextareaCell('selectionReason')}</td>
-                                                <td className="px-4 py-3">{createCheckboxCell('goodFit')}</td>
-                                                <td className="px-4 py-3">{createInputCell('rateUsd', 'number')}</td>
-                                                <td className="px-4 py-3">{createInputCell('ourFeePct', 'number')}</td>
-                                                <td className="px-4 py-3">{createTextareaCell('comments')}</td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex flex-wrap gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={createRow}
-                                                            disabled={creating}
-                                                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                                        >
-                                                            <Save className="h-4 w-4" />
-                                                            {creating ? 'Saving...' : 'Save'}
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={cancelCreateRow}
-                                                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                        >
-                                                            <X className="h-4 w-4" />
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-
-                                        {rows.map((row) => {
-                                            const isEdit = editingId === row._id;
-
-                                            return (
-                                                <tr key={row._id} className="border-t border-slate-200 align-top">
-                                                    {renderSelectionCell(row._id)}
-                                                    <td className="px-4 py-3">{textCell(row.name || DASH)}</td>
-                                                    <td className="px-4 py-3">{textCell(formatNumber(row.followers))}</td>
-                                                    <td className="px-4 py-3">
-                                                        {textCell(
-                                                            row.primaryLink ? (
-                                                                <a
-                                                                    href={row.primaryLink}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="text-blue-600 underline"
-                                                                >
-                                                                    Open
-                                                                </a>
-                                                            ) : joinList(row.links)
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3">{textCell(joinList(row.niche))}</td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('country') : textCell(row.country || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? textareaCell('additionalInfo') : textCell(row.additionalInfo || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? textareaCell('selectionReason') : textCell(row.selectionReason || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? checkboxCell('goodFit') : textCell(row.goodFit ? 'Yes' : 'No')}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('rateUsd', 'number') : textCell(formatNumber(row.rateUsd))}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? inputCell('ourFeePct', 'number') : textCell(row.ourFeePct ?? DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        {isEdit ? textareaCell('comments') : textCell(row.comments || DASH)}
-                                                    </td>
-                                                    <td className="px-4 py-3">
-                                                        <div className="flex gap-2">
-                                                            {isEdit ? (
-                                                                <>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={saveRow}
-                                                                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                                                                    >
-                                                                        <Save className="h-4 w-4" />
-                                                                        Save
-                                                                    </button>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={cancelEdit}
-                                                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                                    >
-                                                                        <X className="h-4 w-4" />
-                                                                        Cancel
-                                                                    </button>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => startEdit(row)}
-                                                                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                                                    >
-                                                                        <Edit3 className="h-4 w-4" />
-                                                                        Edit
-                                                                    </button>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            )}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     )}
-                </div>
+                </SectionCard>
+
+                <Card className="rounded-2xl shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="text-base">Quick notes</CardTitle>
+                        <CardDescription>
+                            Pitch invitations are enabled from the pitch table and will reflect invitation state using the backend fields like <span className="font-mono">hasInvited</span> and <span className="font-mono">campaignInvitationStatus</span>.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 md:grid-cols-3">
+                        <Field label="Campaign title">
+                            <div className="rounded-xl border bg-muted/40 px-3 py-2 text-sm">{campaignTitle}</div>
+                        </Field>
+                        <Field label="Brand">
+                            <div className="rounded-xl border bg-muted/40 px-3 py-2 text-sm">{brandName}</div>
+                        </Field>
+                        <Field label="Meta status">
+                            <div className="rounded-xl border bg-muted/40 px-3 py-2 text-sm capitalize">
+                                {metaLoading ? 'Loading...' : campaign?.status || DASH}
+                            </div>
+                        </Field>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );

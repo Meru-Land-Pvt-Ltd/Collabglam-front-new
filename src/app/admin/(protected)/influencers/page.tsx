@@ -13,8 +13,23 @@ import {
   HiChevronRight,
   HiOutlineClipboardList,
 } from "react-icons/hi";
-import { Instagram, Youtube } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  Instagram,
+  Youtube,
+  Search,
+  Users,
+  BadgeCheck,
+  Clock3,
+  Sparkles,
+  ArrowUpRight,
+} from "lucide-react";
+
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -45,99 +60,180 @@ interface Influencer {
   email: string;
   phone?: string;
   primaryPlatform?: string | null;
-  planName?: string; // flat per backend
-  expiresAt?: string | null; // flat per backend (ISO)
-  subscriptionExpired?: boolean; // flat per backend
+  planName?: string;
+  expiresAt?: string | null;
+  subscriptionExpired?: boolean;
+  countryName?: string;
+  proxyEmail?: string;
 }
 
+type SortField =
+  | "name"
+  | "email"
+  | "primaryPlatform"
+  | "planName"
+  | "expiresAt"
+  | "createdAt";
+
 // -------------- Constants --------------
-const API_ENDPOINT = "/admin/influencer/list"; // unified backend path
+const API_ENDPOINT = "/admin/influencer/list";
+const DEFAULT_LIMIT = 10;
+const ROW_OPTIONS = [10, 20, 50, 100] as const;
 
 const HEADERS: {
-  key:
-    | keyof Influencer
-    | "status"
-    | "planName"
-    | "expiresAt"
-    | "primaryPlatform"
-    | "name"
-    | "email"
+  key: SortField | "status";
   label: string;
   sortable?: boolean;
+  align?: "left" | "center" | "right";
 }[] = [
-  { key: "name", label: "Name", sortable: true },
-  { key: "email", label: "Email", sortable: true },
-  { key: "primaryPlatform", label: "Platform", sortable: true },
-  { key: "planName", label: "Plan", sortable: true },
-  { key: "expiresAt", label: "Expires", sortable: true },
-  { key: "status", label: "Status", sortable: false },
+  { key: "name", label: "Influencer", sortable: true, align: "left" },
+  { key: "email", label: "Email", sortable: true, align: "left" },
+  { key: "primaryPlatform", label: "Platform", sortable: true, align: "center" },
+  { key: "planName", label: "Plan", sortable: true, align: "center" },
+  { key: "expiresAt", label: "Expires", sortable: true, align: "center" },
+  { key: "status", label: "Status", sortable: false, align: "center" },
 ];
 
-function formatDate(d?: string | null) {
-  if (!d) return "-";
-  const date = new Date(d);
-  if (isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString(undefined, {
+const ALLOWED_SORT = new Set<SortField>([
+  "name",
+  "email",
+  "primaryPlatform",
+  "planName",
+  "expiresAt",
+  "createdAt",
+]);
+
+// -------------- Helpers --------------
+function formatDate(value?: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-IN", {
     year: "numeric",
     month: "short",
-    day: "numeric",
+    day: "2-digit",
   });
 }
 
-function daysUntil(d?: string | null) {
-  if (!d) return null;
-  const date = new Date(d);
-  if (isNaN(date.getTime())) return null;
-  const MS = 24 * 60 * 60 * 1000;
-  return Math.ceil((date.getTime() - Date.now()) / MS);
+function getDaysUntil(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const diff = date.getTime() - Date.now();
+  return Math.ceil(diff / (24 * 60 * 60 * 1000));
+}
+
+function getInitials(name?: string) {
+  return (name || "Influencer")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "IN";
+}
+
+function normalizePlatform(platform?: string | null) {
+  return String(platform || "").trim().toLowerCase();
+}
+
+function getPlanLabel(influencer: Influencer) {
+  if (influencer.planName?.trim()) return influencer.planName;
+  return influencer.subscriptionExpired ? "Free Plan" : "—";
+}
+
+function getStatusTone(expired?: boolean) {
+  if (expired) {
+    return "bg-blue-50 text-blue-700 border-blue-200";
+  }
+  return "bg-[#fff1f4] text-[#ef2f5b] border-[#f8bfd0]";
 }
 
 function PlatformBadge({ platform }: { platform?: string | null }) {
-  const p = (platform || "").toLowerCase();
-  if (p === "instagram")
-    return (
-      <div className="flex items-center gap-2">
-        <Instagram className="h-4 w-4" />
-        <span className="capitalize">{p}</span>
-      </div>
-    );
-  if (p === "youtube")
-    return (
-      <div className="flex items-center gap-2">
-        <Youtube className="h-4 w-4" />
-        <span className="capitalize">{p}</span>
-      </div>
-    );
-  if (p === "tiktok") return <span className="capitalize">{p}</span>;
-  return <span className="text-muted-foreground">—</span>;
-}
+  const normalized = normalizePlatform(platform);
 
-// ✅ StatusBadge: Free Plan (blue) + Active (brand pink) instead of green
-function StatusBadge({ expired }: { expired?: boolean }) {
-  if (expired) {
+  if (normalized === "instagram") {
     return (
-      <Badge
-        variant="outline"
-        className={cn(
-          "rounded-full px-3",
-          "bg-blue-50 text-blue-700 border-blue-300"
-        )}
-      >
-        Free Plan
-      </Badge>
+      <span className="inline-flex items-center gap-2 rounded-full border border-pink-200 bg-pink-50 px-3 py-1 text-xs font-bold text-pink-700">
+        <Instagram className="h-3.5 w-3.5" />
+        Instagram
+      </span>
+    );
+  }
+
+  if (normalized === "youtube") {
+    return (
+      <span className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+        <Youtube className="h-3.5 w-3.5" />
+        YouTube
+      </span>
+    );
+  }
+
+  if (normalized === "tiktok") {
+    return (
+      <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-700">
+        <Sparkles className="h-3.5 w-3.5" />
+        TikTok
+      </span>
     );
   }
 
   return (
+    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+      —
+    </span>
+  );
+}
+
+function StatusBadge({ expired }: { expired?: boolean }) {
+  return (
     <Badge
-      variant="default"
-      className={cn(
-        "rounded-full px-3 text-white",
-        "bg-[#ef2f5b] hover:bg-[#ef2f5b]"
-      )}
+      variant="outline"
+      className={cn("rounded-full px-3 py-1 text-xs font-bold", getStatusTone(expired))}
     >
-      Active
+      {expired ? "Free Plan" : "Active"}
     </Badge>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  hint,
+  icon: Icon,
+}: {
+  title: string;
+  value: number;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-start justify-between p-5">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+            {title}
+          </p>
+          <h3 className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</h3>
+          <p className="mt-1 text-xs font-medium text-slate-500">{hint}</p>
+        </div>
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SkeletonRow() {
+  return (
+    <TableRow>
+      {Array.from({ length: HEADERS.length + 1 }).map((_, index) => (
+        <TableCell key={index}>
+          <div className="h-4 w-full animate-pulse rounded-full bg-slate-100" />
+        </TableCell>
+      ))}
+    </TableRow>
   );
 }
 
@@ -149,305 +245,448 @@ const AdminInfluencersPage = () => {
   const [error, setError] = React.useState<string | null>(null);
 
   const [page, setPage] = React.useState<number>(1);
-  const [limit, setLimit] = React.useState<number>(10);
+  const [limit, setLimit] = React.useState<number>(DEFAULT_LIMIT);
   const [totalPages, setTotalPages] = React.useState<number>(1);
 
   const [search, setSearch] = React.useState<string>("");
   const [debouncedSearch, setDebouncedSearch] = React.useState<string>("");
 
-  const [sortBy, setSortBy] = React.useState<string>("name");
+  const [sortBy, setSortBy] = React.useState<SortField>("name");
   const [sortOrder, setSortOrder] = React.useState<"asc" | "desc">("asc");
 
-  // Debounce search input
   React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 450);
-    return () => clearTimeout(t);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 400);
+
+    return () => window.clearTimeout(timer);
   }, [search]);
 
-  const fetchData = React.useCallback(
-    async () => {
-      setLoading(true);
-      try {
-        const params = { page, limit, search: debouncedSearch, sortBy, sortOrder };
-        const res = await post<GetListResponse>(API_ENDPOINT, params);
-        setRows(res.influencers || []);
-        setTotal(res.total || 0);
-        setTotalPages(res.totalPages || 1);
-        setError(null);
-      } catch (e: any) {
-        console.error(e);
-        setError(e?.message || "Failed to load influencers.");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [page, limit, debouncedSearch, sortBy, sortOrder]
-  );
+  const fetchData = React.useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const params = {
+        page,
+        limit,
+        search: debouncedSearch,
+        sortBy,
+        sortOrder,
+      };
+
+      const res = await post<GetListResponse>(API_ENDPOINT, params);
+      setRows(res.influencers || []);
+      setTotal(res.total || 0);
+      setTotalPages(res.totalPages || 1);
+      setError(null);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Failed to load influencers.");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, limit, debouncedSearch, sortBy, sortOrder]);
 
   React.useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const toggleSort = (field: string, allowed: boolean) => {
-    if (!allowed) return;
+  const toggleSort = (field: SortField, sortable?: boolean) => {
+    if (!sortable || !ALLOWED_SORT.has(field)) return;
+
     if (sortBy === field) {
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       setSortBy(field);
       setSortOrder("asc");
     }
+
     setPage(1);
   };
 
-  const ALLOWED_SORT = new Set([
-    "name",
-    "email",
-    "primaryPlatform",
-    "planName",
-    "expiresAt",
-    "createdAt",
-  ]);
+  const stats = React.useMemo(() => {
+    const active = rows.filter((item) => !item.subscriptionExpired).length;
+    const freePlan = rows.filter((item) => item.subscriptionExpired).length;
+    const expiringSoon = rows.filter((item) => {
+      const days = getDaysUntil(item.expiresAt);
+      return !item.subscriptionExpired && typeof days === "number" && days >= 0 && days <= 7;
+    }).length;
+    const withPlatform = rows.filter((item) => Boolean(item.primaryPlatform)).length;
+
+    return {
+      active,
+      freePlan,
+      expiringSoon,
+      withPlatform,
+    };
+  }, [rows]);
+
+  const showingFrom = rows.length ? (page - 1) * limit + 1 : 0;
+  const showingTo = Math.min(page * limit, total);
 
   return (
     <TooltipProvider>
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Influencers</h1>
-          <p className="text-sm text-muted-foreground">
-            Admin overview of all creators, plans, and statuses.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder="Search by name, email, platform..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-[280px]"
-          />
-          <Button variant="outline" onClick={fetchData} disabled={loading}>
-            <HiOutlineRefresh className={loading ? "animate-spin" : ""} />
-            <span className="ml-2">Refresh</span>
-          </Button>
-        </div>
-      </div>
+      <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+        <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6">
+          <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
+                  <Users className="h-3.5 w-3.5" />
+                  Creator Administration
+                </div>
+                <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
+                  Influencer Management
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600">
+                  View all creators, track plan health, and jump directly into profile or campaign activity from one clean admin table.
+                </p>
+              </div>
 
-      {/* Table */}
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {HEADERS.map(({ key, label, sortable }) => (
-                  <TableHead
-                    key={String(key)}
-                    onClick={() =>
-                      toggleSort(
-                        String(key),
-                        !!sortable && ALLOWED_SORT.has(String(key))
-                      )
-                    }
-                    className={cn(
-                      "select-none",
-                      sortable && ALLOWED_SORT.has(String(key))
-                        ? "cursor-pointer"
-                        : ""
-                    )}
-                  >
-                    <div className="flex items-center justify-center">
-                      {label}
-                      {sortBy === key && sortable && (
-                        sortOrder === "asc" ? (
-                          <HiChevronUp className="ml-1" />
-                        ) : (
-                          <HiChevronDown className="ml-1" />
-                        )
-                      )}
-                    </div>
-                  </TableHead>
-                ))}
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: Math.min(limit, 10) }).map((_, rowIdx) => (
-                  <TableRow key={rowIdx}>
-                    {Array(HEADERS.length + 1)
-                      .fill(0)
-                      .map((_, cellIdx) => (
-                        <TableCell key={cellIdx}>
-                          <div className="h-4 w-full bg-muted rounded animate-pulse" />
-                        </TableCell>
-                      ))}
-                  </TableRow>
-                ))
-              ) : rows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={HEADERS.length + 1}
-                    className="text-center py-10 text-muted-foreground"
-                  >
-                    No influencers match the criteria.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((inf) => {
-                  const expired = !!inf.subscriptionExpired;
-                  const dLeft = daysUntil(inf.expiresAt);
-                  return (
-                    <TableRow
-                      key={inf._id}
-                      className={expired ? "bg-red-50/30" : undefined}
-                    >
-                      <TableCell className="font-medium">
-                        {inf.name || "—"}
-                      </TableCell>
-                      <TableCell>{inf.email || "—"}</TableCell>
-                      <TableCell className="items-center justify-center">
-                        <PlatformBadge platform={inf.primaryPlatform} />
-                      </TableCell>
-                      <TableCell>
-                        {inf.planName ? (
-                          <Badge className="rounded-full px-3 bg-primary text-primary-foreground">
-                            {inf.planName}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative w-full min-w-[280px] sm:w-[340px]">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    placeholder="Search by name, email, platform..."
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11 text-sm font-medium shadow-none focus-visible:ring-0"
+                  />
+                </div>
+
+                <Button
+                  variant="outline"
+                  onClick={fetchData}
+                  disabled={loading}
+                  className="h-11 rounded-2xl border-slate-200 px-4"
+                >
+                  <HiOutlineRefresh className={cn("h-4 w-4", loading && "animate-spin")} />
+                  <span className="ml-2">Refresh</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard
+              title="Visible Influencers"
+              value={rows.length}
+              hint="Current page result count"
+              icon={Users}
+            />
+            <SummaryCard
+              title="Active Plans"
+              value={stats.active}
+              hint="Creators currently on active subscriptions"
+              icon={BadgeCheck}
+            />
+            <SummaryCard
+              title="Free Plan"
+              value={stats.freePlan}
+              hint="Creators marked as expired / free"
+              icon={Sparkles}
+            />
+            <SummaryCard
+              title="Expiring Soon"
+              value={stats.expiringSoon}
+              hint="Plans ending within 7 days"
+              icon={Clock3}
+            />
+          </div>
+
+          <Card className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-lg font-black tracking-tight text-slate-900">Influencer Directory</h2>
+                  <p className="mt-1 text-sm font-medium text-slate-500">
+                    Sorted, searchable list of all creators from the admin panel.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                    {stats.withPlatform} with platform
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                    {total} total
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="mx-5 mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-200 hover:bg-transparent">
+                    {HEADERS.map(({ key, label, sortable, align = "left" }) => (
+                      <TableHead
+                        key={String(key)}
+                        onClick={() =>
+                          key !== "status" ? toggleSort(key as SortField, sortable) : undefined
+                        }
+                        className={cn(
+                          "py-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500",
+                          sortable && key !== "status" && ALLOWED_SORT.has(key as SortField)
+                            ? "cursor-pointer select-none"
+                            : "",
+                          align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>{formatDate(inf.expiresAt)}</span>
-                          {typeof dLeft === "number" && (
-                            <span
-                              className={cn(
-                                "text-xs",
-                                dLeft < 0
-                                  ? "text-red-600"
-                                  : dLeft <= 7
-                                  ? "text-amber-600"
-                                  : "text-muted-foreground"
-                              )}
-                            >
-                              {dLeft < 0
-                                ? `${Math.abs(dLeft)} days ago`
-                                : dLeft === 0
-                                ? "today"
-                                : `in ${dLeft} days`}
-                            </span>
+                      >
+                        <div
+                          className={cn(
+                            "flex items-center gap-1",
+                            align === "center"
+                              ? "justify-center"
+                              : align === "right"
+                              ? "justify-end"
+                              : "justify-start"
                           )}
+                        >
+                          {label}
+                          {sortBy === key && sortable ? (
+                            sortOrder === "asc" ? (
+                              <HiChevronUp className="h-4 w-4" />
+                            ) : (
+                              <HiChevronDown className="h-4 w-4" />
+                            )
+                          ) : null}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge expired={expired} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1 items-center justify-center">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Link
-                                href={`/admin/influencers/view?influencerId=${inf._id}`}
-                              >
-                                <Button variant="ghost" size="icon">
-                                  <HiOutlineEye />
-                                </Button>
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent>View details</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Link
-                                href={`/admin/influencers/campaigns?influencerId=${inf._id}`}
-                              >
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="item-center"
-                                >
-                                  <HiOutlineClipboardList />
-                                </Button>
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent>Campaigns</TooltipContent>
-                          </Tooltip>
+                      </TableHead>
+                    ))}
+                    <TableHead className="py-4 text-center text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: Math.min(limit, 10) }).map((_, idx) => (
+                      <SkeletonRow key={idx} />
+                    ))
+                  ) : rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={HEADERS.length + 1}
+                        className="py-14 text-center"
+                      >
+                        <div className="mx-auto max-w-md space-y-2">
+                          <h3 className="text-lg font-black text-slate-900">No influencers found</h3>
+                          <p className="text-sm font-medium text-slate-500">
+                            Try adjusting your search or refreshing the list.
+                          </p>
                         </div>
                       </TableCell>
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                  ) : (
+                    rows.map((inf) => {
+                      const expired = Boolean(inf.subscriptionExpired);
+                      const daysLeft = getDaysUntil(inf.expiresAt);
+                      const planLabel = getPlanLabel(inf);
 
-        {/* Pagination */}
-        {!loading && rows.length > 0 && (
-          <div className="flex items-center justify-between p-4">
-            <div className="text-sm text-muted-foreground">
-              Page <span className="font-medium">{page}</span> of {totalPages}
+                      return (
+                        <TableRow
+                          key={inf._id}
+                          className={cn(
+                            "border-slate-100 transition-colors hover:bg-slate-50/80",
+                            expired && "bg-blue-50/30"
+                          )}
+                        >
+                          <TableCell className="py-4">
+                            <div className="flex min-w-[240px] items-center gap-3">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black text-slate-800">
+                                {getInitials(inf.name)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-extrabold text-slate-900">
+                                  {inf.name || "—"}
+                                </div>
+                                <div className="mt-1 truncate text-xs font-medium text-slate-500">
+                                  {inf.countryName || inf.proxyEmail || "Creator profile"}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-4">
+                            <div className="min-w-[210px]">
+                              <div className="truncate text-sm font-semibold text-slate-700">
+                                {inf.email || "—"}
+                              </div>
+                              {inf.phone ? (
+                                <div className="mt-1 text-xs font-medium text-slate-500">{inf.phone}</div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-4 text-center">
+                            <PlatformBadge platform={inf.primaryPlatform} />
+                          </TableCell>
+
+                          <TableCell className="py-4 text-center">
+                            <Badge className="rounded-full border-0 bg-slate-900 px-3 py-1 text-white hover:bg-slate-900">
+                              {planLabel}
+                            </Badge>
+                          </TableCell>
+
+                          <TableCell className="py-4 text-center">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-sm font-semibold text-slate-700">
+                                {formatDate(inf.expiresAt)}
+                              </span>
+                              {typeof daysLeft === "number" ? (
+                                <span
+                                  className={cn(
+                                    "text-xs font-semibold",
+                                    daysLeft < 0
+                                      ? "text-red-600"
+                                      : daysLeft <= 7
+                                      ? "text-amber-600"
+                                      : "text-slate-500"
+                                  )}
+                                >
+                                  {daysLeft < 0
+                                    ? `${Math.abs(daysLeft)} days ago`
+                                    : daysLeft === 0
+                                    ? "today"
+                                    : `in ${daysLeft} days`}
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-4 text-center">
+                            <StatusBadge expired={expired} />
+                          </TableCell>
+
+                          <TableCell className="py-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Link href={`/admin/influencers/view?influencerId=${inf._id}`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                    >
+                                      <HiOutlineEye className="h-5 w-5" />
+                                    </Button>
+                                  </Link>
+                                </TooltipTrigger>
+                                <TooltipContent>View details</TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Link href={`/admin/influencers/campaigns?influencerId=${inf._id}`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                    >
+                                      <HiOutlineClipboardList className="h-5 w-5" />
+                                    </Button>
+                                  </Link>
+                                </TooltipTrigger>
+                                <TooltipContent>Campaigns</TooltipContent>
+                              </Tooltip>
+
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Link href={`/admin/influencers/view?influencerId=${inf._id}`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                    >
+                                      <ArrowUpRight className="h-4.5 w-4.5" />
+                                    </Button>
+                                  </Link>
+                                </TooltipTrigger>
+                                <TooltipContent>Open profile</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
-            <div className="space-x-2">
-              <Button
-                variant="outline"
-                size="icon"
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <HiChevronLeft />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                <HiChevronRight />
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
 
-      <Card className="p-4 flex items-center justify-between gap-4 whitespace-nowrap overflow-x-auto">
-        <div className="text-sm text-muted-foreground shrink-0">
-          Showing{" "}
-          <span className="font-medium">
-            {(page - 1) * limit + (rows.length ? 1 : 0)}
-          </span>
-          –
-          <span className="font-medium">
-            {Math.min(page * limit, total)}
-          </span>{" "}
-          of <span className="font-medium">{total}</span>
-        </div>
+            {!loading && rows.length > 0 && (
+              <div className="flex flex-col gap-4 border-t border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="text-sm font-semibold text-slate-500">
+                  Showing <span className="font-extrabold text-slate-800">{showingFrom}</span>–
+                  <span className="font-extrabold text-slate-800">{showingTo}</span> of <span className="font-extrabold text-slate-800">{total}</span>
+                </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-sm text-muted-foreground">Rows per page</span>
-          <div className="flex items-center gap-1">
-            {[10, 20, 50, 100].map((n) => (
-              <Button
-                key={n}
-                size="sm"
-                variant={limit === n ? "default" : "outline"}
-                className={limit === n ? "bg-[#ef2f5b] text-white" : ""}
-                onClick={() => {
-                  setLimit(n);
-                  setPage(1);
-                }}
-              >
-                {n}
-              </Button>
-            ))}
-          </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-slate-500">Rows</span>
+                    <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1">
+                      {ROW_OPTIONS.map((n) => (
+                        <Button
+                          key={n}
+                          size="sm"
+                          variant={limit === n ? "default" : "ghost"}
+                          className={cn(
+                            "h-8 rounded-xl px-3 text-xs font-bold",
+                            limit === n
+                              ? "bg-[#ef2f5b] text-white hover:bg-[#ef2f5b]"
+                              : "text-slate-600 hover:bg-white"
+                          )}
+                          onClick={() => {
+                            setLimit(n);
+                            setPage(1);
+                          }}
+                        >
+                          {n}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      disabled={page === 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="rounded-full"
+                    >
+                      <HiChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="min-w-[110px] text-center text-sm font-extrabold text-slate-700">
+                      Page {page} / {totalPages}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      className="rounded-full"
+                    >
+                      <HiChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
         </div>
-      </Card>
-    </div>
+      </div>
     </TooltipProvider>
   );
 };
