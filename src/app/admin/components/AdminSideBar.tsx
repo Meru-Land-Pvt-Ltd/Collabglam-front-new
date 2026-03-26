@@ -6,81 +6,32 @@ import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Outfit } from "next/font/google";
 import {
-  Bell,
   ChevronDown,
   ChevronUp,
-  DollarSign,
-  FileText,
-  Home,
-  List,
   LogOut,
-  MailCheckIcon,
   Menu,
-  MessageSquare,
-  Settings as SettingsIcon,
-  Users,
   X,
 } from "lucide-react";
 import api from "@/lib/api";
+import {
+  ADMIN_MODULES,
+  hasModuleAccess,
+} from "@/app/admin/components/admin-access";
 
 const outfit = Outfit({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800", "900"],
 });
 
-type IconType = React.ElementType;
-
-type NavItem = {
-  key: string;  
-  label: string;
-  href: string;
-  icon: IconType;
-};
-
-type SectionLink = {
-  key: string;
-  label: string;
-  href: string;
-};
-
 type Permission = {
   key?: string;
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { key: "notifications", label: "Notifications", href: "/admin/notifications", icon: Bell },
-  { key: "brands", label: "Brands", href: "/admin/brands", icon: Home },
-  { key: "influencers", label: "Influencers", href: "/admin/influencers", icon: Users },
-  { key: "influencer-pipeline", label: "Influencer Pipeline", href: "/admin/influencer-pipeline", icon: Users },
-  { key: "campaigns", label: "All Campaigns", href: "/admin/campaigns", icon: List },
-  { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", icon: DollarSign },
-  { key: "disputes", label: "Disputes", href: "/admin/disputes", icon: FileText },
-  { key: "emails", label: "E-Mails", href: "/admin/emails", icon: MailCheckIcon },
-  { key: "messages", label: "Message", href: "/admin/messages", icon: MessageSquare },
-  { key: "influencer-email", label: "Influencer-Email", href: "/admin/influencerdetails", icon: MailCheckIcon },
-  { key: "inbound-emails", label: "Inbound Emails", href: "/admin/inbound-emails", icon: MailCheckIcon },
-  { key: "missing-email", label: "Missing-Email", href: "/admin/missingemail", icon: MailCheckIcon },
-  { key: "invoice-details", label: "Invoice Details", href: "/admin/invoiceDetails", icon: DollarSign },
-  { key: "payment-notification", label: "Payment Notification", href: "/admin/payment", icon: Bell },
-  { key: "youtube-handle", label: "Youtube Handle", href: "/admin/youtube", icon: MailCheckIcon },
-  { key: "modash-data", label: "Modash Data", href: "/admin/modash", icon: MailCheckIcon },
-  { key: "invited-influencer", label: "Invited Influencer", href: "/admin/invitedInfluencer", icon: MailCheckIcon },
-];
-
-const SETTINGS_LINKS: SectionLink[] = [
-  { key: "role", label: "Role", href: "/admin/role" },
-  { key: "employees", label: "Employees", href: "/admin/employees" },
-];
-
-const DOCUMENT_LINKS: SectionLink[] = [
-  { key: "contact-us-page-email", label: "Contact US Page Email", href: "/admin/documents/contact-us" },
-  { key: "faqs", label: "FAQs", href: "/admin/documents/faqs" },
-  { key: "privacy-policy", label: "Privacy Policy", href: "/admin/documents/privacy-policy" },
-  { key: "terms-of-service", label: "Terms of Service", href: "/admin/documents/terms-of-service" },
-  { key: "cookie-policy", label: "Cookie Policy", href: "/admin/documents/cookie-policy" },
-  { key: "shipping-delivery-policy", label: "Shipping & Delivery Policy", href: "/admin/documents/shipping-delivery" },
-  { key: "returns-policy", label: "Returns Policy", href: "/admin/documents/return-policy" },
-];
+type MeResponse = {
+  role?: string;
+  permissions?: Permission[];
+  access?: Permission[];
+};
 
 const drawerVariants = {
   hidden: { x: "-100%" },
@@ -101,7 +52,7 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
   return (
     <div className={compact ? "px-4 py-3" : "p-5"}>
       <Link href="/admin" className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-xl overflow-hidden border border-black/10 bg-white">
+        <div className="h-10 w-10 overflow-hidden rounded-xl border border-black/10 bg-white">
           <img
             src="/logo.png"
             alt="CollabGlam logo"
@@ -121,7 +72,7 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
 
 type CollapsibleSectionProps = {
   title: string;
-  icon: IconType;
+  icon: React.ElementType;
   isOpen: boolean;
   isActive: boolean;
   onToggle: () => void;
@@ -145,19 +96,22 @@ function CollapsibleSection({
       >
         <span className="flex items-center gap-2">
           <Icon
-            className={`h-4 w-4 ${isActive ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
+            className={`h-4 w-4 ${
+              isActive ? "text-white" : "text-black/50 group-hover:text-white"
+            }`}
           />
           <span className="flex-1 text-left">{title}</span>
           {isOpen ? (
             <ChevronUp
-              className={`h-4 w-4 ${isActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+              className={`h-4 w-4 ${
+                isActive ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
             />
           ) : (
             <ChevronDown
-              className={`h-4 w-4 ${isActive ? "text-white" : "text-black/50 group-hover:text-white"
-                }`}
+              className={`h-4 w-4 ${
+                isActive ? "text-white" : "text-black/50 group-hover:text-white"
+              }`}
             />
           )}
         </span>
@@ -184,21 +138,19 @@ export default function AdminSidebar() {
   const router = useRouter();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [docsOpen, setDocsOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    documents: pathname.startsWith("/admin/documents"),
+  });
+
   const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
+  const [currentRole, setCurrentRole] = useState("");
   const [permissionsLoading, setPermissionsLoading] = useState(true);
 
-  const docsActive = pathname.startsWith("/admin/documents/");
-  const settingsActive =
-    pathname === "/admin/role" ||
-    pathname === "/admin/employees" ||
-    pathname.startsWith("/admin/settings/");
-
   useEffect(() => {
-    if (docsActive) setDocsOpen(true);
-    if (settingsActive) setSettingsOpen(true);
-  }, [docsActive, settingsActive]);
+    if (pathname.startsWith("/admin/documents")) {
+      setOpenSections((prev) => ({ ...prev, documents: true }));
+    }
+  }, [pathname]);
 
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? "hidden" : "";
@@ -213,16 +165,19 @@ export default function AdminSidebar() {
     const fetchPermissions = async () => {
       try {
         const response = await api.get("/admins/me");
-        const permissions: Permission[] = response.data?.permissions ?? [];
+        const me: MeResponse = response.data?.data || response.data || {};
+        const permissions: Permission[] = me.permissions ?? me.access ?? [];
         const keys = permissions.map((item) => item?.key).filter(Boolean) as string[];
 
         if (mounted) {
           setPermissionKeys(keys);
+          setCurrentRole(String(me.role || "").toLowerCase());
         }
       } catch (error) {
         console.error("Failed to fetch permissions:", error);
         if (mounted) {
           setPermissionKeys([]);
+          setCurrentRole("");
         }
       } finally {
         if (mounted) {
@@ -238,23 +193,13 @@ export default function AdminSidebar() {
     };
   }, []);
 
-  const allowedNavItems = useMemo(
-    () => NAV_ITEMS.filter((item) => permissionKeys.includes(item.key)),
-    [permissionKeys]
-  );
+  const showAllModules = currentRole === "super_admin";
 
-  const allowedSettingsLinks = useMemo(
-    () => SETTINGS_LINKS.filter((item) => permissionKeys.includes(item.key)),
-    [permissionKeys]
-  );
+  const allowedSidebarItems = useMemo(() => {
+    if (showAllModules) return ADMIN_MODULES;
 
-  const allowedDocumentLinks = useMemo(
-    () => DOCUMENT_LINKS.filter((item) => permissionKeys.includes(item.key)),
-    [permissionKeys]
-  );
-
-  const showSettings = allowedSettingsLinks.length > 0;
-  const showDocuments = allowedDocumentLinks.length > 0;
+    return ADMIN_MODULES.filter((item) => hasModuleAccess(permissionKeys, item.key));
+  }, [permissionKeys, showAllModules]);
 
   const handleLogout = () => {
     try {
@@ -262,36 +207,14 @@ export default function AdminSidebar() {
         localStorage.clear();
       }
     } catch {
-      // ignore localStorage errors
+      // ignore
     }
 
     router.replace("/admin/login");
   };
 
-  const renderMainLink = (item: NavItem, onClick?: () => void) => {
-    const active = isActivePath(pathname, item.href);
-    const Icon = item.icon;
-
-    return (
-      <Link
-        key={item.href}
-        href={item.href}
-        onClick={onClick}
-        className={`${linkBase} ${active ? linkActive : linkInactive}`}
-      >
-        <span className="flex items-center gap-2">
-          <Icon
-            className={`h-4 w-4 ${active ? "text-white" : "text-black/50 group-hover:text-white"
-              }`}
-          />
-          <span className="flex-1 whitespace-nowrap">{item.label}</span>
-        </span>
-      </Link>
-    );
-  };
-
   const renderSectionLink = (
-    item: SectionLink,
+    item: { href: string; label: string },
     isMobile = false
   ) => {
     const active = isActivePath(pathname, item.href);
@@ -310,35 +233,53 @@ export default function AdminSidebar() {
     );
   };
 
-  const renderSettingsSection = (isMobile = false) => {
-    if (!showSettings) return null;
+  const renderSidebarItem = (
+    item: (typeof ADMIN_MODULES)[number],
+    isMobile = false
+  ) => {
+    const active = isActivePath(pathname, item.href);
+    const Icon = item.icon;
+
+    if (item.children?.length) {
+      const isOpen = Boolean(openSections[item.key]);
+
+      return (
+        <CollapsibleSection
+          key={item.key}
+          title={item.label}
+          icon={Icon}
+          isOpen={isOpen}
+          isActive={active}
+          onToggle={() =>
+            setOpenSections((prev) => ({
+              ...prev,
+              [item.key]: !prev[item.key],
+            }))
+          }
+        >
+          {item.children.map((child) => renderSectionLink(child, isMobile))}
+        </CollapsibleSection>
+      );
+    }
 
     return (
-      <CollapsibleSection
-        title="Settings"
-        icon={SettingsIcon}
-        isOpen={settingsOpen}
-        isActive={settingsActive}
-        onToggle={() => setSettingsOpen((prev) => !prev)}
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => {
+          if (isMobile) setDrawerOpen(false);
+        }}
+        className={`${linkBase} ${active ? linkActive : linkInactive}`}
       >
-        {allowedSettingsLinks.map((item) => renderSectionLink(item, isMobile))}
-      </CollapsibleSection>
-    );
-  };
-
-  const renderDocumentsSection = (isMobile = false) => {
-    if (!showDocuments) return null;
-
-    return (
-      <CollapsibleSection
-        title="Documents"
-        icon={FileText}
-        isOpen={docsOpen}
-        isActive={docsActive}
-        onToggle={() => setDocsOpen((prev) => !prev)}
-      >
-        {allowedDocumentLinks.map((item) => renderSectionLink(item, isMobile))}
-      </CollapsibleSection>
+        <span className="flex items-center gap-2">
+          <Icon
+            className={`h-4 w-4 ${
+              active ? "text-white" : "text-black/50 group-hover:text-white"
+            }`}
+          />
+          <span className="flex-1 whitespace-nowrap">{item.label}</span>
+        </span>
+      </Link>
     );
   };
 
@@ -359,7 +300,7 @@ export default function AdminSidebar() {
 
         <div className="ml-3">
           <Link href="/admin" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl overflow-hidden border border-black/10 bg-white">
+            <div className="h-8 w-8 overflow-hidden rounded-xl border border-black/10 bg-white">
               <img
                 src="/logo.png"
                 alt="CollabGlam logo"
@@ -378,9 +319,7 @@ export default function AdminSidebar() {
 
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           <nav className="space-y-1">
-            {allowedNavItems.map((item) => renderMainLink(item))}
-            {renderSettingsSection(false)}
-            {renderDocumentsSection(false)}
+            {allowedSidebarItems.map((item) => renderSidebarItem(item))}
           </nav>
         </div>
 
@@ -426,11 +365,7 @@ export default function AdminSidebar() {
 
               <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
                 <nav className="space-y-1">
-                  {allowedNavItems.map((item) =>
-                    renderMainLink(item, () => setDrawerOpen(false))
-                  )}
-                  {renderSettingsSection(true)}
-                  {renderDocumentsSection(true)}
+                  {allowedSidebarItems.map((item) => renderSidebarItem(item, true))}
                 </nav>
               </div>
 

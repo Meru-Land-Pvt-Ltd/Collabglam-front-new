@@ -9,7 +9,6 @@ import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { VggCardStack } from "@/components/ui/brand/VggAnimatedCard";
-import { cn } from "@/lib/utils";
 
 import { apiSignInBrand, getApiErrorMessage } from "../../services/brandApi";
 import { toast, ToastStyles } from "@/components/ui/toast";

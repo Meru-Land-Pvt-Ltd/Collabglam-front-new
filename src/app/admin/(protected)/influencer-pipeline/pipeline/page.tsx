@@ -799,7 +799,7 @@ export default function CampaignPipelinePage() {
                                 <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/admin/modash?id=${campaign?._id}`)}>
                                     Add from Modash
                                 </Button>
-                                <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/admin/modash?id=${campaign?._id}`)}>
+                                <Button variant="outline" className="rounded-xl" onClick={() => router.push(`/admin/youtube?id=${campaign?._id}`)}>
                                     Add from Youtube
                                 </Button>
                             </>
