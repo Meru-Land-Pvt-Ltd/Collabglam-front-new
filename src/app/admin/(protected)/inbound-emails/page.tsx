@@ -1,14 +1,16 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
+  ChevronRight,
   FileSpreadsheet,
+  FileText,
   Inbox,
   Loader2,
   Mail,
   MessageSquare,
-  PanelLeft,
   Plus,
   RefreshCcw,
   Save,
@@ -19,10 +21,7 @@ import {
   Upload,
   UserCircle2,
   Users,
-  LayoutGrid,
-  FileText,
 } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import EmailEditor from "@/components/ui/EmailEditor";
 import {
   type AdminRole,
@@ -46,7 +45,7 @@ import {
 type RecipientStatus = "Ready" | "Sent" | "Replied" | "Bounced" | "Failed";
 type ThreadStatusUi = "Waiting" | "Replied" | "Closed" | "Archived";
 type EditorMode = "compose" | "reply";
-type PageTab = "outreach" | "templates";
+type AppTab = "mails" | "templates";
 
 type MailboxScopeData = {
   actor: {
@@ -227,7 +226,9 @@ function parseCsv(text: string) {
     .split("\n")
     .filter((line) => line.trim().length > 0);
 
-  if (!lines.length) return { headers: [], rows: [] as string[][] };
+  if (!lines.length) {
+    return { headers: [], rows: [] as string[][] };
+  }
 
   return {
     headers: parseCsvLine(lines[0]),
@@ -285,14 +286,7 @@ function stripHtml(html?: string | null) {
 function getThreadOwner(thread: AdminEmailThreadDto) {
   const exec = thread.executiveId;
 
-  if (!exec) {
-    return {
-      ownerAdminName: "",
-      ownerAdminEmail: "",
-    };
-  }
-
-  if (typeof exec === "string") {
+  if (!exec || typeof exec === "string") {
     return {
       ownerAdminName: "",
       ownerAdminEmail: "",
@@ -317,9 +311,9 @@ function getRoleMeta(role?: string) {
 }
 
 function getScopeText(scope?: "ALL" | "TREE" | "SELF") {
-  if (scope === "ALL") return "Can view all threads.";
-  if (scope === "TREE") return "Can view own + IME/BME in the same tree.";
-  return "Can view only own threads.";
+  if (scope === "ALL") return "Can view all threads";
+  if (scope === "TREE") return "Can view own + tree threads";
+  return "Can view only own threads";
 }
 
 function mapThreadStatus(thread: AdminEmailThreadDto): ThreadStatusUi {
@@ -398,9 +392,10 @@ export default function Page() {
       .filter(Boolean);
   }, [searchParams]);
 
-  const pipelineSelectionMode = !!campaignId && pipelineIds.length > 0;
+  const pipelineIdsKey = pipelineIds.join(",");
+  const pipelineSelectionMode = Boolean(campaignId && pipelineIds.length > 0);
 
-  const [activeTab, setActiveTab] = useState<PageTab>("outreach");
+  const [activeTab, setActiveTab] = useState<AppTab>("mails");
 
   const [mailboxScope, setMailboxScope] = useState<MailboxScopeData | null>(null);
   const [loadingScope, setLoadingScope] = useState(true);
@@ -414,16 +409,14 @@ export default function Page() {
   const [threadSearch, setThreadSearch] = useState("");
   const [templateSearch, setTemplateSearch] = useState("");
 
-  const [uploadedCsvFile, setUploadedCsvFile] = useState<File | null>(null);
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
-
   const [uploadingCsv, setUploadingCsv] = useState(false);
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editorMode, setEditorMode] = useState<EditorMode>("reply");
+  const [editorMode, setEditorMode] = useState<EditorMode>("compose");
   const [editorSending, setEditorSending] = useState(false);
   const [editorPayload, setEditorPayload] = useState({
     toLabel: "",
@@ -436,7 +429,7 @@ export default function Page() {
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
 
   const [templates, setTemplates] = useState<MailTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateFormOpen, setTemplateFormOpen] = useState(false);
   const [templateFormSaving, setTemplateFormSaving] = useState(false);
   const [templateForm, setTemplateForm] = useState({
@@ -449,41 +442,41 @@ export default function Page() {
   const actorRole = mailboxScope?.actor?.role as AdminRole | undefined;
   const config = getRoleMeta(actorRole);
 
-  const filteredRecipients = useMemo(() => {
-    const q = recipientSearch.toLowerCase();
-
-    return recipients.filter((item) => {
-      return (
-        !recipientSearch ||
-        item.name.toLowerCase().includes(q) ||
-        item.email.toLowerCase().includes(q) ||
-        item.company?.toLowerCase().includes(q) ||
-        item.niche?.toLowerCase().includes(q)
-      );
-    });
-  }, [recipients, recipientSearch]);
-
   const filteredThreads = useMemo(() => {
-    const q = threadSearch.toLowerCase();
+    const q = threadSearch.trim().toLowerCase();
 
     return threads.filter((thread) => {
+      if (!q) return true;
       return (
-        !threadSearch ||
         thread.subject.toLowerCase().includes(q) ||
         thread.recipientName.toLowerCase().includes(q) ||
         thread.recipientEmail.toLowerCase().includes(q) ||
-        thread.ownerAdminName?.toLowerCase().includes(q) ||
-        thread.ownerAdminEmail?.toLowerCase().includes(q)
+        (thread.ownerAdminName || "").toLowerCase().includes(q) ||
+        (thread.ownerAdminEmail || "").toLowerCase().includes(q)
       );
     });
   }, [threads, threadSearch]);
 
+  const filteredRecipients = useMemo(() => {
+    const q = recipientSearch.trim().toLowerCase();
+
+    return recipients.filter((item) => {
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.email.toLowerCase().includes(q) ||
+        (item.company || "").toLowerCase().includes(q) ||
+        (item.niche || "").toLowerCase().includes(q)
+      );
+    });
+  }, [recipients, recipientSearch]);
+
   const filteredTemplates = useMemo(() => {
-    const q = templateSearch.toLowerCase();
+    const q = templateSearch.trim().toLowerCase();
 
     return templates.filter((item) => {
+      if (!q) return true;
       return (
-        !templateSearch ||
         item.name.toLowerCase().includes(q) ||
         item.subject.toLowerCase().includes(q) ||
         item.body.toLowerCase().includes(q) ||
@@ -492,16 +485,8 @@ export default function Page() {
     });
   }, [templates, templateSearch]);
 
-  const selectedRecipients = recipients.filter((item) =>
-    selectedRecipientIds.includes(item.id)
-  );
-
   const selectedThread =
-    filteredThreads.find((item) => item.id === selectedThreadId) ||
-    threads.find((item) => item.id === selectedThreadId) ||
-    filteredThreads[0] ||
-    threads[0] ||
-    null;
+    threads.find((item) => item.id === selectedThreadId) || threads[0] || null;
 
   const selectedTemplate =
     templates.find((item) => item.id === selectedTemplateId) ||
@@ -511,9 +496,10 @@ export default function Page() {
 
   const totalRecipients = recipients.length;
   const sentCount = recipients.filter((item) => item.status === "Sent").length;
-  const repliedCount = threads.filter(
+  const replyCount = threads.filter(
     (item) => item.lastMessageDirection === "INBOUND"
   ).length;
+  const selectedCount = selectedRecipientIds.length;
 
   const loadMailboxScope = async () => {
     try {
@@ -542,10 +528,9 @@ export default function Page() {
         limit: 100,
       });
 
-      const items = response?.data?.items || [];
-      const mappedThreads = items.map(mapBackendThreadToUi);
-
+      const mappedThreads = (response?.data?.items || []).map(mapBackendThreadToUi);
       setThreads(mappedThreads);
+
       setSelectedThreadId((prev) => {
         if (prev && mappedThreads.some((item) => item.id === prev)) return prev;
         return mappedThreads[0]?.id || null;
@@ -608,9 +593,7 @@ export default function Page() {
         pipelineIds,
       });
 
-      const items = response?.data?.items || [];
-
-      const mappedRecipients: Recipient[] = items.map(
+      const mappedRecipients: Recipient[] = (response?.data?.items || []).map(
         (item: PipelineRecipientDto) => ({
           id: item.pipelineId,
           name: item.name || item.email,
@@ -659,25 +642,31 @@ export default function Page() {
   };
 
   useEffect(() => {
-    loadMailboxScope();
+    void loadMailboxScope();
   }, []);
 
   useEffect(() => {
     if (!mailboxScope) return;
 
-    loadThreadsFromApi();
-    loadTemplates();
+    void loadThreadsFromApi();
+    void loadTemplates();
 
     if (pipelineSelectionMode) {
-      loadPipelineRecipients();
+      void loadPipelineRecipients();
     }
-  }, [mailboxScope, pipelineSelectionMode, campaignId, pipelineIds.join(",")]);
+  }, [mailboxScope, pipelineSelectionMode, campaignId, pipelineIdsKey]);
 
   useEffect(() => {
     if (selectedThreadId) {
-      loadThreadMessagesFromApi(selectedThreadId);
+      void loadThreadMessagesFromApi(selectedThreadId);
     }
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (!selectedThreadId && filteredThreads.length) {
+      setSelectedThreadId(filteredThreads[0].id);
+    }
+  }, [filteredThreads, selectedThreadId]);
 
   const toggleRecipient = (id: string) => {
     setSelectedRecipientIds((prev) =>
@@ -688,24 +677,21 @@ export default function Page() {
   const handleCsvUpload = async (file: File) => {
     const text = await file.text();
     const { headers, rows } = parseCsv(text);
+
     if (!headers.length) return;
 
     const headerMap = new Map(
       headers.map((header, index) => [normalizeHeader(header), index])
     );
 
-    const nextRecipients: Recipient[] = [];
     const existingEmails = new Set(recipients.map((item) => item.email.toLowerCase()));
+    const nextRecipients: Recipient[] = [];
 
     let invalidRows = 0;
     let duplicateRows = 0;
 
     for (const row of rows) {
-      const email = extractCell(row, headerMap, [
-        "email",
-        "e mail",
-        "mail",
-      ]).toLowerCase();
+      const email = extractCell(row, headerMap, ["email", "e mail", "mail"]).toLowerCase();
       const name = extractCell(row, headerMap, ["name", "full name", "fullname"]);
       const company = extractCell(row, headerMap, [
         "company",
@@ -713,11 +699,7 @@ export default function Page() {
         "organization",
         "organisation",
       ]);
-      const niche = extractCell(row, headerMap, [
-        "niche",
-        "category",
-        "industry",
-      ]);
+      const niche = extractCell(row, headerMap, ["niche", "category", "industry"]);
 
       if (!email || !isValidEmail(email)) {
         invalidRows += 1;
@@ -760,7 +742,6 @@ export default function Page() {
       setUploadingCsv(true);
       setApiError(null);
       setBannerMessage(null);
-      setUploadedCsvFile(file);
       await handleCsvUpload(file);
     } catch (error: any) {
       setApiError(error?.message || "Failed to parse CSV");
@@ -774,7 +755,6 @@ export default function Page() {
     setRecipients([]);
     setSelectedRecipientIds([]);
     setUploadSummary(null);
-    setUploadedCsvFile(null);
   };
 
   const exportRecipients = () => {
@@ -785,10 +765,10 @@ export default function Page() {
     });
 
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "admin-recipients.csv";
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "admin-recipients.csv";
+    anchor.click();
     URL.revokeObjectURL(url);
   };
 
@@ -839,7 +819,8 @@ export default function Page() {
     setEditorPayload({
       toLabel: selectedThread.recipientEmail,
       subject: `Re: ${selectedThread.subject}`,
-      initialBody: selectedTemplate?.body || "Hi,\n\nThanks for your reply.\n\nBest regards,",
+      initialBody:
+        selectedTemplate?.body || "Hi,\n\nThanks for your reply.\n\nBest regards,",
       toAvatar: "",
     });
     setEditorOpen(true);
@@ -1020,510 +1001,513 @@ export default function Page() {
         onChange={onFileChange}
       />
 
-      <div className="mx-auto flex max-w-full
-       gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <aside className="hidden w-64 shrink-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:block">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-slate-900 p-2 text-white">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="font-semibold text-slate-900">CollabGlam</div>
-              <div className="text-xs text-slate-500">Admin Mail Console</div>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-xl bg-slate-50 p-3">
-            <div className="font-medium text-slate-900">
-              {mailboxScope?.actor?.name || config.title}
-            </div>
-            <div className="mt-1 text-sm text-slate-500">
-              {config.title}
-            </div>
-            <div className="mt-1 text-xs text-slate-500">
-              {loadingScope ? "Loading scope..." : getScopeText(mailboxScope?.scope?.type)}
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-2">
-            <SidebarButton
-              icon={<LayoutGrid className="h-4 w-4" />}
-              label="Outreach"
-              active={activeTab === "outreach"}
-              onClick={() => setActiveTab("outreach")}
-            />
-            <SidebarButton
-              icon={<FileText className="h-4 w-4" />}
-              label="Templates"
-              active={activeTab === "templates"}
-              onClick={() => setActiveTab("templates")}
-            />
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1 space-y-4">
-          {apiError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {apiError}
-            </div>
-          ) : null}
-
-          {bannerMessage ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {bannerMessage}
-            </div>
-          ) : null}
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {activeTab === "templates" ? "Templates" : "Outreach"}
-                </div>
-                <h1 className="mt-3 text-2xl font-semibold text-slate-900">
-                  {activeTab === "templates" ? "Templates" : "Admin Outreach"}
-                </h1>
-                <p className="mt-1 text-sm text-slate-500">
-                  {activeTab === "templates"
-                    ? "Create, update, and manage reusable email templates."
-                    : "Select recipients, review threads, and send through Email Editor."}
-                </p>
+      <div className="mx-auto max-w-[1800px] px-4 py-4 sm:px-6 lg:px-8">
+        <header className="rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                <Sparkles className="h-3.5 w-3.5" />
+                CollabGlam Admin Mail Console
               </div>
+              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                Manage conversations first, actions second
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-slate-500">
+                Threads and active conversations now stay front-and-center, while
+                compose tools and recipients live in a focused side panel.
+              </p>
+            </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <TopToggle
+                value={activeTab}
+                onChange={setActiveTab}
+                options={[
+                  { value: "mails", label: "Mails", icon: <Mail className="h-4 w-4" /> },
+                  {
+                    value: "templates",
+                    label: "Templates",
+                    icon: <FileText className="h-4 w-4" />,
+                  },
+                ]}
+              />
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 {loadingScope ? (
-                  <span className="inline-flex items-center gap-2">
+                  <div className="inline-flex items-center gap-2 text-sm text-slate-500">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading scope...
-                  </span>
+                  </div>
                 ) : (
                   <>
-                    <div className="font-semibold">
+                    <div className="text-sm font-semibold text-slate-900">
                       {mailboxScope?.actor?.name || config.title}
                     </div>
-                    <div className="text-slate-500">
+                    <div className="mt-1 text-xs text-slate-500">
                       {config.title} · {getScopeText(mailboxScope?.scope?.type)}
                     </div>
                   </>
                 )}
               </div>
             </div>
+          </div>
+        </header>
 
-            {activeTab === "outreach" ? (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <SimpleStat
-                  icon={<Users className="h-4 w-4" />}
-                  label="Recipients"
-                  value={String(totalRecipients)}
+        {apiError ? (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {apiError}
+          </div>
+        ) : null}
+
+        {bannerMessage ? (
+          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {bannerMessage}
+          </div>
+        ) : null}
+
+        {activeTab === "mails" ? (
+          <>
+            <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                icon={<Users className="h-4 w-4" />}
+                label="Recipients"
+                value={String(totalRecipients)}
+                helper="Loaded recipients"
+              />
+              <MetricCard
+                icon={<Send className="h-4 w-4" />}
+                label="Sent"
+                value={String(sentCount)}
+                helper="Successful deliveries"
+              />
+              <MetricCard
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                label="Replies"
+                value={String(replyCount)}
+                helper="Inbound responses"
+              />
+              <MetricCard
+                icon={<Inbox className="h-4 w-4" />}
+                label="Selected"
+                value={String(selectedCount)}
+                helper="Ready for compose"
+              />
+            </section>
+
+            <section className="mt-6 grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+              <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                <PanelHeader
+                  title="Threads"
+                  subtitle="Primary inbox view"
+                  actions={
+                    <button
+                      onClick={loadThreadsFromApi}
+                      disabled={loadingThreads}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <RefreshCcw
+                        className={cn("h-4 w-4", loadingThreads && "animate-spin")}
+                      />
+                      Refresh
+                    </button>
+                  }
                 />
-                <SimpleStat
-                  icon={<Send className="h-4 w-4" />}
-                  label="Sent"
-                  value={String(sentCount)}
-                />
-                <SimpleStat
-                  icon={<CheckCircle2 className="h-4 w-4" />}
-                  label="Replies"
-                  value={String(repliedCount)}
-                />
-              </div>
-            ) : null}
-          </section>
 
-          {activeTab === "outreach" ? (
-            <>
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="grid gap-3 lg:grid-cols-[1fr_220px_auto_auto]">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={pipelineSelectionMode}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {uploadingCsv ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
-                    {uploadingCsv ? "Reading..." : "Upload CSV"}
-                  </button>
-
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none"
-                  >
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name} · {template.visibility}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button
-                    onClick={openComposeEditor}
-                    disabled={
-                      !mailboxScope?.scope?.canCompose ||
-                      (!selectedRecipientIds.length && !recipients.length)
-                    }
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Mail className="h-4 w-4" />
-                    Open Email Editor
-                  </button>
-
-                  <button
-                    onClick={loadThreadsFromApi}
-                    disabled={loadingThreads}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <RefreshCcw
-                      className={cn("h-4 w-4", loadingThreads && "animate-spin")}
-                    />
-                    Refresh
-                  </button>
-                </div>
-
-                {uploadSummary ? (
-                  <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    {uploadSummary.fileName} · {uploadSummary.importedRows} imported ·{" "}
-                    {uploadSummary.invalidRows + uploadSummary.duplicateRows} skipped
-                  </div>
-                ) : null}
-              </section>
-
-              <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1.3fr]">
-                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-slate-900">Recipients</h2>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={exportRecipients}
-                        disabled={!recipients.length}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <FileSpreadsheet className="h-4 w-4" />
-                        Export
-                      </button>
-                      <button
-                        onClick={clearRecipients}
-                        disabled={!recipients.length}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="relative mb-3">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      value={recipientSearch}
-                      onChange={(e) => setRecipientSearch(e.target.value)}
-                      placeholder="Search recipients"
-                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none"
-                    />
-                  </div>
-
-                  {!filteredRecipients.length ? (
-                    <SimpleEmpty
-                      icon={<Users className="h-5 w-5" />}
-                      title="No recipients"
-                      description="Upload CSV or load pipeline recipients."
-                    />
-                  ) : (
-                    <div className="max-h-[540px] space-y-2 overflow-y-auto">
-                      {filteredRecipients.map((recipient) => {
-                        const checked = selectedRecipientIds.includes(recipient.id);
-
-                        return (
-                          <button
-                            key={recipient.id}
-                            onClick={() => toggleRecipient(recipient.id)}
-                            className={cn(
-                              "w-full rounded-xl border p-3 text-left transition",
-                              checked
-                                ? "border-slate-900 bg-slate-50"
-                                : "border-slate-200 bg-white hover:bg-slate-50"
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="truncate font-medium text-slate-900">
-                                  {recipient.name}
-                                </div>
-                                <div className="truncate text-sm text-slate-500">
-                                  {recipient.email}
-                                </div>
-                                <div className="mt-1 text-xs text-slate-500">
-                                  {recipient.company || recipient.niche || "Recipient"}
-                                </div>
-                              </div>
-
-                              <span className="text-xs font-medium text-slate-500">
-                                {recipient.status}
-                              </span>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-slate-900">Threads</h2>
-                    <span className="text-sm text-slate-500">
-                      {loadingThreads ? "Loading..." : `${filteredThreads.length}`}
-                    </span>
-                  </div>
-
-                  <div className="relative mb-3">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      value={threadSearch}
-                      onChange={(e) => setThreadSearch(e.target.value)}
-                      placeholder="Search threads"
-                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none"
-                    />
-                  </div>
-
-                  {!filteredThreads.length ? (
-                    <SimpleEmpty
-                      icon={<Inbox className="h-5 w-5" />}
-                      title="No threads"
-                      description="Threads will show here after emails are sent."
-                    />
-                  ) : (
-                    <div className="max-h-[540px] space-y-2 overflow-y-auto">
-                      {filteredThreads.map((thread) => {
-                        const active = selectedThread?.id === thread.id;
-
-                        return (
-                          <button
-                            key={thread.id}
-                            onClick={() => setSelectedThreadId(thread.id)}
-                            className={cn(
-                              "w-full rounded-xl border p-3 text-left transition",
-                              active
-                                ? "border-slate-900 bg-slate-50"
-                                : "border-slate-200 bg-white hover:bg-slate-50"
-                            )}
-                          >
-                            <div className="font-medium text-slate-900">
-                              {thread.recipientName}
-                            </div>
-                            <div className="mt-1 truncate text-sm text-slate-500">
-                              {thread.subject}
-                            </div>
-                            <div className="mt-2 text-xs text-slate-500">
-                              {thread.ownerAdminName || thread.ownerAdminEmail || "Admin"} ·{" "}
-                              {thread.lastMessageAt}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  {selectedThread ? (
-                    <>
-                      <div className="border-b border-slate-200 pb-4">
-                        <h2 className="text-lg font-semibold text-slate-900">
-                          {selectedThread.subject}
-                        </h2>
-                        <div className="mt-1 text-sm text-slate-500">
-                          {selectedThread.recipientEmail}
-                        </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          {selectedThread.ownerAdminName ||
-                            selectedThread.ownerAdminEmail ||
-                            "Admin"}
-                          {selectedThread.senderEmail ? ` · ${selectedThread.senderEmail}` : ""}
-                        </div>
-                      </div>
-
-                      <div className="max-h-[430px] space-y-3 overflow-y-auto py-4">
-                        {loadingMessages ? (
-                          <div className="flex items-center justify-center py-10 text-slate-500">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Loading messages...
-                          </div>
-                        ) : selectedThread.messages.length ? (
-                          selectedThread.messages.map((message) => {
-                            const isExecutive = message.role === "executive";
-
-                            return (
-                              <div
-                                key={message.id}
-                                className={cn(
-                                  "flex",
-                                  isExecutive ? "justify-end" : "justify-start"
-                                )}
-                              >
-                                <div
-                                  className={cn(
-                                    "max-w-[90%] rounded-2xl px-4 py-3",
-                                    isExecutive
-                                      ? "bg-slate-900 text-white"
-                                      : "border border-slate-200 bg-slate-50 text-slate-900"
-                                  )}
-                                >
-                                  <div className="mb-2 flex items-center gap-2 text-xs opacity-80">
-                                    <UserCircle2 className="h-3.5 w-3.5" />
-                                    <span>{message.sender}</span>
-                                    <span>•</span>
-                                    <span>{message.time}</span>
-                                  </div>
-                                  <p className="whitespace-pre-wrap text-sm leading-6">
-                                    {message.body}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <SimpleEmpty
-                            icon={<MessageSquare className="h-5 w-5" />}
-                            title="No messages"
-                            description="This thread does not have messages yet."
-                          />
-                        )}
-                      </div>
-
-                      <div className="border-t border-slate-200 pt-4">
-                        <button
-                          onClick={openReplyEditor}
-                          disabled={!mailboxScope?.scope?.canReply}
-                          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Send className="h-4 w-4" />
-                          Open Reply Editor
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <SimpleEmpty
-                      icon={<MessageSquare className="h-5 w-5" />}
-                      title="No thread selected"
-                      description="Choose a thread to see the conversation."
-                    />
-                  )}
-                </section>
-              </div>
-            </>
-          ) : (
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Templates</h2>
-                  <p className="text-sm text-slate-500">
-                    This page only shows template-related things.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={openNewTemplateForm}
-                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                  >
-                    <Plus className="h-4 w-4" />
-                    New Template
-                  </button>
-
-                  <button
-                    onClick={openEditTemplateForm}
-                    disabled={!selectedTemplate}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Save className="h-4 w-4" />
-                    Edit
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      if (!selectedTemplate) return;
-                      await deleteSelectedTemplate();
-                    }}
-                    disabled={!selectedTemplate}
-                    className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-4 flex gap-3">
-                <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={templateSearch}
-                    onChange={(e) => setTemplateSearch(e.target.value)}
-                    placeholder="Search templates"
-                    className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none"
+                <div className="mt-4">
+                  <SearchField
+                    value={threadSearch}
+                    onChange={setThreadSearch}
+                    placeholder="Search threads, recipient, subject..."
                   />
                 </div>
 
+                <div className="mt-4 max-h-[760px] space-y-2 overflow-y-auto pr-1">
+                  {filteredThreads.length ? (
+                    filteredThreads.map((thread) => (
+                      <ThreadListItem
+                        key={thread.id}
+                        thread={thread}
+                        active={selectedThread?.id === thread.id}
+                        onClick={() => setSelectedThreadId(thread.id)}
+                      />
+                    ))
+                  ) : (
+                    <EmptyState
+                      icon={<Inbox className="h-5 w-5" />}
+                      title="No threads found"
+                      description="Sent conversations will appear here."
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex min-h-[760px] flex-col rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                {selectedThread ? (
+                  <>
+                    <div className="border-b border-slate-200 px-5 py-5">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <StatusPill label={selectedThread.status} />
+                            <span className="text-xs text-slate-500">
+                              Last update · {selectedThread.lastMessageAt}
+                            </span>
+                          </div>
+
+                          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+                            {selectedThread.subject}
+                          </h2>
+
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+                            <span>{selectedThread.recipientEmail}</span>
+                            <span className="hidden sm:inline">•</span>
+                            <span>
+                              {selectedThread.ownerAdminName ||
+                                selectedThread.ownerAdminEmail ||
+                                "Admin"}
+                            </span>
+                            {selectedThread.senderEmail ? (
+                              <>
+                                <span className="hidden sm:inline">•</span>
+                                <span>{selectedThread.senderEmail}</span>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={openReplyEditor}
+                            disabled={!mailboxScope?.scope?.canReply}
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Send className="h-4 w-4" />
+                            Reply
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto px-5 py-5">
+                      {loadingMessages ? (
+                        <div className="flex h-full items-center justify-center text-slate-500">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading conversation...
+                        </div>
+                      ) : selectedThread.messages.length ? (
+                        <div className="space-y-4">
+                          {selectedThread.messages.map((message) => (
+                            <MessageBubble key={message.id} message={message} />
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyState
+                          icon={<MessageSquare className="h-5 w-5" />}
+                          title="No messages yet"
+                          description="Once this thread has messages, the full conversation will appear here."
+                        />
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-200 px-5 py-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-slate-500">
+                          Conversation is prioritized here so replies are always visible before actions.
+                        </p>
+                        <button
+                          onClick={openReplyEditor}
+                          disabled={!mailboxScope?.scope?.canReply}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Mail className="h-4 w-4" />
+                          Open Reply Editor
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex h-full items-center justify-center p-6">
+                    <EmptyState
+                      icon={<MessageSquare className="h-5 w-5" />}
+                      title="Select a thread"
+                      description="Choose a thread from the left to read the conversation."
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <PanelHeader
+                    title="Compose tools"
+                    subtitle="Templates, upload and send"
+                  />
+
+                  <div className="mt-4 space-y-3">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Active template
+                      </label>
+                      <select
+                        value={selectedTemplateId}
+                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                      >
+                        {templates.map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.name} · {template.visibility}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedTemplate ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-sm font-medium text-slate-900">
+                          {selectedTemplate.name}
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-xs text-slate-500">
+                          {selectedTemplate.subject || "(no subject)"}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={pipelineSelectionMode}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {uploadingCsv ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        {uploadingCsv ? "Reading..." : "Upload CSV"}
+                      </button>
+
+                      <button
+                        onClick={openComposeEditor}
+                        disabled={!mailboxScope?.scope?.canCompose}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Mail className="h-4 w-4" />
+                        Compose Mail
+                      </button>
+                    </div>
+
+                    {pipelineSelectionMode ? (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        Pipeline recipient mode is active. CSV upload is disabled and send uses selected pipeline IDs.
+                      </div>
+                    ) : null}
+
+                    {uploadSummary ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                        <div className="font-medium text-slate-900">{uploadSummary.fileName}</div>
+                        <div className="mt-1 text-xs">
+                          {uploadSummary.importedRows} imported ·{" "}
+                          {uploadSummary.invalidRows} invalid ·{" "}
+                          {uploadSummary.duplicateRows} duplicates
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                  <PanelHeader
+                    title="Recipients"
+                    subtitle="Selection panel"
+                    actions={
+                      <div className="flex gap-2">
+                        <button
+                          onClick={exportRecipients}
+                          disabled={!recipients.length}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <FileSpreadsheet className="h-4 w-4" />
+                          Export
+                        </button>
+                        <button
+                          onClick={clearRecipients}
+                          disabled={!recipients.length}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Clear
+                        </button>
+                      </div>
+                    }
+                  />
+
+                  <div className="mt-4">
+                    <SearchField
+                      value={recipientSearch}
+                      onChange={setRecipientSearch}
+                      placeholder="Search recipients..."
+                    />
+                  </div>
+
+                  <div className="mt-4 max-h-[480px] space-y-2 overflow-y-auto pr-1">
+                    {filteredRecipients.length ? (
+                      filteredRecipients.map((recipient) => (
+                        <RecipientListItem
+                          key={recipient.id}
+                          recipient={recipient}
+                          checked={selectedRecipientIds.includes(recipient.id)}
+                          onClick={() => toggleRecipient(recipient.id)}
+                        />
+                      ))
+                    ) : (
+                      <EmptyState
+                        icon={<Users className="h-5 w-5" />}
+                        title="No recipients"
+                        description="Upload a CSV or load pipeline recipients to start composing."
+                      />
+                    )}
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">
+                          {selectedCount} selected
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          These recipients will prefill compose.
+                        </div>
+                      </div>
+                      <button
+                        onClick={openComposeEditor}
+                        disabled={!mailboxScope?.scope?.canCompose}
+                        className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        Use
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="mt-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  <FileText className="h-3.5 w-3.5" />
+                  Template library
+                </div>
+                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+                  Templates
+                </h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  Keep template management on a separate view so the inbox stays focused on active conversations.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
                 <button
                   onClick={loadTemplates}
                   disabled={loadingTemplates}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <RefreshCcw
                     className={cn("h-4 w-4", loadingTemplates && "animate-spin")}
                   />
                   Refresh
                 </button>
+
+                <button
+                  onClick={openNewTemplateForm}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+                >
+                  <Plus className="h-4 w-4" />
+                  New Template
+                </button>
+
+                <button
+                  onClick={openEditTemplateForm}
+                  disabled={!selectedTemplate}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Save className="h-4 w-4" />
+                  Edit
+                </button>
+
+                <button
+                  onClick={deleteSelectedTemplate}
+                  disabled={!selectedTemplate}
+                  className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <SearchField
+                value={templateSearch}
+                onChange={setTemplateSearch}
+                placeholder="Search templates by name, body, subject or visibility..."
+              />
+            </div>
+
+            <div className="mt-5 grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-3">
+                {filteredTemplates.length ? (
+                  <div className="max-h-[700px] space-y-2 overflow-y-auto pr-1">
+                    {filteredTemplates.map((template) => {
+                      const active = selectedTemplate?.id === template.id;
+
+                      return (
+                        <button
+                          key={template.id}
+                          onClick={() => setSelectedTemplateId(template.id)}
+                          className={cn(
+                            "w-full rounded-2xl border bg-white p-4 text-left transition",
+                            active
+                              ? "border-slate-900 bg-slate-50"
+                              : "border-slate-200 hover:bg-slate-50"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-slate-900">
+                                {template.name}
+                              </div>
+                              <div className="mt-1 text-xs uppercase tracking-wide text-slate-500">
+                                {template.visibility}
+                              </div>
+                            </div>
+                            <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                          </div>
+                          <div className="mt-2 truncate text-sm text-slate-500">
+                            {template.subject || "(no subject)"}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<FileText className="h-5 w-5" />}
+                    title="No templates"
+                    description="Create a template to start using it in compose."
+                  />
+                )}
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  {!filteredTemplates.length ? (
-                    <SimpleEmpty
-                      icon={<FileText className="h-5 w-5" />}
-                      title="No templates"
-                      description="Create a template to start using it in Email Editor."
-                    />
-                  ) : (
-                    <div className="max-h-[560px] space-y-2 overflow-y-auto">
-                      {filteredTemplates.map((template) => {
-                        const active = selectedTemplate?.id === template.id;
-
-                        return (
-                          <button
-                            key={template.id}
-                            onClick={() => setSelectedTemplateId(template.id)}
-                            className={cn(
-                              "w-full rounded-xl border bg-white p-3 text-left transition",
-                              active
-                                ? "border-slate-900 bg-slate-50"
-                                : "border-slate-200 hover:bg-slate-50"
-                            )}
-                          >
-                            <div className="font-medium text-slate-900">
-                              {template.name}
-                            </div>
-                            <div className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-                              {template.visibility}
-                            </div>
-                            <div className="mt-2 truncate text-sm text-slate-500">
-                              {template.subject || "(no subject)"}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  {templateFormOpen ? (
-                    <div className="grid gap-3">
+              <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                {templateFormOpen ? (
+                  <div className="grid gap-4">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Template name
+                      </label>
                       <input
                         value={templateForm.name}
                         onChange={(e) =>
@@ -1532,10 +1516,15 @@ export default function Page() {
                             name: e.target.value,
                           }))
                         }
-                        placeholder="Template name"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                        placeholder="For example: Initial creator outreach"
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400"
                       />
+                    </div>
 
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Subject
+                      </label>
                       <input
                         value={templateForm.subject}
                         onChange={(e) =>
@@ -1544,10 +1533,15 @@ export default function Page() {
                             subject: e.target.value,
                           }))
                         }
-                        placeholder="Subject"
-                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                        placeholder="Email subject"
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400"
                       />
+                    </div>
 
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Body
+                      </label>
                       <textarea
                         value={templateForm.body}
                         onChange={(e) =>
@@ -1556,93 +1550,96 @@ export default function Page() {
                             body: e.target.value,
                           }))
                         }
-                        placeholder="Template body"
-                        rows={10}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none"
+                        placeholder="Write your reusable template body..."
+                        rows={14}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none transition focus:border-slate-400"
                       />
+                    </div>
 
-                      <div className="flex gap-2">
-                        <button
-                          onClick={saveTemplate}
-                          disabled={templateFormSaving}
-                          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {templateFormSaving ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Save className="h-4 w-4" />
-                          )}
-                          Save Template
-                        </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={saveTemplate}
+                        disabled={templateFormSaving}
+                        className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {templateFormSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                        Save Template
+                      </button>
 
-                        <button
-                          onClick={() => setTemplateFormOpen(false)}
-                          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
-                        >
-                          Cancel
-                        </button>
+                      <button
+                        onClick={() => setTemplateFormOpen(false)}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : selectedTemplate ? (
+                  <div>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          {selectedTemplate.visibility}
+                        </div>
+                        <h3 className="mt-3 text-2xl font-semibold text-slate-900">
+                          {selectedTemplate.name}
+                        </h3>
+                        <p className="mt-2 text-sm text-slate-500">
+                          Use this in compose or edit it here.
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setEditorMode("compose");
+                          setEditorPayload({
+                            toLabel: "",
+                            subject: selectedTemplate.subject,
+                            initialBody: selectedTemplate.body,
+                            toAvatar: "",
+                          });
+                          setEditorOpen(true);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        <Mail className="h-4 w-4" />
+                        Open in Editor
+                      </button>
+                    </div>
+
+                    <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Subject
+                      </div>
+                      <div className="mt-2 text-sm font-medium text-slate-900">
+                        {selectedTemplate.subject || "(no subject)"}
                       </div>
                     </div>
-                  ) : selectedTemplate ? (
-                    <>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-semibold text-slate-900">
-                            {selectedTemplate.name}
-                          </h3>
-                          <div className="mt-1 text-sm text-slate-500">
-                            {selectedTemplate.visibility} template
-                          </div>
-                        </div>
 
-                        <button
-                          onClick={() => {
-                            setEditorMode("compose");
-                            setEditorPayload({
-                              toLabel: "",
-                              subject: selectedTemplate.subject,
-                              initialBody: selectedTemplate.body,
-                              toAvatar: "",
-                            });
-                            setEditorOpen(true);
-                          }}
-                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
-                        >
-                          <Mail className="h-4 w-4" />
-                          Open in Editor
-                        </button>
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Body
                       </div>
-
-                      <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                        <div className="text-sm font-medium text-slate-900">
-                          Subject
-                        </div>
-                        <div className="mt-1 text-sm text-slate-600">
-                          {selectedTemplate.subject || "(no subject)"}
-                        </div>
+                      <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                        {selectedTemplate.body || "(empty)"}
                       </div>
-
-                      <div className="mt-4 rounded-xl bg-slate-50 p-4">
-                        <div className="text-sm font-medium text-slate-900">
-                          Body
-                        </div>
-                        <div className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
-                          {selectedTemplate.body || "(empty)"}
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <SimpleEmpty
-                      icon={<FileText className="h-5 w-5" />}
-                      title="No template selected"
-                      description="Choose a template from the left side."
-                    />
-                  )}
-                </div>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<FileText className="h-5 w-5" />}
+                    title="No template selected"
+                    description="Pick a template from the left side."
+                  />
+                )}
               </div>
-            </section>
-          )}
-        </main>
+            </div>
+          </section>
+        )}
       </div>
 
       <EmailEditor
@@ -1673,14 +1670,136 @@ export default function Page() {
   );
 }
 
-function SidebarButton({
+function TopToggle<T extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  options: Array<{
+    value: T;
+    label: string;
+    icon?: React.ReactNode;
+  }>;
+}) {
+  return (
+    <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-100 p-1">
+      {options.map((option) => {
+        const active = option.value === value;
+
+        return (
+          <button
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition",
+              active
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
+            )}
+          >
+            {option.icon}
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MetricCard({
   icon,
   label,
-  active,
-  onClick,
+  value,
+  helper,
 }: {
   icon: React.ReactNode;
   label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="inline-flex rounded-xl bg-slate-100 p-2 text-slate-700">
+        {icon}
+      </div>
+      <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+        {value}
+      </div>
+      <div className="mt-1 text-sm text-slate-500">{helper}</div>
+    </div>
+  );
+}
+
+function PanelHeader({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+        {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
+      </div>
+      {actions}
+    </div>
+  );
+}
+
+function SearchField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-slate-400"
+      />
+    </div>
+  );
+}
+
+function StatusPill({ label }: { label: string }) {
+  const tone =
+    label === "Replied"
+      ? "bg-emerald-100 text-emerald-700"
+      : label === "Closed"
+        ? "bg-slate-200 text-slate-700"
+        : label === "Archived"
+          ? "bg-amber-100 text-amber-700"
+          : "bg-blue-100 text-blue-700";
+
+  return (
+    <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", tone)}>
+      {label}
+    </span>
+  );
+}
+
+function ThreadListItem({
+  thread,
+  active,
+  onClick,
+}: {
+  thread: Thread;
   active?: boolean;
   onClick?: () => void;
 }) {
@@ -1688,39 +1807,101 @@ function SidebarButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition",
+        "w-full rounded-2xl border p-4 text-left transition",
         active
-          ? "bg-slate-900 text-white"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          ? "border-slate-900 bg-slate-50"
+          : "border-slate-200 bg-white hover:bg-slate-50"
       )}
     >
-      {icon}
-      <span>{label}</span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium text-slate-900">
+            {thread.recipientName}
+          </div>
+          <div className="mt-1 truncate text-sm text-slate-500">
+            {thread.subject}
+          </div>
+        </div>
+        <StatusPill label={thread.status} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+        <span>{thread.ownerAdminName || thread.ownerAdminEmail || "Admin"}</span>
+        <span>•</span>
+        <span>{thread.lastMessageAt}</span>
+      </div>
     </button>
   );
 }
 
-function SimpleStat({
-  icon,
-  label,
-  value,
+function RecipientListItem({
+  recipient,
+  checked,
+  onClick,
 }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
+  recipient: Recipient;
+  checked?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="mb-2 inline-flex rounded-lg bg-white p-2 text-slate-700">
-        {icon}
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-2xl border p-3 text-left transition",
+        checked
+          ? "border-slate-900 bg-slate-50"
+          : "border-slate-200 bg-white hover:bg-slate-50"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium text-slate-900">{recipient.name}</div>
+          <div className="truncate text-sm text-slate-500">{recipient.email}</div>
+          <div className="mt-1 truncate text-xs text-slate-500">
+            {recipient.company || recipient.niche || "Recipient"}
+          </div>
+        </div>
+        <div className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
+          {recipient.status}
+        </div>
       </div>
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className="text-xl font-semibold text-slate-900">{value}</div>
+    </button>
+  );
+}
+
+function MessageBubble({ message }: { message: Message }) {
+  const isExecutive = message.role === "executive";
+
+  return (
+    <div className={cn("flex", isExecutive ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "max-w-[88%] rounded-3xl px-4 py-3 shadow-sm",
+          isExecutive
+            ? "bg-slate-900 text-white"
+            : "border border-slate-200 bg-slate-50 text-slate-900"
+        )}
+      >
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs opacity-80">
+          <UserCircle2 className="h-3.5 w-3.5" />
+          <span>{message.sender}</span>
+          <span>•</span>
+          <span>{message.time}</span>
+          {message.providerStatus ? (
+            <>
+              <span>•</span>
+              <span>{message.providerStatus}</span>
+            </>
+          ) : null}
+        </div>
+
+        <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
+      </div>
     </div>
   );
 }
 
-function SimpleEmpty({
+function EmptyState({
   icon,
   title,
   description,
@@ -1730,10 +1911,10 @@ function SimpleEmpty({
   description: string;
 }) {
   return (
-    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-      <div className="mb-3 rounded-xl bg-white p-3 text-slate-500">{icon}</div>
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+      <div className="mb-3 rounded-2xl bg-white p-3 text-slate-500">{icon}</div>
       <div className="font-semibold text-slate-900">{title}</div>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
+      <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>
     </div>
   );
 }
