@@ -59,7 +59,7 @@ export const ADMIN_MODULES: AdminModule[] = [
     ],
   },
 
-  { key: "emails", label: "Emails", href: "/admin/emails", icon: MailCheckIcon },
+  // { key: "emails", label: "Emails", href: "/admin/emails", icon: MailCheckIcon },
   { key: "employees", label: "Employees", href: "/admin/employees", icon: Users },
   { key: "inbound-emails", label: "Inbound Emails", href: "/admin/inbound-emails", icon: MailCheckIcon },
 
@@ -94,13 +94,13 @@ export const ADMIN_MODULES: AdminModule[] = [
 
   { key: "messages", label: "Messages", href: "/admin/messages", icon: MessageSquare },
 
-  {
-    key: "missingemail",
-    label: "Missing Email",
-    href: "/admin/missingemail",
-    icon: MailCheckIcon,
-    aliases: ["missing-email"],
-  },
+  // {
+  //   key: "missingemail",
+  //   label: "Missing Email",
+  //   href: "/admin/missingemail",
+  //   icon: MailCheckIcon,
+  //   aliases: ["missing-email"],
+  // },
 
   {
     key: "modash",

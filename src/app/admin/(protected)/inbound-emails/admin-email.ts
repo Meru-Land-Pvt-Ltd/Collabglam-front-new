@@ -250,9 +250,7 @@ export async function fetchEmailThreads(params?: FetchThreadsParams) {
 }
 
 export async function fetchThreadMessages(threadId: string) {
-  return get<ThreadMessagesResponse>(
-    `/admin-email/threads/${threadId}/messages`
-  );
+  return get<ThreadMessagesResponse>(`/admin-email/threads/${threadId}/messages`);
 }
 
 export async function replyToEmailThread(input: ReplyToThreadInput) {
