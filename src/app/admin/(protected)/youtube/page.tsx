@@ -786,6 +786,27 @@ function GlobalSearchCard({
           </div>
 
           <div className="flex flex-col sm:flex-row xl:flex-col gap-2 xl:w-[230px]">
+            {item.channelId ? (
+              <Link
+                href={`/mediakit/${encodeURIComponent(item.channelId)}?platform=${encodeURIComponent(
+                  'youtube'
+                )}&handle=${encodeURIComponent(String(item.handle || ''))}`}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-800 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <Info className="w-4 h-4" />
+                Load Advanced Insights
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-400 text-sm font-semibold cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Info className="w-4 h-4" />
+                Load Advanced Insights
+              </button>
+            )}
+
             {savedProfile?.handleId ? (
               <button
                 type="button"
