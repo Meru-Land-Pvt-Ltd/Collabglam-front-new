@@ -5,15 +5,18 @@ import {
   BadgeCheck,
   ChevronLeft,
   ChevronRight,
-  DollarSign,
   GitBranch,
   Info,
   RefreshCw,
   Search,
-  Settings2,
   Shield,
   Users,
 } from "lucide-react";
+import {
+  ROLE_PERMISSION_SECTIONS,
+  canonicalizeModuleKey,
+  getAdminModule,
+} from "@/app/admin/components/admin-access";
 
 type AdminStatus = "pending" | "active" | "inactive" | "suspended";
 type PermissionLevel = "none" | "read" | "write";
@@ -46,6 +49,7 @@ type AdminRow = {
   createdAt?: string;
   updatedAt?: string;
   access?: AdminAccess[];
+  permissions?: AdminAccess[];
   parentAdmin?: string | AdminMini | null;
   rootAdmin?: string | AdminMini | null;
   createdBy?: string | AdminMini | null;
@@ -64,18 +68,6 @@ type MeResponse = {
   rootAdmin?: string | AdminMini | null;
 };
 
-type PermissionItem = {
-  key: string;
-  label: string;
-};
-
-type PermissionSection = {
-  key: string;
-  title: string;
-  icon: React.ElementType;
-  items: PermissionItem[];
-};
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -90,55 +82,6 @@ const ROLE_OPTIONS: Array<{ value: AdminRole; label: string }> = [
   { value: "revenue_head", label: "Revenue Head" },
   { value: "ime", label: "IME" },
   { value: "bme", label: "BME" },
-];
-
-const permissionSections: PermissionSection[] = [
-  {
-    key: "brand-campaign",
-    title: "Brand & Campaign",
-    icon: Shield,
-    items: [
-      { key: "brands", label: "Brands" },
-      { key: "campaigns", label: "All Campaigns" },
-      { key: "youtube-handle", label: "Youtube Handle" },
-      { key: "modash-data", label: "Modash Data" },
-    ],
-  },
-  {
-    key: "influencer-management",
-    title: "Influencer Management",
-    icon: Users,
-    items: [
-      { key: "influencers", label: "Influencers" },
-      { key: "influencer-pipeline", label: "Influencer Pipeline" },
-      { key: "invited-influencer", label: "Invited Influencer" },
-      { key: "influencer-email", label: "Influencer-Email" },
-      { key: "missing-email", label: "Missing-Email" },
-    ],
-  },
-  {
-    key: "finance-revenue",
-    title: "Finance & Revenue",
-    icon: DollarSign,
-    items: [
-      { key: "subscriptions", label: "Subscriptions" },
-      { key: "invoice-details", label: "Invoice Details" },
-      { key: "payment-notification", label: "Payment Notification" },
-    ],
-  },
-  {
-    key: "platform-administration",
-    title: "Platform Administration",
-    icon: Settings2,
-    items: [
-      { key: "notifications", label: "Notifications" },
-      { key: "disputes", label: "Disputes" },
-      { key: "emails", label: "E-Mails" },
-      { key: "employees", label: "Employees" },
-      { key: "inbound-emails", label: "Inbound Emails" },
-      { key: "messages", label: "Message" },
-    ],
-  },
 ];
 
 const noBlueFocus =
@@ -158,7 +101,7 @@ function formatDT(value?: string) {
   return date.toLocaleString();
 }
 
-function normalizeKey(value: string) {
+function normalizeTextKey(value: string) {
   return String(value || "")
     .toLowerCase()
     .trim()
@@ -190,7 +133,7 @@ function getPermissionLevel(
   moduleKey: string
 ): PermissionLevel {
   const found = access.find(
-    (item) => normalizeKey(item.key) === normalizeKey(moduleKey)
+    (item) => canonicalizeModuleKey(item.key) === canonicalizeModuleKey(moduleKey)
   );
 
   if (!found) return "none";
@@ -225,6 +168,29 @@ function needsParentRevenueHead(inviterRole?: string, targetRole?: string) {
     String(inviterRole || "").toLowerCase() === "super_admin" &&
     ["ime", "bme"].includes(String(targetRole || "").toLowerCase())
   );
+}
+
+function canonicalizeAccessList(access: AdminAccess[] = []) {
+  const map = new Map<string, AdminAccess>();
+
+  for (const item of access) {
+    const module = getAdminModule(item.key);
+    const canonicalKey = module?.key || canonicalizeModuleKey(item.key);
+
+    if (!canonicalKey) continue;
+
+    const prev = map.get(canonicalKey);
+
+    map.set(canonicalKey, {
+      key: canonicalKey,
+      name: module?.label || item.name || canonicalKey,
+      isEdit: Boolean(prev?.isEdit || item.isEdit),
+      isDelete: Boolean(prev?.isDelete || item.isDelete),
+      isManager: Boolean(prev?.isManager || item.isManager),
+    });
+  }
+
+  return Array.from(map.values());
 }
 
 function StatusPill({ status }: { status: AdminStatus }) {
@@ -317,9 +283,19 @@ export default function AdminsPage() {
   const [editErr, setEditErr] = useState<string | null>(null);
 
   const currentRole = String(me?.role || "").toLowerCase();
-  const canViewAdmins = true;
-  const canEditAdmins = roleCanEdit(currentRole);
-  const canInviteAdmins = roleCanInvite(currentRole);
+
+  const myAccess = useMemo(() => {
+    const raw = (me?.permissions ?? me?.access ?? []) as AdminAccess[];
+    return canonicalizeAccessList(raw);
+  }, [me]);
+
+  const canViewAdmins =
+    currentRole === "super_admin" ||
+    currentRole === "revenue_head" ||
+    myAccess.some((item) => item.key === "role");
+
+  const canEditAdmins = roleCanEdit(currentRole) && canViewAdmins;
+  const canInviteAdmins = roleCanInvite(currentRole) && canViewAdmins;
 
   const selectedAdmin = useMemo(
     () => rows.find((row) => row._id === selectedId) || null,
@@ -351,7 +327,7 @@ export default function AdminsPage() {
     const visibleRoles = rows
       .map((row) => String(row.role || "").trim())
       .filter(Boolean)
-      .map((role) => normalizeKey(role));
+      .map((role) => normalizeTextKey(role));
 
     return Array.from(new Set(visibleRoles));
   }, [rows]);
@@ -371,11 +347,11 @@ export default function AdminsPage() {
       const matchesStatus =
         statusFilter === "all" ? true : status === statusFilter;
 
-      const normalizedRole = normalizeKey(String(row.role || ""));
+      const normalizedRole = normalizeTextKey(String(row.role || ""));
       const matchesRole =
         roleFilter === "all"
           ? true
-          : normalizedRole === normalizeKey(roleFilter);
+          : normalizedRole === normalizeTextKey(roleFilter);
 
       return matchesSearch && matchesStatus && matchesRole;
     });
@@ -400,22 +376,31 @@ export default function AdminsPage() {
       return;
     }
 
+    const nextAccess = canonicalizeAccessList(
+      Array.isArray(admin.access)
+        ? admin.access
+        : Array.isArray(admin.permissions)
+        ? admin.permissions
+        : []
+    );
+
     setSelectedId(admin._id);
     setEditName(admin.name || "");
     setEditRole((String(admin.role || "").toLowerCase() as AdminRole) || "");
     setEditStatus((admin.status || "pending") as AdminStatus);
-    setEditAccess(Array.isArray(admin.access) ? admin.access : []);
+    setEditAccess(nextAccess);
     setEditErr(null);
   }
 
   function buildAccessEntry(
     moduleKey: string,
-    label: string,
     level: PermissionLevel
   ): AdminAccess {
+    const module = getAdminModule(moduleKey);
+
     return {
-      key: moduleKey,
-      name: label,
+      key: module?.key || canonicalizeModuleKey(moduleKey),
+      name: module?.label || moduleKey,
       isEdit: level === "write",
       isDelete: false,
       isManager: false,
@@ -425,25 +410,24 @@ export default function AdminsPage() {
   function updateAccessState(
     setter: React.Dispatch<React.SetStateAction<AdminAccess[]>>,
     moduleKey: string,
-    label: string,
     level: PermissionLevel
   ) {
     setter((prev) => {
-      const index = prev.findIndex(
-        (item) => normalizeKey(item.key) === normalizeKey(moduleKey)
-      );
+      const canonicalKey = canonicalizeModuleKey(moduleKey);
+      const next = canonicalizeAccessList(prev);
+      const index = next.findIndex((item) => item.key === canonicalKey);
 
       if (level === "none") {
-        return prev.filter(
-          (item) => normalizeKey(item.key) !== normalizeKey(moduleKey)
-        );
+        return next.filter((item) => item.key !== canonicalKey);
       }
 
-      const nextValue = buildAccessEntry(moduleKey, label, level);
+      const nextValue = buildAccessEntry(moduleKey, level);
 
-      if (index === -1) return [...prev, nextValue];
+      if (index === -1) return canonicalizeAccessList([...next, nextValue]);
 
-      return prev.map((item, i) => (i === index ? { ...item, ...nextValue } : item));
+      return canonicalizeAccessList(
+        next.map((item, i) => (i === index ? { ...item, ...nextValue } : item))
+      );
     });
   }
 
@@ -502,8 +486,8 @@ export default function AdminsPage() {
       const nextRows = Array.isArray(data?.data)
         ? data.data
         : Array.isArray(data)
-          ? data
-          : [];
+        ? data
+        : [];
 
       setRows(nextRows);
 
@@ -587,7 +571,7 @@ export default function AdminsPage() {
         email,
         name: inviteName.trim() || undefined,
         role,
-        access: inviteAccess,
+        access: canonicalizeAccessList(inviteAccess),
         proxyEmail: proxyEmail || undefined,
       };
 
@@ -640,7 +624,7 @@ export default function AdminsPage() {
       const payload: Record<string, any> = {
         adminId: selectedId,
         status: editStatus,
-        access: editAccess,
+        access: canonicalizeAccessList(editAccess),
       };
 
       const trimmedName = editName.trim();
@@ -718,7 +702,7 @@ export default function AdminsPage() {
             Role & Permissions
           </h1>
           <p className="mt-1 text-sm text-black/60">
-            Hierarchy-based RBAC: Super Admin → Revenue Head → IME / BME
+            Sidebar and permission modules are now synced to the actual admin folder structure.
           </p>
 
           {!loadingMe && me ? (
@@ -831,7 +815,13 @@ export default function AdminsPage() {
             paginatedRows.map((admin) => {
               const active = selectedId === admin._id;
               const status = (admin.status || "pending") as AdminStatus;
-              const accessCount = Array.isArray(admin.access) ? admin.access.length : 0;
+              const accessCount = canonicalizeAccessList(
+                Array.isArray(admin.access)
+                  ? admin.access
+                  : Array.isArray(admin.permissions)
+                  ? admin.permissions
+                  : []
+              ).length;
 
               return (
                 <button
@@ -958,8 +948,7 @@ export default function AdminsPage() {
                   </div>
 
                   <p className="mt-2 text-base text-black/55">
-                    Configure what this admin can access inside their allowed
-                    hierarchy scope.
+                    Configure module access exactly according to the admin folder structure.
                   </p>
                 </div>
 
@@ -1100,7 +1089,7 @@ export default function AdminsPage() {
               </div>
 
               <div className="overflow-hidden rounded-[24px] border border-black/10 bg-white/80">
-                {permissionSections.map((section) => {
+                {ROLE_PERMISSION_SECTIONS.map((section) => {
                   const SectionIcon = section.icon;
 
                   return (
@@ -1115,29 +1104,29 @@ export default function AdminsPage() {
                         </span>
                       </div>
 
-                      {section.items.map((item) => (
-                        <div
-                          key={item.key}
-                          className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div className="text-base font-medium text-black">
-                            {item.label}
-                          </div>
+                      {section.items.map((itemKey) => {
+                        const module = getAdminModule(itemKey);
+                        if (!module) return null;
 
-                          <PermissionSwitch
-                            value={getPermissionLevel(editAccess, item.key)}
-                            disabled={!canEditAdmins}
-                            onChange={(next) =>
-                              updateAccessState(
-                                setEditAccess,
-                                item.key,
-                                item.label,
-                                next
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
+                        return (
+                          <div
+                            key={module.key}
+                            className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
+                          >
+                            <div className="text-base font-medium text-black">
+                              {module.label}
+                            </div>
+
+                            <PermissionSwitch
+                              value={getPermissionLevel(editAccess, module.key)}
+                              disabled={!canEditAdmins}
+                              onChange={(next) =>
+                                updateAccessState(setEditAccess, module.key, next)
+                              }
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -1285,7 +1274,7 @@ export default function AdminsPage() {
               ) : null}
 
               <div className="overflow-hidden rounded-[24px] border border-black/10 bg-white">
-                {permissionSections.map((section) => {
+                {ROLE_PERMISSION_SECTIONS.map((section) => {
                   const SectionIcon = section.icon;
 
                   return (
@@ -1300,28 +1289,28 @@ export default function AdminsPage() {
                         </span>
                       </div>
 
-                      {section.items.map((item) => (
-                        <div
-                          key={item.key}
-                          className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div className="text-base font-medium text-black">
-                            {item.label}
-                          </div>
+                      {section.items.map((itemKey) => {
+                        const module = getAdminModule(itemKey);
+                        if (!module) return null;
 
-                          <PermissionSwitch
-                            value={getPermissionLevel(inviteAccess, item.key)}
-                            onChange={(next) =>
-                              updateAccessState(
-                                setInviteAccess,
-                                item.key,
-                                item.label,
-                                next
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
+                        return (
+                          <div
+                            key={module.key}
+                            className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
+                          >
+                            <div className="text-base font-medium text-black">
+                              {module.label}
+                            </div>
+
+                            <PermissionSwitch
+                              value={getPermissionLevel(inviteAccess, module.key)}
+                              onChange={(next) =>
+                                updateAccessState(setInviteAccess, module.key, next)
+                              }
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}

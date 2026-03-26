@@ -1,19 +1,20 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import {
   ChevronDown,
   ExternalLink,
-  Filter,
-  Info,
   Mail,
   RefreshCw,
   Search,
   X,
+  Download,
+  Info,
+  Filter,
 } from 'lucide-react';
 import swal from 'sweetalert';
+import { post } from '@/lib/api';
 import { post } from '@/lib/api';
 import { Checkbox } from '@/components/animate-ui/components/radix/checkbox';
 
@@ -330,26 +331,11 @@ function isValidHandle(h: string) {
   return /^@[A-Za-z0-9._-]+$/.test(h);
 }
 
-function getSearchIntent(input: string) {
-  const raw = (input || '').trim();
-  if (!raw) return { raw: '', isHandle: false, handle: '' };
-
-  const explicitHandle = raw.startsWith('@') || /youtube\.com\/@/i.test(raw);
-  if (!explicitHandle) {
-    return { raw, isHandle: false, handle: '' };
-  }
-
-  const handle = normalizeHandle(raw);
-  return {
-    raw,
-    isHandle: isValidHandle(handle),
-    handle: isValidHandle(handle) ? handle : '',
-  };
-}
-
 function buildSavedSearchText(raw: string) {
-  const parsed = getSearchIntent(raw);
-  return parsed.isHandle ? parsed.handle : parsed.raw;
+  const v = (raw || '').trim();
+  if (!v) return '';
+  const isHandleish = v.startsWith('@') || /^[A-Za-z0-9._-]+$/.test(v);
+  return isHandleish ? normalizeHandle(v) : v;
 }
 
 function formatNumber(n?: number | null) {
@@ -391,16 +377,17 @@ function getCardId(p: InfluencerProfileDoc) {
   return p.handleId || p._id || p.channelId || p.handle || Math.random().toString(36).slice(2);
 }
 
+function getSelectId(p: InfluencerProfileDoc) {
+  return p.handleId || '';
+}
+
 function ytVideoUrl(videoId?: string) {
   if (!videoId) return '';
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
 function ytChannelUrl(p: InfluencerProfileDoc) {
-  if (p.handle) {
-    const handle = p.handle.startsWith('@') ? p.handle : `@${p.handle}`;
-    return `https://www.youtube.com/${handle}`;
-  }
+  if (p.handle) return `https://www.youtube.com/${p.handle.replace(/^@/, '@')}`;
   if (p.channelId) return `https://www.youtube.com/channel/${p.channelId}`;
   return '';
 }
@@ -459,9 +446,7 @@ function topicFromUrl(url: string) {
 }
 
 function cleanTopicLabel(s: string) {
-  return String(s || '')
-    .replace(/\s*\(.*?\)\s*$/, '')
-    .trim();
+  return String(s || '').replace(/\s*\(.*?\)\s*$/, '').trim();
 }
 
 function getTopicNames(p: InfluencerProfileDoc) {
@@ -509,8 +494,6 @@ function sortLabel(sortBy: SavedSortValue) {
   return found?.label || 'Relevance';
 }
 
-/* -------------------- Multi-country select -------------------- */
-
 function MultiCountrySelect({
   value,
   onChange,
@@ -527,7 +510,7 @@ function MultiCountrySelect({
     const s = q.trim().toLowerCase();
     if (!s) return COUNTRY_OPTIONS;
     return COUNTRY_OPTIONS.filter(
-      (c) => c.code.toLowerCase().includes(s) || c.name.toLowerCase().includes(s),
+      (c) => c.code.toLowerCase().includes(s) || c.name.toLowerCase().includes(s)
     );
   }, [q]);
 
@@ -537,11 +520,7 @@ function MultiCountrySelect({
     const el = btnRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setPos({
-      left: r.left,
-      top: r.bottom + 8,
-      width: r.width,
-    });
+    setPos({ left: r.left, top: r.bottom + 8, width: r.width });
   }
 
   function toggle(code: string) {
@@ -557,12 +536,12 @@ function MultiCountrySelect({
     updatePos();
 
     const onReflow = () => updatePos();
+    window.addEventListener('scroll', onReflow, true);
+    window.addEventListener('resize', onReflow);
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-
-    window.addEventListener('scroll', onReflow, true);
-    window.addEventListener('resize', onReflow);
     window.addEventListener('keydown', onKey);
 
     return () => {
@@ -579,7 +558,7 @@ function MultiCountrySelect({
           <div className="absolute inset-0 bg-black/10" onClick={() => setOpen(false)} />
 
           <div
-            className="fixed rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+            className="fixed overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
             style={{
               left: pos.left,
               top: pos.top,
@@ -587,11 +566,12 @@ function MultiCountrySelect({
               maxHeight: 'min(70vh, 520px)',
             }}
           >
-            <div className="p-3 border-b border-slate-200">
+            <div className="border-b border-slate-200 p-3">
               <input
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                placeholder="Search country"
                 placeholder="Search country"
                 autoFocus
               />
@@ -613,7 +593,7 @@ function MultiCountrySelect({
                 return (
                   <label
                     key={c.code}
-                    className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50"
                   >
                     <Checkbox checked={checked} onCheckedChange={() => toggle(c.code)} />
                     <span className="text-sm text-slate-800">{countryLabel(c.code)}</span>
@@ -622,14 +602,16 @@ function MultiCountrySelect({
               })}
 
               {!filtered.length ? (
-                <div className="px-2 py-6 text-center text-sm text-slate-500">No countries found</div>
+                <div className="px-2 py-6 text-center text-sm text-slate-500">
+                  No countries found
+                </div>
               ) : null}
             </div>
 
-            <div className="p-3 border-t border-slate-200 bg-slate-50">
+            <div className="border-t border-slate-200 bg-slate-50 p-3">
               <button
                 type="button"
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold"
+                className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                 onClick={() => setOpen(false)}
               >
                 Done
@@ -637,7 +619,7 @@ function MultiCountrySelect({
             </div>
           </div>
         </div>,
-        document.body,
+        document.body
       )
       : null;
 
@@ -655,9 +637,9 @@ function MultiCountrySelect({
           });
         }}
       >
-        <span className="text-sm text-slate-800 truncate">{summary}</span>
+        <span className="truncate text-sm text-slate-800">{summary}</span>
         <ChevronDown
-          className={`w-4 h-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -1241,6 +1223,8 @@ export default function Page() {
   const [total, setTotal] = useState(0);
   const [hasNext, setHasNext] = useState(false);
 
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+
   const [query, setQuery] = useState('');
   const [searchHint, setSearchHint] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
@@ -1274,7 +1258,7 @@ export default function Page() {
     sortBy: 'relevance',
   });
 
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [downloadLimit, setDownloadLimit] = useState('500');
 
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [detailsHandleId, setDetailsHandleId] = useState('');
@@ -1320,19 +1304,6 @@ export default function Page() {
       if (typeSearchRef.current) clearTimeout(typeSearchRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (filterModalOpen || detailsModalOpen || previewOpen) {
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = '';
-      };
-    }
-    document.body.style.overflow = '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [filterModalOpen, detailsModalOpen, previewOpen]);
 
   function buildFilterPayload(f: InfluencerFilters) {
     const out: Record<string, any> = {
@@ -1547,26 +1518,23 @@ export default function Page() {
 
   useEffect(() => {
     const raw = query.trim();
-
     if (!raw) {
       setSearchHint('');
       return;
     }
 
-    if (searchIntent.isHandle) {
-      const existing = profilesByHandle.get(searchIntent.handle.toLowerCase());
+    const maybeHandle = buildSavedSearchText(raw);
+    if (isValidHandle(maybeHandle)) {
+      const existing = profilesByHandle.get(maybeHandle.toLowerCase());
       setSearchHint(
         existing
-          ? 'Handle already saved. Search will open the saved profile.'
-          : 'Explicit handle detected. Search will fetch full creator details first. You can save after preview.',
+          ? 'Already saved. Press Open Profile to jump to it.'
+          : 'Not saved yet. Press Search & Save.'
       );
-      return;
+    } else {
+      setSearchHint('Typing filters the saved database list.');
     }
-
-    setSearchHint(
-      'Keyword search runs live on YouTube. Use View Details to fetch full creator data, then save only if needed.',
-    );
-  }, [query, searchIntent, profilesByHandle]);
+  }, [query, profilesByHandle]);
 
   function upsertProfile(doc: InfluencerProfileDoc) {
     setProfiles((prev) => {
@@ -1600,12 +1568,19 @@ export default function Page() {
       email: p.email || '',
       lastSponsor: p.lastSponsor || '',
       managedByAgency:
-        p.managedByAgency === true ? 'yes' : p.managedByAgency === false ? 'no' : 'unknown',
+        p.managedByAgency === true
+          ? 'yes'
+          : p.managedByAgency === false
+            ? 'no'
+            : 'unknown',
       topAudienceCountry: p.topAudienceCountry || '',
       averageAudienceAge: p.averageAudienceAge != null ? String(p.averageAudienceAge) : '',
       lastContactedAt: toDateInputValue(p.lastContactedAt),
       followUpDates: Array.isArray(p.followUpDates)
-        ? p.followUpDates.map((x) => toDateInputValue(x)).filter(Boolean).join(', ')
+        ? p.followUpDates
+          .map((x) => toDateInputValue(x))
+          .filter(Boolean)
+          .join(', ')
         : '',
       workingHandle: p.workingHandle || '',
     });
@@ -1616,9 +1591,9 @@ export default function Page() {
   async function onSearch(e: React.FormEvent) {
     e.preventDefault();
 
-    const raw = query.trim();
-    if (!raw) {
-      await showErr('Please enter a handle or keyword.');
+    const h = normalizeHandle(query);
+    if (!h || !isValidHandle(h)) {
+      await showErr('Please enter a valid handle like @MrBeast.');
       return;
     }
 
@@ -1653,6 +1628,7 @@ export default function Page() {
     payload.lastSponsor = detailsForm.lastSponsor.trim() || null;
     payload.topAudienceCountry = detailsForm.topAudienceCountry.trim() || null;
     payload.workingHandle = detailsForm.workingHandle.trim() || null;
+
     payload.managedByAgency =
       detailsForm.managedByAgency === 'yes'
         ? true
@@ -1711,22 +1687,42 @@ export default function Page() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 mb-2">YouTube Influencer Profiles</h1>
           <p className="text-slate-600">
-            Search YouTube globally, preview full creator data, and save only the influencers you actually want.
+            Search saved influencers instantly. Use Search & Save only if the handle
+            is not already in the database.
           </p>
         </div>
 
-        <div className="mb-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <StatCard title="Saved Profiles" value={formatNumber(total)} />
+          <StatCard title="Selected" value={String(selectedCount)} />
+          <StatCard
+            title="Current Sort"
+            value={
+              sortModeActive === 'engagement_upload'
+                ? 'Engagement + Uploads'
+                : sortModeActive === 'engagement'
+                  ? 'Engagement'
+                  : sortModeActive === 'uploads'
+                    ? 'Uploads / week'
+                    : 'Newest'
+            }
+          />
+        </div>
+
+        <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-6 py-5">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">Discovery</h2>
-                <p className="text-sm text-slate-600 mt-1">
-                  Use keywords for live YouTube search. Use <span className="font-semibold">@handle</span> when you want to save a creator.
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Search & Filters
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Filters, sort, export, and manual details are fully aligned now.
                 </p>
               </div>
 
@@ -1756,24 +1752,24 @@ export default function Page() {
             </div>
           </div>
 
-          <form onSubmit={onSearch} className="p-6">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
-                <div className="lg:col-span-7">
-                  <label className="text-[11px] font-semibold text-slate-600 mb-2 block uppercase tracking-wide">
-                    Search keywords or explicit handles
-                  </label>
+          <form onSubmit={onSearch} className="space-y-5 p-6">
+            <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-12">
+              <div className="lg:col-span-7">
+                <label className="mb-2 block text-xs font-medium text-slate-600">
+                  YouTube Handle
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white py-3.5 pl-12 pr-4 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                    value={query}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setQuery(v);
 
-                  <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input
-                      className="w-full pl-12 pr-4 py-3.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-                      value={query}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setQuery(v);
-
-                        if (typeSearchRef.current) clearTimeout(typeSearchRef.current);
+                      if (typeSearchRef.current) {
+                        clearTimeout(typeSearchRef.current);
+                      }
 
                         typeSearchRef.current = setTimeout(() => {
                           const searchText = buildSavedSearchText(v);
@@ -1824,43 +1820,45 @@ export default function Page() {
                 </div>
               </div>
 
-              {searchHint ? (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 flex gap-3 items-start">
-                  <div className="mt-0.5">
-                    <Info className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <p className="text-sm text-slate-700">{searchHint}</p>
+            {searchHint ? (
+              <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="mt-0.5">
+                  <Info className="h-5 w-5 text-slate-500" />
                 </div>
-              ) : null}
-            </div>
-          </form>
-        </div>
-
-        {globalResult ? (
-          <div className="mb-6 rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-200 bg-white flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Live YouTube Results for “{globalResult.query}”
-                </h2>
-                <p className="text-sm text-slate-500 mt-1">
-                  {formatNumber(globalResult.channelsFound)} creators • {formatNumber(globalResult.videoHits)} matched videos
-                </p>
+                <p className="text-sm text-slate-700">{searchHint}</p>
               </div>
+            ) : null}
 
-              <button
-                type="button"
-                className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold"
-                onClick={() => setGlobalResult(null)}
-              >
-                Clear Results
-              </button>
-            </div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Filters</div>
+                    <div className="mt-0.5 text-xs text-slate-600">
+                      Subscribers default to 1K–1M. Country is multi-select.
+                    </div>
+                  </div>
+                </div>
 
-            <div className="p-5 bg-slate-50/70">
-              {!globalResult.recommendations?.length ? (
-                <div className="px-6 py-10 text-center text-slate-500">
-                  No live results found.
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={clearFilters}
+                    disabled={listLoading}
+                  >
+                    Clear
+                  </button>
+
+                  <button
+                    type="button"
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={applyFilters}
+                    disabled={listLoading}
+                  >
+                    Apply Filters
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-5">
@@ -1917,166 +1915,171 @@ export default function Page() {
             </span>
           </div>
 
-          <div className="p-5 bg-slate-50/70">
-            {listLoading && profiles.length === 0 ? (
-              <div className="px-6 py-12 text-center text-slate-500">
-                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
-                Loading profiles...
-              </div>
-            ) : null}
+          {listLoading && profiles.length === 0 ? (
+            <div className="px-6 py-12 text-center text-slate-500">
+              <RefreshCw className="mx-auto mb-2 h-8 w-8 animate-spin" />
+              Loading profiles...
+            </div>
+          ) : null}
 
-            {!listLoading && profiles.length === 0 ? (
-              <div className="px-6 py-12 text-center text-slate-500">
-                No matching saved profiles. Use keywords for live search, or use an explicit @handle to save from YouTube.
-              </div>
-            ) : null}
+          {!listLoading && profiles.length === 0 ? (
+            <div className="px-6 py-12 text-center text-slate-500">
+              No matching saved profiles.
+            </div>
+          ) : null}
 
-            <div className="space-y-5">
-              {profiles.map((p) => {
-                const cardId = getCardId(p);
-                const isOpen = !!expanded[cardId];
-                const thumb = getThumbUrl(p.thumbnails);
-                const channelUrl = ytChannelUrl(p);
-                const topics = getTopicNames(p);
+          <div className="divide-y divide-slate-200">
+            {profiles.map((p) => {
+              const cardId = getCardId(p);
+              const selectId = getSelectId(p);
+              const isOpen = !!expanded[cardId];
+              const checked = selectId ? !!selectedIds[selectId] : false;
+              const thumb =
+                p.thumbnails?.default?.url ||
+                p.thumbnails?.medium?.url ||
+                p.thumbnails?.high?.url;
+              const channelUrl = ytChannelUrl(p);
+              const topics = getTopicNames(p);
 
-                return (
-                  <div
-                    key={cardId}
-                    id={`card-${cardId}`}
-                    className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden"
-                  >
-                    <div className="p-6">
-                      <div className="flex flex-col xl:flex-row xl:items-start gap-5">
-                        <div className="flex items-start gap-4 flex-1 min-w-0">
-                          <div className="w-20 h-20 rounded-full overflow-hidden bg-slate-200 shrink-0 ring-4 ring-slate-100">
+              return (
+                <div key={cardId} id={`card-${cardId}`} className="transition-colors hover:bg-slate-50">
+                  <div className="px-6 py-4">
+                    <div className="grid grid-cols-12 items-start gap-3">
+                      <div className="col-span-1 pt-2">
+                        <Checkbox
+                          checked={checked}
+                          disabled={!selectId}
+                          onCheckedChange={(v: any) => {
+                            if (!selectId) return;
+                            toggleSelect(selectId, !!v);
+                          }}
+                        />
+                      </div>
+
+                      <div className="col-span-9 min-w-0">
+                        <div className="mb-3 flex items-center gap-3">
+                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-slate-200">
                             {thumb ? (
                               <img
                                 src={thumb}
                                 alt=""
-                                className="w-full h-full object-cover"
+                                className="h-full w-full object-cover"
                                 loading="lazy"
                               />
                             ) : null}
                           </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-3xl leading-tight font-bold text-slate-900 truncate">
-                                {p.title || p.handle || '—'}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="truncate text-lg font-semibold text-slate-900">
+                                {p.handle || '—'}
                               </h3>
-
                               {p.platform ? (
                                 <span className="text-[10px] px-2 py-0.5 rounded-full border border-slate-300 text-slate-600">
                                   {p.platform}
                                 </span>
                               ) : null}
-
-                              {p.country ? (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700">
-                                  {p.country}
-                                </span>
-                              ) : null}
                             </div>
-
-                            <div className="mt-2 flex items-center gap-3 flex-wrap">
-                              <div className="text-lg font-semibold text-blue-600">
-                                {p.handle || '—'}
-                              </div>
-
-                              {p.lastSponsor ? (
-                                <span className="text-xs px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-orange-700">
-                                  Last Sponsor: {p.lastSponsor}
-                                </span>
-                              ) : null}
-
-                              {p.managedByAgency != null ? (
-                                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-700">
-                                  Agency: {formatBool(p.managedByAgency)}
-                                </span>
-                              ) : null}
-                            </div>
-
-                            {topics.length ? (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {topics.slice(0, 5).map((t) => (
-                                  <span
-                                    key={t}
-                                    className="text-[11px] px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200"
-                                  >
-                                    {t}
-                                  </span>
-                                ))}
-                                {topics.length > 5 ? (
-                                  <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-900 text-white">
-                                    +{topics.length - 5} Categories
-                                  </span>
-                                ) : null}
-                              </div>
-                            ) : null}
-
-                            <div className="mt-4 text-sm text-slate-500 flex flex-wrap gap-x-6 gap-y-1">
-                              <span>Synced: {formatDate(p.syncedAt)}</span>
-                              <span>Last Upload: {formatDate(p.lastUploadAt)}</span>
-                              <span>Email: {p.email || '—'}</span>
+                            <div className="truncate text-sm text-slate-600">
+                              {p.title || '—'}
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row xl:flex-col gap-2 xl:w-[230px]">
-                          {p.channelId ? (
-                            <Link
-                              href={`/mediakit/${encodeURIComponent(p.channelId)}?platform=${encodeURIComponent(
-                                String(p.platform || 'youtube').toLowerCase()
-                              )}&handle=${encodeURIComponent(String(p.handle || ''))}`}
-                              className="w-full px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-800 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-                            >
-                              <Info className="w-4 h-4" />
-                              Load Advanced Insights
-                            </Link>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled
-                              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-400 text-sm font-semibold cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                              <Info className="w-4 h-4" />
-                              Load Advanced Insights
-                            </button>
-                          )}
-
-                          {channelUrl ? (
-                            <a
-                              href={channelUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="w-full px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-800 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                              View Channel
-                            </a>
-                          ) : null}
-
-                          <button
-                            type="button"
-                            className="w-full px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-                            onClick={() => openDetailsModal(p)}
-                          >
-                            <Mail className="w-4 h-4" />
-                            Add Details
-                          </button>
-
-                          <button
-                            type="button"
-                            className="w-full px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-800 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-                            onClick={() => toggleExpand(cardId)}
-                          >
-                            {isOpen ? 'Hide Intelligence' : 'Show Intelligence'}
-                            <ChevronDown
-                              className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                            />
-                          </button>
+                        <div className="mb-3 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+                          <Metric label="Country" value={p.country || '—'} />
+                          <Metric
+                            label="Subscribers"
+                            value={formatNumber(p.subscriberCount)}
+                          />
+                          <Metric
+                            label="Avg Views (15)"
+                            value={formatNumber(p.avgViewsLast15)}
+                          />
+                          <Metric
+                            label="Engagement"
+                            value={formatPercent(p.engagementRateLast15)}
+                          />
+                          <Metric
+                            label="Uploads/week"
+                            value={
+                              p.uploadFrequencyPerWeek != null
+                                ? String(p.uploadFrequencyPerWeek)
+                                : '—'
+                            }
+                            className="hidden lg:block"
+                          />
+                          <Metric
+                            label="Email"
+                            value={p.email || '—'}
+                            className="hidden lg:block"
+                          />
                         </div>
+
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+                          <span>Synced: {formatDate(p.syncedAt)}</span>
+                          {p.lastSponsor ? (
+                            <span>Last Sponsor: {p.lastSponsor}</span>
+                          ) : null}
+                          {p.managedByAgency != null ? (
+                            <span>Agency: {formatBool(p.managedByAgency)}</span>
+                          ) : null}
+                        </div>
+
+                        {topics.length ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {topics.slice(0, 4).map((t) => (
+                              <span
+                                key={t}
+                                className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                            {topics.length > 4 ? (
+                              <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] text-white">
+                                +{topics.length - 4}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
+
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        {channelUrl ? (
+                          <a
+                            href={channelUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            Channel
+                          </a>
+                        ) : null}
+
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                          onClick={() => openDetailsModal(p)}
+                        >
+                          <Mail className="h-4 w-4" />
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          className="rounded-lg p-2 transition-colors hover:bg-slate-100"
+                          onClick={() => toggleExpand(cardId)}
+                          aria-expanded={isOpen}
+                        >
+                          <ChevronDown
+                            className={`h-5 w-5 text-slate-600 transition-transform ${isOpen ? 'rotate-180' : ''
+                              }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
 
                       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
                         <MetricCard label="Subscriber Base" value={formatNumber(p.subscriberCount)} />
@@ -2101,7 +2104,7 @@ export default function Page() {
                               <Row label="Operating Language" value={p.defaultLanguage || '—'} />
                               <Row label="Verified Contact Email" value={p.email || '—'} />
                               <Row
-                                label="Content Ecosystem"
+                                label="Categories"
                                 value={topics.length ? topics.join(', ') : '—'}
                               />
                               <Row label="Total Lifetime Views" value={formatNumber(p.totalViewCount)} />
@@ -2111,33 +2114,38 @@ export default function Page() {
                               <Row label="Latest Video Link" value={p.lastVideoId ? 'Available' : '—'} />
                             </div>
 
-                            {p.lastVideoId ? (
-                              <div className="mt-4 pt-4 border-t border-slate-200">
-                                <a
-                                  href={ytVideoUrl(p.lastVideoId)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                  Watch latest video
-                                </a>
-                              </div>
-                            ) : null}
+                              {p.lastVideoId ? (
+                                <div className="pt-2">
+                                  <a
+                                    href={ytVideoUrl(p.lastVideoId)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+                                  >
+                                    <ExternalLink className="h-4 w-4" />
+                                    Watch latest video
+                                  </a>
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
 
-                          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 mb-4">
-                              Market Reliability
-                            </div>
-
-                            <div className="space-y-3">
-                              <Row label="Account Creation" value={formatDate(p.createdAt)} />
+                          <div className="rounded-xl bg-slate-50 p-4">
+                            <h4 className="mb-3 font-semibold text-slate-900">
+                              Metrics
+                            </h4>
+                            <div className="space-y-2 text-sm">
+                              <Row label="Subscribers" value={formatNumber(p.subscriberCount)} />
+                              <Row label="Avg Views (last 15)" value={formatNumber(p.avgViewsLast15)} />
                               <Row
-                                label="Upload Consistency"
+                                label="Engagement (last 15)"
+                                value={formatPercent(p.engagementRateLast15)}
+                              />
+                              <Row
+                                label="Uploads/week"
                                 value={
-                                  p.avgDaysBetweenUploads != null
-                                    ? `${p.avgDaysBetweenUploads} days gap`
+                                  p.uploadFrequencyPerWeek != null
+                                    ? p.uploadFrequencyPerWeek
                                     : '—'
                                 }
                               />
@@ -2167,12 +2175,12 @@ export default function Page() {
                       </div>
                     ) : null}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
           </div>
 
-          <div className="px-6 py-4 border-t border-slate-200 bg-white flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-4">
             <div className="text-sm text-slate-600">
               Page <span className="font-semibold text-slate-900">{page}</span>
               {total ? (
@@ -2367,10 +2375,12 @@ export default function Page() {
       ) : null}
 
       {detailsModalOpen ? (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[115]">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Add / Update Details</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 p-6">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Add / Update Details
+              </h3>
               <button
                 onClick={() => setDetailsModalOpen(false)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
@@ -2401,9 +2411,12 @@ export default function Page() {
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     value={detailsForm.workingHandle}
                     onChange={(e) =>
-                      setDetailsForm((p) => ({ ...p, workingHandle: e.target.value }))
+                      setDetailsForm((p) => ({
+                        ...p,
+                        workingHandle: e.target.value,
+                      }))
                     }
-                    placeholder="@creator_official"
+                    placeholder="@mrbeast_official"
                   />
                 </div>
 
@@ -2413,7 +2426,10 @@ export default function Page() {
                     className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     value={detailsForm.lastSponsor}
                     onChange={(e) =>
-                      setDetailsForm((p) => ({ ...p, lastSponsor: e.target.value }))
+                      setDetailsForm((p) => ({
+                        ...p,
+                        lastSponsor: e.target.value,
+                      }))
                     }
                     placeholder="Brand name"
                   />
@@ -2427,7 +2443,7 @@ export default function Page() {
                     onChange={(e) =>
                       setDetailsForm((p) => ({
                         ...p,
-                        managedByAgency: e.target.value as 'unknown' | 'yes' | 'no',
+                        managedByAgency: e.target.value as any,
                       }))
                     }
                   >
@@ -2448,7 +2464,7 @@ export default function Page() {
                         topAudienceCountry: e.target.value,
                       }))
                     }
-                    placeholder="US / IN / UK ..."
+                    placeholder="US / IN / UK"
                   />
                 </div>
 
@@ -2484,21 +2500,22 @@ export default function Page() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-sm text-slate-600 mb-1 block">Follow-up Dates</label>
-                  <textarea
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[90px]"
-                    value={detailsForm.followUpDates}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({
-                        ...p,
-                        followUpDates: e.target.value,
-                      }))
-                    }
-                    placeholder="2026-02-26, 2026-03-02"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Use <span className="font-mono">YYYY-MM-DD</span>. Separate by comma or new line.
-                  </p>
+                  <Field label="Follow-up Dates">
+                    <textarea
+                      className="min-h-[90px] w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                      value={detailsForm.followUpDates}
+                      onChange={(e) =>
+                        setDetailsForm((p) => ({
+                          ...p,
+                          followUpDates: e.target.value,
+                        }))
+                      }
+                      placeholder="2026-02-26, 2026-03-02"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Use <span className="font-mono">YYYY-MM-DD</span>. Separate by comma or new line.
+                    </p>
+                  </Field>
                 </div>
               </div>
             </div>
