@@ -6,90 +6,162 @@ import { get } from "@/lib/api";
 import { resolveFileList } from "@/lib/files";
 import {
   HiChevronLeft,
-  HiOutlineUserGroup,
-  HiOutlineCalendar,
-  HiOutlineCurrencyDollar,
-  HiOutlineDocument,
+  HiOutlineFire,
   HiCheckCircle,
   HiXCircle,
+  HiOutlinePhoto,
+  HiOutlineBriefcase,
+  HiOutlineDocumentText,
+  HiOutlineUserGroup,
+  HiOutlineCurrencyDollar,
+  HiOutlineCalendar,
+  HiOutlineGlobeAlt,
+  HiOutlineSparkles,
+  HiOutlineLink,
+  HiOutlineVideoCamera,
 } from "react-icons/hi2";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HiOutlinePhotograph, HiOutlineRefresh } from "react-icons/hi";
 
-// Added pendingUpdate structure to the interface
-interface CampaignData {
-  _id?: string;
-  campaignsId?: string;
-
-  brandId?: string;
-  brandName?: string;
-  productOrServiceName?: string;
-  description?: string;
-
-  images?: string[];
-
-  targetAudience?: {
-    age?: { MinAge?: number; MaxAge?: number };
-    gender?: 0 | 1 | 2; // 0 = Female, 1 = Male, 2 = All
-    locations?: { countryId: string; countryName: string }[];
-  };
-
-  categories?: {
-    categoryName: string;
-    subcategoryName: string;
-  }[];
-
-  goal?: string;
-  campaignType?: string;
-  budget?: number | string;
-  influencerBudget?: number | string;
-
-  timeline?: { startDate?: string; endDate?: string };
-
-  creativeBriefText?: string;
-  creativeBrief?: string[];
-  additionalNotes?: string;
-
-  isActive?: number;
-  isDraft?: number;
-
-  createdAt?: string;
-  applicantCount?: number;
-  hasApplied?: number;
-
-  pendingUpdate?: {
-    status: string;
-    patch: Partial<CampaignData>;
-  };
+interface ProductImage {
+  name?: string;
+  type?: string;
+  size?: number;
+  dataUrl?: string;
+  url?: string;
 }
 
-// Reusable component to handle before/after views cleanly
-const DiffView = ({
-  current,
-  updated,
-  hasUpdate,
+interface CampaignCategory {
+  categoryName?: string;
+  subcategoryName?: string;
+}
+
+interface GoalDetail {
+  goal?: string;
+}
+
+interface InfluencerTierDetail {
+  category?: string;
+  value?: string;
+}
+
+interface ContentFormatDetail {
+  format?: string;
+}
+
+interface ContentLanguageDetail {
+  name?: string;
+}
+
+interface PreferredHashtagDetail {
+  tag?: string;
+}
+
+interface TargetCountryDetail {
+  countryName?: string;
+  flag?: string;
+}
+
+interface TargetAgeRangeDetail {
+  range?: string;
+}
+
+interface CreatedBy {
+  name?: string;
+  email?: string;
+  role?: string;
+  adminRole?: string;
+}
+
+interface CampaignData {
+  _id?: string;
+  brandName?: string;
+  campaignTitle?: string;
+  description?: string;
+  campaignType?: string;
+  campaignCategory?: string;
+  campaignSubcategory?: string;
+  productImages?: ProductImage[];
+  images?: string[];
+  productLink?: string;
+  videoLink?: string;
+  productServiceInfo?: string[];
+  numberOfInfluencers?: number;
+  minFollowers?: number;
+  maxFollowers?: number;
+  campaignBudget?: number;
+  budget?: number;
+  influencerBudget?: number;
+  paymentType?: string;
+  platformSelection?: string[];
+  additionalNotes?: string;
+  hashtags?: string[];
+  campaignTimezone?: string;
+  scheduledAt?: string | null;
+  startAt?: string;
+  endAt?: string;
+  publishedAt?: string;
+  endedAt?: string | null;
+  categories?: CampaignCategory[];
+  status?: string;
+  publishStatus?: string;
+  approvalMode?: string;
+  isActive?: number;
+  isDraft?: number;
+  applicantCount?: number;
+  hasApplied?: number;
+  byAi?: number;
+  createdBy?: CreatedBy;
+  createdAt?: string;
+  updatedAt?: string;
+
+  subcategoryDetails?: { name?: string; categoryName?: string }[];
+  campaignGoalDetails?: GoalDetail[];
+  influencerTierDetails?: InfluencerTierDetail[];
+  contentFormatDetails?: ContentFormatDetail[];
+  contentLanguageDetails?: ContentLanguageDetail[];
+  preferredHashtagDetails?: PreferredHashtagDetail[];
+  targetCountryDetails?: TargetCountryDetail[];
+  targetAgeRangeDetails?: TargetAgeRangeDetail[];
+}
+
+interface ApiResponse {
+  message?: string;
+  data?: CampaignData;
+}
+
+const DetailItem = ({
+  label,
+  value,
 }: {
-  current: React.ReactNode;
-  updated: React.ReactNode;
-  hasUpdate: boolean;
-}) => {
-  if (!hasUpdate) return <div className="mt-1 text-gray-800">{current}</div>;
+  label: string;
+  value: React.ReactNode;
+}) => (
+  <div className="space-y-1 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+    <div className="text-sm font-medium text-slate-900">{value || "—"}</div>
+  </div>
+);
+
+const ListBadges = ({ items }: { items: string[] }) => {
+  if (!items.length) {
+    return <p className="text-sm text-slate-500">No details available.</p>;
+  }
 
   return (
-    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50/50 p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <Badge className="border-none bg-amber-100 text-amber-800 shadow-none hover:bg-amber-200">
-          Pending Update
+    <div className="flex flex-wrap gap-2">
+      {items.map((item, index) => (
+        <Badge
+          key={`${item}-${index}`}
+          variant="secondary"
+          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700"
+        >
+          {item}
         </Badge>
-      </div>
-      <div className="mb-2 font-medium text-gray-900">{updated}</div>
-      <div className="flex items-center gap-2 border-t border-amber-100 pt-2 text-xs text-gray-500">
-        <span className="opacity-70 line-through">Previous:</span>
-        <div className="opacity-70 line-through">{current}</div>
-      </div>
+      ))}
     </div>
   );
 };
@@ -103,19 +175,29 @@ export default function ViewCampaignPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const formatDate = (iso?: string) => {
+  const formatDate = (iso?: string | null) => {
     if (!iso) return "—";
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString(undefined, {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
       year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
     });
   };
 
-  const genderLabel = (g?: 0 | 1 | 2) =>
-    g === 0 ? "Female" : g === 1 ? "Male" : g === 2 ? "All" : "—";
+  const formatMoney = (value?: number | string | null) => {
+    const amount = Number(value ?? 0);
+    if (Number.isNaN(amount)) return "—";
+    return amount.toLocaleString();
+  };
+
+  const prettify = (value?: string | null) => {
+    if (!value) return "—";
+    return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  };
 
   const loadCampaign = async () => {
     if (!id) {
@@ -128,8 +210,9 @@ export default function ViewCampaignPage() {
     setError(null);
 
     try {
-      const data = await get<CampaignData>(`/admin/campaign/getById?id=${id}`);
-      setCampaign(data);
+      const response = await get<ApiResponse | CampaignData>(`/admin/campaign/getById?id=${id}`);
+      const normalized = (response as ApiResponse)?.data ?? (response as CampaignData);
+      setCampaign(normalized);
     } catch {
       setError("Failed to load campaign details.");
       setCampaign(null);
@@ -143,28 +226,80 @@ export default function ViewCampaignPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const imageUrls = useMemo(
-    () => resolveFileList(campaign?.images ?? []),
-    [campaign?.images]
+  const imageUrls = useMemo(() => {
+    const productImageUrls = (campaign?.productImages ?? [])
+      .map((image) => image.dataUrl || image.url)
+      .filter(Boolean) as string[];
+
+    if (productImageUrls.length) return productImageUrls;
+    return resolveFileList(campaign?.images ?? []);
+  }, [campaign?.productImages, campaign?.images]);
+
+  const campaignGoals = useMemo(
+    () => (campaign?.campaignGoalDetails ?? []).map((item) => item.goal).filter(Boolean) as string[],
+    [campaign?.campaignGoalDetails]
   );
 
-  const creativeBriefUrls = useMemo(
-    () => resolveFileList(campaign?.creativeBrief ?? []),
-    [campaign?.creativeBrief]
+  const influencerTiers = useMemo(
+    () =>
+      (campaign?.influencerTierDetails ?? [])
+        .map((item) => [item.category, item.value].filter(Boolean).join(" • "))
+        .filter(Boolean) as string[],
+    [campaign?.influencerTierDetails]
   );
+
+  const contentFormats = useMemo(
+    () => (campaign?.contentFormatDetails ?? []).map((item) => item.format).filter(Boolean) as string[],
+    [campaign?.contentFormatDetails]
+  );
+
+  const contentLanguages = useMemo(
+    () => (campaign?.contentLanguageDetails ?? []).map((item) => item.name).filter(Boolean) as string[],
+    [campaign?.contentLanguageDetails]
+  );
+
+  const hashtags = useMemo(
+    () => (campaign?.preferredHashtagDetails ?? []).map((item) => item.tag).filter(Boolean) as string[],
+    [campaign?.preferredHashtagDetails]
+  );
+
+  const countries = useMemo(
+    () =>
+      (campaign?.targetCountryDetails ?? [])
+        .map((item) => [item.flag, item.countryName].filter(Boolean).join(" "))
+        .filter(Boolean) as string[],
+    [campaign?.targetCountryDetails]
+  );
+
+  const ageRanges = useMemo(
+    () => (campaign?.targetAgeRangeDetails ?? []).map((item) => item.range).filter(Boolean) as string[],
+    [campaign?.targetAgeRangeDetails]
+  );
+
+  const categoryNames = useMemo(() => {
+    if (campaign?.subcategoryDetails?.length) {
+      return campaign.subcategoryDetails
+        .map((item) => [item.categoryName, item.name].filter(Boolean).join(" • "))
+        .filter(Boolean) as string[];
+    }
+
+    return (campaign?.categories ?? [])
+      .map((item) => [item.categoryName, item.subcategoryName].filter(Boolean).join(" • "))
+      .filter(Boolean) as string[];
+  }, [campaign?.subcategoryDetails, campaign?.categories]);
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <Skeleton className="h-12 w-1/3 animate-pulse rounded-lg" />
+      <div className="flex min-h-[70vh] items-center justify-center bg-slate-50">
+        <Skeleton className="h-12 w-56 rounded-xl" />
       </div>
     );
   }
 
   if (error || !campaign) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <p className="rounded-lg bg-red-100 px-6 py-4 text-red-700">
+      <div className="flex min-h-[70vh] items-center justify-center bg-slate-50 px-4">
+        <p className="rounded-xl border border-rose-200 bg-rose-50 px-6 py-4 text-sm font-medium text-rose-700">
           {error || "Campaign not found."}
         </p>
       </div>
@@ -172,354 +307,261 @@ export default function ViewCampaignPage() {
   }
 
   const c = campaign;
-  const patch = c.pendingUpdate?.status === "pending" ? c.pendingUpdate.patch : null;
-
-  const statusBadge = () => {
-    if (c.isDraft === 1) {
-      return (
-        <Badge
-          variant="secondary"
-          className="inline-flex items-center space-x-1 text-yellow-700"
-        >
-          <HiOutlineDocument className="h-4 w-4" />
-          <span>Draft</span>
-        </Badge>
-      );
-    }
-
-    if (c.isActive === 1) {
-      return (
-        <Badge
-          variant="default"
-          className="inline-flex items-center space-x-1"
-        >
-          <HiCheckCircle className="h-4 w-4" />
-          <span>Active</span>
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge
-        variant="destructive"
-        className="inline-flex items-center space-x-1"
-      >
-        <HiXCircle className="h-4 w-4" />
-        <span>Inactive</span>
-      </Badge>
-    );
-  };
-
-  // Helper renderers for complex structures
-  const renderLocations = (locs?: { countryId: string; countryName: string }[]) => (
-    <div className="flex flex-wrap gap-2">
-      {(locs ?? []).length > 0 ? (
-        locs!.map((loc) => (
-          <Badge key={loc.countryId} variant="secondary">
-            {loc.countryName}
-          </Badge>
-        ))
-      ) : (
-        <span className="text-gray-700">No locations added.</span>
-      )}
-    </div>
-  );
-
-  const renderCategories = (cats?: { categoryName: string; subcategoryName: string }[]) => (
-    cats && cats.length > 0 ? (
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {cats.map((cat, idx) => (
-          <div key={idx} className="rounded-lg border p-3">
-            <div className="text-sm font-medium text-gray-900">
-              {cat.categoryName} → {cat.subcategoryName}
-            </div>
-          </div>
-        ))}
-      </div>
-    ) : (
-      <p className="text-gray-700">No categories added.</p>
-    )
-  );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => router.back()}
-            aria-label="Back"
-          >
-            <HiChevronLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            Campaign Details
-          </h1>
-        </div>
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-4 md:px-6">
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
+        <CardContent className="p-6 md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={() => router.back()} aria-label="Back">
+                  <HiChevronLeft className="h-5 w-5" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={loadCampaign} aria-label="Refresh" disabled={loading}>
+                  <HiOutlineRefresh className="h-5 w-5" />
+                </Button>
+              </div>
 
-        <div className="flex items-center space-x-2">
-          {statusBadge()}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={loadCampaign}
-            aria-label="Refresh"
-            disabled={loading}
-          >
-            <HiOutlineRefresh className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
+              <div>
+                <p className="text-sm text-slate-500">Campaign Details</p>
+                <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+                  {c.campaignTitle || "Untitled Campaign"}
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                  {c.description || "No campaign description available."}
+                </p>
+              </div>
 
-      {/* Product Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HiOutlinePhotograph className="h-6 w-6 text-indigo-500" />
-            Product Info
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {c.brandName && (
-            <div>
-              <p className="text-sm font-medium text-gray-600">Brand</p>
-              <p className="mt-1 text-gray-800">{c.brandName}</p>
-            </div>
-          )}
-
-          <div>
-            <p className="text-sm font-medium text-gray-600">Name</p>
-            <DiffView
-              hasUpdate={!!patch && "productOrServiceName" in patch}
-              current={c.productOrServiceName || "—"}
-              updated={patch?.productOrServiceName || "—"}
-            />
-          </div>
-
-          <div className="md:col-span-2 lg:col-span-2">
-            <p className="text-sm font-medium text-gray-600">Description</p>
-            <DiffView
-              hasUpdate={!!patch && "description" in patch}
-              current={<span className="whitespace-pre-wrap">{c.description || "—"}</span>}
-              updated={<span className="whitespace-pre-wrap">{patch?.description || "—"}</span>}
-            />
-          </div>
-
-          {imageUrls.length > 0 && (
-            <div className="md:col-span-3">
-              <p className="text-sm font-medium text-gray-600">Images</p>
-              <div className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                {imageUrls.map((url, i) => (
-                  <div
-                    key={i}
-                    className="relative h-36 overflow-hidden rounded-lg border"
-                  >
-                    <img
-                      src={url}
-                      alt={`Campaign image ${i + 1}`}
-                      className="h-full w-full object-cover transition-transform hover:scale-105"
-                    />
-                  </div>
-                ))}
+              <div className="flex flex-wrap gap-2">
+                <Badge className={c.isActive === 1 ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-rose-100 text-rose-800 hover:bg-rose-100"}>
+                  {c.isActive === 1 ? <HiCheckCircle className="mr-1 h-4 w-4" /> : <HiXCircle className="mr-1 h-4 w-4" />}
+                  {c.isDraft === 1 ? "Draft" : prettify(c.status)}
+                </Badge>
+                <Badge variant="secondary">{prettify(c.publishStatus)}</Badge>
+                <Badge variant="secondary">{prettify(c.campaignType)}</Badge>
+                <Badge variant="secondary">{prettify(c.approvalMode)}</Badge>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Audience */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HiOutlineUserGroup className="h-6 w-6 text-indigo-500" />
-            Target Audience
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <p className="text-sm font-medium text-gray-600">Age</p>
-            <DiffView
-              hasUpdate={!!patch?.targetAudience}
-              current={`${c.targetAudience?.age?.MinAge ?? "—"}–${c.targetAudience?.age?.MaxAge ?? "—"}`}
-              updated={`${patch?.targetAudience?.age?.MinAge ?? "—"}–${patch?.targetAudience?.age?.MaxAge ?? "—"}`}
-            />
-          </div>
-
-          <div>
-            <p className="text-sm font-medium text-gray-600">Gender</p>
-            <DiffView
-              hasUpdate={!!patch?.targetAudience}
-              current={genderLabel(c.targetAudience?.gender)}
-              updated={genderLabel(patch?.targetAudience?.gender)}
-            />
-          </div>
-
-          <div className="md:col-span-3">
-            <p className="text-sm font-medium text-gray-600">Locations</p>
-            <DiffView
-              hasUpdate={!!patch?.targetAudience}
-              current={renderLocations(c.targetAudience?.locations)}
-              updated={renderLocations(patch?.targetAudience?.locations)}
-            />
+            <div className="grid grid-cols-2 gap-3 md:w-[320px]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">Budget</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">${formatMoney(c.budget ?? c.campaignBudget)}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">Platforms</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{c.platformSelection?.length ?? 0}</p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Categories */}
-      <Card>
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HiOutlineDocument className="h-6 w-6 text-indigo-500" />
-            Categories
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
+            <HiOutlineBriefcase className="h-5 w-5 text-indigo-600" />
+            Basic Information
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <DiffView
-            hasUpdate={!!patch && "categories" in patch}
-            current={renderCategories(c.categories)}
-            updated={renderCategories(patch?.categories)}
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <DetailItem label="Brand Name" value={c.brandName || "—"} />
+          <DetailItem label="Campaign Type" value={prettify(c.campaignType)} />
+          <DetailItem label="Category" value={c.campaignCategory || "—"} />
+          <DetailItem label="Payment Type" value={prettify(c.paymentType)} />
+          <div className="md:col-span-2">
+            <DetailItem label="Description" value={<span className="whitespace-pre-wrap">{c.description || "—"}</span>} />
+          </div>
+          <DetailItem
+            label="Product Link"
+            value={
+              c.productLink ? (
+                <a href={c.productLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-indigo-600 hover:underline break-all">
+                  <HiOutlineLink className="h-4 w-4" />
+                  {c.productLink}
+                </a>
+              ) : (
+                "—"
+              )
+            }
+          />
+          <DetailItem
+            label="Video Link"
+            value={
+              c.videoLink ? (
+                <a href={c.videoLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-indigo-600 hover:underline break-all">
+                  <HiOutlineVideoCamera className="h-4 w-4" />
+                  {c.videoLink}
+                </a>
+              ) : (
+                "—"
+              )
+            }
           />
         </CardContent>
       </Card>
 
-      {/* Campaign Details */}
-      <Card>
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HiOutlineCalendar className="h-6 w-6 text-indigo-500" />
-            Campaign Details
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
+            <HiOutlinePhotograph className="h-5 w-5 text-indigo-600" />
+            Product Media
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div>
-            <p className="text-sm font-medium text-gray-600">Goal</p>
-            <DiffView
-              hasUpdate={!!patch && "goal" in patch}
-              current={c.goal || "—"}
-              updated={patch?.goal || "—"}
-            />
-          </div>
-
-          <div>
-            <p className="text-sm font-medium text-gray-600">Budget</p>
-            <DiffView
-              hasUpdate={!!patch && "budget" in patch}
-              current={
-                <span className="flex items-center gap-1">
-                  <HiOutlineCurrencyDollar className="inline" />
-                  {Number(c.budget ?? 0).toLocaleString()}
-                </span>
-              }
-              updated={
-                <span className="flex items-center gap-1">
-                  <HiOutlineCurrencyDollar className="inline" />
-                  {Number(patch?.budget ?? 0).toLocaleString()}
-                </span>
-              }
-            />
-          </div>
-
-          {c.influencerBudget && (
-            <div>
-              <p className="text-sm font-medium text-gray-600">Influencer Budget</p>
-              <DiffView
-                hasUpdate={!!patch && "influencerBudget" in patch}
-                current={
-                  <span className="flex items-center gap-1">
-                    <HiOutlineCurrencyDollar className="inline" />
-                    {Number(c.influencerBudget ?? 0).toLocaleString()}
-                  </span>
-                }
-                updated={
-                  <span className="flex items-center gap-1">
-                    <HiOutlineCurrencyDollar className="inline" />
-                    {Number(patch?.influencerBudget ?? 0).toLocaleString()}
-                  </span>
-                }
-              />
+        <CardContent>
+          {imageUrls.length ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {imageUrls.map((url, index) => (
+                <div key={index} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                  <div className="aspect-[4/3] overflow-hidden">
+                    <img
+                      src={url}
+                      alt={`Campaign image ${index + 1}`}
+                      className="h-full w-full object-cover transition duration-300 hover:scale-105"
+                    />
+                  </div>
+                  <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500">
+                    {c.productImages?.[index]?.name || `Image ${index + 1}`}
+                  </div>
+                </div>
+              ))}
             </div>
+          ) : (
+            <p className="text-sm text-slate-500">No product images available.</p>
           )}
+        </CardContent>
+      </Card>
 
-          <div className="lg:col-span-2">
-             <p className="text-sm font-medium text-gray-600">Timeline</p>
-             <DiffView
-               hasUpdate={!!patch && "timeline" in patch}
-               current={
-                 <div className="flex flex-col gap-1 mt-1">
-                   <div className="flex items-center gap-2"><HiOutlineCalendar className="h-5 w-5 text-gray-500" /><span>Start: {formatDate(c.timeline?.startDate)}</span></div>
-                   <div className="flex items-center gap-2"><HiOutlineCalendar className="h-5 w-5 text-gray-500" /><span>End: {formatDate(c.timeline?.endDate)}</span></div>
-                 </div>
-               }
-               updated={
-                 <div className="flex flex-col gap-1">
-                   <div className="flex items-center gap-2"><HiOutlineCalendar className="h-5 w-5 text-gray-500" /><span>Start: {formatDate(patch?.timeline?.startDate)}</span></div>
-                   <div className="flex items-center gap-2"><HiOutlineCalendar className="h-5 w-5 text-gray-500" /><span>End: {formatDate(patch?.timeline?.endDate)}</span></div>
-                 </div>
-               }
-             />
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
+            <HiOutlineSparkles className="h-5 w-5 text-indigo-600" />
+            Categories, Goals & Content
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Selected Categories</p>
+            <ListBadges items={categoryNames} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Campaign Goals</p>
+            <ListBadges items={campaignGoals} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Content Formats</p>
+            <ListBadges items={contentFormats} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Content Languages</p>
+            <ListBadges items={contentLanguages} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Preferred Hashtags</p>
+            <ListBadges items={hashtags} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Creative Brief & Notes */}
-      <Card>
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HiOutlineDocument className="h-6 w-6 text-indigo-500" />
-            Creative Brief & Notes
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
+            <HiOutlineUserGroup className="h-5 w-5 text-indigo-600" />
+            Influencer Targeting
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {c.creativeBriefText && (
-            <div>
-              <p className="text-sm font-medium text-gray-600">Brief Text</p>
-              <DiffView
-                hasUpdate={!!patch && "creativeBriefText" in patch}
-                current={<span className="whitespace-pre-wrap">{c.creativeBriefText}</span>}
-                updated={<span className="whitespace-pre-wrap">{patch?.creativeBriefText}</span>}
-              />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <DetailItem label="Number of Influencers" value={c.numberOfInfluencers ?? 0} />
+            <DetailItem label="Followers Range" value={`${(c.minFollowers ?? 0).toLocaleString()} - ${(c.maxFollowers ?? 0).toLocaleString()}`} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Influencer Tiers</p>
+            <ListBadges items={influencerTiers} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Target Countries</p>
+            <ListBadges items={countries} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Target Age Ranges</p>
+            <ListBadges items={ageRanges} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
+            <HiOutlineCurrencyDollar className="h-5 w-5 text-indigo-600" />
+            Budget & Timeline
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <DetailItem label="Campaign Budget" value={`$${formatMoney(c.campaignBudget ?? c.budget)}`} />
+          <DetailItem label="Influencer Budget" value={`$${formatMoney(c.influencerBudget)}`} />
+          <DetailItem label="Timezone" value={c.campaignTimezone || "—"} />
+          <DetailItem label="Scheduled At" value={formatDate(c.scheduledAt)} />
+          <DetailItem label="Start Date" value={formatDate(c.startAt)} />
+          <DetailItem label="End Date" value={formatDate(c.endAt)} />
+          <DetailItem label="Published At" value={formatDate(c.publishedAt)} />
+          <DetailItem label="Ended At" value={formatDate(c.endedAt)} />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
+            <HiOutlineGlobeAlt className="h-5 w-5 text-indigo-600" />
+            Platform & Status Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Platforms</p>
+            <ListBadges items={(c.platformSelection ?? []).map((item) => prettify(item))} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Extra Product / Service Info</p>
+            <ListBadges items={c.productServiceInfo ?? []} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Extra Hashtags</p>
+            <ListBadges items={c.hashtags ?? []} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <DetailItem label="Publish Status" value={prettify(c.publishStatus)} />
+            <DetailItem label="Approval Mode" value={prettify(c.approvalMode)} />
+            <DetailItem label="Applicants" value={c.applicantCount ?? 0} />
+            <DetailItem label="Has Applied" value={c.hasApplied === 1 ? "Yes" : "No"} />
+            <DetailItem label="Created By AI" value={c.byAi === 1 ? "Yes" : "No"} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg text-slate-900">
+            <HiOutlineDocumentText className="h-5 w-5 text-indigo-600" />
+            Admin & Notes
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <DetailItem label="Created By" value={c.createdBy?.name || "—"} />
+            <DetailItem label="Admin Email" value={c.createdBy?.email || "—"} />
+            <DetailItem label="Role" value={prettify(c.createdBy?.role)} />
+            <DetailItem label="Admin Role" value={prettify(c.createdBy?.adminRole)} />
+            <DetailItem label="Created At" value={formatDate(c.createdAt)} />
+            <DetailItem label="Updated At" value={formatDate(c.updatedAt)} />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Additional Notes</p>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <span className="whitespace-pre-wrap">{c.additionalNotes || "No additional notes available."}</span>
             </div>
-          )}
-
-          {creativeBriefUrls.length > 0 && (
-            <>
-              <p className="text-sm font-medium text-gray-600">Files</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {creativeBriefUrls.map((url, i) => (
-                  <a
-                    key={i}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-lg border p-2 hover:bg-indigo-50"
-                  >
-                    <HiOutlineDocument className="h-5 w-5 text-indigo-600" />
-                    <span className="truncate text-sm text-indigo-700">
-                      {url.split("/").pop()}
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </>
-          )}
-
-          {c.additionalNotes && (
-            <>
-              <hr />
-              <div>
-                <p className="text-sm font-medium text-gray-600">
-                  Additional Notes
-                </p>
-                <DiffView
-                  hasUpdate={!!patch && "additionalNotes" in patch}
-                  current={<span className="whitespace-pre-wrap">{c.additionalNotes}</span>}
-                  updated={<span className="whitespace-pre-wrap">{patch?.additionalNotes}</span>}
-                />
-              </div>
-            </>
-          )}
+          </div>
         </CardContent>
       </Card>
     </div>

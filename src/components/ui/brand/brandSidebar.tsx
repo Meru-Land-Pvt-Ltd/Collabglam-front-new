@@ -13,6 +13,7 @@ import type { Transition, Variants } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { get } from "@/lib/api";
+import { apiGetBrandLite, apiGetBrandWallet } from "@/app/brand/services/brandApi";
 
 import {
   Bell,
@@ -26,6 +27,8 @@ import {
   NotePencil,
   PaperPlaneTilt,
   Question,
+  SignOut,
+  UserCircle,
   UserPlus,
   Users,
   Wallet,
@@ -44,14 +47,13 @@ const ROUTES: Record<string, string> = {
   campaigns_all: "/brand/campaign/all",
   campaigns_active: "/brand/campaign/active",
   campaigns_draft: "/brand/campaign/draft",
-  campaigns_scheduled: "/brand/campaign/scheduled",
+  campaigns_scheduled: "/brand/campaign/scheduled-campaign",
   browse: "/brand/browse-influencer",
   inbox: "/brand/inbox",
-  wallet: "/brand/wallet",
   notification: "/brand/notifications",
   credits: "/brand/credits",
   help: "/brand/help-and-support",
-  invite: "/brand/invite-members",
+  // invite: "/brand/invite-members",
 };
 
 /* -------------------------------- types -------------------------------- */
@@ -74,6 +76,24 @@ type Workspace = {
   key: string;
   name: string;
   logoSrc?: string;
+};
+// 2) add these types near your other types
+
+type BrandLiteSubscription = {
+  brandPlanId?: string | null;
+  brandPlanName?: string | null;
+  plan?: string | null;
+  status?: string | null;
+};
+
+// 1) update BrandLiteRes type
+
+type BrandLiteRes = {
+  brandId?: string | null;
+  name?: string | null;
+  proxyEmail?: string | null;
+  profilePic?: string | null;
+  subscriptionDetails?: BrandLiteSubscription | null;
 };
 
 export type BrandSidebarProps = {
@@ -158,6 +178,7 @@ const upgradeShellStyle: React.CSSProperties = {
   border: "1.5px solid var(--Neutrals-75, #F5F5F5)",
 };
 
+
 /* ---------------------------- small components ---------------------------- */
 
 function WorkspaceLogo({ ws }: { ws: Workspace }) {
@@ -230,7 +251,30 @@ function PanelCaretGlyph({
     </svg>
   );
 }
+function getWalletAmount(res: unknown) {
+  const data = res as Record<string, any> | null | undefined;
 
+  const value =
+    data?.walletBalance ??
+    data?.balance ??
+    data?.availableBalance ??
+    data?.data?.walletBalance ??
+    data?.data?.balance ??
+    0;
+
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatWalletAmount(amount: number | null) {
+  if (amount === null) return "—";
+
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 const RowButton = React.memo(function RowButton({
   active,
   icon: Icon,
@@ -321,7 +365,15 @@ export default function BrandSidebar({
   const isShort = useMediaQuery("(max-height: 800px)");
   const supportsHover = useMediaQuery("(hover: hover)");
   const vw = useViewportWidth();
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const walletBalanceLabel = useMemo(
+    () => formatWalletAmount(walletBalance),
+    [walletBalance]
+  );
+  const [brandLite, setBrandLite] = useState<BrandLiteRes | null>(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
   /* --------------------------------- state -------------------------------- */
 
   const [active, setActive] = useState<string>("dashboard");
@@ -425,7 +477,14 @@ export default function BrandSidebar({
       },
       { key: "credits", label: "Credits", icon: ContactlessPayment, section: "manage" },
       { key: "help", label: "Help", icon: Question, section: "manage" },
-      { key: "invite", label: "Invite Members", icon: UserPlus, section: "manage" },
+      // {
+      //   key: "invite", label: "Invite Members", icon: UserPlus, section: "manage",
+      //   right: (
+      //     <span className="grid h-5 w-10 place-items-center rounded-full bg-yellow-100 text-[11px] text-[#1a1a1a]">
+      //       Soon
+      //     </span>
+      //   ),
+      // },
     ],
     []
   );
@@ -513,6 +572,19 @@ export default function BrandSidebar({
     }),
     []
   );
+  // 4) add these derived values near your other derived values
+
+  const footerBrandName = brandLite?.name?.trim() || "Brand";
+  const footerProxyEmail = brandLite?.proxyEmail?.trim() || "No proxy email";
+  const footerProfilePic = brandLite?.profilePic?.trim() || "";
+
+  const footerPlanLabel = titleCasePlan(
+    brandLite?.subscriptionDetails?.brandPlanName ||
+    brandLite?.subscriptionDetails?.plan ||
+    planName
+  );
+
+  const footerPlanStatus = brandLite?.subscriptionDetails?.status?.trim() || "";
 
   /* -------------------------------- effects -------------------------------- */
 
@@ -537,6 +609,26 @@ export default function BrandSidebar({
       if (cachedPlanName) setPlanName(cachedPlanName.toLowerCase());
     } catch { }
   }, []);
+  useEffect(() => {
+    if (!brandId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await apiGetBrandWallet({ brandId });
+
+        if (cancelled) return;
+        setWalletBalance(getWalletAmount(res));
+      } catch {
+        if (!cancelled) setWalletBalance(0);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId]);
 
   useEffect(() => {
     if (!token || !brandId) return;
@@ -645,6 +737,60 @@ export default function BrandSidebar({
     if (inCampaigns && !(isDesktop && collapsed)) setCampaignOpen(true);
   }, [active, isDesktop, collapsed]);
 
+  // 5) fetch lite api data
+
+  useEffect(() => {
+    if (!brandId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await apiGetBrandLite(brandId);
+
+        if (cancelled) return;
+
+        setBrandLite(data ?? null);
+
+        const nextPlanId = data?.subscriptionDetails?.brandPlanId ?? null;
+        const nextPlanNameRaw =
+          data?.subscriptionDetails?.brandPlanName ??
+          data?.subscriptionDetails?.plan ??
+          null;
+
+        if (nextPlanId) setPlanId(nextPlanId);
+        if (nextPlanNameRaw) setPlanName(String(nextPlanNameRaw).toLowerCase());
+      } catch {
+        if (!cancelled) setBrandLite(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId]);
+
+  // 6) outside click close for the 3-dot menu
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = profileMenuRef.current;
+      if (!el) return;
+      if (el.contains(e.target as Node)) return;
+      setProfileMenuOpen(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, { capture: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, {
+        capture: true,
+      } as EventListenerOptions);
+    };
+  }, [profileMenuOpen]);
+
   /* ------------------------------- callbacks ------------------------------- */
 
   const setDrawerOpen = useCallback(
@@ -706,6 +852,35 @@ export default function BrandSidebar({
     setActive("campaigns_all");
     goTo("campaigns_all");
   }, [beginOpenDesktop, goTo]);
+  // 7) add these handlers
+
+  const handleProfileMenuAction = useCallback(
+    (href: string) => {
+      setProfileMenuOpen(false);
+      router.push(href);
+
+      if (!isDesktop) setDrawerOpen(false);
+    },
+    [router, isDesktop, setDrawerOpen]
+  );
+
+  const handleLogout = useCallback(() => {
+    try {
+      [
+        "token",
+        "accessToken",
+        "brandId",
+        "currentBrandId",
+        "brandPlanId",
+        "brandPlanName",
+      ].forEach((key) => window.localStorage.removeItem(key));
+    } catch { }
+
+    setProfileMenuOpen(false);
+    router.replace("/brand/login");
+
+    if (!isDesktop) setDrawerOpen(false);
+  }, [router, isDesktop, setDrawerOpen]);
 
   const handleCampaignMouseEnter = useCallback(() => {
     if (!supportsHover) return;
@@ -730,6 +905,25 @@ export default function BrandSidebar({
         item.key === "campaigns" && (active === "campaigns" || isCampaignChildActive);
 
       const isCollapsed = isDesktop && (collapsed || isClosing);
+
+      if (item.key === "wallet") {
+        return (
+          <RowButton
+            key={item.key}
+            icon={item.icon}
+            label={item.label}
+            right={
+              !isCollapsed ? (
+                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-[#1a1a1a]">
+                  {walletBalanceLabel}
+                </span>
+              ) : undefined
+            }
+            tight={tight}
+            collapsed={isCollapsed}
+          />
+        );
+      }
 
       return (
         <RowButton
@@ -759,6 +953,7 @@ export default function BrandSidebar({
       isDesktop,
       openCampaignsFromRail,
       tight,
+      walletBalanceLabel,
     ]
   );
 
@@ -1218,29 +1413,108 @@ export default function BrandSidebar({
 
               <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
 
-              <div className="flex w-full items-center gap-3 bg-white p-3">
-                <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
-                  <img
-                    alt="Aditya"
-                    src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=120&q=60"
-                    className="h-full w-full object-cover"
-                  />
+              {/* 8) replace the current expanded footer profile section with this */}
+
+              <div className="relative">
+                <div className="flex w-full items-center gap-3 bg-white p-3">
+                  <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full border border-neutral-200 bg-neutral-100 text-[15px] font-semibold text-[#1a1a1a]">
+                    {footerBrandName.charAt(0).toUpperCase()}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[16px] font-semibold text-[#1a1a1a]">
+                      {footerBrandName}
+                    </div>
+
+                    <div className="truncate text-[12px] text-neutral-500">
+                      {footerProxyEmail}
+                    </div>
+
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-[#1a1a1a]">
+                        {footerPlanLabel}
+                      </span>
+
+                      {footerPlanStatus ? (
+                        <span className="truncate text-[11px] capitalize text-neutral-500">
+                          {footerPlanStatus}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Open profile menu"
+                    aria-expanded={profileMenuOpen}
+                    onClick={() => setProfileMenuOpen((prev) => !prev)}
+                    className={cn(
+                      "grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-[#1a1a1a] transition hover:bg-[#EDEDED]",
+                      FOCUS_RING
+                    )}
+                  >
+                    <DotsThree size={24} />
+                  </button>
                 </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[16px] font-semibold text-[#1a1a1a]">Aditya</div>
-                  <div className="truncate text-[12px] text-neutral-500">aditya.mail.coll...</div>
-                </div>
+                <AnimatePresence initial={false}>
+                  {profileMenuOpen && (
+                    <m.div
+                      ref={profileMenuRef}
+                      key="profile-menu"
+                      variants={dropdownY}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={motionTransitions.content}
+                      className="absolute bottom-[calc(100%+12px)] right-0 z-[70]"
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          width: "13.6875rem",
+                          padding: "1rem 0.75rem",
+                          flexDirection: "column",
+                          alignItems: "flex-start",
+                          gap: "1rem",
+                          borderRadius: "0.75rem",
+                          background: "var(--Light-Background-Primary, #FFF)",
+                          boxShadow:
+                            "0 24px 40px -4px rgba(0, 0, 0, 0.10), 0 0 12px 0 rgba(0, 0, 0, 0.08)",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleProfileMenuAction("/brand/profile")}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] font-medium text-[#1a1a1a] transition hover:bg-[#F5F5F5]"
+                        >
+                          <UserCircle size={20} />
+                          <span>Profile</span>
+                        </button>
 
-                <button
-                  type="button"
-                  className={cn(
-                    "grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl text-[#1a1a1a] transition hover:bg-[#EDEDED]",
-                    FOCUS_RING
+                        <button
+                          type="button"
+                          onClick={() => handleProfileMenuAction("/brand/invite-members")}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] font-medium text-[#1a1a1a] transition hover:bg-[#F5F5F5]"
+                        >
+                          <UserPlus size={20} />
+                          <span>Invite Members</span>
+                        </button>
+
+                        <div className="h-px w-full bg-neutral-200" />
+
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] font-medium text-[#F04438] transition hover:bg-[#FFF1F0]"
+                        >
+                          <SignOut size={20} />
+                          <span>Logout</span>
+                        </button>
+                      </div>
+                    </m.div>
                   )}
-                >
-                  <DotsThree size={24} />
-                </button>
+                </AnimatePresence>
               </div>
             </m.div>
           )}

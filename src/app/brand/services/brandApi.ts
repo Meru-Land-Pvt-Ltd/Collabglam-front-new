@@ -1589,3 +1589,15 @@ export async function apiGetCampaignInvitationsByBrandAndCampaign(
     }
   );
 }
+
+export type BrandLiteResponse = {
+  brandId: string;
+  name: string;
+  proxyEmail: string;
+  profilePic: string;
+  subscriptionDetails: any | null;
+};
+
+export async function apiGetBrandLite(brandId: string) {
+  return apiGet<BrandLiteResponse>(`${BRAND_BASE}/lite`, { brandId });
+}
