@@ -28,10 +28,12 @@ import {
   type AdminEmailMessageDto,
   type AdminEmailThreadDto,
   type PipelineRecipientDto,
+  type BrandOutreachRecipientDto,
   type EmailTemplateDto,
   composeAdminEmail,
   createEmailTemplate,
   deleteEmailTemplateById,
+  fetchBrandOutreachRecipients,
   fetchEmailTemplates,
   fetchEmailThreads,
   fetchMailboxScope,
@@ -39,6 +41,7 @@ import {
   fetchThreadMessages,
   replyToEmailThread,
   updateEmailTemplateById,
+  sendSelectedBrandOutreachEmails,
   sendSelectedPipelineEmails,
 } from "./admin-email";
 
@@ -46,6 +49,7 @@ type RecipientStatus = "Ready" | "Sent" | "Replied" | "Bounced" | "Failed";
 type ThreadStatusUi = "Waiting" | "Replied" | "Closed" | "Archived";
 type EditorMode = "compose" | "reply";
 type AppTab = "mails" | "templates";
+type SelectionMode = "none" | "pipeline" | "brand";
 
 type MailboxScopeData = {
   actor: {
@@ -354,9 +358,9 @@ function mapBackendMessageToUi(
     sender:
       msg.direction === "OUTBOUND"
         ? thread?.ownerAdminName ||
-        thread?.senderEmail ||
-        thread?.role?.toUpperCase() ||
-        "Admin"
+          thread?.senderEmail ||
+          thread?.role?.toUpperCase() ||
+          "Admin"
         : msg.from || "Recipient",
     email:
       msg.direction === "OUTBOUND" ? thread?.senderEmail || "" : msg.from || "",
@@ -379,11 +383,39 @@ function mapBackendTemplateToUi(item: EmailTemplateDto): MailTemplate {
   };
 }
 
+function mapPipelineRecipientToUi(item: PipelineRecipientDto): Recipient {
+  return {
+    id: item.pipelineId,
+    name: item.name || item.email,
+    email: item.email,
+    company: item.company,
+    niche: Array.isArray(item.niche) ? item.niche.join(", ") : undefined,
+    status: item.threadId ? "Sent" : "Ready",
+    threadId: item.threadId || undefined,
+    replyToEmail: item.replyToEmail || undefined,
+  };
+}
+
+function mapBrandRecipientToUi(item: BrandOutreachRecipientDto): Recipient {
+  return {
+    id: item.brandOutreachId,
+    name: item.name || item.email,
+    email: item.email,
+    company: item.website,
+    niche: undefined,
+    status: item.threadId ? "Sent" : "Ready",
+    threadId: item.threadId || undefined,
+    replyToEmail: item.replyToEmail || undefined,
+  };
+}
+
 export default function Page() {
   const searchParams = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const mode = searchParams.get("mode") === "brand" ? "brand" : "pipeline";
   const campaignId = searchParams.get("campaignId") || "";
+
   const pipelineIds = useMemo(() => {
     const raw = searchParams.get("pipelineIds") || "";
     return raw
@@ -392,8 +424,22 @@ export default function Page() {
       .filter(Boolean);
   }, [searchParams]);
 
+  const brandOutreachIds = useMemo(() => {
+    const raw = searchParams.get("brandOutreachIds") || "";
+    return raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }, [searchParams]);
+
   const pipelineIdsKey = pipelineIds.join(",");
-  const pipelineSelectionMode = Boolean(campaignId && pipelineIds.length > 0);
+  const brandOutreachIdsKey = brandOutreachIds.join(",");
+
+  const selectionMode: SelectionMode = useMemo(() => {
+    if (mode === "brand" && brandOutreachIds.length > 0) return "brand";
+    if (campaignId && pipelineIds.length > 0) return "pipeline";
+    return "none";
+  }, [mode, campaignId, pipelineIds.length, brandOutreachIds.length]);
 
   const [activeTab, setActiveTab] = useState<AppTab>("mails");
 
@@ -414,6 +460,7 @@ export default function Page() {
   const [loadingThreads, setLoadingThreads] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("compose");
@@ -510,8 +557,8 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load mailbox scope"
+          error?.message ||
+          "Failed to load mailbox scope"
       );
     } finally {
       setLoadingScope(false);
@@ -538,8 +585,8 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load threads"
+          error?.message ||
+          "Failed to load threads"
       );
     } finally {
       setLoadingThreads(false);
@@ -567,43 +614,51 @@ export default function Page() {
         prev.map((item) =>
           item.id === threadId
             ? {
-              ...(baseThread || item),
-              messages: backendMessages,
-            }
+                ...(baseThread || item),
+                messages: backendMessages,
+              }
             : item
         )
       );
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load thread messages"
+          error?.message ||
+          "Failed to load thread messages"
       );
     } finally {
       setLoadingMessages(false);
     }
   };
 
-  const loadPipelineRecipients = async () => {
+  const loadSelectionRecipients = async () => {
+    if (selectionMode === "none") return;
+
     try {
+      setLoadingRecipients(true);
       setApiError(null);
 
-      const response = await fetchPipelineRecipients({
-        campaignId,
-        pipelineIds,
+      if (selectionMode === "pipeline") {
+        const response = await fetchPipelineRecipients({
+          campaignId,
+          pipelineIds,
+        });
+
+        const mappedRecipients: Recipient[] = (response?.data?.items || []).map(
+          (item: PipelineRecipientDto) => mapPipelineRecipientToUi(item)
+        );
+
+        setRecipients(mappedRecipients);
+        setSelectedRecipientIds(mappedRecipients.map((item) => item.id));
+        return;
+      }
+
+      const response = await fetchBrandOutreachRecipients({
+        brandOutreachIds,
       });
 
       const mappedRecipients: Recipient[] = (response?.data?.items || []).map(
-        (item: PipelineRecipientDto) => ({
-          id: item.pipelineId,
-          name: item.name || item.email,
-          email: item.email,
-          company: item.company,
-          niche: Array.isArray(item.niche) ? item.niche.join(", ") : undefined,
-          status: item.threadId ? "Sent" : "Ready",
-          threadId: item.threadId || undefined,
-          replyToEmail: item.replyToEmail || undefined,
-        })
+        (item: BrandOutreachRecipientDto) => mapBrandRecipientToUi(item)
       );
 
       setRecipients(mappedRecipients);
@@ -611,9 +666,11 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load selected pipeline recipients"
+          error?.message ||
+          "Failed to load selected recipients"
       );
+    } finally {
+      setLoadingRecipients(false);
     }
   };
 
@@ -633,8 +690,8 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load templates"
+          error?.message ||
+          "Failed to load templates"
       );
     } finally {
       setLoadingTemplates(false);
@@ -651,10 +708,16 @@ export default function Page() {
     void loadThreadsFromApi();
     void loadTemplates();
 
-    if (pipelineSelectionMode) {
-      void loadPipelineRecipients();
+    if (selectionMode !== "none") {
+      void loadSelectionRecipients();
     }
-  }, [mailboxScope, pipelineSelectionMode, campaignId, pipelineIdsKey]);
+  }, [
+    mailboxScope,
+    selectionMode,
+    campaignId,
+    pipelineIdsKey,
+    brandOutreachIdsKey,
+  ]);
 
   useEffect(() => {
     if (selectedThreadId) {
@@ -797,9 +860,9 @@ export default function Page() {
     const toList =
       selectedRecipientIds.length > 0
         ? recipients
-          .filter((item) => selectedRecipientIds.includes(item.id))
-          .map((item) => item.email)
-          .join(", ")
+            .filter((item) => selectedRecipientIds.includes(item.id))
+            .map((item) => item.email)
+            .join(", ")
         : "";
 
     setEditorMode("compose");
@@ -858,7 +921,7 @@ export default function Page() {
       } else {
         let response: any;
 
-        if (pipelineSelectionMode) {
+        if (selectionMode === "pipeline") {
           const selectedPipelineIds = recipients
             .filter((item) => selectedRecipientIds.includes(item.id))
             .map((item) => item.id);
@@ -870,6 +933,21 @@ export default function Page() {
           response = await sendSelectedPipelineEmails({
             campaignId,
             pipelineIds: selectedPipelineIds,
+            subject: payload.subject,
+            text: payload.body,
+            html: payload.htmlBody,
+          });
+        } else if (selectionMode === "brand") {
+          const selectedBrandOutreachIds = recipients
+            .filter((item) => selectedRecipientIds.includes(item.id))
+            .map((item) => item.id);
+
+          if (!selectedBrandOutreachIds.length) {
+            throw new Error("Please select at least one brand outreach recipient.");
+          }
+
+          response = await sendSelectedBrandOutreachEmails({
+            brandOutreachIds: selectedBrandOutreachIds,
             subject: payload.subject,
             text: payload.body,
             html: payload.htmlBody,
@@ -905,8 +983,8 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to send email"
+          error?.message ||
+          "Failed to send email"
       );
     } finally {
       setEditorSending(false);
@@ -967,8 +1045,8 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to save template"
+          error?.message ||
+          "Failed to save template"
       );
     } finally {
       setTemplateFormSaving(false);
@@ -985,8 +1063,8 @@ export default function Page() {
     } catch (error: any) {
       setApiError(
         error?.response?.data?.message ||
-        error?.message ||
-        "Failed to delete template"
+          error?.message ||
+          "Failed to delete template"
       );
     }
   };
@@ -1013,7 +1091,7 @@ export default function Page() {
                 Manage conversations first, actions second
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-slate-500">
-                Threads and active conversations now stay front-and-center, while
+                Threads and active conversations stay front-and-center, while
                 compose tools and recipients live in a focused side panel.
               </p>
             </div>
@@ -1275,7 +1353,7 @@ export default function Page() {
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={pipelineSelectionMode}
+                        disabled={selectionMode !== "none"}
                         className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {uploadingCsv ? (
@@ -1296,12 +1374,6 @@ export default function Page() {
                       </button>
                     </div>
 
-                    {pipelineSelectionMode ? (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                        Pipeline recipient mode is active. CSV upload is disabled and send uses selected pipeline IDs.
-                      </div>
-                    ) : null}
-
                     {uploadSummary ? (
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
                         <div className="font-medium text-slate-900">{uploadSummary.fileName}</div>
@@ -1318,7 +1390,13 @@ export default function Page() {
                 <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                   <PanelHeader
                     title="Recipients"
-                    subtitle="Selection panel"
+                    subtitle={
+                      selectionMode === "brand"
+                        ? "Selected brand outreach recipients"
+                        : selectionMode === "pipeline"
+                          ? "Selected pipeline recipients"
+                          : "Selection panel"
+                    }
                     actions={
                       <div className="flex gap-2">
                         <button
@@ -1350,7 +1428,12 @@ export default function Page() {
                   </div>
 
                   <div className="mt-4 max-h-[480px] space-y-2 overflow-y-auto pr-1">
-                    {filteredRecipients.length ? (
+                    {loadingRecipients ? (
+                      <div className="flex items-center justify-center py-10 text-slate-500">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading recipients...
+                      </div>
+                    ) : filteredRecipients.length ? (
                       filteredRecipients.map((recipient) => (
                         <RecipientListItem
                           key={recipient.id}
@@ -1363,7 +1446,7 @@ export default function Page() {
                       <EmptyState
                         icon={<Users className="h-5 w-5" />}
                         title="No recipients"
-                        description="Upload a CSV or load pipeline recipients to start composing."
+                        description="Upload a CSV or load selected recipients to start composing."
                       />
                     )}
                   </div>

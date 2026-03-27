@@ -15,8 +15,6 @@ import {
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
-
-// shadcn/ui components
 import { Skeleton } from '@/components/ui/skeleton';
 
 type PitchRow = {
@@ -35,7 +33,8 @@ type PitchRow = {
   comments?: string;
 };
 
-/* ─── helpers ─── */
+type ViewerType = 'brand' | 'admin';
+
 function fmtFollowers(n: number | null | undefined): string {
   if (n == null) return '—';
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -43,17 +42,16 @@ function fmtFollowers(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
-// Updated to softer, lighter colors for a white theme
 const NICHE_PALETTE: Record<string, string> = {
-  fashion:     'bg-rose-50 text-rose-600 ring-rose-200',
-  beauty:      'bg-pink-50 text-pink-600 ring-pink-200',
-  tech:        'bg-sky-50 text-sky-600 ring-sky-200',
-  gaming:      'bg-violet-50 text-violet-600 ring-violet-200',
-  fitness:     'bg-emerald-50 text-emerald-600 ring-emerald-200',
-  food:        'bg-amber-50 text-amber-700 ring-amber-200',
-  travel:      'bg-teal-50 text-teal-600 ring-teal-200',
-  lifestyle:   'bg-fuchsia-50 text-fuchsia-600 ring-fuchsia-200',
-  default:     'bg-slate-100 text-slate-600 ring-slate-200',
+  fashion: 'bg-rose-50 text-rose-600 ring-rose-200',
+  beauty: 'bg-pink-50 text-pink-600 ring-pink-200',
+  tech: 'bg-sky-50 text-sky-600 ring-sky-200',
+  gaming: 'bg-violet-50 text-violet-600 ring-violet-200',
+  fitness: 'bg-emerald-50 text-emerald-600 ring-emerald-200',
+  food: 'bg-amber-50 text-amber-700 ring-amber-200',
+  travel: 'bg-teal-50 text-teal-600 ring-teal-200',
+  lifestyle: 'bg-fuchsia-50 text-fuchsia-600 ring-fuchsia-200',
+  default: 'bg-slate-100 text-slate-600 ring-slate-200',
 };
 
 function nicheClass(tag: string): string {
@@ -61,7 +59,6 @@ function nicheClass(tag: string): string {
   return NICHE_PALETTE[key] || NICHE_PALETTE.default;
 }
 
-/* ─── Stat Card ─── */
 function StatCard({
   icon: Icon,
   label,
@@ -88,7 +85,6 @@ function StatCard({
   );
 }
 
-/* ─── Good Fit Toggle ─── */
 function GoodFitButton({
   checked,
   saving,
@@ -106,20 +102,25 @@ function GoodFitButton({
       disabled={saving || disabled}
       aria-label="Toggle good fit"
       className={`group relative flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2
-        ${checked
-          ? 'border-rose-200 bg-rose-50 text-rose-500 shadow-sm'
-          : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500'
+        ${
+          checked
+            ? 'border-rose-200 bg-rose-50 text-rose-500 shadow-sm'
+            : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500'
         } ${(saving || disabled) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
     >
-      {saving
-        ? <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
-        : <Heart className={`h-4 w-4 transition-transform duration-200 ${checked ? 'fill-current scale-110' : 'group-hover:scale-110'}`} />
-      }
+      {saving ? (
+        <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+      ) : (
+        <Heart
+          className={`h-4 w-4 transition-transform duration-200 ${
+            checked ? 'fill-current scale-110' : 'group-hover:scale-110'
+          }`}
+        />
+      )}
     </button>
   );
 }
 
-/* ─── Page ─── */
 export default function InfluencerSheetPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -129,25 +130,54 @@ export default function InfluencerSheetPage() {
   const [savingId, setSavingId] = useState('');
   const [rows, setRows] = useState<PitchRow[]>([]);
   const [brandId, setBrandId] = useState('');
+  const [viewerType, setViewerType] = useState<ViewerType | null>(null);
   const [error, setError] = useState('');
 
+  const isBrandView = viewerType === 'brand';
+  const isAdminView = viewerType === 'admin';
+
   useEffect(() => {
+    const storedUserType = localStorage.getItem('userType');
+
+    if (storedUserType === 'admin') {
+      setViewerType('admin');
+      return;
+    }
+
     const storedBrandId =
       localStorage.getItem('brandId') ||
       localStorage.getItem('brand_id') ||
       '';
-    if (!storedBrandId) { router.replace('/brand/login'); return; }
+
+    if (!storedBrandId) {
+      router.replace('/brand/login');
+      return;
+    }
+
     setBrandId(storedBrandId);
+    setViewerType('brand');
   }, [router]);
 
   useEffect(() => {
     async function loadSheet() {
-      if (!campaignId || !brandId) return;
+      if (!campaignId || !viewerType) return;
+      if (viewerType === 'brand' && !brandId) return;
+
       try {
-        setLoading(true); setError('');
-        const resp = await get<{ success: boolean; data: { campaignId: string; items: PitchRow[] } }>(
-          `/pipeline/brand-sheet`, { campaignId, brandId }
-        );
+        setLoading(true);
+        setError('');
+
+        const params =
+          viewerType === 'brand'
+            ? { campaignId, brandId }
+            : { campaignId };
+
+        const resp = await get<{
+          success: boolean;
+          viewerType?: ViewerType;
+          data: { campaignId: string; items: PitchRow[] };
+        }>('/pipeline/brand-sheet', params);
+
         setRows(resp?.data?.items || []);
       } catch (e: any) {
         setError(e?.response?.data?.error || e?.message || 'Failed to load pitch sheet');
@@ -155,15 +185,28 @@ export default function InfluencerSheetPage() {
         setLoading(false);
       }
     }
+
     loadSheet();
-  }, [campaignId, brandId]);
+  }, [campaignId, brandId, viewerType]);
 
   async function saveGoodFit(id: string, goodFit: boolean) {
+    if (!isBrandView) return;
+
     try {
-      setSavingId(id); setError('');
-      const resp = await post(`/pipeline/brand-sheet/${id}/good-fit`, { brandId, goodFit });
+      setSavingId(id);
+      setError('');
+
+      const resp = await post(`/pipeline/brand-sheet/${id}/good-fit`, {
+        brandId,
+        goodFit,
+      });
+
       const updated = resp?.data;
-      setRows((prev) => prev.map((item) => item._id === id ? { ...item, goodFit: !!updated?.goodFit } : item));
+      setRows((prev) =>
+        prev.map((item) =>
+          item._id === id ? { ...item, goodFit: !!updated?.goodFit } : item
+        )
+      );
     } catch (e: any) {
       setError(e?.response?.data?.error || e?.message || 'Failed to update good fit');
     } finally {
@@ -171,34 +214,40 @@ export default function InfluencerSheetPage() {
     }
   }
 
-  /* Derived stats */
-  const stats = useMemo(() => ({
-    total: rows.length,
-    goodFit: rows.filter((r) => r.goodFit).length,
-    totalReach: rows.reduce((s, r) => s + (r.followers || 0), 0),
-    avgRate: rows.filter((r) => r.rateUsd).length
-      ? Math.round(rows.reduce((s, r) => s + (r.rateUsd || 0), 0) / rows.filter((r) => r.rateUsd).length)
-      : 0,
-  }), [rows]);
+  const stats = useMemo(
+    () => ({
+      total: rows.length,
+      goodFit: rows.filter((r) => r.goodFit).length,
+      totalReach: rows.reduce((s, r) => s + (r.followers || 0), 0),
+      avgRate: rows.filter((r) => r.rateUsd).length
+        ? Math.round(
+            rows.reduce((s, r) => s + (r.rateUsd || 0), 0) /
+              rows.filter((r) => r.rateUsd).length
+          )
+        : 0,
+    }),
+    [rows]
+  );
 
-  /* ── Font injection ── */
   useEffect(() => {
     if (document.getElementById('pitch-sheet-fonts')) return;
     const link = document.createElement('link');
     link.id = 'pitch-sheet-fonts';
     link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap';
+    link.href =
+      'https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap';
     document.head.appendChild(link);
   }, []);
 
-  /* ── Loading ── */
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50/50 p-6 md:p-10" style={{ fontFamily: "'DM Sans', sans-serif" }}>
         <div className="mx-auto max-w-7xl space-y-6">
           <Skeleton className="h-10 w-48 rounded-xl bg-slate-200/60" />
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl bg-white shadow-sm" />)}
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-2xl bg-white shadow-sm" />
+            ))}
           </div>
           <Skeleton className="h-[500px] w-full rounded-2xl bg-white shadow-sm" />
         </div>
@@ -206,7 +255,6 @@ export default function InfluencerSheetPage() {
     );
   }
 
-  /* ── Error ── */
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50/50 p-6">
@@ -229,7 +277,41 @@ export default function InfluencerSheetPage() {
     );
   }
 
-  /* ── Main ── */
+  const headers = isBrandView
+    ? ['Influencer', 'Followers', 'Profile', 'Niche', 'Country', 'Rate', 'Selection Reason', 'Comments', 'Fit']
+    : ['Influencer', 'Followers', 'Profile', 'Niche', 'Country', 'Rate', 'Selection Reason', 'Comments'];
+
+  const statCards = [
+    {
+      icon: Users,
+      label: 'Total Pitched',
+      value: stats.total,
+      accentClass: 'bg-indigo-50 text-indigo-600',
+    },
+    ...(isBrandView
+      ? [
+          {
+            icon: Heart,
+            label: 'Good Fits',
+            value: stats.goodFit,
+            accentClass: 'bg-rose-50 text-rose-500',
+          },
+        ]
+      : []),
+    {
+      icon: TrendingUp,
+      label: 'Total Reach',
+      value: fmtFollowers(stats.totalReach),
+      accentClass: 'bg-sky-50 text-sky-600',
+    },
+    {
+      icon: DollarSign,
+      label: 'Avg. Rate',
+      value: stats.avgRate ? `$${stats.avgRate.toLocaleString()}` : '—',
+      accentClass: 'bg-emerald-50 text-emerald-600',
+    },
+  ];
+
   return (
     <>
       <style>{`
@@ -249,16 +331,12 @@ export default function InfluencerSheetPage() {
       `}</style>
 
       <div className="pitch-sheet-root relative min-h-screen overflow-x-hidden bg-slate-50/50">
-        
-        {/* Very subtle ambient background color blobs */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
           <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-indigo-100/40 blur-[100px]" />
           <div className="absolute -right-32 top-40 h-96 w-96 rounded-full bg-rose-100/30 blur-[120px]" />
         </div>
 
         <div className="relative z-10 mx-auto max-w-[96rem] px-4 py-8 md:px-8">
-
-          {/* ── Header ── */}
           <div className="mb-8 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-indigo-600">
@@ -268,11 +346,13 @@ export default function InfluencerSheetPage() {
                 Influencer Review
               </h1>
               <p className="mt-1.5 text-sm text-slate-500">
-                Review and shortlist the best candidates for your upcoming campaign.
+                {isAdminView
+                  ? 'Admin preview of the campaign pitch sheet.'
+                  : 'Review and shortlist the best candidates for your upcoming campaign.'}
               </p>
             </div>
 
-            {rows.length > 0 && (
+            {rows.length > 0 && isBrandView && (
               <div className="mt-4 flex flex-col items-start gap-2 sm:mt-0 sm:items-end">
                 <span className="text-sm text-slate-500">
                   <span className="font-semibold text-slate-900">{stats.goodFit}</span> of{' '}
@@ -288,20 +368,25 @@ export default function InfluencerSheetPage() {
             )}
           </div>
 
-          {/* ── Stat Cards ── */}
           {rows.length > 0 && (
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-              <StatCard icon={Users}        label="Total Pitched"   value={stats.total}                   accentClass="bg-indigo-50 text-indigo-600" />
-              <StatCard icon={Heart}        label="Good Fits"       value={stats.goodFit}                 accentClass="bg-rose-50 text-rose-500" />
-              <StatCard icon={TrendingUp}   label="Total Reach"     value={fmtFollowers(stats.totalReach)} accentClass="bg-sky-50 text-sky-600" />
-              <StatCard icon={DollarSign}   label="Avg. Rate"       value={stats.avgRate ? `$${stats.avgRate.toLocaleString()}` : '—'} accentClass="bg-emerald-50 text-emerald-600" />
+            <div
+              className={`mb-6 grid gap-3 ${
+                statCards.length === 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'
+              } lg:gap-4`}
+            >
+              {statCards.map((card) => (
+                <StatCard
+                  key={card.label}
+                  icon={card.icon}
+                  label={card.label}
+                  value={card.value}
+                  accentClass={card.accentClass}
+                />
+              ))}
             </div>
           )}
 
-          {/* ── Table Card ── */}
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
-            {/* Table Header Bar */}
             <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/50 px-6 py-4">
               <p className="text-sm font-medium text-slate-600">
                 {rows.length > 0 ? `${rows.length} influencer${rows.length !== 1 ? 's' : ''}` : 'No candidates yet'}
@@ -315,7 +400,6 @@ export default function InfluencerSheetPage() {
             </div>
 
             {!rows.length ? (
-              /* ── Empty ── */
               <div className="flex flex-col items-center justify-center py-28 text-center bg-white">
                 <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50">
                   <Users className="h-8 w-8 text-slate-400" />
@@ -324,12 +408,11 @@ export default function InfluencerSheetPage() {
                 <p className="mt-1 text-sm text-slate-500">Candidates will appear here once pitched.</p>
               </div>
             ) : (
-              /* ── Table ── */
               <div className="overflow-x-auto">
-                <table className="min-w-[1280px] w-full border-collapse text-sm bg-white">
+                <table className={`w-full border-collapse text-sm bg-white ${isBrandView ? 'min-w-[1280px]' : 'min-w-[1160px]'}`}>
                   <thead>
                     <tr className="border-b border-slate-200">
-                      {['Influencer', 'Followers', 'Profile', 'Niche', 'Country', 'Rate', 'Selection Reason', 'Comments', 'Fit'].map((h, i) => (
+                      {headers.map((h, i) => (
                         <th
                           key={h}
                           className={`py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500
@@ -349,7 +432,6 @@ export default function InfluencerSheetPage() {
                         className="row-animate group border-b border-slate-100 transition-colors duration-150 hover:bg-slate-50/80"
                         style={{ animationDelay: `${i * 30}ms` }}
                       >
-                        {/* Name */}
                         <td className="py-4 pl-6 pr-4 whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-600 ring-1 ring-inset ring-indigo-100/50">
@@ -359,7 +441,6 @@ export default function InfluencerSheetPage() {
                           </div>
                         </td>
 
-                        {/* Followers */}
                         <td className="whitespace-nowrap px-4 py-4 tabular-nums text-slate-600">
                           <span className="flex items-center gap-1.5">
                             <Users className="h-3.5 w-3.5 text-slate-400" />
@@ -367,7 +448,6 @@ export default function InfluencerSheetPage() {
                           </span>
                         </td>
 
-                        {/* Link */}
                         <td className="whitespace-nowrap px-4 py-4">
                           {row.primaryLink ? (
                             <a
@@ -378,64 +458,72 @@ export default function InfluencerSheetPage() {
                             >
                               Profile <ExternalLink className="h-3 w-3 text-slate-400" />
                             </a>
-                          ) : <span className="text-slate-400">—</span>}
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
 
-                        {/* Niche */}
                         <td className="px-4 py-4">
                           {Array.isArray(row.niche) && row.niche.length ? (
                             <div className="flex flex-wrap gap-1.5">
                               {row.niche.map((n) => (
-                                <span key={n} className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${nicheClass(n)}`}>
+                                <span
+                                  key={n}
+                                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${nicheClass(n)}`}
+                                >
                                   {n}
                                 </span>
                               ))}
                             </div>
-                          ) : <span className="text-slate-400">—</span>}
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
 
-                        {/* Country */}
                         <td className="whitespace-nowrap px-4 py-4 text-slate-600">
                           {row.country ? (
                             <span className="flex items-center gap-1.5">
                               <Globe className="h-3.5 w-3.5 text-slate-400" />
                               {row.country}
                             </span>
-                          ) : <span className="text-slate-400">—</span>}
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
 
-                        {/* Rate */}
                         <td className="whitespace-nowrap px-4 py-4 font-medium tabular-nums text-slate-900">
                           {row.rateUsd != null ? (
                             <span className="flex items-center gap-1">
-                              <DollarSign className="h-3.5 w-3.5 text-slate-400" />{row.rateUsd.toLocaleString()}
+                              <DollarSign className="h-3.5 w-3.5 text-slate-400" />
+                              {row.rateUsd.toLocaleString()}
                             </span>
-                          ) : <span className="text-slate-400">—</span>}
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
 
-                        {/* Selection Reason */}
                         <td className="px-4 py-4 max-w-[220px]">
                           <p className="line-clamp-2 text-[13px] leading-relaxed text-slate-600" title={row.selectionReason}>
                             {row.selectionReason || <span className="text-slate-400">—</span>}
                           </p>
                         </td>
 
-                        {/* Comments */}
                         <td className="px-4 py-4 max-w-[220px]">
                           <p className="line-clamp-2 text-[13px] leading-relaxed text-slate-500" title={row.comments}>
                             {row.comments || <span className="text-slate-400">—</span>}
                           </p>
                         </td>
 
-                        {/* Good Fit — sticky */}
-                        <td className="sticky right-0 bg-white px-4 py-4 text-center shadow-[-8px_0_15px_-3px_rgba(0,0,0,0.02)] transition-colors group-hover:bg-slate-50/80 after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-slate-100">
-                          <GoodFitButton
-                            checked={!!row.goodFit}
-                            saving={savingId === row._id}
-                            disabled={savingId !== '' && savingId !== row._id}
-                            onToggle={(v) => saveGoodFit(row._id, v)}
-                          />
-                        </td>
+                        {isBrandView && (
+                          <td className="sticky right-0 bg-white px-4 py-4 text-center shadow-[-8px_0_15px_-3px_rgba(0,0,0,0.02)] transition-colors group-hover:bg-slate-50/80 after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-slate-100">
+                            <GoodFitButton
+                              checked={!!row.goodFit}
+                              saving={savingId === row._id}
+                              disabled={savingId !== '' && savingId !== row._id}
+                              onToggle={(v) => saveGoodFit(row._id, v)}
+                            />
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -444,8 +532,7 @@ export default function InfluencerSheetPage() {
             )}
           </div>
 
-          {/* Footer note */}
-          {rows.length > 0 && (
+          {rows.length > 0 && isBrandView && (
             <p className="mt-6 text-center text-sm text-slate-500">
               Click the <Heart className="inline h-3.5 w-3.5 text-rose-500" /> icon to mark influencers as a good fit for your campaign.
             </p>

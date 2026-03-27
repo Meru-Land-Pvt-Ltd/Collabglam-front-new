@@ -204,6 +204,46 @@ export type SendSelectedPipelineEmailsResponse = ApiSuccess<{
   }>;
 }>;
 
+export type BrandOutreachRecipientDto = {
+  brandOutreachId: string;
+  name: string;
+  email: string;
+  website?: string;
+  status?: string;
+  threadId?: string | null;
+  replyToEmail?: string | null;
+};
+
+export type BrandOutreachRecipientsResponse = ApiSuccess<{
+  items: BrandOutreachRecipientDto[];
+}>;
+
+export type SendSelectedBrandOutreachEmailsInput = {
+  brandOutreachIds: string[];
+  ownerAdminId?: string;
+  subject?: string;
+  text?: string;
+  html?: string;
+};
+
+export type SendSelectedBrandOutreachEmailsResponse = ApiSuccess<{
+  total: number;
+  sent: number;
+  failed: number;
+  results: Array<{
+    brandOutreachId: string;
+    email: string;
+    name?: string;
+    threadId?: string;
+    emailMessageId?: string;
+    sesMessageId?: string | null;
+    replyToEmail?: string;
+    s3Key?: string | null;
+    success: boolean;
+    error?: string;
+  }>;
+}>;
+
 export type EmailTemplateVisibility = "GLOBAL" | "TREE" | "PERSONAL";
 
 export type EmailTemplateDto = {
@@ -292,6 +332,24 @@ export async function sendSelectedPipelineEmails(
 ) {
   return post<SendSelectedPipelineEmailsResponse>(
     "/admin-email/pipeline/send-selected",
+    input
+  );
+}
+
+export async function fetchBrandOutreachRecipients(input: {
+  brandOutreachIds: string[];
+}) {
+  return post<BrandOutreachRecipientsResponse>(
+    "/admin-email/brand-outreach/recipients",
+    input
+  );
+}
+
+export async function sendSelectedBrandOutreachEmails(
+  input: SendSelectedBrandOutreachEmailsInput
+) {
+  return post<SendSelectedBrandOutreachEmailsResponse>(
+    "/admin-email/brand-outreach/send-selected",
     input
   );
 }

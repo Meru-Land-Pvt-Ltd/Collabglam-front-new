@@ -128,7 +128,7 @@ export default function ViewCampaignPage() {
     setError(null);
 
     try {
-      const data = await get<CampaignData>(`/campaign/id?id=${id}`);
+      const data = await get<CampaignData>(`/admin/campaign/getById?id=${id}`);
       setCampaign(data);
     } catch {
       setError("Failed to load campaign details.");

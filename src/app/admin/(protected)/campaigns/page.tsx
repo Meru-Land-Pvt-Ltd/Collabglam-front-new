@@ -42,13 +42,14 @@ import {
 interface Campaign {
   _id: string;
   brandId: string;
-  campaignTitle?: string;
-  description?: string;
-  timeline?: { startDate?: string; endDate?: string };
+  campaignId: string;
+  name: string;
+  startDate?: string | null;
+  endDate?: string | null;
   budget?: number;
-  isActive: number;
   goal?: string;
   applicantCount?: number;
+  isActive: number;
   isDraft?: number;
   campaignStatus?: string;
 }
@@ -65,7 +66,7 @@ interface ListResponse {
 type StatusFilter = 0 | 1 | 2;
 
 type SortKey =
-  | "campaignTitle"
+  | "name"
   | "goal"
   | "startDate"
   | "endDate"
@@ -91,18 +92,20 @@ export default function AdminCampaignsPage() {
 
   const [search, setSearch] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(0);
+  const [page, setPage] = useState<number>(1);
+  const [limit] = useState<number>(10);
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
+
   const statusOptions = [
     { label: "All", value: 0 },
     { label: "Active", value: 1 },
     { label: "Inactive", value: 2 },
   ];
 
-  const [page, setPage] = useState<number>(1);
-  const [limit] = useState<number>(10);
-  const [sortKey, setSortKey] = useState<SortKey>("campaignTitle");
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
   const actionBtnClass =
     "rounded-md text-black hover:!bg-[#EDEDED] hover:!text-black focus-visible:!bg-[#EDEDED] focus-visible:!text-black focus-visible:!ring-0 active:!bg-[#EDEDED] data-[state=open]:!bg-[#EDEDED]";
+
   const fetchCampaigns = async () => {
     setLoading(true);
     try {
@@ -115,7 +118,7 @@ export default function AdminCampaignsPage() {
         type: statusFilter,
       };
 
-      const data = await post<ListResponse>("/admin/campaign/getlist", payload);
+      const data = await post<ListResponse>("/admin/campaign/lite", payload);
       setCampaigns(data.campaigns || []);
       setTotal(data.total || 0);
       setTotalPages(data.totalPages || 1);
@@ -145,7 +148,7 @@ export default function AdminCampaignsPage() {
     setPage(1);
   };
 
-  const formatDate = (iso?: string) => {
+  const formatDate = (iso?: string | null) => {
     if (!iso) return "—";
     return new Date(iso).toLocaleDateString(undefined, {
       month: "short",
@@ -200,9 +203,7 @@ export default function AdminCampaignsPage() {
             </Select>
 
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
-              <HiOutlineRefresh
-                className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
-              />
+              <HiOutlineRefresh className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
           </div>
@@ -219,12 +220,12 @@ export default function AdminCampaignsPage() {
         ) : campaigns.length === 0 ? (
           <div className="mt-8 py-16 text-center text-gray-500">No campaigns found.</div>
         ) : (
-          <div className="mt-8 rounded-2xl border border-gray-300 bg-white overflow-hidden">
+          <div className="mt-8 overflow-hidden rounded-2xl border border-gray-300 bg-white">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-gray-50">
                   {[
-                    { label: "Name", key: "campaignTitle" },
+                    { label: "Name", key: "name" },
                     { label: "Goal", key: "goal" },
                     { label: "Start", key: "startDate" },
                     { label: "End", key: "endDate" },
@@ -236,8 +237,9 @@ export default function AdminCampaignsPage() {
                     <th
                       key={col.label}
                       onClick={() => col.key && toggleSort(col.key as SortKey)}
-                      className={`border-r border-gray-300 px-5 py-5 text-left text-[15px] font-semibold text-gray-700 last:border-r-0 ${col.key ? "cursor-pointer select-none" : ""
-                        }`}
+                      className={`border-r border-gray-300 px-5 py-5 text-left text-[15px] font-semibold text-gray-700 last:border-r-0 ${
+                        col.key ? "cursor-pointer select-none" : ""
+                      }`}
                     >
                       <div className="flex items-center gap-1">
                         {col.label}
@@ -249,13 +251,10 @@ export default function AdminCampaignsPage() {
               </thead>
 
               <tbody>
-                {campaigns.map((c, index) => (
-                  <tr
-                    key={c._id}
-                    className={index !== campaigns.length - 1 ? "border-t border-gray-300" : "border-t border-gray-300"}
-                  >
-                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] font-medium text-black last:border-r-0">
-                      {formatName(c.campaignTitle)}
+                {campaigns.map((c) => (
+                  <tr key={c.campaignId} className="border-t border-gray-300">
+                    <td className="border-r border-gray-300 px-5 py-5 text-[15px] font-medium text-black">
+                      {formatName(c.name)}
                     </td>
 
                     <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
@@ -263,11 +262,11 @@ export default function AdminCampaignsPage() {
                     </td>
 
                     <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
-                      {formatDate(c.timeline?.startDate)}
+                      {formatDate(c.startDate)}
                     </td>
 
                     <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
-                      {formatDate(c.timeline?.endDate)}
+                      {formatDate(c.endDate)}
                     </td>
 
                     <td className="border-r border-gray-300 px-5 py-5 text-[15px] text-black">
@@ -302,7 +301,10 @@ export default function AdminCampaignsPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
-                              <Link href={`/admin/campaigns/view?id=${c._id}`} aria-label="View Campaign">
+                              <Link
+                                href={`/admin/campaigns/view?id=${c.campaignId}`}
+                                aria-label="View Campaign"
+                              >
                                 <HiOutlineEye className="h-5 w-5 text-black" />
                               </Link>
                             </Button>
@@ -314,7 +316,7 @@ export default function AdminCampaignsPage() {
                           <TooltipTrigger asChild>
                             <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
                               <Link
-                                href={`/admin/brands/create-campaign?brandId=${c.brandId}&id=${c._id}`}
+                                href={`/admin/brands/create-campaign?brandId=${c.brandId}&id=${c.campaignId}`}
                                 aria-label="Edit Campaign"
                               >
                                 <HiPencil className="h-5 w-5 text-black" />
@@ -328,7 +330,7 @@ export default function AdminCampaignsPage() {
                           <TooltipTrigger asChild>
                             <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
                               <Link
-                                href={`/admin/campaigns/applicants?campaignId=${c._id}`}
+                                href={`/admin/campaigns/applicants?campaignId=${c.campaignId}`}
                                 aria-label="View Applicants"
                               >
                                 <HiUserGroup className="h-5 w-5 text-black" />
@@ -342,7 +344,7 @@ export default function AdminCampaignsPage() {
                           <TooltipTrigger asChild>
                             <Button asChild variant="ghost" size="icon" className={actionBtnClass}>
                               <Link
-                                href={`/admin/campaigns/deliverables/${c._id}`}
+                                href={`/admin/campaigns/deliverables/${c.campaignId}`}
                                 aria-label="See Deliverables"
                               >
                                 <HiOutlineDocumentText className="h-5 w-5 text-black" />
@@ -371,10 +373,10 @@ export default function AdminCampaignsPage() {
 
                           <DropdownMenuContent align="end" className="w-44 bg-white">
                             <DropdownMenuItem asChild className="cursor-pointer hover:!bg-[#EDEDED] focus:!bg-[#EDEDED]">
-                              <Link href={`/admin/youtube?id=${c._id}`}>Youtube Data</Link>
+                              <Link href={`/admin/youtube?id=${c.campaignId}`}>Youtube Data</Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild className="cursor-pointer hover:!bg-[#EDEDED] focus:!bg-[#EDEDED]">
-                              <Link href={`/admin/modash?id=${c._id}`}>Modash Data</Link>
+                              <Link href={`/admin/modash?id=${c.campaignId}`}>Modash Data</Link>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
