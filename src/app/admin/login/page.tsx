@@ -64,7 +64,7 @@ export default function AdminLoginPage() {
       if (admin.name) localStorage.setItem("adminName", admin.name);
       if (admin.status) localStorage.setItem("adminStatus", admin.status);
 
-      router.replace("/admin/brands");
+      router.replace("/admin/dashboard");
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
