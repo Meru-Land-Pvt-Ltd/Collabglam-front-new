@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Building2,
   Mail,
-  Phone,
   RefreshCw,
   MoreHorizontal,
   ShieldCheck,
@@ -20,6 +19,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock3,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   HiChevronDown,
@@ -55,7 +55,7 @@ const outfit = Outfit({
   weight: ["400", "500", "600", "700", "800", "900"],
 });
 
-type BrandStatus = "active" | "expired" | "cancelled";
+type BrandStatus = "active" | "expired" | "archived";
 type BillingCycle = "monthly" | "annual";
 type AssignRole = "RH" | "BME" | "IME";
 
@@ -74,14 +74,17 @@ interface ApiFeature {
   key: string;
   limit: number;
   used: number;
-  value: string | null;
+  value: string | number | boolean | string[] | null;
   note: string | null;
+  resetsEvery?: string | null;
+  resetsAt?: string | null;
 }
 
 interface ApiSubscription {
   planId?: string;
   planName?: string;
-  status?: BrandStatus;
+  role?: string;
+  status?: "active" | "archived";
   monthlyCost?: number;
   annualCost?: number;
   billingCycle?: BillingCycle;
@@ -94,15 +97,16 @@ interface ApiSubscription {
 
 interface ApiBrand {
   _id: string;
+  brandId?: string;
   name?: string;
   brandName?: string;
   email: string;
-  callingcode?: string;
-  phone?: string;
   companySize?: string;
   industry?: string;
   createdAt: string;
+  updatedAt?: string;
   profilePic?: string;
+  proxyEmail?: string;
   subscription?: ApiSubscription;
   subscriptionExpired?: boolean;
 
@@ -146,11 +150,13 @@ interface EmployeeListResponse {
 
 interface BrandRow {
   _id: string;
+  brandId: string;
   name: string;
   contactName: string;
   email: string;
-  phone: string;
+  proxyEmail: string;
   createdAt: string;
+  updatedAt: string;
   planName: string;
   billingCycle: BillingCycle;
   amountPaid: number;
@@ -160,6 +166,7 @@ interface BrandRow {
   status: BrandStatus;
   companySize: string;
   industry: string;
+  profilePic: string;
   features: ApiFeature[];
   internalCredits: { used: number; resetsAt: string | null };
 
@@ -221,7 +228,7 @@ function formatMoney(value: number) {
 }
 
 function getStatusFromApi(brand: ApiBrand): BrandStatus {
-  if (brand.subscription?.status) return brand.subscription.status;
+  if (brand.subscription?.status === "archived") return "archived";
   if (brand.subscriptionExpired) return "expired";
   return "active";
 }
@@ -236,11 +243,13 @@ function mapBrand(brand: ApiBrand): BrandRow {
 
   return {
     _id: brand._id,
+    brandId: brand.brandId || brand._id,
     name: brand.brandName || brand.name || "—",
     contactName: brand.name || brand.brandName || "—",
     email: brand.email,
-    phone: [brand.callingcode, brand.phone].filter(Boolean).join(" ") || "—",
+    proxyEmail: brand.proxyEmail || "",
     createdAt: brand.createdAt,
+    updatedAt: brand.updatedAt || brand.createdAt,
     planName: subscription.planName || "—",
     billingCycle,
     amountPaid,
@@ -250,6 +259,7 @@ function mapBrand(brand: ApiBrand): BrandRow {
     status: getStatusFromApi(brand),
     companySize: brand.companySize || "—",
     industry: brand.industry || "—",
+    profilePic: brand.profilePic || "",
     features: subscription.features ?? [],
     internalCredits: subscription.internalCredits ?? { used: 0, resetsAt: null },
 
@@ -276,7 +286,7 @@ function initials(name: string) {
 
 function statusStyles(status: BrandStatus) {
   if (status === "active") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "cancelled") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (status === "archived") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
@@ -328,11 +338,48 @@ function roleMeta(role: AssignRole) {
   }
 }
 
+function isDataUrlImage(value?: string) {
+  return !!value && /^data:image\//i.test(value);
+}
+
+const BrandAvatar = ({
+  name,
+  profilePic,
+  size = "md",
+}: {
+  name: string;
+  profilePic?: string;
+  size?: "sm" | "md";
+}) => {
+  const classes =
+    size === "sm"
+      ? "h-10 w-10 rounded-2xl text-sm"
+      : "h-12 w-12 rounded-2xl text-base";
+
+  if (isDataUrlImage(profilePic)) {
+    return (
+      <img
+        src={profilePic}
+        alt={name}
+        className={`${classes} border border-slate-200 object-cover bg-slate-100`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`flex items-center justify-center ${classes} bg-slate-100 font-black text-slate-800`}
+    >
+      {initials(name)}
+    </div>
+  );
+};
+
 const StatusBadge = ({ status }: { status: BrandStatus }) => {
   const Icon =
     status === "active"
       ? CheckCircle2
-      : status === "cancelled"
+      : status === "archived"
       ? XCircle
       : Clock3;
 
@@ -374,7 +421,7 @@ const SummaryCard = ({
 );
 
 const FeatureUsage = ({ feature }: { feature: ApiFeature }) => {
-  if (!feature.limit) return null;
+  if (!feature.limit || feature.limit <= 0) return null;
 
   const percent = Math.min(100, Math.round((feature.used / feature.limit) * 100));
   const tone = percent >= 90 ? "bg-rose-500" : percent >= 70 ? "bg-amber-500" : "bg-emerald-500";
@@ -412,7 +459,6 @@ const SkeletonRows = () => (
 
 const ExpandedContent = ({ brand }: { brand: BrandRow }) => {
   const usageFeatures = brand.features.filter((item) => item.limit > 0);
-  const flagFeatures = brand.features.filter((item) => item.limit === 0);
 
   return (
     <TableRow className="border-slate-100 bg-slate-50/70">
@@ -421,9 +467,9 @@ const ExpandedContent = ({ brand }: { brand: BrandRow }) => {
           <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
             {[
               { label: "Contact", value: brand.contactName },
-              { label: "Phone", value: brand.phone },
               { label: "Industry", value: brand.industry },
               { label: "Company Size", value: brand.companySize },
+              { label: "Proxy Email", value: brand.proxyEmail || "—" },
               { label: "Billing", value: brand.billingCycle === "annual" ? "Annual" : "Monthly" },
               { label: "Auto Renew", value: brand.autoRenew ? "Enabled" : "Disabled" },
             ].map((item) => (
@@ -463,41 +509,24 @@ const ExpandedContent = ({ brand }: { brand: BrandRow }) => {
             <Card className="rounded-2xl border border-slate-200 bg-white shadow-none">
               <div className="p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Add-ons & Credits
+                  Brand Media
                 </p>
 
-                <div className="mt-4 space-y-4">
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                      Internal Credits Used
-                    </p>
-                    <p className="mt-2 text-xl font-extrabold text-slate-900">
-                      {brand.internalCredits.used}
-                    </p>
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      Reset: {formatDate(brand.internalCredits.resetsAt || undefined)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                      Feature Flags
-                    </p>
-                    {flagFeatures.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {flagFeatures.map((feature) => (
-                          <span
-                            key={feature.key}
-                            className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700"
-                          >
-                            {FEATURE_LABELS[feature.key] || feature.key.replace(/_/g, " ")}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm font-medium text-slate-500">No add-ons available.</p>
-                    )}
-                  </div>
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  {isDataUrlImage(brand.profilePic) ? (
+                    <img
+                      src={brand.profilePic}
+                      alt={brand.name}
+                      className="h-32 w-32 rounded-2xl border border-slate-200 object-cover bg-white"
+                    />
+                  ) : (
+                    <div className="flex h-32 w-32 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-slate-400">
+                      <ImageIcon className="h-6 w-6" />
+                    </div>
+                  )}
+                  <p className="mt-3 text-xs font-medium text-slate-500">
+                    Profile picture is rendered directly when backend returns a data URL.
+                  </p>
                 </div>
               </div>
             </Card>
@@ -783,7 +812,6 @@ const AdminBrandPage: NextPage = () => {
       prev.map((brand) => {
         if (brand._id !== brandId) return brand;
 
-        // RH changes reset child assignments in UI as well
         if (role === "RH") {
           return {
             ...brand,
@@ -817,7 +845,7 @@ const AdminBrandPage: NextPage = () => {
     () => ({
       active: brands.filter((item) => item.status === "active").length,
       expired: brands.filter((item) => item.status === "expired").length,
-      cancelled: brands.filter((item) => item.status === "cancelled").length,
+      archived: brands.filter((item) => item.status === "archived").length,
     }),
     [brands]
   );
@@ -873,7 +901,7 @@ const AdminBrandPage: NextPage = () => {
               </h1>
 
               <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600">
-                Manage brands, review subscription health, and assign RH, BME, and IME with hierarchy-based access.
+                Manage brands, review subscription health, assign RH, BME, and IME, and render brand avatars directly from profilePic data URLs.
               </p>
             </div>
 
@@ -940,7 +968,7 @@ const AdminBrandPage: NextPage = () => {
                   {statusCounts.expired} Expired
                 </span>
                 <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">
-                  {statusCounts.cancelled} Cancelled
+                  {statusCounts.archived} Archived
                 </span>
               </div>
             </div>
@@ -1012,10 +1040,8 @@ const AdminBrandPage: NextPage = () => {
                           </TableCell>
 
                           <TableCell className="py-4">
-                            <div className="flex min-w-[240px] items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black text-slate-800">
-                                {initials(brand.name)}
-                              </div>
+                            <div className="flex min-w-[260px] items-center gap-3">
+                              <BrandAvatar name={brand.name} profilePic={brand.profilePic} size="sm" />
 
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-extrabold text-slate-900">{brand.name}</p>
@@ -1026,10 +1052,11 @@ const AdminBrandPage: NextPage = () => {
                                     {brand.email}
                                   </span>
 
-                                  <span className="flex items-center gap-1.5 truncate">
-                                    <Phone className="h-3.5 w-3.5" />
-                                    {brand.phone}
-                                  </span>
+                                  {brand.proxyEmail ? (
+                                    <span className="truncate text-[11px] text-slate-400">
+                                      Proxy: {brand.proxyEmail}
+                                    </span>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
