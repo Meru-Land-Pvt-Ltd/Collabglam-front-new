@@ -10,11 +10,14 @@ import {
   ChevronUp,
   LogOut,
   Menu,
+  Shield,
+  UserCircle2,
   X,
 } from "lucide-react";
 import api from "@/lib/api";
 import {
   ADMIN_MODULES,
+  canonicalizeModuleKey,
   hasModuleAccess,
 } from "@/app/admin/components/admin-access";
 
@@ -27,10 +30,80 @@ type Permission = {
   key?: string;
 };
 
+type AdminUser = {
+  _id?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+  status?: string;
+  permissions?: Permission[];
+  access?: Permission[];
+};
+
 type MeResponse = {
+  data?: AdminUser;
   role?: string;
   permissions?: Permission[];
   access?: Permission[];
+  email?: string;
+  name?: string;
+  status?: string;
+};
+
+const ROLES = {
+  SUPER_ADMIN: "super_admin",
+  REVENUE_HEAD: "revenue_head",
+  IME: "ime",
+  BME: "bme",
+} as const;
+
+/**
+ * Fallback module access per role.
+ * If your backend already sends `access` or `permissions`,
+ * those will take priority over this mapping.
+ */
+const DEFAULT_ROLE_MODULES: Record<string, string[]> = {
+  [ROLES.SUPER_ADMIN]: ADMIN_MODULES.map((item) => item.key),
+
+  [ROLES.REVENUE_HEAD]: [
+    "brands",
+    "campaigns",
+    "disputes",
+    "subscriptions",
+    "invoiceDetails",
+    "payment",
+    "notifications",
+    "documents",
+  ],
+
+  [ROLES.IME]: [
+    "influencer-data",
+    "influencer-pipeline",
+    "influencerdetails",
+    "influencers",
+    "invitedInfluencer",
+    "modash",
+    "messages",
+    "inbound-emails",
+    "youtube",
+    "documents",
+  ],
+
+  [ROLES.BME]: [
+    "brands",
+    "campaigns",
+    "messages",
+    "inbound-emails",
+    "youtube",
+    "documents",
+  ],
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  [ROLES.SUPER_ADMIN]: "Super Admin",
+  [ROLES.REVENUE_HEAD]: "Revenue Head",
+  [ROLES.IME]: "IME",
+  [ROLES.BME]: "BME",
 };
 
 const drawerVariants = {
@@ -43,6 +116,10 @@ const linkBase =
 const linkActive = "bg-black text-white";
 const linkInactive = "text-black/80 hover:bg-black hover:text-white";
 const subLinkInactive = "text-black/70 hover:bg-black hover:text-white";
+
+function normalizeRole(value?: string) {
+  return String(value || "").trim().toLowerCase();
+}
 
 function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -138,13 +215,17 @@ export default function AdminSidebar() {
   const router = useRouter();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [bootstrapped, setBootstrapped] = useState(false);
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     documents: pathname.startsWith("/admin/documents"),
   });
 
   const [permissionKeys, setPermissionKeys] = useState<string[]>([]);
   const [currentRole, setCurrentRole] = useState("");
-  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminStatus, setAdminStatus] = useState("");
 
   useEffect(() => {
     if (pathname.startsWith("/admin/documents")) {
@@ -162,44 +243,134 @@ export default function AdminSidebar() {
   useEffect(() => {
     let mounted = true;
 
-    const fetchPermissions = async () => {
+    const bootstrapAndFetch = async () => {
       try {
+        if (typeof window !== "undefined") {
+          const storedRole = normalizeRole(localStorage.getItem("adminRole") || "");
+          const storedName = String(localStorage.getItem("adminName") || "");
+          const storedEmail = String(localStorage.getItem("userEmail") || "");
+          const storedStatus = String(localStorage.getItem("adminStatus") || "");
+
+          let storedPermissions: string[] = [];
+
+          try {
+            const storedAdmin = JSON.parse(localStorage.getItem("admin") || "{}");
+            const permissionObjects: Permission[] =
+              storedAdmin?.permissions ?? storedAdmin?.access ?? [];
+            storedPermissions = permissionObjects
+              .map((item) => canonicalizeModuleKey(item?.key))
+              .filter(Boolean);
+          } catch {
+            storedPermissions = [];
+          }
+
+          if (mounted) {
+            setCurrentRole(storedRole);
+            setPermissionKeys(storedPermissions);
+            setAdminName(storedName);
+            setAdminEmail(storedEmail);
+            setAdminStatus(storedStatus);
+            setBootstrapped(true);
+          }
+        } else if (mounted) {
+          setBootstrapped(true);
+        }
+
         const response = await api.get("/admins/me");
-        const me: MeResponse = response.data?.data || response.data || {};
-        const permissions: Permission[] = me.permissions ?? me.access ?? [];
-        const keys = permissions.map((item) => item?.key).filter(Boolean) as string[];
+        const raw: MeResponse = response?.data || {};
+        const me: AdminUser = raw?.data || raw || {};
+
+        const roleFromApi = normalizeRole(me.role || raw.role || "");
+        const permissionObjects: Permission[] =
+          me.permissions ?? me.access ?? raw.permissions ?? raw.access ?? [];
+
+        const normalizedPermissionKeys = permissionObjects
+          .map((item) => canonicalizeModuleKey(item?.key))
+          .filter(Boolean);
 
         if (mounted) {
-          setPermissionKeys(keys);
-          setCurrentRole(String(me.role || "").toLowerCase());
+          if (roleFromApi) {
+            setCurrentRole(roleFromApi);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("adminRole", roleFromApi);
+            }
+          }
+
+          setPermissionKeys(normalizedPermissionKeys);
+          setAdminName(String(me.name || raw.name || ""));
+          setAdminEmail(String(me.email || raw.email || ""));
+          setAdminStatus(String(me.status || raw.status || ""));
+
+          if (typeof window !== "undefined") {
+            if (me.name || raw.name) {
+              localStorage.setItem("adminName", String(me.name || raw.name || ""));
+            }
+            if (me.email || raw.email) {
+              localStorage.setItem("userEmail", String(me.email || raw.email || ""));
+            }
+            if (me.status || raw.status) {
+              localStorage.setItem("adminStatus", String(me.status || raw.status || ""));
+            }
+
+            const existingAdmin = (() => {
+              try {
+                return JSON.parse(localStorage.getItem("admin") || "{}");
+              } catch {
+                return {};
+              }
+            })();
+
+            localStorage.setItem(
+              "admin",
+              JSON.stringify({
+                ...existingAdmin,
+                ...me,
+                role: roleFromApi || existingAdmin?.role || "",
+                access: permissionObjects,
+              })
+            );
+          }
         }
       } catch (error) {
-        console.error("Failed to fetch permissions:", error);
-        if (mounted) {
-          setPermissionKeys([]);
-          setCurrentRole("");
-        }
-      } finally {
-        if (mounted) {
-          setPermissionsLoading(false);
-        }
+        console.error("Failed to fetch admin profile:", error);
       }
     };
 
-    fetchPermissions();
+    bootstrapAndFetch();
 
     return () => {
       mounted = false;
     };
   }, []);
 
-  const showAllModules = currentRole === "super_admin";
+  const isSuperAdmin = currentRole === ROLES.SUPER_ADMIN;
+  const isRevenueHead = currentRole === ROLES.REVENUE_HEAD;
+  const isIME = currentRole === ROLES.IME;
+  const isBME = currentRole === ROLES.BME;
 
   const allowedSidebarItems = useMemo(() => {
-    if (showAllModules) return ADMIN_MODULES;
+    if (isSuperAdmin) return ADMIN_MODULES;
 
-    return ADMIN_MODULES.filter((item) => hasModuleAccess(permissionKeys, item.key));
-  }, [permissionKeys, showAllModules]);
+    // If backend permissions exist, they take priority
+    if (permissionKeys.length > 0) {
+      return ADMIN_MODULES.filter((item) =>
+        hasModuleAccess(permissionKeys, item.key)
+      );
+    }
+
+    // Otherwise fall back to role-based defaults
+    const fallbackKeys =
+      DEFAULT_ROLE_MODULES[currentRole]?.map((item) => canonicalizeModuleKey(item)) || [];
+
+    return ADMIN_MODULES.filter((item) =>
+      fallbackKeys.includes(canonicalizeModuleKey(item.key))
+    );
+  }, [currentRole, permissionKeys, isSuperAdmin]);
+
+  const roleLabel = useMemo(() => {
+    if (!currentRole) return "Admin";
+    return ROLE_LABELS[currentRole] || currentRole;
+  }, [currentRole]);
 
   const handleLogout = () => {
     try {
@@ -283,7 +454,7 @@ export default function AdminSidebar() {
     );
   };
 
-  if (permissionsLoading) return null;
+  if (!bootstrapped) return null;
 
   return (
     <>
@@ -317,10 +488,48 @@ export default function AdminSidebar() {
       >
         <BrandHeader />
 
+        <div className="px-3 pb-3">
+          <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-black/5 p-2">
+                <UserCircle2 className="h-5 w-5 text-black/70" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-black">
+                  {adminName || "Admin User"}
+                </p>
+                <p className="truncate text-xs text-black/50">
+                  {adminEmail || "No email"}
+                </p>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="inline-flex items-center rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    {roleLabel}
+                  </span>
+
+                  {adminStatus ? (
+                    <span className="inline-flex items-center rounded-full border border-black/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-black/60">
+                      {adminStatus}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto px-3 pb-3">
           <nav className="space-y-1">
             {allowedSidebarItems.map((item) => renderSidebarItem(item))}
           </nav>
+
+          {!isSuperAdmin && permissionKeys.length === 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Showing fallback modules for <strong>{roleLabel}</strong>.
+              Add backend <code>access</code> / <code>permissions</code> for stricter control.
+            </div>
+          )}
         </div>
 
         <div className="shrink-0 border-t border-black/10 p-3">
@@ -363,7 +572,38 @@ export default function AdminSidebar() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-3 pb-3 pt-3">
+              <div className="px-3 pb-3 pt-3">
+                <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-black/5 p-2">
+                      <Shield className="h-5 w-5 text-black/70" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-black">
+                        {adminName || "Admin User"}
+                      </p>
+                      <p className="truncate text-xs text-black/50">
+                        {adminEmail || "No email"}
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="inline-flex items-center rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          {roleLabel}
+                        </span>
+
+                        {adminStatus ? (
+                          <span className="inline-flex items-center rounded-full border border-black/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-black/60">
+                            {adminStatus}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-3 pb-3">
                 <nav className="space-y-1">
                   {allowedSidebarItems.map((item) => renderSidebarItem(item, true))}
                 </nav>

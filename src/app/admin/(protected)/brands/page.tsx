@@ -105,12 +105,28 @@ interface ApiBrand {
   profilePic?: string;
   subscription?: ApiSubscription;
   subscriptionExpired?: boolean;
+
   assignedRm?: string;
   assignedBm?: string;
   assignedIm?: string;
+
   assignedRh?: string;
   assignedBme?: string;
   assignedIme?: string;
+
+  RHId?: string;
+  bdmId?: string;
+  idmId?: string;
+}
+
+interface Employee {
+  _id: string;
+  name: string;
+  email: string;
+  role?: string;
+  status?: string;
+  teamType?: string;
+  parentAdmin?: string;
 }
 
 interface BrandListResponse {
@@ -121,15 +137,6 @@ interface BrandListResponse {
   totalPages?: number;
   brands?: ApiBrand[];
   data?: ApiBrand[];
-}
-
-interface Employee {
-  _id: string;
-  name: string;
-  email: string;
-  role?: string;
-  status?: string;
-  teamType?: string;
 }
 
 interface EmployeeListResponse {
@@ -155,9 +162,14 @@ interface BrandRow {
   industry: string;
   features: ApiFeature[];
   internalCredits: { used: number; resetsAt: string | null };
+
   assignedRh: string;
   assignedBme: string;
   assignedIme: string;
+
+  RHId: string;
+  bdmId: string;
+  idmId: string;
 }
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -217,9 +229,10 @@ function getStatusFromApi(brand: ApiBrand): BrandStatus {
 function mapBrand(brand: ApiBrand): BrandRow {
   const subscription = brand.subscription ?? {};
   const billingCycle = subscription.billingCycle ?? "monthly";
-  const amountPaid = billingCycle === "annual"
-    ? subscription.annualCost ?? 0
-    : subscription.monthlyCost ?? 0;
+  const amountPaid =
+    billingCycle === "annual"
+      ? subscription.annualCost ?? 0
+      : subscription.monthlyCost ?? 0;
 
   return {
     _id: brand._id,
@@ -239,33 +252,37 @@ function mapBrand(brand: ApiBrand): BrandRow {
     industry: brand.industry || "—",
     features: subscription.features ?? [],
     internalCredits: subscription.internalCredits ?? { used: 0, resetsAt: null },
+
     assignedRh: brand.assignedRh || brand.assignedRm || "",
     assignedBme: brand.assignedBme || brand.assignedBm || "",
     assignedIme: brand.assignedIme || brand.assignedIm || "",
+
+    RHId: brand.RHId || "",
+    bdmId: brand.bdmId || "",
+    idmId: brand.idmId || "",
   };
 }
 
 function initials(name: string) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "B";
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "B"
+  );
 }
 
 function statusStyles(status: BrandStatus) {
-  if (status === "active") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (status === "cancelled") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
+  if (status === "active") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "cancelled") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
 function isFullyManagedSubscription(brand: BrandRow) {
   const normalizedPlan = brand.planName.toLowerCase();
+
   const managedPlanMatch =
     normalizedPlan.includes("fully managed") ||
     normalizedPlan.includes("full managed") ||
@@ -289,6 +306,7 @@ function roleMeta(role: AssignRole) {
         label: "RH",
         payloadKey: "RHId",
         valueKey: "assignedRh" as const,
+        idKey: "RHId" as const,
         emptyLabel: "Assign RH",
       };
     case "BME":
@@ -296,6 +314,7 @@ function roleMeta(role: AssignRole) {
         label: "BME",
         payloadKey: "bdmId",
         valueKey: "assignedBme" as const,
+        idKey: "bdmId" as const,
         emptyLabel: "Assign BME",
       };
     case "IME":
@@ -303,6 +322,7 @@ function roleMeta(role: AssignRole) {
         label: "IME",
         payloadKey: "idmId",
         valueKey: "assignedIme" as const,
+        idKey: "idmId" as const,
         emptyLabel: "Assign IME",
       };
   }
@@ -419,15 +439,13 @@ const ExpandedContent = ({ brand }: { brand: BrandRow }) => {
           <div className="grid gap-4 xl:grid-cols-[1.4fr,0.6fr]">
             <Card className="rounded-2xl border border-slate-200 bg-white shadow-none">
               <div className="p-4">
-                <div className="mb-4 flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                      Subscription Usage
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-600">
-                      Metered usage across the current plan.
-                    </p>
-                  </div>
+                <div className="mb-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                    Subscription Usage
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-600">
+                    Metered usage across the current plan.
+                  </p>
                 </div>
 
                 {usageFeatures.length > 0 ? (
@@ -496,12 +514,16 @@ const AssigneeCell = ({
   role,
   options,
   onSave,
+  disabled = false,
+  disabledLabel = "",
 }: {
   brandId: string;
   currentValue: string;
   role: AssignRole;
   options: Employee[];
   onSave: (brandId: string, role: AssignRole, employeeId: string) => Promise<void>;
+  disabled?: boolean;
+  disabledLabel?: string;
 }) => {
   const meta = roleMeta(role);
   const [open, setOpen] = useState(false);
@@ -512,6 +534,7 @@ const AssigneeCell = ({
 
   useEffect(() => {
     if (!open) return;
+
     const handler = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false);
@@ -545,6 +568,14 @@ const AssigneeCell = ({
     return (
       <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-extrabold text-slate-700">
         {currentValue}
+      </span>
+    );
+  }
+
+  if (disabled) {
+    return (
+      <span className="inline-flex items-center rounded-full border border-dashed border-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-400">
+        {disabledLabel || `No ${meta.label} available`}
       </span>
     );
   }
@@ -592,7 +623,7 @@ const AssigneeCell = ({
         ))}
       </select>
 
-      {error && <p className="mt-2 text-[11px] font-semibold text-rose-600">{error}</p>}
+      {error ? <p className="mt-2 text-[11px] font-semibold text-rose-600">{error}</p> : null}
 
       <div className="mt-3 flex gap-2">
         <Button
@@ -603,6 +634,7 @@ const AssigneeCell = ({
         >
           {saving ? "Saving..." : "Save"}
         </Button>
+
         <Button
           type="button"
           size="sm"
@@ -626,12 +658,15 @@ const AdminBrandPage: NextPage = () => {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
   const [sortBy, setSortBy] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -645,6 +680,7 @@ const AdminBrandPage: NextPage = () => {
   const fetchBrands = useCallback(async () => {
     try {
       setLoading(true);
+
       const response = await post<BrandListResponse>("/admin/brand/getlist", {
         page,
         limit: pageSize,
@@ -660,7 +696,9 @@ const AdminBrandPage: NextPage = () => {
       setTotal(response.total ?? mapped.length);
       setPage(response.page ?? page);
       setPageSize(response.limit ?? pageSize);
-      setTotalPages(response.totalPages ?? Math.max(1, Math.ceil((response.total ?? mapped.length) / pageSize)));
+      setTotalPages(
+        response.totalPages ?? Math.max(1, Math.ceil((response.total ?? mapped.length) / pageSize))
+      );
       setError(null);
     } catch (err: any) {
       console.error(err);
@@ -672,22 +710,17 @@ const AdminBrandPage: NextPage = () => {
 
   const fetchAssignees = useCallback(async () => {
     try {
-      const [rhResponse, executiveResponse] = await Promise.all([
+      const [rhResponse, bmeResponse, imeResponse] = await Promise.all([
         get<EmployeeListResponse>("/admins/get-rm-list"),
-        get<EmployeeListResponse>("/admins/get-executive-list"),
+        get<EmployeeListResponse>("/admins/get-executive-list?role=bme"),
+        get<EmployeeListResponse>("/admins/get-executive-list?role=ime"),
       ]);
 
-      if (rhResponse.success) {
-        setRhOptions(rhResponse.data ?? []);
-      }
-
-      if (executiveResponse.success) {
-        const execs = executiveResponse.data ?? [];
-        setBmeOptions(execs);
-        setImeOptions(execs);
-      }
+      if (rhResponse.success) setRhOptions(rhResponse.data ?? []);
+      if (bmeResponse.success) setBmeOptions(bmeResponse.data ?? []);
+      if (imeResponse.success) setImeOptions(imeResponse.data ?? []);
     } catch (err) {
-      console.error("Failed to fetch assignment lists", err);
+      console.error("Failed to fetch assignees", err);
     }
   }, []);
 
@@ -701,7 +734,11 @@ const AdminBrandPage: NextPage = () => {
 
   const handleSearch = (value: string) => {
     setSearch(value);
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedSearch(value.trim());
       setPage(1);
@@ -718,8 +755,22 @@ const AdminBrandPage: NextPage = () => {
     setPage(1);
   };
 
+  const getScopedExecOptions = useCallback(
+    (role: "BME" | "IME", brand: BrandRow) => {
+      if (!brand.RHId) return [];
+
+      const source = role === "BME" ? bmeOptions : imeOptions;
+
+      return source.filter(
+        (employee) => String(employee.parentAdmin || "") === String(brand.RHId)
+      );
+    },
+    [bmeOptions, imeOptions]
+  );
+
   const handleAssignSave = async (brandId: string, role: AssignRole, employeeId: string) => {
     const meta = roleMeta(role);
+
     await post("/admins/assign-brand", {
       brandId,
       [meta.payloadKey]: employeeId,
@@ -729,14 +780,36 @@ const AdminBrandPage: NextPage = () => {
     const employee = source.find((item) => item._id === employeeId);
 
     setBrands((prev) =>
-      prev.map((brand) =>
-        brand._id === brandId
-          ? {
-              ...brand,
-              [meta.valueKey]: employee?.name || employeeId,
-            }
-          : brand
-      )
+      prev.map((brand) => {
+        if (brand._id !== brandId) return brand;
+
+        // RH changes reset child assignments in UI as well
+        if (role === "RH") {
+          return {
+            ...brand,
+            assignedRh: employee?.name || employeeId,
+            RHId: employeeId,
+            assignedBme: "",
+            assignedIme: "",
+            bdmId: "",
+            idmId: "",
+          };
+        }
+
+        if (role === "BME") {
+          return {
+            ...brand,
+            assignedBme: employee?.name || employeeId,
+            bdmId: employeeId,
+          };
+        }
+
+        return {
+          ...brand,
+          assignedIme: employee?.name || employeeId,
+          idmId: employeeId,
+        };
+      })
     );
   };
 
@@ -794,11 +867,13 @@ const AdminBrandPage: NextPage = () => {
                 <ShieldCheck className="h-3.5 w-3.5" />
                 Admin Brand Control
               </div>
+
               <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
-                AdminBrandPage
+                Admin Brand Management
               </h1>
+
               <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600">
-                Manage brands, review subscription health, and assign RH, BME, and IME directly from one screen with immediate UI updates.
+                Manage brands, review subscription health, and assign RH, BME, and IME with hierarchy-based access.
               </p>
             </div>
 
@@ -871,11 +946,11 @@ const AdminBrandPage: NextPage = () => {
             </div>
           </div>
 
-          {error && (
+          {error ? (
             <div className="mx-4 mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 md:mx-5">
               {error}
             </div>
-          )}
+          ) : null}
 
           <div className="overflow-x-auto">
             <Table>
@@ -917,6 +992,9 @@ const AdminBrandPage: NextPage = () => {
                     const isExpanded = expandedId === brand._id;
                     const isFullyManaged = isFullyManagedSubscription(brand);
 
+                    const brandBmeOptions = getScopedExecOptions("BME", brand);
+                    const brandImeOptions = getScopedExecOptions("IME", brand);
+
                     return (
                       <React.Fragment key={brand._id}>
                         <TableRow
@@ -938,13 +1016,16 @@ const AdminBrandPage: NextPage = () => {
                               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black text-slate-800">
                                 {initials(brand.name)}
                               </div>
+
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-extrabold text-slate-900">{brand.name}</p>
+
                                 <div className="mt-1 flex flex-col gap-1 text-xs font-medium text-slate-500">
                                   <span className="flex items-center gap-1.5 truncate">
                                     <Mail className="h-3.5 w-3.5" />
                                     {brand.email}
                                   </span>
+
                                   <span className="flex items-center gap-1.5 truncate">
                                     <Phone className="h-3.5 w-3.5" />
                                     {brand.phone}
@@ -992,8 +1073,10 @@ const AdminBrandPage: NextPage = () => {
                               brandId={brand._id}
                               currentValue={brand.assignedBme}
                               role="BME"
-                              options={bmeOptions}
+                              options={brandBmeOptions}
                               onSave={handleAssignSave}
+                              disabled={!brand.RHId || (!brand.assignedBme && brandBmeOptions.length === 0)}
+                              disabledLabel={!brand.RHId ? "Assign RH first" : "No BME under RH"}
                             />
                           </TableCell>
 
@@ -1002,8 +1085,10 @@ const AdminBrandPage: NextPage = () => {
                               brandId={brand._id}
                               currentValue={brand.assignedIme}
                               role="IME"
-                              options={imeOptions}
+                              options={brandImeOptions}
                               onSave={handleAssignSave}
+                              disabled={!brand.RHId || (!brand.assignedIme && brandImeOptions.length === 0)}
+                              disabledLabel={!brand.RHId ? "Assign RH first" : "No IME under RH"}
                             />
                           </TableCell>
 
@@ -1018,9 +1103,13 @@ const AdminBrandPage: NextPage = () => {
                                   <MoreHorizontal className="h-4.5 w-4.5" />
                                 </button>
                               </DropdownMenuTrigger>
+
                               <DropdownMenuContent align="end" className="w-64 rounded-2xl border-slate-200">
                                 <DropdownMenuItem asChild>
-                                  <Link href={`/admin/brands/view?brandId=${brand._id}`} className="flex items-center gap-2">
+                                  <Link
+                                    href={`/admin/brands/view?brandId=${brand._id}`}
+                                    className="flex items-center gap-2"
+                                  >
                                     <HiOutlineEye className="h-4 w-4" />
                                     View details
                                   </Link>
@@ -1029,13 +1118,20 @@ const AdminBrandPage: NextPage = () => {
                                 {isFullyManaged ? (
                                   <>
                                     <DropdownMenuItem asChild>
-                                      <Link href={`/admin/brands/create-campaign?brandId=${brand._id}`} className="flex items-center gap-2">
+                                      <Link
+                                        href={`/admin/brands/create-campaign?brandId=${brand._id}`}
+                                        className="flex items-center gap-2"
+                                      >
                                         <HiOutlinePlus className="h-4 w-4" />
                                         Create campaign
                                       </Link>
                                     </DropdownMenuItem>
+
                                     <DropdownMenuItem asChild>
-                                      <Link href={`/admin/brands/review-campaigns?brandId=${brand._id}`} className="flex items-center gap-2">
+                                      <Link
+                                        href={`/admin/brands/review-campaigns?brandId=${brand._id}`}
+                                        className="flex items-center gap-2"
+                                      >
                                         <HiPencil className="h-4 w-4" />
                                         Review campaigns
                                       </Link>
@@ -1052,6 +1148,7 @@ const AdminBrandPage: NextPage = () => {
                                         Create campaign
                                       </span>
                                     </DropdownMenuItem>
+
                                     <DropdownMenuItem
                                       disabled
                                       className="cursor-not-allowed opacity-50 focus:bg-transparent"
@@ -1092,9 +1189,11 @@ const AdminBrandPage: NextPage = () => {
                 >
                   <HiChevronLeft className="h-4 w-4" />
                 </Button>
+
                 <div className="min-w-[110px] text-center text-sm font-extrabold text-slate-700">
                   Page {page} / {totalPages}
                 </div>
+
                 <Button
                   variant="outline"
                   size="icon"
