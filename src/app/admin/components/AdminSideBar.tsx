@@ -59,28 +59,30 @@ const ROLES = {
 
 /**
  * Fallback module access per role.
- * If your backend already sends `access` or `permissions`,
- * those will take priority over this mapping.
+ * Backend `access` / `permissions` still takes priority.
+ * Dashboard added for all roles.
  */
 const DEFAULT_ROLE_MODULES: Record<string, string[]> = {
   [ROLES.SUPER_ADMIN]: ADMIN_MODULES.map((item) => item.key),
 
   [ROLES.REVENUE_HEAD]: [
+    "dashboard",
     "brands",
     "campaigns",
-    "disputes",
     "subscriptions",
     "invoiceDetails",
     "payment",
+    "disputes",
     "notifications",
     "documents",
   ],
 
   [ROLES.IME]: [
+    "dashboard",
+    "influencers",
     "influencer-data",
     "influencer-pipeline",
     "influencerdetails",
-    "influencers",
     "invitedInfluencer",
     "modash",
     "messages",
@@ -90,6 +92,7 @@ const DEFAULT_ROLE_MODULES: Record<string, string[]> = {
   ],
 
   [ROLES.BME]: [
+    "dashboard",
     "brands",
     "campaigns",
     "messages",
@@ -122,6 +125,9 @@ function normalizeRole(value?: string) {
 }
 
 function isActivePath(pathname: string, href: string) {
+  if (href === "/admin") {
+    return pathname === "/admin";
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -351,14 +357,12 @@ export default function AdminSidebar() {
   const allowedSidebarItems = useMemo(() => {
     if (isSuperAdmin) return ADMIN_MODULES;
 
-    // If backend permissions exist, they take priority
     if (permissionKeys.length > 0) {
       return ADMIN_MODULES.filter((item) =>
         hasModuleAccess(permissionKeys, item.key)
       );
     }
 
-    // Otherwise fall back to role-based defaults
     const fallbackKeys =
       DEFAULT_ROLE_MODULES[currentRole]?.map((item) => canonicalizeModuleKey(item)) || [];
 

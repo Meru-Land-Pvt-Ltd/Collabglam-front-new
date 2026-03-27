@@ -4,6 +4,8 @@ export type AdminRole = "super_admin" | "revenue_head" | "ime" | "bme";
 export type ScopeType = "ALL" | "TREE" | "SELF";
 export type ThreadStatus = "ACTIVE" | "ARCHIVED" | "CLOSED";
 export type MessageDirection = "INBOUND" | "OUTBOUND";
+export type MailboxViewFilter = "ALL" | "REPLIED" | ProviderStatus;
+export type TeamRoleFilter = "ALL" | "REVENUE_HEAD" | "IME" | "BME";
 
 export type ProviderStatus =
   | "QUEUED"
@@ -39,25 +41,49 @@ export type MailboxScope = {
     canReply: boolean;
     canEditThread: boolean;
   };
+  filters?: {
+    revenueHeads?: AdminMini[];
+  };
 };
 
 export type MailboxScopeResponse = ApiSuccess<MailboxScope>;
 
+export type FetchThreadsParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  ownerAdminId?: string;
+  mailboxView?: MailboxViewFilter;
+  teamRole?: TeamRoleFilter;
+  revenueHeadId?: string;
+};
+
 export type AdminEmailThreadDto = {
   _id: string;
-  executiveId: string | AdminMini;
-  lastActorAdminId?: string | AdminMini | null;
-  role: AdminRole;
-  senderEmail: string;
-  recipientEmail: string;
-  replyToEmail: string;
   subject: string;
+  recipientEmail: string;
+  role: AdminRole;
+  senderEmail?: string;
+  replyToEmail?: string;
   lastMessageAt?: string;
-  lastMessageDirection?: MessageDirection;
-  status?: ThreadStatus;
-  createdAt?: string;
-  updatedAt?: string;
+  lastMessageDirection?: "INBOUND" | "OUTBOUND";
+  status: "ACTIVE" | "ARCHIVED" | "CLOSED";
+
+  hasInboundEver?: boolean;
+  lastProviderStatus?: ProviderStatus | null;
+
+  executiveId?:
+    | string
+    | {
+        _id: string;
+        name?: string;
+        email?: string;
+        proxyEmail?: string;
+        role?: AdminRole | string;
+      };
 };
+
 
 export type AdminEmailMessageDto = {
   _id: string;
@@ -266,14 +292,6 @@ export type EmailTemplateListResponse = ApiSuccess<{
 }>;
 
 export type EmailTemplateSingleResponse = ApiSuccess<EmailTemplateDto>;
-
-export type FetchThreadsParams = {
-  page?: number;
-  limit?: number;
-  search?: string;
-  status?: string;
-  ownerAdminId?: string;
-};
 
 function appendIfPresent(formData: FormData, key: string, value?: string) {
   if (value != null && value !== "") {

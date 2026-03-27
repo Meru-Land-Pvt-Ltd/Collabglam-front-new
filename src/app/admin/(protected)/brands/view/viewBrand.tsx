@@ -1,14 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Outfit } from "next/font/google";
 import { get, post } from "@/lib/api";
 import {
   HiChevronLeft,
   HiOutlineMail,
-  HiPhone,
-  HiLocationMarker,
   HiCheckCircle,
   HiXCircle,
   HiUserGroup,
@@ -18,6 +16,9 @@ import {
   HiChevronDown,
   HiSearch,
   HiChevronDoubleRight,
+  HiOfficeBuilding,
+  HiPhotograph,
+  HiSparkles,
 } from "react-icons/hi";
 import {
   HiChevronRight,
@@ -43,7 +44,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/* ---------- API PATHS (edit if needed) ---------- */
+/* ---------- API PATHS ---------- */
 const API_LIST_PLANS = "/subscription/list";
 const API_CHECK_CHANGE = "/subscription/check-brand";
 const API_ADMIN_ASSIGN = "/admin/assignBrandPlan";
@@ -55,42 +56,78 @@ const outfit = Outfit({
 });
 
 /* ---------- Types ---------- */
-interface Feature {
+interface QAItem {
+  question: string;
+  answers: string[];
+}
+
+interface SubscriptionFeature {
   key: string;
+  value?: unknown;
   limit: number;
   used: number;
+  note?: string | null;
+  resetsEvery?: string | null;
+  resetsAt?: string | null;
+}
+
+interface InternalCredits {
+  used: number;
+  resetsAt?: string | null;
 }
 
 interface Subscription {
   planId: string;
   planName: string;
   role: string;
+  planRef?: string | null;
   monthlyCost: number;
+  annualCost?: number;
+  billingCycle: "monthly" | "annual";
   autoRenew: boolean;
-  status: string;
+  status: "active" | "archived" | string;
   durationMins: number;
-  startedAt: string;
-  expiresAt: string;
-  features: Feature[];
+  startedAt?: string | null;
+  expiresAt?: string | null;
+  features: SubscriptionFeature[];
+  internalCredits?: InternalCredits;
 }
 
 interface BrandDetail {
-  brandId: string;
-  name: string;
-  phone: string;
-  country: string;
-  callingcode: string;
+  _id: string;
+  brandId?: string;
   email: string;
-  categoryName: string;
-  businessType: string;
-  companySize: string;
-  referralCode: string;
-  isVerifiedRepresentative: boolean;
+  brandName: string;
+  name: string;
+  companySize?: string;
+  industry: string;
+  proxyEmail?: string;
+  profilePic?: string;
+  page1?: QAItem[];
+  page2?: QAItem[];
+  page3?: QAItem[];
+  ispage1Skip?: boolean;
+  ispage2Skip?: boolean;
+  ispage3Skip?: boolean;
+  isProfilePicSkip?: boolean;
+  subscription: Subscription;
   subscriptionExpired: boolean;
+  failedLoginAttempts?: number;
+  lockUntil?: string | null;
   createdAt: string;
   updatedAt: string;
-  subscription: Subscription;
-  walletBalance: number;
+  walletBalance?: number;
+  assignedRh?: string;
+  assignedBme?: string;
+  assignedIme?: string;
+  assignedRm?: string;
+  assignedBm?: string;
+  assignedIm?: string;
+  fullyManagedSubscription?: boolean;
+  assignmentStatus?: string;
+  planName?: string;
+  expiresAt?: string | null;
+  status?: string;
 }
 
 interface Campaign {
@@ -151,12 +188,60 @@ const formatDate = (iso?: string | null) => {
   });
 };
 
-// UI-aligned pill: Active is bold text; Inactive is a gray chip w/ dot (matches Brands page vibe)
-const statusPill = (isActive: number) =>
+const formatDateTime = (iso?: string | null) => {
+  if (!iso) return "—";
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return "—";
+
+  return dt.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const formatCurrency = (amount?: number | null) => {
+  if (!amount || amount <= 0) return "Free";
+  return `$${amount}`;
+};
+
+const titleCaseKey = (key?: string) => {
+  if (!key) return "—";
+  return key.replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+};
+
+const displayFeatureValue = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "—";
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "boolean") return value ? "Included" : "Not included";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+};
+
+const statusChip = (label: string, tone: "dark" | "green" | "rose" = "dark") => {
+  const styles = {
+    dark: "bg-black/[0.06] text-black/75 border-black/10",
+    green: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    rose: "bg-rose-50 text-rose-700 border-rose-200",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold ${styles[tone]}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+      {label}
+    </span>
+  );
+};
+
+const campaignStatusPill = (isActive: number) =>
   isActive === 1 ? (
     <span className="text-[13px] font-extrabold text-[#111827]">Active</span>
   ) : (
-    <span className="inline-flex items-center gap-2 rounded-full bg-black/[0.06] text-black/70 px-3 py-1 text-xs font-extrabold border border-black/10">
+    <span className="inline-flex items-center gap-2 rounded-full bg-black/[0.06] px-3 py-1 text-xs font-extrabold text-black/70 border border-black/10">
       <span className="h-1.5 w-1.5 rounded-full bg-black/40" />
       Inactive
     </span>
@@ -173,13 +258,90 @@ const formatCampaignName = (name?: string) => {
 function addMinutes(d: Date, mins: number) {
   return new Date(d.getTime() + mins * 60 * 1000);
 }
+
 function addDays(d: Date, days: number) {
   return addMinutes(d, days * 1440);
 }
+
 function safeDate(iso?: string | null) {
   if (!iso) return null;
   const dt = new Date(iso);
   return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function getInitials(brand?: BrandDetail | null) {
+  const source = (brand?.brandName || brand?.name || "B").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
+
+function isDataImage(src?: string) {
+  return !!src && src.startsWith("data:image");
+}
+
+function InfoItem({
+  label,
+  value,
+}: {
+  label: string;
+  value?: React.ReactNode;
+}) {
+  return (
+    <p className="text-[13px] font-semibold text-black/70">
+      <span className="font-extrabold text-black/55">{label}:</span>{" "}
+      <span className="text-[#111827]">{value || "—"}</span>
+    </p>
+  );
+}
+
+function QABlock({
+  title,
+  items,
+  skipped,
+}: {
+  title: string;
+  items?: QAItem[];
+  skipped?: boolean;
+}) {
+  return (
+    <Card className="rounded-2xl border border-black/10 bg-white">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-sm font-extrabold text-[#111827]">{title}</h4>
+          {skipped ? statusChip("Skipped", "rose") : statusChip("Completed", "green")}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {!items || items.length === 0 ? (
+            <p className="text-[13px] font-semibold text-black/50">No responses captured.</p>
+          ) : (
+            items.map((item, idx) => (
+              <div key={`${title}-${idx}`} className="rounded-xl border border-black/10 bg-[#FAFAFA] p-3">
+                <p className="text-xs font-extrabold uppercase tracking-wide text-black/45">
+                  {item.question}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {item.answers?.length ? (
+                    item.answers.map((answer, answerIdx) => (
+                      <span
+                        key={`${title}-${idx}-${answerIdx}`}
+                        className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-bold text-[#111827]"
+                      >
+                        {answer}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[13px] font-semibold text-black/50">—</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 /* ---------- Component ---------- */
@@ -200,16 +362,13 @@ export default function ViewBrandPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<0 | 1 | 2>(0);
-  const [sortBy, setSortBy] = useState<
-    keyof Campaign | "startDate" | "endDate" | "status"
-  >("productOrServiceName");
+  const [sortBy, setSortBy] = useState<keyof Campaign | "startDate" | "endDate" | "status">(
+    "productOrServiceName"
+  );
   const [sortAsc, setSortAsc] = useState(true);
   const campaignsLimit = 10;
 
-  const apiSortBy = useMemo(
-    () => (sortBy === "status" ? "isActive" : sortBy),
-    [sortBy]
-  );
+  const apiSortBy = useMemo(() => (sortBy === "status" ? "isActive" : sortBy), [sortBy]);
 
   /* ----------- Plan Management State ----------- */
   const [plans, setPlans] = useState<PlanListItem[]>([]);
@@ -217,24 +376,16 @@ export default function ViewBrandPage() {
   const [planError, setPlanError] = useState<string | null>(null);
 
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(
-    "monthly"
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
+
+  const [validityMode, setValidityMode] = useState<"plan_default" | "custom_days" | "exact_date">(
+    "plan_default"
   );
-
-  // validity
-  const [validityMode, setValidityMode] = useState<
-    "plan_default" | "custom_days" | "exact_date"
-  >("plan_default");
-  const [customDays, setCustomDays] = useState<string>(""); // "14"
-  const [customExpiryDate, setCustomExpiryDate] = useState<string>(""); // yyyy-mm-dd
-
-  // start counting from
+  const [customDays, setCustomDays] = useState<string>("");
+  const [customExpiryDate, setCustomExpiryDate] = useState<string>("");
   const [applyFrom, setApplyFrom] = useState<"now" | "current_expiry">("now");
 
-  // checks + submit
-  const [checkInfo, setCheckInfo] = useState<PlanChangeCheckResponse | null>(
-    null
-  );
+  const [checkInfo, setCheckInfo] = useState<PlanChangeCheckResponse | null>(null);
   const [checking, setChecking] = useState(false);
   const [forceAssign, setForceAssign] = useState(false);
 
@@ -243,7 +394,7 @@ export default function ViewBrandPage() {
 
   const currentExpiry = brand?.subscription?.expiresAt
     ? safeDate(brand.subscription.expiresAt)
-    : null;
+    : safeDate(brand?.expiresAt);
 
   const selectedPlan = useMemo(
     () => plans.find((p) => p.planId === selectedPlanId) || null,
@@ -266,6 +417,7 @@ export default function ViewBrandPage() {
   const fetchPlans = async () => {
     setLoadingPlans(true);
     setPlanError(null);
+
     try {
       const resp = await post<{ plans: PlanListItem[] }>(API_LIST_PLANS, {
         role: "Brand",
@@ -275,7 +427,6 @@ export default function ViewBrandPage() {
       const list = resp?.plans || [];
       setPlans(list);
 
-      // default selection: current plan if exists, else first
       const currId = brand?.subscription?.planId;
       if (currId) setSelectedPlanId(currId);
       else if (list[0]?.planId) setSelectedPlanId(list[0].planId);
@@ -289,14 +440,14 @@ export default function ViewBrandPage() {
   const checkPlanChange = async (planId: string) => {
     if (!brandId || !planId) return;
     setChecking(true);
+
     try {
       const resp = await post<PlanChangeCheckResponse>(API_CHECK_CHANGE, {
         brandId,
         planId,
       });
       setCheckInfo(resp);
-    } catch (err: any) {
-      // if check endpoint not available / route differs, don't block admin usage
+    } catch {
       setCheckInfo(null);
     } finally {
       setChecking(false);
@@ -307,20 +458,17 @@ export default function ViewBrandPage() {
     const base =
       applyFrom === "current_expiry" && currentExpiry ? currentExpiry : new Date();
 
-    // exact date
     if (validityMode === "exact_date" && customExpiryDate) {
       const dt = new Date(customExpiryDate + "T00:00:00.000Z");
       return Number.isNaN(dt.getTime()) ? null : dt;
     }
 
-    // custom days
     if (validityMode === "custom_days" && customDays) {
       const n = Number(customDays);
       if (!Number.isFinite(n) || n <= 0) return null;
       return addDays(base, n);
     }
 
-    // plan default
     if (!selectedPlan) return addDays(base, 30);
 
     const mins =
@@ -335,13 +483,11 @@ export default function ViewBrandPage() {
   const upgradeOrUpdatePlan = async () => {
     if (!brandId || !selectedPlanId) return;
 
-    // If you want to enforce "upgrade only", block when check says no (unless forceAssign)
     if (checkInfo && checkInfo.canProceed === false && !forceAssign) {
       setAssignMsg(`❌ ${checkInfo.message}`);
       return;
     }
 
-    // validate custom inputs
     if (validityMode === "custom_days") {
       const n = Number(customDays);
       if (!Number.isFinite(n) || n <= 0) {
@@ -349,6 +495,7 @@ export default function ViewBrandPage() {
         return;
       }
     }
+
     if (validityMode === "exact_date" && !customExpiryDate) {
       setAssignMsg("❌ Please select an expiry date.");
       return;
@@ -358,21 +505,18 @@ export default function ViewBrandPage() {
     setAssignMsg(null);
 
     try {
-      const payload: any = {
+      const payload: Record<string, any> = {
         brandId,
         planId: selectedPlanId,
         billingCycle,
-        applyFrom, // "now" | "current_expiry"
+        applyFrom,
       };
 
       if (validityMode === "custom_days" && customDays) {
         payload.durationDays = Number(customDays);
       } else if (validityMode === "exact_date" && customExpiryDate) {
-        payload.expiresAt = new Date(
-          customExpiryDate + "T00:00:00.000Z"
-        ).toISOString();
+        payload.expiresAt = new Date(customExpiryDate + "T00:00:00.000Z").toISOString();
       }
-      // plan_default => no overrides, backend uses plan duration
 
       await post(API_ADMIN_ASSIGN, payload);
 
@@ -391,6 +535,8 @@ export default function ViewBrandPage() {
   const fetchCampaigns = async () => {
     if (!brandId) return;
     setLoadingCampaigns(true);
+    setErrorCampaigns(null);
+
     try {
       const payload = {
         brandId,
@@ -401,12 +547,10 @@ export default function ViewBrandPage() {
         sortBy: apiSortBy,
         sortOrder: sortAsc ? "asc" : "desc",
       };
-      const resp = await post<CampaignListResponse>(
-        "/admin/campaign/getByBrandId",
-        payload
-      );
-      setCampaigns(resp.campaigns);
-      setCampaignsTotalPages(resp.totalPages);
+
+      const resp = await post<CampaignListResponse>("/admin/campaign/getByBrandId", payload);
+      setCampaigns(resp.campaigns || []);
+      setCampaignsTotalPages(resp.totalPages || 1);
     } catch (err: any) {
       setErrorCampaigns(err.message || "Failed to load campaigns.");
     } finally {
@@ -420,23 +564,18 @@ export default function ViewBrandPage() {
 
   useEffect(() => {
     fetchCampaigns();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandId, campaignsPage, searchTerm, statusFilter, apiSortBy, sortAsc]);
 
-  // fetch plans once brand loads
   useEffect(() => {
     if (brand) fetchPlans();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brand?.brandId]);
+  }, [brand?._id]);
 
-  // check plan change when selected plan changes
   useEffect(() => {
     if (!selectedPlanId || !brandId) return;
     checkPlanChange(selectedPlanId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlanId, brandId]);
 
-  const toggleSort = (key: any) => {
+  const toggleSort = (key: keyof Campaign | "startDate" | "endDate" | "status") => {
     if (sortBy === key) setSortAsc(!sortAsc);
     else {
       setSortBy(key);
@@ -446,20 +585,22 @@ export default function ViewBrandPage() {
   };
 
   const expiryPreview = computeExpiryPreview();
+  const initials = getInitials(brand);
+  const currentPlanName = brand?.subscription?.planName || brand?.planName || "—";
 
-  // ---------- Loading / Error / Empty ----------
-  if (loadingBrand)
+  if (loadingBrand) {
     return (
       <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
-        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10 space-y-6">
+        <div className="mx-auto w-full max-w-[1200px] space-y-6 px-4 py-6 md:px-6 md:py-10">
           <Skeleton className="h-10 w-48 rounded-xl" />
           <Skeleton className="h-44 w-full rounded-2xl" />
           <Skeleton className="h-64 w-full rounded-2xl" />
         </div>
       </div>
     );
+  }
 
-  if (errorBrand)
+  if (errorBrand) {
     return (
       <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
         <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10">
@@ -469,8 +610,9 @@ export default function ViewBrandPage() {
         </div>
       </div>
     );
+  }
 
-  if (!brand)
+  if (!brand) {
     return (
       <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
         <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10 text-black/70">
@@ -478,235 +620,157 @@ export default function ViewBrandPage() {
         </div>
       </div>
     );
-
-  const initials = (brand.name || "—").trim().slice(0, 1).toUpperCase();
+  }
 
   return (
     <div className={`${outfit.className} min-h-screen w-full bg-[#FAFAFA]`}>
-      <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-6 md:py-10 space-y-6">
-        {/* Top Bar */}
+      <div className="mx-auto w-full max-w-[1200px] space-y-6 px-4 py-6 md:px-6 md:py-10">
         <div className="flex items-center justify-between">
           <Button
             variant="outline"
             onClick={() => router.back()}
-            className="h-11 rounded-full border-black/10 bg-white px-4 text-[13px] font-extrabold text-black/80 hover:bg-black hover:text-white hover:border-black"
+            className="h-11 rounded-full border-black/10 bg-white px-4 text-[13px] font-extrabold text-black/80 hover:border-black hover:bg-black hover:text-white"
           >
             <HiChevronLeft className="mr-2 h-5 w-5" />
             Back
           </Button>
         </div>
 
-        {/* Brand Header */}
-        <Card className="border border-black/10 bg-white rounded-2xl overflow-hidden">
+        <Card className="overflow-hidden rounded-2xl border border-black/10 bg-white">
           <CardContent className="p-5 md:p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-full border border-black/10 bg-black/[0.06] flex items-center justify-center text-sm font-extrabold text-[#111827]">
-                  {initials}
-                </div>
+            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div className="flex items-start gap-4">
+                {isDataImage(brand.profilePic) && !brand.isProfilePicSkip ? (
+                  <img
+                    src={brand.profilePic}
+                    alt={brand.brandName}
+                    className="h-16 w-16 rounded-2xl border border-black/10 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-black/10 bg-black/[0.06] text-lg font-extrabold text-[#111827]">
+                    {initials}
+                  </div>
+                )}
 
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-[24px] md:text-[28px] font-extrabold tracking-tight text-[#111827] leading-tight truncate">
-                      {brand.name}
-                    </h2>
-                    {brand.isVerifiedRepresentative ? (
-                      <HiCheckCircle className="text-emerald-600" title="Verified" />
-                    ) : (
-                      <HiXCircle className="text-rose-600" title="Not Verified" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="truncate text-[24px] font-extrabold leading-tight tracking-tight text-[#111827] md:text-[28px]">
+                      {brand.brandName}
+                    </h1>
+                    {statusChip(
+                      brand.subscriptionExpired ? "Subscription expired" : "Subscription active",
+                      brand.subscriptionExpired ? "rose" : "green"
                     )}
                   </div>
 
-                  <p className="mt-1 text-[13px] font-semibold text-black/55">
+                  <p className="mt-1 text-[14px] font-bold text-black/65">
+                    Contact person: {brand.name || "—"}
+                  </p>
+
+                  <p className="mt-2 text-[13px] font-semibold text-black/55">
                     Created {formatDate(brand.createdAt)} • Updated {formatDate(brand.updatedAt)}
                   </p>
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {brand.subscriptionExpired ? (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-black/[0.06] text-black/70 px-3 py-1 text-xs font-extrabold border border-black/10">
-                    <span className="h-1.5 w-1.5 rounded-full bg-black/40" />
-                    Subscription: Expired
-                  </span>
-                ) : (
-                  <span className="text-[13px] font-extrabold text-[#111827]">
-                    Subscription: Active
-                  </span>
-                )}
-
-                <span className="inline-flex items-center rounded-full bg-black/[0.06] text-black/80 px-3 py-1 text-xs font-extrabold border border-black/10">
-                  Wallet: ${brand.walletBalance.toFixed(2)}
-                </span>
+                {statusChip(`Plan: ${currentPlanName}`)}
+                {statusChip(`Wallet: $${Number(brand.walletBalance || 0).toFixed(2)}`)}
+                {brand.fullyManagedSubscription ? statusChip("Fully managed", "green") : null}
+                {brand.assignmentStatus ? statusChip(`Assignment: ${brand.assignmentStatus}`) : null}
               </div>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2 text-[13px] font-semibold text-black/70">
-                <p className="flex items-center gap-2">
-                  <HiOutlineMail className="text-black/45" /> {brand.email}
-                </p>
-                <p className="flex items-center gap-2">
-                  <HiPhone className="text-black/45" /> {brand.callingcode} {brand.phone}
-                </p>
-                <p className="flex items-center gap-2">
-                  <HiLocationMarker className="text-black/45" /> {brand.country}
-                </p>
-                <p className="flex items-center gap-2">
-                  <HiIdentification className="text-black/45" />
-                  Business Type: <span className="font-extrabold text-[#111827]">{brand.businessType}</span>
-                </p>
-                <p className="flex items-center gap-2">
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-3 rounded-2xl border border-black/10 bg-[#FAFAFA] p-4">
+                <div className="flex items-center gap-2">
+                  <HiOutlineMail className="text-black/45" />
+                  <span className="text-[13px] font-semibold text-[#111827]">{brand.email}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <HiOfficeBuilding className="text-black/45" />
+                  <span className="text-[13px] font-semibold text-[#111827]">{brand.industry || "—"}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
                   <HiUserGroup className="text-black/45" />
-                  Company Size: <span className="font-extrabold text-[#111827]">{brand.companySize}</span>
-                </p>
+                  <span className="text-[13px] font-semibold text-[#111827]">{brand.companySize || "—"}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <HiIdentification className="text-black/45" />
+                  <span className="text-[13px] font-semibold text-[#111827]">
+                    Proxy email: {brand.proxyEmail || "—"}
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-2 text-[13px] font-semibold text-black/70">
-                <p>
-                  <span className="text-black/55 font-extrabold">Category:</span> {brand.categoryName}
-                </p>
-                <p>
-                  <span className="text-black/55 font-extrabold">Referral Code:</span> {brand.referralCode}
-                </p>
+              <div className="rounded-2xl border border-black/10 bg-[#FAFAFA] p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <HiSparkles className="text-black/45" />
+                  <h3 className="text-sm font-extrabold text-[#111827]">Assigned Team</h3>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <InfoItem label="RM" value={brand.assignedRm || "—"} />
+                  <InfoItem label="RH" value={brand.assignedRh || "—"} />
+                  <InfoItem label="BM" value={brand.assignedBm || brand.assignedBme || "—"} />
+                  <InfoItem label="IM" value={brand.assignedIm || brand.assignedIme || "—"} />
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Subscription */}
-        <Card className="border border-black/10 bg-white rounded-2xl overflow-hidden">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <QABlock title="Onboarding • Page 1" items={brand.page1} skipped={brand.ispage1Skip} />
+          <QABlock title="Onboarding • Page 2" items={brand.page2} skipped={brand.ispage2Skip} />
+          <QABlock title="Onboarding • Page 3" items={brand.page3} skipped={brand.ispage3Skip} />
+        </div>
+
+        <Card className="overflow-hidden rounded-2xl border border-black/10 bg-white">
           <CardContent className="p-5 md:p-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-2">
-                <div className="h-10 w-10 rounded-xl border border-black/10 bg-black/[0.06] flex items-center justify-center text-black/70">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-black/[0.06] text-black/70">
                   <HiClipboardList className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-[18px] md:text-[20px] font-extrabold text-[#111827]">
-                    Subscription
-                  </h3>
+                  <h3 className="text-[18px] font-extrabold text-[#111827] md:text-[20px]">Subscription</h3>
                   <p className="text-[13px] font-semibold text-black/55">
-                    Plan status, billing and usage snapshot.
+                    Plan status, billing, limits and value-based feature access.
                   </p>
                 </div>
               </div>
 
-              <span className="inline-flex items-center rounded-full bg-black/[0.06] text-black/80 px-3 py-1 text-xs font-extrabold border border-black/10">
-                Plan: {brand.subscription?.planName || "—"}
-              </span>
+              {statusChip(`Plan: ${currentPlanName}`)}
             </div>
 
-            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[13px] font-semibold text-black/70">
-              <p>
-                <span className="text-black/55 font-extrabold">Role:</span>{" "}
-                {brand.subscription?.role || "—"}
-              </p>
-              <p>
-                <span className="text-black/55 font-extrabold">Status:</span>{" "}
-                {brand.subscription?.status || "—"}
-              </p>
-              <p>
-                <span className="text-black/55 font-extrabold">Monthly Cost:</span>{" "}
-                {typeof brand.subscription?.monthlyCost === "number" && brand.subscription.monthlyCost > 0
-                  ? `$${brand.subscription.monthlyCost}`
-                  : "Free / N.A."}
-              </p>
-              <p>
-                <span className="text-black/55 font-extrabold">Auto Renew:</span>{" "}
-                {typeof brand.subscription?.autoRenew === "boolean"
-                  ? brand.subscription.autoRenew
-                    ? "Yes"
-                    : "No"
-                  : "—"}
-              </p>
-              <p>
-                <span className="text-black/55 font-extrabold">Started:</span>{" "}
-                {brand.subscription?.startedAt ? formatDate(brand.subscription.startedAt) : "—"}
-              </p>
-              <p>
-                <span className="text-black/55 font-extrabold">Expires:</span>{" "}
-                {brand.subscription?.expiresAt ? formatDate(brand.subscription.expiresAt) : "—"}
-              </p>
+            <div className="mt-5 grid grid-cols-1 gap-3 text-[13px] font-semibold text-black/70 sm:grid-cols-2 md:grid-cols-3">
+              <InfoItem label="Role" value={brand.subscription?.role} />
+              <InfoItem label="Status" value={brand.subscription?.status || brand.status || "—"} />
+              <InfoItem label="Billing cycle" value={brand.subscription?.billingCycle || "—"} />
+              <InfoItem label="Monthly cost" value={formatCurrency(brand.subscription?.monthlyCost)} />
+              <InfoItem label="Annual cost" value={formatCurrency(brand.subscription?.annualCost)} />
+              <InfoItem label="Auto renew" value={brand.subscription?.autoRenew ? "Yes" : "No"} />
+              <InfoItem label="Started" value={formatDate(brand.subscription?.startedAt)} />
+              <InfoItem label="Expires" value={brand.subscription?.expiresAt ? formatDate(brand.subscription.expiresAt) : "No expiry set"} />
+              <InfoItem label="Duration" value={brand.subscription?.durationMins ? `${brand.subscription.durationMins} mins` : "—"} />
+              <InfoItem label="Internal credits used" value={brand.subscription?.internalCredits?.used ?? 0} />
+              <InfoItem label="Credits reset at" value={formatDateTime(brand.subscription?.internalCredits?.resetsAt)} />
+              <InfoItem label="Lock until" value={formatDateTime(brand.lockUntil)} />
             </div>
 
-            {/* Subscription Features Table */}
-            <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 bg-white">
-              <Table className="w-full">
-                <TableHeader>
-                  <TableRow className="bg-white">
-                    <TableHead className="py-4 text-xs font-extrabold text-black/60">
-                      Feature
-                    </TableHead>
-                    <TableHead className="py-4 text-xs font-extrabold text-black/60">
-                      Limit
-                    </TableHead>
-                    <TableHead className="py-4 text-xs font-extrabold text-black/60">
-                      Used
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-
-                <TableBody>
-                  {(brand.subscription?.features || []).map((f) => {
-                    const pct =
-                      f.limit > 0
-                        ? Math.min(100, Math.round((f.used / f.limit) * 100))
-                        : 0;
-
-                    return (
-                      <TableRow
-                        key={f.key}
-                        className="border-b border-black/5 hover:bg-black/[0.02]"
-                      >
-                        <TableCell className="py-4 text-[13px] font-extrabold text-[#111827] capitalize">
-                          {f.key.replace(/_/g, " ")}
-                        </TableCell>
-
-                        <TableCell className="py-4 text-[13px] font-semibold text-black/70">
-                          {f.limit === -1 ? "Unlimited" : f.limit}
-                        </TableCell>
-
-                        <TableCell className="py-4">
-                          <div className="flex items-center justify-between text-[13px] font-semibold text-black/70">
-                            <span className="font-extrabold text-[#111827]">{f.used}</span>
-                            <span className="text-xs font-extrabold text-black/50">
-                              {pct}%
-                            </span>
-                          </div>
-
-                          <div className="mt-2 h-2 w-full rounded-full bg-black/10 overflow-hidden">
-                            <div
-                              className="h-full bg-black transition-all"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-
-                  {(brand.subscription?.features || []).length === 0 && (
-                    <TableRow className="border-b border-black/5">
-                      <TableCell className="py-6 text-sm font-semibold text-black/55" colSpan={3}>
-                        No feature snapshot found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Admin Upgrade / Update Plan */}
             <div className="mt-6 rounded-2xl border border-black/10 bg-white p-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[13px] font-extrabold text-[#111827] flex items-center gap-2">
+                  <p className="flex items-center gap-2 text-[13px] font-extrabold text-[#111827]">
                     <HiChevronDoubleRight className="text-black/70" />
                     Upgrade / Update Plan
                   </p>
                   <p className="text-xs font-semibold text-black/50">
-                    Choose plan + set validity (days / expiry). You can also start from current expiry.
+                    Choose a plan, decide validity, and optionally extend from the current expiry.
                   </p>
                 </div>
 
@@ -714,11 +778,10 @@ export default function ViewBrandPage() {
                   <span className="text-xs font-semibold text-black/50">Checking…</span>
                 ) : checkInfo ? (
                   <span
-                    className={`text-xs px-3 py-1 rounded-full border font-extrabold ${
-                      checkInfo.canProceed
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : "bg-rose-50 text-rose-700 border-rose-200"
-                    }`}
+                    className={`rounded-full border px-3 py-1 text-xs font-extrabold ${checkInfo.canProceed
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-rose-200 bg-rose-50 text-rose-700"
+                      }`}
                   >
                     {checkInfo.message}
                   </span>
@@ -732,7 +795,6 @@ export default function ViewBrandPage() {
               )}
 
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {/* Plan */}
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-black/55">Plan</label>
                   <Select
@@ -744,23 +806,19 @@ export default function ViewBrandPage() {
                       <SelectValue placeholder={loadingPlans ? "Loading..." : "Select plan"} />
                     </SelectTrigger>
                     <SelectContent className="bg-white">
-                      {plans.map((p) => (
-                        <SelectItem key={p.planId} value={p.planId}>
-                          {(p.displayName || p.name).toUpperCase()}{" "}
-                          {p.monthlyCost > 0 ? `- $${p.monthlyCost}/mo` : "- Free"}
+                      {plans.map((plan) => (
+                        <SelectItem key={plan.planId} value={plan.planId}>
+                          {(plan.displayName || plan.name).toUpperCase()} {" "}
+                          {plan.monthlyCost > 0 ? `- $${plan.monthlyCost}/mo` : "- Free"}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Billing Cycle */}
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-black/55">Billing Cycle</label>
-                  <Select
-                    value={billingCycle}
-                    onValueChange={(val) => setBillingCycle(val as "monthly" | "annual")}
-                  >
+                  <Select value={billingCycle} onValueChange={(val) => setBillingCycle(val as "monthly" | "annual")}>
                     <SelectTrigger className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold">
                       <SelectValue placeholder="Select cycle" />
                     </SelectTrigger>
@@ -771,13 +829,9 @@ export default function ViewBrandPage() {
                   </Select>
                 </div>
 
-                {/* Apply From */}
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-black/55">Start counting from</label>
-                  <Select
-                    value={applyFrom}
-                    onValueChange={(val) => setApplyFrom(val as "now" | "current_expiry")}
-                  >
+                  <Select value={applyFrom} onValueChange={(val) => setApplyFrom(val as "now" | "current_expiry")}>
                     <SelectTrigger className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold">
                       <SelectValue placeholder="Select" />
                     </SelectTrigger>
@@ -787,11 +841,10 @@ export default function ViewBrandPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] font-semibold text-black/50">
-                    Use <b>Current expiry</b> if you want to extend without losing remaining days.
+                    Use <b>Current expiry</b> to extend an existing plan without losing remaining time.
                   </p>
                 </div>
 
-                {/* Validity Mode */}
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-black/55">Validity</label>
                   <Select
@@ -811,7 +864,6 @@ export default function ViewBrandPage() {
                   </Select>
                 </div>
 
-                {/* Custom Days */}
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-black/55">Days (if custom)</label>
                   <Input
@@ -821,12 +873,8 @@ export default function ViewBrandPage() {
                     disabled={validityMode !== "custom_days"}
                     className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold"
                   />
-                  <p className="text-[11px] font-semibold text-black/50">
-                    Only used when validity is <b>Custom days</b>.
-                  </p>
                 </div>
 
-                {/* Exact Expiry Date */}
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-black/55">Expiry date (if exact)</label>
                   <Input
@@ -836,30 +884,25 @@ export default function ViewBrandPage() {
                     disabled={validityMode !== "exact_date"}
                     className="h-11 rounded-full border-black/10 bg-white text-[13px] font-semibold"
                   />
-                  <p className="text-[11px] font-semibold text-black/50">
-                    Only used when validity is <b>Exact expiry date</b>.
-                  </p>
                 </div>
 
-                {/* Force Assign */}
                 <div className="md:col-span-2 flex items-end">
-                  <label className="flex items-center gap-2 text-[13px] font-semibold text-black/70 select-none">
+                  <label className="flex select-none items-center gap-2 text-[13px] font-semibold text-black/70">
                     <input
                       type="checkbox"
                       className="h-4 w-4 accent-black"
                       checked={forceAssign}
                       onChange={(e) => setForceAssign(e.target.checked)}
                     />
-                    Force assign (ignore upgrade rules / downgrade block)
+                    Force assign (ignore upgrade/downgrade restrictions)
                   </label>
                 </div>
 
-                {/* Action */}
                 <div className="flex items-end">
                   <Button
                     onClick={upgradeOrUpdatePlan}
                     disabled={!selectedPlanId || assigning}
-                    className="w-full h-11 rounded-full bg-black text-white hover:bg-black/90 text-[13px] font-extrabold"
+                    className="h-11 w-full rounded-full bg-black text-[13px] font-extrabold text-white hover:bg-black/90"
                   >
                     {assigning ? "Updating..." : "Update Plan"}
                   </Button>
@@ -873,41 +916,114 @@ export default function ViewBrandPage() {
                     {expiryPreview.toLocaleString()}
                   </p>
                 )}
+
                 {selectedPlan && (
                   <p className="text-xs font-semibold text-black/50">
                     Plan duration:{" "}
                     {selectedPlan.durationDays
                       ? `${selectedPlan.durationDays} days`
                       : selectedPlan.durationMins
-                      ? `${selectedPlan.durationMins} minutes`
-                      : selectedPlan.durationMinutes
-                      ? `${selectedPlan.durationMinutes} minutes`
-                      : "Default (30 days)"}
+                        ? `${selectedPlan.durationMins} minutes`
+                        : selectedPlan.durationMinutes
+                          ? `${selectedPlan.durationMinutes} minutes`
+                          : "Default (30 days)"}
                   </p>
                 )}
-                {assignMsg && (
-                  <p className="text-[13px] font-semibold text-black/70">{assignMsg}</p>
-                )}
+
+                {assignMsg && <p className="text-[13px] font-semibold text-black/70">{assignMsg}</p>}
               </div>
+            </div>
+
+            <div className="mt-5 overflow-hidden rounded-2xl border border-black/10 bg-white">
+              <Table className="w-full">
+                <TableHeader>
+                  <TableRow className="bg-white">
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">Feature</TableHead>
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">Value</TableHead>
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">Limit</TableHead>
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">Usage</TableHead>
+                    <TableHead className="py-4 text-xs font-extrabold text-black/60">Note / Reset</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {(brand.subscription?.features || []).map((feature) => {
+                    const hasNumericLimit = typeof feature.limit === "number" && feature.limit > 0;
+                    const pct = hasNumericLimit
+                      ? Math.min(100, Math.round((feature.used / feature.limit) * 100))
+                      : 0;
+
+                    return (
+                      <TableRow
+                        key={feature.key}
+                        className="border-b border-black/5 hover:bg-black/[0.02]"
+                      >
+                        <TableCell className="py-4 text-[13px] font-extrabold text-[#111827]">
+                          {titleCaseKey(feature.key)}
+                        </TableCell>
+
+                        <TableCell className="py-4 text-[13px] font-semibold text-black/70">
+                          {displayFeatureValue(feature.value)}
+                        </TableCell>
+
+                        <TableCell className="py-4 text-[13px] font-semibold text-black/70">
+                          {feature.limit === -1
+                            ? "Unlimited"
+                            : hasNumericLimit
+                              ? feature.limit
+                              : "—"}
+                        </TableCell>
+
+                        <TableCell className="py-4">
+                          {hasNumericLimit ? (
+                            <>
+                              <div className="flex items-center justify-between text-[13px] font-semibold text-black/70">
+                                <span className="font-extrabold text-[#111827]">{feature.used}</span>
+                                <span className="text-xs font-extrabold text-black/50">{pct}%</span>
+                              </div>
+                              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-black/10">
+                                <div className="h-full bg-black transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-[13px] font-semibold text-black/50">Not usage based</span>
+                          )}
+                        </TableCell>
+
+                        <TableCell className="py-4 text-[13px] font-semibold text-black/70">
+                          <div>{feature.note || "—"}</div>
+                          <div className="mt-1 text-xs text-black/45">
+                            {feature.resetsEvery || feature.resetsAt
+                              ? `Resets ${feature.resetsEvery || ""} ${feature.resetsAt ? `• ${formatDateTime(feature.resetsAt)}` : ""}`
+                              : "No reset info"}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+
+                  {(brand.subscription?.features || []).length === 0 && (
+                    <TableRow className="border-b border-black/5">
+                      <TableCell className="py-6 text-sm font-semibold text-black/55" colSpan={5}>
+                        No feature snapshot found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
 
-        {/* Campaigns */}
-        <Card className="border border-black/10 bg-white rounded-2xl overflow-hidden">
+        <Card className="overflow-hidden rounded-2xl border border-black/10 bg-white">
           <CardContent className="p-5 md:p-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="text-[18px] md:text-[20px] font-extrabold text-[#111827]">
-                  Campaigns
-                </h3>
-                <p className="text-[13px] font-semibold text-black/55">
-                  Browse campaigns for this brand.
-                </p>
+                <h3 className="text-[18px] font-extrabold text-[#111827] md:text-[20px]">Campaigns</h3>
+                <p className="text-[13px] font-semibold text-black/55">Browse campaigns for this brand.</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* Search (pill) */}
                 <div className="relative w-full sm:w-64">
                   <HiSearch
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-black/45"
@@ -924,7 +1040,6 @@ export default function ViewBrandPage() {
                   />
                 </div>
 
-                {/* Status Filter (pill) */}
                 <Select
                   value={statusFilter.toString()}
                   onValueChange={(val) => {
@@ -956,9 +1071,7 @@ export default function ViewBrandPage() {
                   Error: {errorCampaigns}
                 </div>
               ) : campaigns.length === 0 ? (
-                <div className="text-[13px] font-semibold text-black/55">
-                  No campaigns found.
-                </div>
+                <div className="text-[13px] font-semibold text-black/55">No campaigns found.</div>
               ) : (
                 <>
                   <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white">
@@ -966,44 +1079,40 @@ export default function ViewBrandPage() {
                       <TableHeader>
                         <TableRow className="bg-white">
                           {[
-                            { label: "Name", key: "productOrServiceName" as any, align: "left" as const },
-                            { label: "Goal", key: "goal" as any, align: "left" as const },
-                            { label: "Start", key: "startDate" as any, align: "center" as const },
-                            { label: "End", key: "endDate" as any, align: "center" as const },
-                            { label: "Applicants", key: "applicantCount" as any, align: "center" as const },
-                            { label: "Status", key: "status" as any, align: "center" as const },
+                            { label: "Name", key: "productOrServiceName" as const, align: "left" as const },
+                            { label: "Goal", key: "goal" as const, align: "left" as const },
+                            { label: "Start", key: "startDate" as const, align: "center" as const },
+                            { label: "End", key: "endDate" as const, align: "center" as const },
+                            { label: "Applicants", key: "applicantCount" as const, align: "center" as const },
+                            { label: "Status", key: "status" as const, align: "center" as const },
                             { label: "Open", key: undefined, align: "right" as const },
                           ].map((col) => (
                             <TableHead
                               key={col.label}
-                              className={`py-4 text-xs font-extrabold text-black/60 whitespace-nowrap ${
-                                col.key ? "cursor-pointer select-none" : ""
-                              } ${
-                                col.align === "center"
+                              className={`whitespace-nowrap py-4 text-xs font-extrabold text-black/60 ${col.key ? "cursor-pointer select-none" : ""
+                                } ${col.align === "center"
                                   ? "text-center"
                                   : col.align === "right"
-                                  ? "text-right"
-                                  : "text-left"
-                              }`}
+                                    ? "text-right"
+                                    : "text-left"
+                                }`}
                               onClick={() => col.key && toggleSort(col.key)}
                             >
                               <div
-                                className={`flex items-center gap-1 ${
-                                  col.align === "center"
+                                className={`flex items-center gap-1 ${col.align === "center"
                                     ? "justify-center"
                                     : col.align === "right"
-                                    ? "justify-end"
-                                    : "justify-start"
-                                }`}
+                                      ? "justify-end"
+                                      : "justify-start"
+                                  }`}
                               >
                                 {col.label}
-                                {col.key && sortBy === col.key && (
-                                  sortAsc ? (
+                                {col.key && sortBy === col.key &&
+                                  (sortAsc ? (
                                     <HiChevronUp className="ml-1" />
                                   ) : (
                                     <HiChevronDown className="ml-1" />
-                                  )
-                                )}
+                                  ))}
                               </div>
                             </TableHead>
                           ))}
@@ -1011,47 +1120,45 @@ export default function ViewBrandPage() {
                       </TableHeader>
 
                       <TableBody>
-                        {campaigns.map((c) => (
+                        {campaigns.map((campaign) => (
                           <TableRow
-                            key={c.campaignsId}
+                            key={campaign.campaignsId}
                             className="border-b border-black/5 hover:bg-black/[0.02]"
                           >
                             <TableCell
-                              className="py-4 font-extrabold text-[#111827] max-w-[30ch] truncate"
-                              title={c.productOrServiceName}
+                              className="max-w-[30ch] truncate py-4 font-extrabold text-[#111827]"
+                              title={campaign.productOrServiceName}
                             >
-                              {formatCampaignName(c.productOrServiceName)}
+                              {formatCampaignName(campaign.productOrServiceName)}
                             </TableCell>
 
                             <TableCell
-                              className="py-4 text-[13px] font-semibold text-black/70 max-w-[22ch] truncate"
-                              title={c.goal || ""}
+                              className="max-w-[22ch] truncate py-4 text-[13px] font-semibold text-black/70"
+                              title={campaign.goal || ""}
                             >
-                              {c.goal || "—"}
+                              {campaign.goal || "—"}
                             </TableCell>
 
                             <TableCell className="py-4 text-center text-[13px] font-semibold text-black/70">
-                              {formatDate(c.timeline?.startDate)}
+                              {formatDate(campaign.timeline?.startDate)}
                             </TableCell>
 
                             <TableCell className="py-4 text-center text-[13px] font-semibold text-black/70">
-                              {formatDate(c.timeline?.endDate)}
+                              {formatDate(campaign.timeline?.endDate)}
                             </TableCell>
 
                             <TableCell className="py-4 text-center text-[13px] font-extrabold text-[#111827]">
-                              {c.applicantCount ?? 0}
+                              {campaign.applicantCount ?? 0}
                             </TableCell>
 
                             <TableCell className="py-4 text-center">
-                              {statusPill(c.isActive)}
+                              {campaignStatusPill(campaign.isActive)}
                             </TableCell>
 
                             <TableCell className="py-4 text-right">
                               <Button
-                                onClick={() =>
-                                  router.push(`/admin/campaigns/view?id=${c.campaignsId}`)
-                                }
-                                className="h-9 rounded-full bg-black text-white hover:bg-black/90 px-4 text-[13px] font-extrabold"
+                                onClick={() => router.push(`/admin/campaigns/view?id=${campaign.campaignsId}`)}
+                                className="h-9 rounded-full bg-black px-4 text-[13px] font-extrabold text-white hover:bg-black/90"
                                 size="sm"
                               >
                                 View
@@ -1063,15 +1170,14 @@ export default function ViewBrandPage() {
                     </Table>
                   </div>
 
-                  {/* Pagination */}
                   {campaignsTotalPages > 1 && (
-                    <div className="mt-4 flex justify-end items-center gap-2 flex-wrap">
+                    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                       <Button
                         onClick={() => setCampaignsPage((p) => Math.max(p - 1, 1))}
                         disabled={campaignsPage === 1}
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 rounded-full border-black/10 text-black/70 hover:bg-black hover:text-white hover:border-black"
+                        className="h-8 w-8 rounded-full border-black/10 text-black/70 hover:border-black hover:bg-black hover:text-white"
                       >
                         <HiChevronLeftIcon />
                       </Button>
@@ -1081,13 +1187,11 @@ export default function ViewBrandPage() {
                       </span>
 
                       <Button
-                        onClick={() =>
-                          setCampaignsPage((p) => Math.min(p + 1, campaignsTotalPages))
-                        }
+                        onClick={() => setCampaignsPage((p) => Math.min(p + 1, campaignsTotalPages))}
                         disabled={campaignsPage === campaignsTotalPages}
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 rounded-full border-black/10 text-black/70 hover:bg-black hover:text-white hover:border-black"
+                        className="h-8 w-8 rounded-full border-black/10 text-black/70 hover:border-black hover:bg-black hover:text-white"
                       >
                         <HiChevronRight />
                       </Button>
