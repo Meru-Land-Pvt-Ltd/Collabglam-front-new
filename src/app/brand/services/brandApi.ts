@@ -1590,12 +1590,31 @@ export async function apiGetCampaignInvitationsByBrandAndCampaign(
   );
 }
 
+export type BrandLiteFeature = {
+  key?: string | null;
+  value?: string | number | null;
+  limit?: number | null;
+  used?: number | null;
+  note?: string | null;
+  resetsEvery?: string | null;
+  resetsAt?: string | null;
+};
+
+export type BrandLiteSubscription = {
+  brandPlanId?: string | null;
+  brandPlanName?: string | null;
+  plan?: string | null;
+  status?: string | null;
+  features?: BrandLiteFeature[] | null;
+};
+
 export type BrandLiteResponse = {
+  subscription: BrandLiteSubscription | null;
   brandId: string;
   name: string;
   proxyEmail: string;
   profilePic: string;
-  subscriptionDetails: any | null;
+  subscriptionDetails: BrandLiteSubscription | null;
 };
 
 export async function apiGetBrandLite(brandId: string) {

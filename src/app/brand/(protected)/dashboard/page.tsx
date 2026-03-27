@@ -465,21 +465,22 @@ export default function BrandDashboardHome() {
                   {/* ✅ Desktop table */}
                   <div className="hidden md:block w-full overflow-x-auto">
                     <table className="w-full table-auto text-left text-sm min-w-[620px] lg:min-w-[780px] xl:min-w-[900px]">
-                      <thead className="sticky top-0 bg-white z-10">
-                        <tr className="text-gray-500 border-b">
-                          <th className="py-3 pr-4 whitespace-nowrap">Campaign</th>
+                      <thead className="sticky top-0 z-10 bg-white">
+                        <tr className="border-b text-gray-500">
+                          <th className="py-3 pr-4 text-left whitespace-nowrap">Campaign</th>
 
                           {/* show from lg */}
-                          <th className="py-3 pr-4 whitespace-nowrap hidden lg:table-cell">Goal</th>
+                          <th className="hidden py-3 pr-4 text-left whitespace-nowrap lg:table-cell">
+                            Goal
+                          </th>
 
-                          <th className="py-3 pr-4 whitespace-nowrap">Budget</th>
+                          <th className="py-3 pr-4 text-left whitespace-nowrap">Budget</th>
 
-                          {/* ✅ hide Applied + Influencer columns for FULLY MANAGED */}
+                          {/* hide Applied + Influencer columns for FULLY MANAGED */}
                           {!isFullyManaged && (
-                            <th className="py-3 pr-4 whitespace-nowrap">Applied</th>
-                          )}
-                          {!isFullyManaged && (
-                            <th className="py-3 pr-4 whitespace-nowrap hidden xl:table-cell">Influencer</th>
+                            <th className="py-3 pr-4 text-center align-middle whitespace-nowrap">
+                              All Influencers
+                            </th>
                           )}
 
                           <th className="py-3 text-right whitespace-nowrap">Action</th>
@@ -519,49 +520,26 @@ export default function BrandDashboardHome() {
 
                               {/* Applied (NOT fully managed) */}
                               {!isFullyManaged && (
-                                <td className="py-3 pr-4">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (c.hasAcceptedInfluencer) {
-                                        router.push(`/brand/active-campaign/active-inf?id=${id}`);
-                                      } else {
-                                        router.push(`/brand/created-campaign/applied-inf?id=${id}`);
-                                      }
-                                    }}
-                                    className="group inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 hover:border-gray-300 transition cursor-pointer"
-                                    title={c.hasAcceptedInfluencer ? "Open active influencers" : "Open applied influencers"}
-                                  >
-                                    <span
-                                      className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${applied > 0 ? "bg-[#EAF6EC] text-[#28A745]" : "bg-gray-100 text-gray-500"
-                                        }`}
+                                <td className="py-3 pr-4 text-center align-middle">
+                                  <div className="flex items-center justify-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        router.push(`/brand/influ/all?campaignId=${id}`);
+                                      }}
+                                      className="group inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 transition hover:border-gray-300 hover:bg-gray-50 cursor-pointer"
+                                      title={c.hasAcceptedInfluencer ? "Open active influencers" : "Open applied influencers"}
                                     >
-                                      {applied.toLocaleString()}
-                                    </span>
-
-                                    <span className="text-[11px] font-medium text-gray-400 group-hover:text-gray-500">
-                                      {c.hasAcceptedInfluencer ? "→ Active" : "→ List"}
-                                    </span>
-                                  </button>
-                                </td>
-                              )}
-
-                              {/* Influencer (xl+) (NOT fully managed) */}
-                              {!isFullyManaged && (
-                                <td className="py-3 pr-4 hidden xl:table-cell">
-                                  <span
-                                    className={`px-2 py-1 rounded-full text-xs font-semibold ${c.hasAcceptedInfluencer
-                                      ? "bg-indigo-100 text-indigo-700"
-                                      : "bg-yellow-100 text-yellow-700"
-                                      }`}
-                                  >
-                                    {c.hasAcceptedInfluencer ? "Accepted" : "Not accepted"}
-                                  </span>
+                                      <span className="inline-flex items-center justify-center text-center text-[13px] font-medium text-gray-700 group-hover:text-gray-500">
+                                        List
+                                      </span>
+                                    </button>
+                                  </div>
                                 </td>
                               )}
 
                               {/* Action */}
-                              <td className="py-3 text-right whitespace-nowrap ">
+                              <td className="py-3 text-right whitespace-nowrap">
                                 <button
                                   className="text-sm font-semibold cursor-pointer"
                                   style={{
@@ -639,7 +617,7 @@ export default function BrandDashboardHome() {
                         <button
                           key={t.threadId}
                           type="button"
-                          onClick={() => router.push(`/brand/email?threadId=${t.threadId}`)}
+                          onClick={() => router.push(`/brand/inbox/${t.threadId}`)}
                           className="w-full text-left p-3 hover:bg-gray-50 transition flex items-start gap-3"
                           title="Open conversation"
                         >

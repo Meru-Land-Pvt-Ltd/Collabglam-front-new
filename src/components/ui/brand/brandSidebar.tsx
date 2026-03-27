@@ -13,7 +13,10 @@ import type { Transition, Variants } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { get } from "@/lib/api";
-import { apiGetBrandLite, apiGetBrandWallet } from "@/app/brand/services/brandApi";
+import {
+  apiGetBrandLite,
+  apiGetBrandWallet,
+} from "@/app/brand/services/brandApi";
 
 import {
   Bell,
@@ -43,7 +46,7 @@ const ROUTES: Record<string, string> = {
   dashboard: "/brand/dashboard",
   hub: "/brand/influencer",
   create: "/brand/create-campaign",
-  campaigns: "/brand/created-campaign",
+  campaigns: "/brand/campaign/all",
   campaigns_all: "/brand/campaign/all",
   campaigns_active: "/brand/campaign/active",
   campaigns_draft: "/brand/campaign/draft",
@@ -51,9 +54,7 @@ const ROUTES: Record<string, string> = {
   browse: "/brand/browse-influencer",
   inbox: "/brand/inbox",
   notification: "/brand/notifications",
-  credits: "/brand/credits",
   help: "/brand/help-and-support",
-  // invite: "/brand/invite-members",
 };
 
 /* -------------------------------- types -------------------------------- */
@@ -77,16 +78,24 @@ type Workspace = {
   name: string;
   logoSrc?: string;
 };
-// 2) add these types near your other types
+
+type BrandLiteFeature = {
+  key?: string | null;
+  value?: string | number | null;
+  limit?: number | null;
+  used?: number | null;
+  note?: string | null;
+  resetsEvery?: string | null;
+  resetsAt?: string | null;
+};
 
 type BrandLiteSubscription = {
   brandPlanId?: string | null;
   brandPlanName?: string | null;
   plan?: string | null;
   status?: string | null;
+  features?: BrandLiteFeature[] | null;
 };
-
-// 1) update BrandLiteRes type
 
 type BrandLiteRes = {
   brandId?: string | null;
@@ -94,6 +103,8 @@ type BrandLiteRes = {
   proxyEmail?: string | null;
   profilePic?: string | null;
   subscriptionDetails?: BrandLiteSubscription | null;
+  subscription?: BrandLiteSubscription | null;
+  features?: BrandLiteFeature[] | null;
 };
 
 export type BrandSidebarProps = {
@@ -178,12 +189,11 @@ const upgradeShellStyle: React.CSSProperties = {
   border: "1.5px solid var(--Neutrals-75, #F5F5F5)",
 };
 
-
 /* ---------------------------- small components ---------------------------- */
 
 function WorkspaceLogo({ ws }: { ws: Workspace }) {
   return (
-    <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-neutral-200 bg-white grid place-items-center">
+    <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-neutral-200 bg-white">
       {ws.logoSrc ? (
         <img
           src={ws.logoSrc}
@@ -251,6 +261,7 @@ function PanelCaretGlyph({
     </svg>
   );
 }
+
 function getWalletAmount(res: unknown) {
   const data = res as Record<string, any> | null | undefined;
 
@@ -275,6 +286,7 @@ function formatWalletAmount(amount: number | null) {
     maximumFractionDigits: 0,
   }).format(amount);
 }
+
 const RowButton = React.memo(function RowButton({
   active,
   icon: Icon,
@@ -283,6 +295,7 @@ const RowButton = React.memo(function RowButton({
   onClick,
   tight,
   collapsed,
+  disabled,
 }: {
   active?: boolean;
   icon: React.ElementType;
@@ -291,17 +304,20 @@ const RowButton = React.memo(function RowButton({
   onClick?: () => void;
   tight?: boolean;
   collapsed?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       title={collapsed ? label : undefined}
       className={cn(
-        "relative flex cursor-pointer items-center overflow-hidden rounded-lg transition-all duration-300",
+        "relative flex items-center overflow-hidden rounded-lg transition-all duration-300",
+        disabled ? "cursor-default" : "cursor-pointer",
         FOCUS_RING,
         REST_NAV,
-        active ? ACTIVE_NAV : HOVER_NAV,
+        !disabled && (active ? ACTIVE_NAV : HOVER_NAV),
         collapsed
           ? cn("mx-auto justify-center", tight ? "h-11 w-11" : "h-12 w-12")
           : cn("w-full justify-start", tight ? "h-9 gap-2 px-2.5 py-2" : "h-10 gap-2 px-3 py-2")
@@ -336,7 +352,7 @@ const RowButton = React.memo(function RowButton({
         </m.span>
       )}
 
-      {collapsed && right && (
+      {collapsed && right && !disabled && (
         <span
           className={cn(
             "absolute right-2 top-2 h-2 w-2 rounded-full",
@@ -365,15 +381,57 @@ export default function BrandSidebar({
   const isShort = useMediaQuery("(max-height: 800px)");
   const supportsHover = useMediaQuery("(hover: hover)");
   const vw = useViewportWidth();
+
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const walletBalanceLabel = useMemo(
     () => formatWalletAmount(walletBalance),
     [walletBalance]
   );
+
+  const [creditsOpen, setCreditsOpen] = useState(false);
+
   const [brandLite, setBrandLite] = useState<BrandLiteRes | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const liteSubscription = brandLite?.subscriptionDetails ?? brandLite?.subscription ?? null;
+
+  const influencerSearchFeature = useMemo(() => {
+    const features = liteSubscription?.features ?? brandLite?.features ?? [];
+    return features.find((item) => item?.key === "influencer_search_per_month") ?? null;
+  }, [liteSubscription, brandLite]);
+
+  const creditsLimitLabel =
+    influencerSearchFeature?.limit != null
+      ? String(influencerSearchFeature.limit)
+      : "—";
+
+  const creditUsageItems = useMemo(() => {
+    const features = liteSubscription?.features ?? brandLite?.features ?? [];
+
+    const labels: Record<string, string> = {
+      influencer_search_per_month: "Influencer Search",
+      influencer_profile_views_per_month: "Profile Views",
+    };
+
+    return features
+      .filter((item) => item?.key && labels[String(item.key)])
+      .map((item) => {
+        const used = Number(item?.used ?? 0);
+        const limit = Number(item?.limit ?? 0);
+        const progress =
+          limit > 0 ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0;
+
+        return {
+          key: String(item?.key),
+          label: labels[String(item?.key)],
+          used,
+          limit,
+          progress,
+        };
+      });
+  }, [liteSubscription, brandLite]);
   /* --------------------------------- state -------------------------------- */
 
   const [active, setActive] = useState<string>("dashboard");
@@ -398,6 +456,7 @@ export default function BrandSidebar({
   const campaignHoverRef = useRef(false);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const hasInitializedCollapsed = useRef(false);
+
   /* -------------------------------- derived -------------------------------- */
 
   const tight = isShort;
@@ -464,6 +523,7 @@ export default function BrandSidebar({
       { key: "browse", label: "Browse Influencer", icon: Users, section: "dashboard" },
       { key: "inbox", label: "Inbox", icon: PaperPlaneTilt, section: "dashboard" },
       { key: "wallet", label: "Wallet", icon: Wallet, section: "dashboard" },
+      { key: "credits", label: "Credits", icon: ContactlessPayment, section: "manage" },
       {
         key: "notification",
         label: "Notification",
@@ -475,16 +535,8 @@ export default function BrandSidebar({
           </span>
         ),
       },
-      { key: "credits", label: "Credits", icon: ContactlessPayment, section: "manage" },
+      
       { key: "help", label: "Help", icon: Question, section: "manage" },
-      // {
-      //   key: "invite", label: "Invite Members", icon: UserPlus, section: "manage",
-      //   right: (
-      //     <span className="grid h-5 w-10 place-items-center rounded-full bg-yellow-100 text-[11px] text-[#1a1a1a]">
-      //       Soon
-      //     </span>
-      //   ),
-      // },
     ],
     []
   );
@@ -572,7 +624,6 @@ export default function BrandSidebar({
     }),
     []
   );
-  // 4) add these derived values near your other derived values
 
   const footerBrandName = brandLite?.name?.trim() || "Brand";
   const footerProxyEmail = brandLite?.proxyEmail?.trim() || "No proxy email";
@@ -584,7 +635,6 @@ export default function BrandSidebar({
     planName
   );
 
-  const footerPlanStatus = brandLite?.subscriptionDetails?.status?.trim() || "";
 
   /* -------------------------------- effects -------------------------------- */
 
@@ -609,6 +659,7 @@ export default function BrandSidebar({
       if (cachedPlanName) setPlanName(cachedPlanName.toLowerCase());
     } catch { }
   }, []);
+
   useEffect(() => {
     if (!brandId) return;
 
@@ -677,7 +728,6 @@ export default function BrandSidebar({
       setIsClosing(false);
 
       if (!hasInitializedCollapsed.current) {
-        // Restore persisted preference, default to true (collapsed)
         let initialCollapsed = true;
         try {
           const stored = window.localStorage.getItem("sidebar-collapsed");
@@ -691,10 +741,9 @@ export default function BrandSidebar({
       setCollapsed(false);
       setIsClosing(false);
       setWidthCollapsed(false);
-      hasInitializedCollapsed.current = false; // reset so re-entering desktop re-reads storage
+      hasInitializedCollapsed.current = false;
     }
   }, [isDesktop, setDrawerOpenProp]);
-
 
   useEffect(() => {
     if (!workspaceOpen) return;
@@ -733,11 +782,15 @@ export default function BrandSidebar({
   }, [pathname, routePairs, active]);
 
   useEffect(() => {
-    const inCampaigns = active === "campaigns" || active.startsWith("campaigns_");
-    if (inCampaigns && !(isDesktop && collapsed)) setCampaignOpen(true);
-  }, [active, isDesktop, collapsed]);
+    const inCampaignChildren = active.startsWith("campaigns_");
 
-  // 5) fetch lite api data
+    if (inCampaignChildren && !(isDesktop && collapsed)) {
+      setCampaignOpen(true);
+      return;
+    }
+
+    setCampaignOpen(false);
+  }, [active, isDesktop, collapsed]);
 
   useEffect(() => {
     if (!brandId) return;
@@ -752,10 +805,12 @@ export default function BrandSidebar({
 
         setBrandLite(data ?? null);
 
-        const nextPlanId = data?.subscriptionDetails?.brandPlanId ?? null;
+        const nextSubscription = data?.subscriptionDetails ?? data?.subscription ?? null;
+
+        const nextPlanId = nextSubscription?.brandPlanId ?? null;
         const nextPlanNameRaw =
-          data?.subscriptionDetails?.brandPlanName ??
-          data?.subscriptionDetails?.plan ??
+          nextSubscription?.brandPlanName ??
+          nextSubscription?.plan ??
           null;
 
         if (nextPlanId) setPlanId(nextPlanId);
@@ -769,8 +824,6 @@ export default function BrandSidebar({
       cancelled = true;
     };
   }, [brandId]);
-
-  // 6) outside click close for the 3-dot menu
 
   useEffect(() => {
     if (!profileMenuOpen) return;
@@ -809,6 +862,7 @@ export default function BrandSidebar({
     [router]
   );
 
+
   const handlePlanClick = useCallback(() => {
     router.push("/brand/subscriptions");
     if (!isDesktop) setDrawerOpen(false);
@@ -834,7 +888,9 @@ export default function BrandSidebar({
     setCollapsed(false);
     setIsClosing(false);
     setWidthCollapsed(false);
-    try { window.localStorage.setItem("sidebar-collapsed", "false"); } catch { }
+    try {
+      window.localStorage.setItem("sidebar-collapsed", "false");
+    } catch { }
   }, []);
 
   const beginCloseDesktop = useCallback(() => {
@@ -843,16 +899,10 @@ export default function BrandSidebar({
     campaignHoverRef.current = false;
     setWorkspaceOpen(false);
     setWidthCollapsed(true);
-    try { window.localStorage.setItem("sidebar-collapsed", "true"); } catch { }
+    try {
+      window.localStorage.setItem("sidebar-collapsed", "true");
+    } catch { }
   }, []);
-
-  const openCampaignsFromRail = useCallback(() => {
-    beginOpenDesktop();
-    setCampaignOpen(true);
-    setActive("campaigns_all");
-    goTo("campaigns_all");
-  }, [beginOpenDesktop, goTo]);
-  // 7) add these handlers
 
   const handleProfileMenuAction = useCallback(
     (href: string) => {
@@ -882,22 +932,6 @@ export default function BrandSidebar({
     if (!isDesktop) setDrawerOpen(false);
   }, [router, isDesktop, setDrawerOpen]);
 
-  const handleCampaignMouseEnter = useCallback(() => {
-    if (!supportsHover) return;
-    if (collapsed || isClosing) return;
-
-    campaignHoverRef.current = true;
-    setCampaignOpen(true);
-  }, [supportsHover, collapsed, isClosing]);
-
-  const handleCampaignMouseLeave = useCallback(() => {
-    if (!supportsHover) return;
-    if (isClosing) return;
-
-    campaignHoverRef.current = false;
-    setCampaignOpen(false);
-  }, [supportsHover, isClosing]);
-
   const renderItem = useCallback(
     (item: Item) => {
       const isActiveItem = active === item.key;
@@ -921,7 +955,97 @@ export default function BrandSidebar({
             }
             tight={tight}
             collapsed={isCollapsed}
+            disabled
           />
+        );
+      }
+
+      if (item.key === "credits") {
+        if (isCollapsed) {
+          return (
+            <RowButton
+              key={item.key}
+              icon={item.icon}
+              label={item.label}
+              tight={tight}
+              collapsed={isCollapsed}
+              disabled
+            />
+          );
+        }
+
+        const Icon = item.icon;
+
+        return (
+          <div key={item.key} className="w-full">
+            <button
+              type="button"
+              onClick={() => setCreditsOpen((prev) => !prev)}
+              className={cn(
+                "flex h-10 w-full items-center gap-2 rounded-lg px-3 py-2 text-[#1a1a1a] transition hover:bg-[#1a1a1a]/10",
+                FOCUS_RING
+              )}
+              style={{ fontFamily: "var(--Font-Family-Inter, Inter)" }}
+            >
+              <Icon size={20} weight="regular" className="shrink-0 text-current" />
+              <span className="truncate text-[14px] leading-5 text-current">Credits</span>
+
+              <m.span
+                className="ml-auto inline-flex items-center"
+                animate={{ rotate: creditsOpen ? 180 : 0 }}
+                transition={motionTransitions.content}
+              >
+                <CaretDown size={18} className="text-current opacity-70" />
+              </m.span>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {creditsOpen && (
+                <m.div
+                  key="credits-usage-panel"
+                  variants={dropdownScaleY}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={motionTransitions.content}
+                  className="origin-top overflow-hidden"
+                >
+                  <div className="mt-2 rounded-xl border border-neutral-200 bg-[#FAFAFA] p-3">
+                    {creditUsageItems.length ? (
+                      creditUsageItems.map((feature, index) => (
+                        <div
+                          key={feature.key}
+                          className={cn(
+                            index > 0 && "mt-3 border-t border-neutral-200 pt-3"
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[13px] font-medium text-[#1a1a1a]">
+                              {feature.label}
+                            </span>
+                            <span className="text-[13px] font-semibold text-[#1a1a1a]">
+                              {feature.used}/{feature.limit}
+                            </span>
+                          </div>
+
+                          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-200">
+                            <div
+                              className="h-full rounded-full bg-[#14AE5C]"
+                              style={{ width: `${feature.progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-[12px] text-neutral-500">
+                        No credit usage data available.
+                      </div>
+                    )}
+                  </div>
+                </m.div>
+              )}
+            </AnimatePresence>
+          </div>
         );
       }
 
@@ -935,10 +1059,6 @@ export default function BrandSidebar({
           tight={tight}
           collapsed={isCollapsed}
           onClick={() => {
-            if (item.key === "campaigns" && isCollapsed) {
-              openCampaignsFromRail();
-              return;
-            }
             handleSetActive(item.key);
           }}
         />
@@ -947,11 +1067,13 @@ export default function BrandSidebar({
     [
       active,
       collapsed,
+      creditsOpen,
+      creditUsageItems,
       handleSetActive,
       isCampaignChildActive,
       isClosing,
       isDesktop,
-      openCampaignsFromRail,
+      motionTransitions.content,
       tight,
       walletBalanceLabel,
     ]
@@ -1041,7 +1163,7 @@ export default function BrandSidebar({
           )}
         </div>
 
-        <AnimatePresence initial={false}>
+        {/* <AnimatePresence initial={false}>
           {!compactUI && (
             <m.div
               key="workspace-switcher"
@@ -1060,8 +1182,8 @@ export default function BrandSidebar({
                 animate={{ scale: workspaceOpen ? 1.02 : 1 }}
                 transition={motionTransitions.content}
                 className={cn(
-                  "w-full cursor-pointer rounded-s border border-[#E6E6E6] bg-white p-2 text-left transition hover:bg-neutral-50",
-                  "flex items-center gap-3",
+                  "flex items-center gap-3 rounded-s border border-[#E6E6E6] bg-white p-2 text-left transition hover:bg-neutral-50",
+                  "w-full cursor-pointer",
                   FOCUS_RING,
                   workspaceOpen ? "shadow-sm" : "shadow-none"
                 )}
@@ -1140,7 +1262,7 @@ export default function BrandSidebar({
               </AnimatePresence>
             </m.div>
           )}
-        </AnimatePresence>
+        </AnimatePresence> */}
       </div>
 
       <div className={cn("mt-6 flex min-h-0 flex-1 flex-col", tight ? "mt-4" : "")}>
@@ -1173,40 +1295,57 @@ export default function BrandSidebar({
               .map((item) => {
                 if (item.key !== "campaigns") return renderItem(item);
 
-                const caret = (
-                  <m.span
-                    className="inline-flex items-center"
-                    animate={{ rotate: campaignOpen ? 180 : 0 }}
-                    transition={motionTransitions.content}
-                  >
-                    <CaretDown size={18} className="text-current opacity-70" />
-                  </m.span>
-                );
-
                 if (isDesktop && (collapsed || isClosing)) {
                   return renderItem(item);
                 }
 
+                const isCampaignActive =
+                  campaignOpen || active === "campaigns" || isCampaignChildActive;
+
                 return (
-                  <div
-                    key={item.key}
-                    className="w-full"
-                  // onMouseEnter={handleCampaignMouseEnter}
-                  // onMouseLeave={handleCampaignMouseLeave}
-                  >
-                    <RowButton
-                      icon={item.icon}
-                      label={item.label}
-                      right={caret}
-                      tight={tight}
-                      active={campaignOpen || active === "campaigns" || isCampaignChildActive}
-                      collapsed={false}
-                      onClick={() => {
-                        setCampaignOpen((v) => !v);
-                        // setActive("campaigns_all");
-                        // goTo("campaigns_all");
-                      }}
-                    />
+                  <div key={item.key} className="w-full">
+                    <div
+                      className={cn(
+                        "flex h-10 w-full items-center rounded-lg transition-all duration-300",
+                        FOCUS_RING,
+                        REST_NAV,
+                        isCampaignActive ? ACTIVE_NAV : HOVER_NAV
+                      )}
+                      style={{ fontFamily: "var(--Font-Family-Inter, Inter)" }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCampaignOpen(false);
+                          campaignHoverRef.current = false;
+                          handleSetActive("campaigns");
+                        }}
+                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+                      >
+                        <item.icon size={20} weight="regular" className="shrink-0 text-current" />
+                        <span className="truncate text-[14px] leading-5 text-current">
+                          {item.label}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        aria-label={campaignOpen ? "Close campaigns menu" : "Open campaigns menu"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCampaignOpen((prev) => !prev);
+                        }}
+                        className="flex h-full items-center px-3 text-current"
+                      >
+                        <m.span
+                          className="inline-flex items-center"
+                          animate={{ rotate: campaignOpen ? 180 : 0 }}
+                          transition={motionTransitions.content}
+                        >
+                          <CaretDown size={18} className="text-current opacity-70" />
+                        </m.span>
+                      </button>
+                    </div>
 
                     <AnimatePresence initial={false}>
                       {campaignOpen && !(isDesktop && isClosing) && (
@@ -1331,12 +1470,21 @@ export default function BrandSidebar({
 
               <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
 
-              <div className="h-10 w-10 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
-                <img
-                  alt="User avatar"
-                  src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=120&q=60"
-                  className="h-full w-full object-cover"
-                />
+              <div
+                className="h-10 w-10 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100"
+                title={footerBrandName}
+              >
+                {footerProfilePic ? (
+                  <img
+                    src={footerProfilePic}
+                    alt={footerBrandName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-[15px] font-semibold text-[#1a1a1a]">
+                    {footerBrandName.charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
             </m.div>
           ) : (
@@ -1413,12 +1561,20 @@ export default function BrandSidebar({
 
               <div className={cn("my-5 h-px w-full bg-neutral-200", tight ? "my-4" : "")} />
 
-              {/* 8) replace the current expanded footer profile section with this */}
-
               <div className="relative">
                 <div className="flex w-full items-center gap-3 bg-white p-3">
-                  <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full border border-neutral-200 bg-neutral-100 text-[15px] font-semibold text-[#1a1a1a]">
-                    {footerBrandName.charAt(0).toUpperCase()}
+                  <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border border-neutral-200 bg-neutral-100">
+                    {footerProfilePic ? (
+                      <img
+                        src={footerProfilePic}
+                        alt={footerBrandName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-[15px] font-semibold text-[#1a1a1a]">
+                        {footerBrandName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -1428,18 +1584,6 @@ export default function BrandSidebar({
 
                     <div className="truncate text-[12px] text-neutral-500">
                       {footerProxyEmail}
-                    </div>
-
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-[#1a1a1a]">
-                        {footerPlanLabel}
-                      </span>
-
-                      {footerPlanStatus ? (
-                        <span className="truncate text-[11px] capitalize text-neutral-500">
-                          {footerPlanStatus}
-                        </span>
-                      ) : null}
                     </div>
                   </div>
 
@@ -1494,11 +1638,14 @@ export default function BrandSidebar({
 
                         <button
                           type="button"
-                          onClick={() => handleProfileMenuAction("/brand/invite-members")}
                           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[14px] font-medium text-[#1a1a1a] transition hover:bg-[#F5F5F5]"
                         >
                           <UserPlus size={20} />
                           <span>Invite Members</span>
+
+                          <span className="ml-auto inline-flex items-center rounded-full border border-[#F2B705] bg-[#FFF8E1] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.02em] text-[#D4A100]">
+                            Soon
+                          </span>
                         </button>
 
                         <div className="h-px w-full bg-neutral-200" />
@@ -1565,7 +1712,7 @@ export default function BrandSidebar({
           <m.aside
             data-cg-sidebar
             id="cg-sidebar"
-            className="fixed bottom-0 left-0 top-0 z-[100] border-r border-neutral-200 bg-white select-none"
+            className="fixed bottom-0 left-0 top-0 z-[100] select-none border-r border-neutral-200 bg-white"
             style={{
               width: mobileW,
               padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",

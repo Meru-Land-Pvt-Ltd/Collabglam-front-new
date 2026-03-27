@@ -36,6 +36,7 @@ export type ManualForm = {
   campaigngoal?: string;
   campaignBudget?: number;
   productImages?: ProductImage[];
+  brandName?: string;
 };
 
 export type PreviewMeta = {
@@ -98,10 +99,25 @@ export type ContractCardProps = {
 
 const normSt = (s?: string) => String(s || "").trim().toUpperCase();
 
+function normalizeImageSrc(src?: string) {
+  if (!src) return "";
+
+  let value = String(src).trim();
+
+  // Fix malformed base64 prefix
+  if (value.startsWith("data:image/") && value.includes(";base") && !value.includes(";base64,")) {
+    value = value.replace(";base64 ", ";base64,");
+    value = value.replace(";base ", ";base64,");
+    value = value.replace(";base64", ";base64,");
+  }
+
+  return value;
+}
+
 function getProductImageSrc(img?: ProductImage) {
   if (!img) return "";
-  if (typeof img === "string") return img;
-  return img.dataUrl || img.url || "";
+  if (typeof img === "string") return normalizeImageSrc(img);
+  return normalizeImageSrc(img.dataUrl || img.url || "");
 }
 function resolveContractStatus(meta: ContractCardMeta | null): {
   statusText: string;
@@ -416,7 +432,7 @@ function ContractActions({ contract }: { contract: ContractCardProps }) {
       {canReject && (
         <Button
           onClick={contract.onReject}
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98] "
         >
           Reject
         </Button>
@@ -483,6 +499,7 @@ export function ManualPreviewCard({
   );
   const goal = useMemo(() => firstAndExtra(goalLabels), [goalLabels]);
   const topBadge = goal.first ? pillText(goal.first, goal.extra) : "";
+  const brandInitial = (form.brandName || "B").trim().charAt(0).toUpperCase();
 
   return (
     <div
@@ -528,7 +545,7 @@ export function ManualPreviewCard({
       <div className="mt-8 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-6">
         <div className="grid h-11 w-11 place-items-center rounded-s border-2 border-neutral-200 bg-white">
           <span className="text-[0.75rem] font-semibold tracking-wide text-neutral-900">
-            AD
+            {brandInitial}
           </span>
         </div>
       </div>
@@ -620,9 +637,11 @@ export function ManualPreviewCard({
           </div>
 
           {invite ? (
-            <InviteActions invite={invite} />
+            <div className="shrink-0 ml-auto">
+              <InviteActions invite={invite} />
+            </div>
           ) : showViewMilestone ? (
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="ml-auto flex items-center gap-3 shrink-0">
               <Button
                 variant="default"
                 onClick={onViewMilestone}
@@ -632,14 +651,15 @@ export function ManualPreviewCard({
               </Button>
             </div>
           ) : contract ? (
-            <ContractActions contract={contract} />
+            <div className="shrink-0 ml-auto">
+              <ContractActions contract={contract} />
+            </div>
           ) : (
-            <div className="flex items-center gap-3 shrink-0 cursor-pointer">
-              <Button variant="ghost" className="shadow-none hover:bg-white">
-                <BookmarkSimpleIcon />
-                <span>Save</span>
-              </Button>
-              <Button variant="default" onClick={onViewClick}>
+            <div className="ml-auto flex items-center gap-3 shrink-0">
+              <Button
+                variant="default"
+                onClick={onViewClick}
+              >
                 View
               </Button>
             </div>
