@@ -164,6 +164,18 @@ type GlobalSearchRecommendation = {
   matchedByDirectChannelSearch?: boolean;
   matchedVideos?: GlobalSearchVideo[];
   score?: number;
+
+  avgViewsLast15?: number | null;
+  engagementRateLast15?: number | null;
+  uploadFrequencyPerWeek?: number | null;
+  avgDaysBetweenUploads?: number | null;
+  lastUploadAt?: string | null;
+  lastVideoId?: string | null;
+  lastVideoTitle?: string | null;
+  channelCreatedAt?: string | null;
+  keywords?: string;
+  defaultLanguage?: string | null;
+  instagramHandle?: string | null;
 };
 
 type GlobalSearchData = {
@@ -664,6 +676,13 @@ function MultiCountrySelect({
       {overlay}
     </>
   );
+}
+function chunkArray(arr = [], size = 50) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
 }
 
 /* -------------------- Small UI helpers -------------------- */
@@ -1235,6 +1254,8 @@ function PreviewSidebar({
 export default function Page() {
   const [profiles, setProfiles] = useState<InfluencerProfileDoc[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [saveEmailModalOpen, setSaveEmailModalOpen] = useState(false);
+  const [previewEmail, setPreviewEmail] = useState('');
 
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
@@ -1282,13 +1303,6 @@ export default function Page() {
 
   const [detailsForm, setDetailsForm] = useState({
     email: '',
-    lastSponsor: '',
-    managedByAgency: 'unknown' as 'unknown' | 'yes' | 'no',
-    topAudienceCountry: '',
-    averageAudienceAge: '',
-    lastContactedAt: '',
-    followUpDates: '',
-    workingHandle: '',
   });
 
   const profilesByHandle = useMemo(() => {
@@ -1322,7 +1336,7 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    if (filterModalOpen || detailsModalOpen || previewOpen) {
+    if (filterModalOpen || detailsModalOpen || previewOpen || saveEmailModalOpen) {
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = '';
@@ -1332,7 +1346,7 @@ export default function Page() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [filterModalOpen, detailsModalOpen, previewOpen]);
+  }, [filterModalOpen, detailsModalOpen, previewOpen, saveEmailModalOpen]);
 
   function buildFilterPayload(f: InfluencerFilters) {
     const out: Record<string, any> = {
@@ -1391,7 +1405,10 @@ export default function Page() {
     }
   }
 
-  async function runGlobalSearch(rawQuery: string) {
+  async function runGlobalSearch(
+    rawQuery: string,
+    active: InfluencerFilters = filtersActiveRef.current,
+  ) {
     setSearchLoading(true);
     try {
       const resp = await post<GlobalSearchResponse>('/youtube/search', {
@@ -1399,6 +1416,7 @@ export default function Page() {
         channelLimit: 50,
         videoLimit: 50,
         pageToken: '',
+        ...buildFilterPayload(active),
       });
 
       if (resp?.status !== 'ok') throw new Error('Global search failed');
@@ -1410,7 +1428,7 @@ export default function Page() {
 
       setSearchHint(
         resp.data.recommendations?.length
-          ? `Found ${formatNumber(resp.data.channelsFound)} creators in this batch. Click View Details to preview, and Load More to fetch the next batch.`
+          ? `Found ${formatNumber(resp.data.channelsFound)} creators in this batch. Filters are applied to live search too.`
           : 'No live YouTube results found.',
       );
     } catch (e: any) {
@@ -1426,13 +1444,11 @@ export default function Page() {
     const currentlyShown = globalVisibleCount;
     const alreadyLoaded = globalResult.recommendations.length;
 
-    // First reveal more from already loaded data
     if (currentlyShown < alreadyLoaded) {
       setGlobalVisibleCount((v) => Math.min(v + 10, alreadyLoaded));
       return;
     }
 
-    // Then fetch next page from backend if available
     if (!globalNextPageToken || !globalHasMore) return;
 
     setGlobalLoadingMore(true);
@@ -1442,6 +1458,7 @@ export default function Page() {
         channelLimit: 50,
         videoLimit: 50,
         pageToken: globalNextPageToken,
+        ...buildFilterPayload(filtersActiveRef.current),
       });
 
       if (resp?.status !== 'ok') throw new Error('Failed to load more search results');
@@ -1467,7 +1484,7 @@ export default function Page() {
         return {
           ...prev,
           channelsFound: merged.length,
-          videoHits: prev.videoHits + (resp.data.videoHits || 0),
+          videoHits: resp.data.videoHits || prev.videoHits,
           nextPageToken: resp.data.nextPageToken || null,
           hasMore: !!resp.data.hasMore,
           recommendations: merged,
@@ -1507,14 +1524,27 @@ export default function Page() {
     }
   }
 
-  async function savePreviewProfile() {
+  async function savePreviewProfile(emailValue?: string) {
     if (!previewData) return;
+
+    const email = String(emailValue || '').trim().toLowerCase();
+
+    if (!email) {
+      await showErr('Please enter email before saving profile.');
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      await showErr('Enter a valid email.');
+      return;
+    }
 
     setPreviewSaving(true);
     try {
       const resp = await post<SaveProfileResponse>('/youtube/profile/sync', {
         handle: previewData.handle || undefined,
         channelId: previewData.channelId || undefined,
+        email,
       });
 
       if (resp?.status !== 'ok' || !resp?.data?.handleId) {
@@ -1523,6 +1553,8 @@ export default function Page() {
 
       upsertProfile(resp.data);
 
+      setSaveEmailModalOpen(false);
+      setPreviewEmail('');
       setPreviewOpen(false);
       setPreviewData(null);
 
@@ -1598,16 +1630,6 @@ export default function Page() {
 
     setDetailsForm({
       email: p.email || '',
-      lastSponsor: p.lastSponsor || '',
-      managedByAgency:
-        p.managedByAgency === true ? 'yes' : p.managedByAgency === false ? 'no' : 'unknown',
-      topAudienceCountry: p.topAudienceCountry || '',
-      averageAudienceAge: p.averageAudienceAge != null ? String(p.averageAudienceAge) : '',
-      lastContactedAt: toDateInputValue(p.lastContactedAt),
-      followUpDates: Array.isArray(p.followUpDates)
-        ? p.followUpDates.map((x) => toDateInputValue(x)).filter(Boolean).join(', ')
-        : '',
-      workingHandle: p.workingHandle || '',
     });
 
     setDetailsModalOpen(true);
@@ -1649,34 +1671,9 @@ export default function Page() {
     } else {
       payload.email = null;
     }
-
-    payload.lastSponsor = detailsForm.lastSponsor.trim() || null;
-    payload.topAudienceCountry = detailsForm.topAudienceCountry.trim() || null;
-    payload.workingHandle = detailsForm.workingHandle.trim() || null;
-    payload.managedByAgency =
-      detailsForm.managedByAgency === 'yes'
-        ? true
-        : detailsForm.managedByAgency === 'no'
-          ? false
-          : null;
-
-    if (detailsForm.averageAudienceAge.trim()) {
-      const n = Number(detailsForm.averageAudienceAge.trim());
-      if (!Number.isFinite(n) || n < 0 || n > 120) {
-        await showErr('Average audience age must be 0–120.');
-        return;
-      }
-      payload.averageAudienceAge = n;
-    } else {
-      payload.averageAudienceAge = null;
-    }
-
-    payload.lastContactedAt = detailsForm.lastContactedAt ? detailsForm.lastContactedAt : null;
-    payload.followUpDates = parseFollowUps(detailsForm.followUpDates);
-
     setDetailsSaving(true);
     try {
-      const resp = await post<UpdateManualResponse>('/youtube/profile/update-manual', payload);
+      const resp = await post<UpdateManualResponse>('/youtube/update-manual', payload);
       if (resp?.status !== 'ok') throw new Error('Failed to save details');
       upsertProfile(resp.data);
       setDetailsModalOpen(false);
@@ -1690,7 +1687,14 @@ export default function Page() {
   function applyFilters() {
     const next = { ...filtersDraft };
     setFiltersActive(next);
+    filtersActiveRef.current = next;
+
     loadSaved(1, next, buildSavedSearchText(query));
+
+    if (query.trim() && !searchIntent.isHandle) {
+      runGlobalSearch(query.trim(), next);
+    }
+
     setFilterModalOpen(false);
   }
 
@@ -1706,7 +1710,14 @@ export default function Page() {
 
     setFiltersDraft(empty);
     setFiltersActive(empty);
+    filtersActiveRef.current = empty;
+
     loadSaved(1, empty, buildSavedSearchText(query));
+
+    if (query.trim() && !searchIntent.isHandle) {
+      runGlobalSearch(query.trim(), empty);
+    }
+
     setFilterModalOpen(false);
   }
 
@@ -2062,7 +2073,7 @@ export default function Page() {
                             onClick={() => openDetailsModal(p)}
                           >
                             <Mail className="w-4 h-4" />
-                            Add Details
+                            Update Email
                           </button>
 
                           <button
@@ -2368,9 +2379,15 @@ export default function Page() {
 
       {detailsModalOpen ? (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[115]">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900">Add / Update Details</h3>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Update Email</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Update the creator email address.
+                </p>
+              </div>
+
               <button
                 onClick={() => setDetailsModalOpen(false)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
@@ -2380,127 +2397,18 @@ export default function Page() {
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Email Address</label>
-                  <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    value={detailsForm.email}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({ ...p, email: e.target.value }))
-                    }
-                    placeholder="brand@domain.com"
-                    type="email"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Working Handle</label>
-                  <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    value={detailsForm.workingHandle}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({ ...p, workingHandle: e.target.value }))
-                    }
-                    placeholder="@creator_official"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Last Sponsor</label>
-                  <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    value={detailsForm.lastSponsor}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({ ...p, lastSponsor: e.target.value }))
-                    }
-                    placeholder="Brand name"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Managed by Agency?</label>
-                  <select
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-                    value={detailsForm.managedByAgency}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({
-                        ...p,
-                        managedByAgency: e.target.value as 'unknown' | 'yes' | 'no',
-                      }))
-                    }
-                  >
-                    <option value="unknown">Unknown</option>
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Top Audience Country</label>
-                  <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    value={detailsForm.topAudienceCountry}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({
-                        ...p,
-                        topAudienceCountry: e.target.value,
-                      }))
-                    }
-                    placeholder="US / IN / UK ..."
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Average Audience Age</label>
-                  <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    value={detailsForm.averageAudienceAge}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({
-                        ...p,
-                        averageAudienceAge: e.target.value,
-                      }))
-                    }
-                    placeholder="24"
-                    inputMode="numeric"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-1 block">Last Contacted Date</label>
-                  <input
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    value={detailsForm.lastContactedAt}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({
-                        ...p,
-                        lastContactedAt: e.target.value,
-                      }))
-                    }
-                    type="date"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="text-sm text-slate-600 mb-1 block">Follow-up Dates</label>
-                  <textarea
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-h-[90px]"
-                    value={detailsForm.followUpDates}
-                    onChange={(e) =>
-                      setDetailsForm((p) => ({
-                        ...p,
-                        followUpDates: e.target.value,
-                      }))
-                    }
-                    placeholder="2026-02-26, 2026-03-02"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Use <span className="font-mono">YYYY-MM-DD</span>. Separate by comma or new line.
-                  </p>
-                </div>
-              </div>
+            <div className="p-6">
+              <label className="text-sm text-slate-600 mb-2 block">Email Address</label>
+              <input
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                value={detailsForm.email}
+                onChange={(e) =>
+                  setDetailsForm({ email: e.target.value })
+                }
+                placeholder="brand@domain.com"
+                type="email"
+                autoFocus
+              />
             </div>
 
             <div className="flex gap-3 p-6 border-t border-slate-200">
@@ -2515,7 +2423,71 @@ export default function Page() {
                 onClick={saveDetails}
                 disabled={detailsSaving}
               >
-                {detailsSaving ? 'Saving...' : 'Save Details'}
+                {detailsSaving ? 'Saving...' : 'Update Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {saveEmailModalOpen ? (
+        <div className="fixed inset-0 z-[140] bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Save Profile</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Enter email before saving this creator to database.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                onClick={() => {
+                  if (previewSaving) return;
+                  setSaveEmailModalOpen(false);
+                }}
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 text-slate-600" />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <label className="text-sm text-slate-600 mb-2 block">Email Address</label>
+              <input
+                type="email"
+                value={previewEmail}
+                onChange={(e) => setPreviewEmail(e.target.value)}
+                placeholder="brand@domain.com"
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                autoFocus
+              />
+
+              {previewData?.handle ? (
+                <div className="mt-3 text-xs text-slate-500">
+                  Saving profile for <span className="font-semibold text-slate-700">{previewData.handle}</span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex gap-3 p-5 border-t border-slate-200 bg-slate-50">
+              <button
+                type="button"
+                className="flex-1 px-4 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold disabled:opacity-50"
+                onClick={() => setSaveEmailModalOpen(false)}
+                disabled={previewSaving}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="flex-1 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold disabled:opacity-50"
+                onClick={() => savePreviewProfile(previewEmail)}
+                disabled={previewSaving}
+              >
+                {previewSaving ? 'Saving...' : 'Save Profile'}
               </button>
             </div>
           </div>
@@ -2536,11 +2508,18 @@ export default function Page() {
         onClose={() => {
           setPreviewOpen(false);
           setPreviewData(null);
+          setSaveEmailModalOpen(false);
+          setPreviewEmail('');
         }}
-        onSave={savePreviewProfile}
+        onSave={() => {
+          setPreviewEmail(previewData?.email || '');
+          setSaveEmailModalOpen(true);
+        }}
         onOpenSaved={(id) => {
           setPreviewOpen(false);
           setPreviewData(null);
+          setSaveEmailModalOpen(false);
+          setPreviewEmail('');
           openAndScrollTo(id);
         }}
       />

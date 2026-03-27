@@ -413,7 +413,6 @@ function ContractActions({ contract }: { contract: ContractCardProps }) {
         View
       </Button> */}
 
-      {/* Reject */}
       {canReject && (
         <Button
           onClick={contract.onReject}
@@ -434,7 +433,9 @@ export function ManualPreviewCard({
   contract,
   invite,
   className = "",
-  onViewClick
+  onViewClick,
+  showViewMilestone = false,
+  onViewMilestone,
 }: {
   form: ManualForm;
   meta?: PreviewMeta;
@@ -442,6 +443,8 @@ export function ManualPreviewCard({
   invite?: InviteCardProps;
   className?: string;
   onViewClick?: () => void;
+  showViewMilestone?: boolean;
+  onViewMilestone?: () => void;
 }) {
   const title = form.title?.trim() ?? "";
   const desc = form.description?.trim() ?? "";
@@ -582,7 +585,6 @@ export function ManualPreviewCard({
       </div>
 
       {/* countries line */}
-      {/* countries line */}
       <div className="mt-3">
         {country.first ? (
           <div className="flex items-center gap-2 min-w-0">
@@ -603,9 +605,9 @@ export function ManualPreviewCard({
 
       <div className="mt-6 h-px w-full bg-neutral-100 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5" />
 
- 
+
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
-     
+
         <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
           <div className="min-w-0 flex-1">
             {budget > 0 ? (
@@ -619,6 +621,16 @@ export function ManualPreviewCard({
 
           {invite ? (
             <InviteActions invite={invite} />
+          ) : showViewMilestone ? (
+            <div className="flex items-center gap-3 shrink-0">
+              <Button
+                variant="default"
+                onClick={onViewMilestone}
+                className="bg-black text-white"
+              >
+                View Milestone
+              </Button>
+            </div>
           ) : contract ? (
             <ContractActions contract={contract} />
           ) : (

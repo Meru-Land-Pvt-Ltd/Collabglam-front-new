@@ -1,12 +1,12 @@
 "use client";
 
 import { Suspense } from "react";
-import ViewCampaignInvitation from "./campaign-invitations";
+import ViewMilestonePage from "./viewMilestone";
 
-export default function CampaignInvitation() {
+export default function ViewMilestone() {
   return (
     <Suspense fallback={<div className="p-6">Loading…</div>}>
-      <ViewCampaignInvitation />
+      <ViewMilestonePage />
     </Suspense>
   );
 }

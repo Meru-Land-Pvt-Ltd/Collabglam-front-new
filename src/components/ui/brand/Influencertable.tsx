@@ -12,6 +12,10 @@ import {
 } from "@phosphor-icons/react";
 
 export type PlatformType = "instagram" | "youtube" | "tiktok";
+export type ApplicantDecisionField =
+  | "isShortlisted"
+  | "isUndicided"
+  | "isRejected";
 
 export type InfluencerRow = {
   id: string;
@@ -43,7 +47,7 @@ type RowRenderer = (row: InfluencerRow) => React.ReactNode;
 
 type InfluencerTableProps = {
   rows: InfluencerRow[];
-  onActionClick?: (row: InfluencerRow) => void;
+  onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
   variant?: "default" | "shortlisted" | "recommended";
   renderRecommendedActions?: RowRenderer;
   renderShortlistedActions?: RowRenderer;
@@ -233,7 +237,11 @@ function PillTag({ text, title }: { text: string; title?: string }) {
   );
 }
 
-function ActionGroup({ onSelect }: { onSelect?: () => void }) {
+function ActionGroup({
+  onAction,
+}: {
+  onAction?: (action: ApplicantDecisionField) => void;
+}) {
   const b = "var(--Light-Border-Primary,#D6D6D6)";
 
   return (
@@ -255,6 +263,7 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           e.currentTarget.style.background = "transparent";
         }}
         aria-label="Reject"
+        onClick={() => onAction?.("isRejected")}
       >
         <X size={18} weight="bold" />
       </button>
@@ -276,6 +285,7 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           e.currentTarget.style.background = "transparent";
         }}
         aria-label="Undecided"
+        onClick={() => onAction?.("isUndicided")}
       >
         <QuestionMark size={18} weight="bold" />
       </button>
@@ -297,7 +307,7 @@ function ActionGroup({ onSelect }: { onSelect?: () => void }) {
           e.currentTarget.style.background = "transparent";
         }}
         aria-label="Selected"
-        onClick={onSelect}
+        onClick={() => onAction?.("isShortlisted")}
       >
         <Check size={18} weight="bold" />
       </button>
@@ -344,7 +354,7 @@ function DefaultTable({
   renderBulkHeader,
 }: {
   rows: InfluencerRow[];
-  onActionClick?: (row: InfluencerRow) => void;
+  onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
   renderBulkHeader?: BulkHeaderRenderer;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
@@ -623,7 +633,7 @@ function DefaultTable({
                   <div
                     className={`${colDefault.actions} flex h-[5.5rem] items-center justify-end gap-2 bg-white pl-4 pr-4 py-[0.625rem] rounded-r-[0.75rem]`}
                   >
-                    <ActionGroup onSelect={() => onActionClick?.(r)} />
+                    <ActionGroup onAction={(action) => onActionClick?.(r, action)} />
 
                     <button
                       type="button"
@@ -921,11 +931,7 @@ function ShortlistedTable({
                   <div
                     className={`${colShort.status} flex h-[5.5rem] items-center justify-center px-4`}
                   >
-                    {renderStatus ? (
-                      renderStatus(r)
-                    ) : (
-                      <PillTag text={statusText} />
-                    )}
+                    {renderStatus ? renderStatus(r) : <PillTag text={statusText} />}
                   </div>
 
                   <div

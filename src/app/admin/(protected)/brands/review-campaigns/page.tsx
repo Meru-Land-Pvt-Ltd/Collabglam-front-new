@@ -1,3 +1,5 @@
+//review-campaigns/page.tsx
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -8,17 +10,15 @@ import {
   HiChevronLeft,
   HiChevronRight,
   HiOutlinePencil,
-  HiCheckCircle,
   HiOutlineDocumentText,
   HiChevronRight as HiChevronRightIcon,
-  HiOutlineStar,
 } from "react-icons/hi";
 import { get, post } from "@/lib/api";
 
 type CampaignStatus = "open" | "paused";
 
 interface Campaign {
-  id: string; // campaignsId
+  id: string;
   campaignTitle: string;
   description: string;
   timeline: { startDate: string; endDate: string };
@@ -35,12 +35,12 @@ interface Campaign {
   createdByRole?: string;
 
   shortlistedCount?: number;
-  favoriteCount?: number;
 
   raw?: any;
 }
 
 const APPROVE_ENDPOINT = "/campaign/confirm-readiness";
+const SHORTLISTED_ENDPOINT = "/accepted-admin-created-influencers";
 
 const sliceText = (text: string, max = 40) =>
   text?.length > max ? `${text.slice(0, max - 3)}...` : text;
@@ -62,14 +62,13 @@ const safeCurrency = (amt: number) =>
     currency: "USD",
   }).format(Number.isFinite(amt) ? amt : 0);
 
-// ✅ Deliverables response => { success:true, count:number, data:[...] }
-const getShortlistedCountFromDeliverablesResp = (res: any) => {
+const getShortlistedTotalFromAcceptedAdminResp = (res: any) => {
   const body = res?.data && typeof res.data === "object" ? res.data : res;
 
-  const cnt = Number(body?.count ?? body?.total);
-  if (!Number.isNaN(cnt)) return cnt;
+  const total = Number(body?.total ?? body?.count);
+  if (!Number.isNaN(total)) return total;
 
-  const arr = Array.isArray(body?.data) ? body.data : [];
+  const arr = Array.isArray(body?.influencers) ? body.influencers : [];
   return arr.length;
 };
 
@@ -151,54 +150,30 @@ export default function AdminReviewCampaignsPage() {
     const results = await Promise.allSettled(
       list.map(async (c) => {
         const campaignId = c.id;
-
         let shortlistedCount = c.shortlistedCount ?? 0;
-        let favoriteCount = c.favoriteCount ?? 0;
 
-        // ✅ Shortlisted count (deliverables) - try campaign2 first
         try {
-          const r2 = await get(
-            `/deliverable/influencer/campaign2/${encodeURIComponent(campaignId)}`
+          const resp = await get(
+            `${SHORTLISTED_ENDPOINT}?campaignId=${encodeURIComponent(
+              campaignId
+            )}&page=1&limit=1`
           );
-          shortlistedCount = getShortlistedCountFromDeliverablesResp(r2);
+          shortlistedCount = getShortlistedTotalFromAcceptedAdminResp(resp);
         } catch {
-          try {
-            const r1 = await get(
-              `/deliverable/influencer/campaign/${encodeURIComponent(campaignId)}`
-            );
-            shortlistedCount = getShortlistedCountFromDeliverablesResp(r1);
-          } catch {
-            // keep existing
-          }
+          // keep existing count
         }
 
-        // ✅ Favorite count (admin invitations)
-        try {
-          const favResp = await post(`/campaign-invitation/get-by-campaign`, {
-            campaignId,
-            page: 1,
-            limit: 1, // only need total
-          });
-          favoriteCount = getFavoriteTotalFromInvitationsResp(favResp);
-        } catch {
-          // keep existing
-        }
-
-        return { id: campaignId, shortlistedCount, favoriteCount };
+        return { id: campaignId, shortlistedCount };
       })
     );
 
     if (countsReqRef.current !== reqId) return;
 
-    const map = new Map<
-      string,
-      { shortlistedCount: number; favoriteCount: number }
-    >();
+    const map = new Map<string, { shortlistedCount: number }>();
     results.forEach((r) => {
       if (r.status === "fulfilled") {
         map.set(r.value.id, {
           shortlistedCount: r.value.shortlistedCount,
-          favoriteCount: r.value.favoriteCount,
         });
       }
     });
@@ -206,7 +181,7 @@ export default function AdminReviewCampaignsPage() {
     setCampaigns((prev) =>
       prev.map((p) => {
         const found = map.get(p.id);
-        return found ? { ...p, ...found } : p;
+        return found ? { ...p, shortlistedCount: found.shortlistedCount } : p;
       })
     );
   }, []);
@@ -242,24 +217,24 @@ export default function AdminReviewCampaignsPage() {
         const rawList: any[] = Array.isArray(body?.data)
           ? body.data
           : Array.isArray(body)
-          ? body
-          : [];
+            ? body
+            : [];
 
         // ✅ Detect if server is NOT paginating (returns full list ignoring page/limit)
         const respLimit = Number(body?.limit ?? limit) || limit;
 
         const apiTotalPages = Number(
           body?.totalPages ??
-            body?.pagination?.totalPages ??
-            body?.meta?.totalPages
+          body?.pagination?.totalPages ??
+          body?.meta?.totalPages
         );
 
         const apiTotal = Number(
           body?.total ??
-            body?.totalCount ??
-            body?.count ??
-            body?.meta?.total ??
-            body?.pagination?.total
+          body?.totalCount ??
+          body?.count ??
+          body?.meta?.total ??
+          body?.pagination?.total
         );
 
         const hasPaginationMeta =
@@ -304,18 +279,6 @@ export default function AdminReviewCampaignsPage() {
               : undefined) ??
             (Array.isArray(merged.shortlisted) ? merged.shortlisted.length : 0);
 
-          const favCount =
-            merged.favoriteCount ??
-            merged.favouriteCount ??
-            merged.favCount ??
-            merged.favoriteInfluencersCount ??
-            merged.favouriteInfluencersCount ??
-            merged.favInfluencersCount ??
-            (Array.isArray(merged.favoriteInfluencers)
-              ? merged.favoriteInfluencers.length
-              : undefined) ??
-            (Array.isArray(merged.favorites) ? merged.favorites.length : 0);
-
           return {
             id: String(merged.campaignsId ?? merged.id ?? merged._id),
             campaignTitle: merged.campaignTitle ?? "",
@@ -329,7 +292,6 @@ export default function AdminReviewCampaignsPage() {
             isApproved,
             createdByRole,
             shortlistedCount: typeof shortlistCount === "number" ? shortlistCount : 0,
-            favoriteCount: typeof favCount === "number" ? favCount : 0,
             raw: merged,
           };
         });
@@ -527,7 +489,6 @@ function TableView({
                 "Budget",
                 "Campaign Timeline",
                 "Shortlisted Influencers",
-                "Favorite Influencers",
                 "Status",
                 "Actions",
               ].map((h) => (
@@ -552,7 +513,6 @@ function TableView({
                   : "Open";
 
               const shortlistCount = c.shortlistedCount ?? 0;
-              const favCount = c.favoriteCount ?? 0;
 
               return (
                 <tr
@@ -614,29 +574,6 @@ function TableView({
                       </span>
                       <span className="ml-1 inline-flex min-w-[2rem] justify-center rounded-full bg-black px-2 py-0.5 text-xs font-bold text-white">
                         {shortlistCount}
-                      </span>
-                      <HiChevronRightIcon size={18} className="opacity-60" />
-                    </Link>
-                  </td>
-
-                  {/* Favorites */}
-                  <td className="px-4 py-3 align-top text-center">
-                    <Link
-                      href={withBrandId(
-                        `/admin/brands/fav-influencer?id=${encodeURIComponent(
-                          c.id
-                        )}`
-                      )}
-                      className="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition border-gray-300 bg-white text-black hover:border-black hover:bg-gray-50"
-                      title="View favorite influencers"
-                      aria-label={`View favorite influencers (${favCount})`}
-                    >
-                      <HiOutlineStar size={18} className="opacity-70" />
-                      <span className="underline-offset-2 hover:underline">
-                        Favorites
-                      </span>
-                      <span className="ml-1 inline-flex min-w-[2rem] justify-center rounded-full bg-black px-2 py-0.5 text-xs font-bold text-white">
-                        {favCount}
                       </span>
                       <HiChevronRightIcon size={18} className="opacity-60" />
                     </Link>

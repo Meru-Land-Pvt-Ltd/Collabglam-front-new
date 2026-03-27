@@ -1,33 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Swal from "sweetalert2";
 
 import { Button } from "@/components/ui/button";
+import {
+  apiListDeliverablesByCampaign,
+  apiUpdateDeliverableApprovalStatus,
+  getApiErrorMessage,
+  type DeliverableRow,
+} from "@/app/brand/services/brandApi";
+// If your folder is actually singular, change to:
+// import { ... } from "@/service/brandApi";
 
-type DeliverableUrl = { label: string; url: string };
+type DeliverableUrl = {
+  label?: string;
+  url?: string;
+};
 
-interface Deliverable {
-  _id?: string; // optional because API may not send it
-  brandId: string;
-  influencerId: string;
-  campaignId: string;
-  title: string;
-  description: string;
-  status: string; // pending | approved | revision | rejected etc
-  milestoneTitle?: string; // ✅ added
-  approvedRole?: string;
-  approvalId?: string;
-  comments?: string;
+type Deliverable = DeliverableRow & {
   url?: DeliverableUrl[];
-  delieverableApprovalId: string;
-  createdAt: string;
-  updatedDate?: string;
-}
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
-const DELIVERABLE_BASE_PATH = "deliverable";
+};
 
 const formatDateTime = (dateStr?: string) => {
   if (!dateStr) return "-";
@@ -42,17 +36,41 @@ const formatDateTime = (dateStr?: string) => {
   });
 };
 
-const badgeClass = (status: string) => {
+const badgeClass = (status?: string) => {
   const s = (status || "").toLowerCase();
-  if (s === "approved" || s === "paid")
-    return "bg-green-100 text-green-700 border-green-200";
-  if (s === "pending")
-    return "bg-yellow-100 text-yellow-700 border-yellow-200";
-  if (s === "revision")
-    return "bg-blue-100 text-blue-700 border-blue-200";
-  if (s === "rejected")
-    return "bg-red-100 text-red-700 border-red-200";
-  return "bg-gray-100 text-gray-700 border-gray-200";
+
+  if (s === "approved" || s === "paid") {
+    return "border border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  if (s === "pending") {
+    return "border border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  if (s === "revision") {
+    return "border border-sky-200 bg-sky-50 text-sky-700";
+  }
+
+  return "border border-slate-200 bg-slate-50 text-slate-700";
+};
+
+const getDeliverableId = (row: Deliverable) =>
+  String(row._id || row.delieverableApprovalId || "");
+
+const getDeliverableLinks = (row: Deliverable): DeliverableUrl[] => {
+  const arr = Array.isArray(row.url) ? row.url.filter((x) => x?.url) : [];
+
+  if (arr.length) return arr;
+
+  const fallback: DeliverableUrl[] = [];
+  if (typeof row.link === "string" && row.link.trim()) {
+    fallback.push({ label: "Open link", url: row.link });
+  }
+  if (typeof row.fileUrl === "string" && row.fileUrl.trim()) {
+    fallback.push({ label: "Open file", url: row.fileUrl });
+  }
+
+  return fallback;
 };
 
 export default function DeliverablesPage() {
@@ -62,6 +80,7 @@ export default function DeliverablesPage() {
     () => searchParams.get("campaignId") || "",
     [searchParams]
   );
+
   const statusFilter = useMemo(
     () => searchParams.get("status") || "",
     [searchParams]
@@ -72,9 +91,10 @@ export default function DeliverablesPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDeliverables = async () => {
+  const fetchDeliverables = useCallback(async () => {
     if (!campaignId) {
       setError("Missing campaignId in URL. Example: ?campaignId=xxxx");
+      setRows([]);
       return;
     }
 
@@ -82,252 +102,323 @@ export default function DeliverablesPage() {
     setError(null);
 
     try {
-      const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : "";
-      const url = `${API_BASE}${DELIVERABLE_BASE_PATH}/campaign/${campaignId}${qs}`;
-
-      const res = await fetch(url, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+      const res = await apiListDeliverablesByCampaign({
+        campaignId,
+        ...(statusFilter ? { status: statusFilter } : {}),
       });
 
-      const json = await res.json();
-
-      if (!res.ok || !json?.success) {
-        throw new Error(json?.message || "Failed to fetch deliverables");
-      }
-
-      setRows(Array.isArray(json.data) ? json.data : []);
-    } catch (e: any) {
-      setError(e?.message || "Something went wrong");
+      setRows(Array.isArray(res) ? (res as Deliverable[]) : []);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to fetch deliverables"));
+      setRows([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [campaignId, statusFilter]);
 
-  const updateDeliverableStatus = async (
-    delieverableApprovalId: string,
-    status: "approved" | "revision",
-    comments?: string
-  ) => {
-    try {
-      setUpdatingId(delieverableApprovalId);
+  const updateDeliverableStatus = useCallback(
+    async (
+      row: Deliverable,
+      status: "approved" | "revision",
+      comments?: string
+    ) => {
+      const deliverableId = getDeliverableId(row);
 
-      const url = `${API_BASE}${DELIVERABLE_BASE_PATH}/${delieverableApprovalId}/status`;
-
-      const res = await fetch(url, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          status,
-          ...(typeof comments === "string" ? { comments } : {}),
-        }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json?.success) {
-        throw new Error(json?.message || "Status update failed");
+      if (!deliverableId) {
+        Swal.fire({
+          icon: "error",
+          title: "Missing deliverable id",
+          text: "This row does not have a valid deliverable id.",
+          showConfirmButton: false,
+          timer: 1800,
+          timerProgressBar: true,
+        });
+        return;
       }
 
-      Swal.fire({
-        icon: "success",
-        title: status === "approved" ? "Approved" : "Revision Sent",
-        text:
-          status === "approved"
-            ? "Deliverable approved successfully."
-            : "Revision request sent successfully.",
-        showConfirmButton: false,
-        timer: 1600,
-        timerProgressBar: true,
+      try {
+        setUpdatingId(deliverableId);
+
+        await apiUpdateDeliverableApprovalStatus({
+          deliverableId,
+          status,
+          comments,
+          approvedRole: "Brand",
+        });
+
+        Swal.fire({
+          icon: "success",
+          title: status === "approved" ? "Approved" : "Revision Sent",
+          text:
+            status === "approved"
+              ? "Deliverable approved successfully."
+              : "Revision request sent successfully.",
+          showConfirmButton: false,
+          timer: 1600,
+          timerProgressBar: true,
+        });
+
+        await fetchDeliverables();
+      } catch (err) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: getApiErrorMessage(err, "Failed to update deliverable status"),
+          showConfirmButton: false,
+          timer: 1800,
+          timerProgressBar: true,
+        });
+      } finally {
+        setUpdatingId(null);
+      }
+    },
+    [fetchDeliverables]
+  );
+
+  const approveDeliverable = useCallback(
+    async (row: Deliverable) => {
+      await updateDeliverableStatus(row, "approved");
+    },
+    [updateDeliverableStatus]
+  );
+
+  const sendRevision = useCallback(
+    async (row: Deliverable) => {
+      const result = await Swal.fire({
+        title: "Send for revision?",
+        input: "textarea",
+        inputLabel: "Comments (optional)",
+        inputPlaceholder: "Write what needs to be changed...",
+        showCancelButton: true,
+        confirmButtonText: "Send Revision",
+        cancelButtonText: "Cancel",
+        confirmButtonColor: "#0f172a",
       });
 
-      fetchDeliverables();
-    } catch (e: any) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: e?.message || "Failed to update deliverable status",
-        showConfirmButton: false,
-        timer: 1800,
-        timerProgressBar: true,
-      });
-    } finally {
-      setUpdatingId(null);
-    }
-  };
+      if (!result.isConfirmed) return;
 
-  const approveDeliverable = (delieverableApprovalId: string) => {
-    return updateDeliverableStatus(delieverableApprovalId, "approved");
-  };
+      const comments =
+        typeof result.value === "string" ? result.value : undefined;
 
-  const sendRevision = async (delieverableApprovalId: string) => {
-    const result = await Swal.fire({
-      title: "Send for revision?",
-      input: "textarea",
-      inputLabel: "Comments (optional)",
-      inputPlaceholder: "Write what needs to be changed...",
-      showCancelButton: true,
-      confirmButtonText: "Send Revision",
-      cancelButtonText: "Cancel",
-    });
-
-    if (!result.isConfirmed) return;
-
-    const comments = typeof result.value === "string" ? result.value : undefined;
-    return updateDeliverableStatus(delieverableApprovalId, "revision", comments);
-  };
+      await updateDeliverableStatus(row, "revision", comments);
+    },
+    [updateDeliverableStatus]
+  );
 
   useEffect(() => {
     fetchDeliverables();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, statusFilter]);
+  }, [fetchDeliverables]);
 
   return (
-    <div className="p-6 space-y-5">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Deliverables</h1>
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-7xl p-4 md:p-6 space-y-5">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 p-5 md:p-6 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                Deliverables
+              </h1>
+              <p className="text-sm text-slate-500">
+                Review submissions, approve completed work, or send items back
+                for revision.
+              </p>
+            </div>
 
-      {loading && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-gray-700">
-          Loading deliverables...
-        </div>
-      )}
+            <div className="flex flex-wrap items-center gap-2">
+              {statusFilter && (
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                  Filter: {statusFilter}
+                </span>
+              )}
 
-      {!loading && error && (
-        <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-5">
-          <p className="text-red-600 font-medium">{error}</p>
-          <div className="mt-3">
-            <Button
-              variant="outline"
-              className="border-red-300 text-red-600 hover:bg-red-50"
-              onClick={fetchDeliverables}
-            >
-              Retry
-            </Button>
+              <Button
+                variant="outline"
+                className="border-slate-300 text-slate-700 hover:bg-slate-100"
+                onClick={fetchDeliverables}
+                disabled={loading}
+              >
+                {loading ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
           </div>
         </div>
-      )}
 
-      {!loading && !error && rows.length === 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-gray-700">
-          No deliverables found.
-        </div>
-      )}
+        {loading && (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="text-sm font-medium text-slate-700">
+              Loading deliverables...
+            </div>
+          </div>
+        )}
 
-      {!loading && !error && rows.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-gray-700">
-              <tr>
-                <th className="text-left font-semibold px-4 py-3">Title</th>
-                <th className="text-left font-semibold px-4 py-3">Description</th>
+        {!loading && error && (
+          <div className="rounded-3xl border border-red-200 bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold text-red-600">{error}</p>
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                className="border-red-300 text-red-600 hover:bg-red-50"
+                onClick={fetchDeliverables}
+              >
+                Retry
+              </Button>
+            </div>
+          </div>
+        )}
 
-                {/* ✅ New column */}
-                <th className="text-left font-semibold px-4 py-3">Milestone Title</th>
+        {!loading && !error && rows.length === 0 && (
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-sm text-slate-600">No deliverables found.</p>
+          </div>
+        )}
 
-                <th className="text-left font-semibold px-4 py-3">Status</th>
-                <th className="text-left font-semibold px-4 py-3">Links</th>
-                <th className="text-left font-semibold px-4 py-3">Created</th>
-                <th className="text-left font-semibold px-4 py-3">Action</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((d) => {
-                const status = (d.status || "").toLowerCase();
-                const isApproved = status === "approved";
-                const isRevision = status === "revision";
-                const isUpdating = updatingId === d.delieverableApprovalId;
-
-                return (
-                  <tr
-                    key={d.delieverableApprovalId} // ✅ safer than d._id
-                    className="hover:bg-gray-50/60"
-                  >
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      {d.title || "-"}
-                    </td>
-
-                    <td className="px-4 py-3 text-gray-700 max-w-[420px]">
-                      <div className="line-clamp-2">{d.description || "-"}</div>
-                    </td>
-
-                    {/* ✅ New cell */}
-                    <td className="px-4 py-3 text-gray-700 max-w-[360px]">
-                      <div className="line-clamp-2">{d.milestoneTitle || "-"}</div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-semibold ${badgeClass(
-                          d.status
-                        )}`}
-                      >
-                        {d.status || "-"}
-                      </span>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        {(d.url || []).length === 0 ? (
-                          <span className="text-gray-500">-</span>
-                        ) : (
-                          d.url!.map((u, idx) => (
-                            <a
-                              key={`${d.delieverableApprovalId}-u-${idx}`}
-                              href={u.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-600 hover:underline"
-                            >
-                              {u.label || "Open link"}
-                            </a>
-                          ))
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3 text-gray-700">
-                      {formatDateTime(d.createdAt)}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-2">
-                        <Button
-                          className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white disabled:opacity-50 items-center justify-center"
-                          disabled={isApproved || isUpdating}
-                          onClick={() => approveDeliverable(d.delieverableApprovalId)}
-                        >
-                          {isApproved ? "Approved" : isUpdating ? "Updating..." : "Approve"}
-                        </Button>
-
-                        <Button
-                          className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white disabled:opacity-50"
-                          disabled={isApproved || isRevision || isUpdating}
-                          onClick={() => sendRevision(d.delieverableApprovalId)}
-                        >
-                          {isApproved
-                            ? "Revision Locked"
-                            : isRevision
-                            ? "Revision Sent"
-                            : isUpdating
-                            ? "Updating..."
-                            : "Revision"}
-                        </Button>
-                      </div>
-                    </td>
+        {!loading && !error && rows.length > 0 && (
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Deliverable
+                    </th>
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Milestone
+                    </th>
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Influencer
+                    </th>
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Status
+                    </th>
+                    <th className="px-5 py-4 text-left font-semibold">Links</th>
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Created
+                    </th>
+                    <th className="px-5 py-4 text-left font-semibold">
+                      Actions
+                    </th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {rows.map((row) => {
+                    const rowId = getDeliverableId(row);
+                    const status = (row.status || "").toLowerCase();
+                    const isApproved = status === "approved";
+                    const isRevision = status === "revision";
+                    const isUpdating = updatingId === rowId;
+                    const isLocked = isApproved || isRevision;
+                    const links = getDeliverableLinks(row);
+
+                    return (
+                      <tr
+                        key={rowId}
+                        className="transition-colors hover:bg-slate-50/80"
+                      >
+                        <td className="px-5 py-4 align-top">
+                          <div className="space-y-1">
+                            <div className="font-semibold text-slate-900">
+                              {row.title || "-"}
+                            </div>
+                            <div className="max-w-[340px] text-slate-600 line-clamp-2">
+                              {row.description || "-"}
+                            </div>
+                            {row.comments ? (
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                <span className="font-semibold text-slate-700">
+                                  Comment:
+                                </span>{" "}
+                                {row.comments}
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 align-top text-slate-700">
+                          <div className="max-w-[220px] line-clamp-2">
+                            {row.milestoneTitle || "-"}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 align-top text-slate-700">
+                          {row.influencerName || row.influencer?.name || "-"}
+                        </td>
+
+                        <td className="px-5 py-4 align-top">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass(
+                              row.status
+                            )}`}
+                          >
+                            {row.status || "-"}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex max-w-[220px] flex-col gap-2">
+                            {links.length === 0 ? (
+                              <span className="text-slate-400">-</span>
+                            ) : (
+                              links.map((link, idx) => (
+                                <a
+                                  key={`${rowId}-link-${idx}`}
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="truncate text-sm font-medium text-slate-900 underline underline-offset-4 hover:text-slate-600"
+                                >
+                                  {link.label || `Open link ${idx + 1}`}
+                                </a>
+                              ))
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4 align-top text-slate-600">
+                          {formatDateTime(row.createdAt)}
+                        </td>
+
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex min-w-[190px] flex-col gap-2">
+                            <Button
+                              className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
+                              disabled={isLocked || isUpdating || !rowId}
+                              onClick={() => approveDeliverable(row)}
+                            >
+                              {isApproved
+                                ? "Approved"
+                                : isRevision
+                                ? "Approve Locked"
+                                : isUpdating
+                                ? "Updating..."
+                                : "Approve"}
+                            </Button>
+
+                            <Button
+                              variant="outline"
+                              className="border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                              disabled={isLocked || isUpdating || !rowId}
+                              onClick={() => sendRevision(row)}
+                            >
+                              {isApproved
+                                ? "Revision Locked"
+                                : isRevision
+                                ? "Revision Sent"
+                                : isUpdating
+                                ? "Updating..."
+                                : "Request Revision"}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

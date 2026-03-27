@@ -10,6 +10,9 @@ const WALLET_BASE = "/wallet";
 const INVITATION_BASE = "/invitation";
 const APPLY_BASE = "/apply-campaign";
 const MILESTONE_BASE = "/milestone";
+const DELIVERABLE_BASE = "/deliverable";
+const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
+const Apply_Base = "/apply";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -337,40 +340,49 @@ export async function apiGetAllCategories() {
  *  ✅ CAMPAIGN APIs
  *  ------------------------*/
 export type Platform = "youtube" | "instagram" | "tiktok";
-export type CampaignStatus = "draft" | "scheduled" | "active" | "paused" | "completed";
+export type CampaignStatus = "draft" | "scheduled" | "active" | "paused" | "completed" | "archived";
 
 /** Your controller returns enriched docs; keep it flexible */
 export type EnrichedCampaignDoc = any;
 
 /** ✅ Dashboard/List Summary Row (NEW) */
 export type TimeMeta = {
-  unit: "minutes" | "hours" | "days" | null;
+  unit: "minutes" | "hours" | "days" | "expired" | null;
   value: number | null;
   text: string | null;
 };
 
 export type CampaignRowSummary = {
+  campaignId: string;
   campaignTitle: string;
+  status: CampaignStatus;
 
-  scheduledAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  publishedAt: string | null;
   startAt: string | null;
   endAt: string | null;
-
-  status: CampaignStatus;
-  campaignId: string;
 
   category: { id: string; name: string } | null;
 
   numberOfInfluencers: number | null;
-  contractsCount: number;
-  emailsSent: number;
+  campaignBudget: number;
 
-  scheduleIn: TimeMeta;
+  contractsCount: number;
+  acceptedContracts: number;
+  assignedContracts: number;
+
+  startIn: TimeMeta;
   expireIn: TimeMeta;
 
   platformSelection: Platform[];
   productImages: any[];
+
+  byAi: 0 | 1;
+  isActive: 0 | 1;
+  isDraft: 0 | 1;
 };
+
 
 export type CreateCampaignManualPayload = {
   brandId: string;
@@ -477,23 +489,49 @@ export type ListCampaignsPayload = {
   byAi?: 0 | 1;
 
   campaignType?: string;
-  creatorStatus?: string;
+
   categoryId?: string;
   categoryIds?: string[];
+
+  subcategoryId?: string;
+  subcategoryIds?: string[];
+
+  dateField?: "createdAt" | "updatedAt" | "startAt" | "endAt" | "publishedAt";
+  datePreset?:
+  | "today"
+  | "last7days"
+  | "last30days"
+  | "thisweek"
+  | "thismonth"
+  | "launchingSoon";
 
   dateFrom?: string;
   dateTo?: string;
 
-  sortBy?: "createdAt" | "updatedAt" | "scheduledAt" | "startAt" | "endAt";
+  sortBy?:
+  | "createdAt"
+  | "updatedAt"
+  | "startAt"
+  | "endAt"
+  | "publishedAt"
+  | "campaignTitle"
+  | "campaignBudget"
+  | "numberOfInfluencers"
+  | "status";
+
   sortOrder?: "asc" | "desc";
 };
+
 
 export async function apiCampaignGetDrafts(payload: ListCampaignsPayload) {
   return apiPost<{ items: EnrichedCampaignDoc[]; meta: any }>(`${CAMPAIGN_BASE}/get-drafts`, payload);
 }
 
 export async function apiCampaignGetByBrand(payload: ListCampaignsPayload) {
-  return apiPost<{ items: CampaignRowSummary[]; meta: any }>(`${CAMPAIGN_BASE}/get-by-brand`, payload);
+  return apiPost<{ items: CampaignRowSummary[]; meta: any }>(
+    `${CAMPAIGN_BASE}/get-by-brand`,
+    payload
+  );
 }
 
 export async function apiCampaignGetById(payload: { campaignId: string; brandId?: string }) {
@@ -538,7 +576,6 @@ export type EditDraftPayload = {
 
   status?: CampaignStatus;
 };
-
 export async function apiCampaignEditDraft(payload: EditDraftPayload) {
   return apiPost<EnrichedCampaignDoc>(`${CAMPAIGN_BASE}/edit-draft`, payload);
 }
@@ -628,21 +665,50 @@ export type TimezonesTargetCountry = {
   flag?: string;
   timezones: TimezoneItem[];
 };
+export type TimezoneTarget = {
+  id: string;
+  countryCode: string;
+  countryName: string;
+  callingCode?: string;
+  flag?: string;
+  timezones: Array<{
+    timezone: string;
+    isValid?: boolean;
+    nowLocal?: string;
+    offsetMinutes?: number;
+    offsetMinutesFromCurrent?: number;
+  }>;
+  timezoneMeta?: {
+    selected?: string;
+    selectedBy?: string;
+    availableCount?: number;
+  };
+};
 
 export type GetTimezonesByCountriesResponse = {
-  current: {
-    ip?: string;
-    countryCode?: string;
-    timezone: string;
-    nowLocal: string | null;
-    nowUtc: string;
+  success: boolean;
+  data: {
+    current: {
+      timezone: string;
+      nowLocal: string;
+      nowUtc: string;
+    };
+    targets: TimezoneTarget[];
+    meta?: {
+      requested?: {
+        ids?: number;
+        codes?: number;
+      };
+      resolved?: {
+        countries?: number;
+      };
+      invalid?: {
+        countryIds?: string[];
+        countryCodes?: string[];
+      };
+    };
   };
-  targets: TimezonesTargetCountry[];
-  meta: {
-    requested: { ids: number; codes: number };
-    resolved: { countries: number };
-    invalid: { countryIds: string[]; countryCodes: string[] };
-  };
+  requestId?: string;
 };
 
 export async function apiGetTimezonesByCountries(payload: GetTimezonesByCountriesPayload) {
@@ -1058,4 +1124,468 @@ export async function apiGetMilestonesByCampaign(
       (item) => !payload.brandId || String(item.brandId) === String(payload.brandId)
     ),
   };
+}
+
+/** -------------------------
+ *  ✅ DELIVERABLE APIs
+ *  ------------------------*/
+/** -------------------------
+ *  ✅ DELIVERABLE APIs
+ *  ------------------------*/
+export type DeliverableStatus =
+  | "pending"
+  | "submitted"
+  | "approved"
+  | "revision";
+
+export type ApprovedRole = "Brand" | "Admin";
+
+export type DeliverableInfluencer = {
+  _id: string;
+  name: string;
+};
+
+export type DeliverableRow = {
+  _id?: string;
+  deliverableId?: string;
+  delieverableApprovalId?: string; // keep legacy typo if backend ever sends it
+  campaignId: string;
+  influencerId: string;
+  milestoneId?: string;
+  milestoneHistoryId?: string;
+
+  title?: string;
+  description?: string;
+  fileUrl?: string;
+  link?: string;
+
+  status?: DeliverableStatus | string;
+  comments?: string;
+  approvalId?: string;
+  approvedRole?: ApprovedRole;
+
+  createdAt?: string;
+  updatedAt?: string;
+
+  milestoneTitle?: string;
+  influencerName?: string;
+  influencer?: DeliverableInfluencer | null;
+
+  [key: string]: any;
+};
+
+export async function apiListDeliverablesByCampaign(params: {
+  campaignId: string;
+  status?: string;
+}) {
+  return apiGet<DeliverableRow[]>(
+    `${DELIVERABLE_BASE}/campaign/${params.campaignId}`,
+    {
+      status: params.status,
+    }
+  );
+}
+
+export type UpdateDeliverableApprovalStatusPayload = {
+  deliverableId: string;
+  status: "approved" | "revision";
+  comments?: string;
+  approvedRole?: ApprovedRole;
+  approvalId?: string;
+};
+
+export async function apiUpdateDeliverableApprovalStatus(
+  payload: UpdateDeliverableApprovalStatusPayload
+) {
+  return apiPost<DeliverableRow>(
+    `${DELIVERABLE_BASE}/${payload.deliverableId}/approval-status`,
+    {
+      status: payload.status,
+      comments: payload.comments,
+      approvedRole: payload.approvedRole,
+      approvalId: payload.approvalId,
+    }
+  );
+}
+
+export type GetAllCampaignsParams = {
+  brandId?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type GetAllCampaignsRow = {
+  _id?: string;
+  id?: string;
+  campaignId?: string;
+  campaignTitle?: string;
+  title?: string;
+  name?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type GetAllCampaignsResponse = {
+  data: GetAllCampaignsRow[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+};
+
+export async function apiGetAllCampaigns(params: GetAllCampaignsParams = {}) {
+  const res = await apiGet<any>(`${CAMPAIGN_BASE}/getAll`, {
+    brandId: params.brandId,
+    page: params.page ?? 1,
+    limit: params.limit ?? 100,
+  });
+
+  if (Array.isArray(res)) {
+    return {
+      data: res,
+      pagination: {
+        total: res.length,
+        page: params.page ?? 1,
+        limit: params.limit ?? 100,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+    } as GetAllCampaignsResponse;
+  }
+
+  return res as GetAllCampaignsResponse;
+}
+
+export type CreateCampaignInvitationPayload = {
+  brandId: string;
+  influencerId: string;
+  campaignIds: string[];
+  platform?: "youtube" | "instagram" | "tiktok";
+  handle?: string;
+  modashUserId?: string;
+  emailTo?: string;
+};
+
+export type CampaignInvitationRow = {
+  _id?: string;
+  brandId: string;
+  campaignId: string;
+  influencerId: string;
+  status?: string;
+  sentAt?: string;
+  failedAt?: string | null;
+  failReason?: string | null;
+  platform?: string;
+  handle?: string;
+  modashUserId?: string;
+  emailTo?: string | null;
+  [key: string]: any;
+};
+
+export type CreateCampaignInvitationResponse = {
+  status: "success" | "error";
+  message: string;
+  requestedCampaigns?: number;
+  created?: number;
+  missingCampaignIds?: string[];
+  invitations?: CampaignInvitationRow[];
+};
+
+export async function apiCreateCampaignInvitation(
+  payload: CreateCampaignInvitationPayload
+) {
+  return apiPost<CreateCampaignInvitationResponse>(`${CAMPAIGN_INVITATION_BASE}/create`, payload);
+}
+
+
+/** -------- Campaign Invitation List by Brand (NEW) -------- */
+export type GetCampaignInvitationsByBrandParams = {
+  brandId: string;
+  page?: number;
+  limit?: number;
+  status?: string;
+  influencerId?: string;
+};
+
+export type CampaignInvitationListResponse = {
+  status: "success" | "error";
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+  brandId: string;
+  invitations: CampaignInvitationRow[];
+};
+
+export async function apiGetCampaignInvitationsByBrand(
+  params: GetCampaignInvitationsByBrandParams
+) {
+  const { brandId, page = 1, limit = 25, status, influencerId } = params;
+
+  return apiGet<CampaignInvitationListResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/brand/${brandId}`,
+    {
+      page,
+      limit,
+      status,
+      influencerId,
+    }
+  );
+}
+
+/** -------- Campaign History -------- */
+export type CampaignHistoryTimelineState = "none" | "running" | "expired";
+
+export type CampaignHistorySortBy =
+  | "createdAt"
+  | "budget"
+  | "applicantCount"
+  | "campaignStatus"
+  | "statusUpdatedAt"
+  | "productOrServiceName"
+  | "isActive";
+
+export type CampaignHistorySortOrder = "asc" | "desc";
+
+export type CampaignHistoryPayload = {
+  brandId: string;
+
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: CampaignHistorySortBy;
+  sortOrder?: CampaignHistorySortOrder;
+  includeDescription?: 0 | 1;
+
+  campaignStatus?: "open" | "paused";
+  timelineState?: CampaignHistoryTimelineState;
+  goal?: string;
+  minBudget?: number | string;
+  maxBudget?: number | string;
+
+  campaignType?: string;
+  creatorStatus?: "all" | "invited" | "applied" | "approved";
+  categoryIds?: string[];
+  aiCreated?: boolean | 0 | 1 | "true" | "false";
+
+  quickFilter?:
+  | "recently_edited"
+  | "launching_soon"
+  | "today"
+  | "this_week"
+  | "this_month";
+
+  allDatesOption?:
+  | "all"
+  | "last_7"
+  | "last_15"
+  | "last_30"
+  | "last_90"
+  | "last_365"
+  | "last_month"
+  | "last_quarter";
+
+  startDate?: string;
+  endDate?: string;
+};
+
+export type CampaignHistoryRow = EnrichedCampaignDoc & {
+  computedIsActive?: boolean;
+  timelineState?: CampaignHistoryTimelineState;
+  hasTimeline?: boolean;
+  influencerWorking?: boolean;
+};
+
+export type CampaignHistoryResponse = {
+  data: CampaignHistoryRow[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+};
+
+export async function apiCampaignHistory(payload: CampaignHistoryPayload) {
+  const client = resolveClient();
+
+  if (typeof client?.request === "function") {
+    const res = await client.request({
+      method: "POST",
+      url: `${CAMPAIGN_BASE}/history`,
+      data: payload,
+    });
+    return res?.data as CampaignHistoryResponse;
+  }
+
+  if (typeof client?.post === "function") {
+    const res = await client.post(`${CAMPAIGN_BASE}/history`, payload);
+    return res?.data as CampaignHistoryResponse;
+  }
+
+  throw new Error("No compatible API client found in @/lib/api");
+}
+
+
+
+/** -------- Applicant List By Campaign (NEW) -------- */
+
+/** -------- Applicant List By Campaign (UPDATED) -------- */
+
+export type ApplyListSortField =
+  | "name"
+  | "primaryPlatform"
+  | "category"
+  | "audienceSize"
+  | "handle"
+  | "createdAt";
+
+export type ApplicantDecisionFilter = 0 | 1 | boolean | "0" | "1" | "true" | "false";
+
+export type GetListByCampaignPayload = {
+  campaignId: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortField?: ApplyListSortField;
+  createdPage?: boolean | "true" | "false";
+  sortOrder?: 0 | 1; // 0 = asc, 1 = desc
+
+  // new applicant decision filters
+  isShortlisted?: ApplicantDecisionFilter;
+  isUndicided?: ApplicantDecisionFilter;
+  isRejected?: ApplicantDecisionFilter;
+};
+
+export type CampaignApplicantInfluencerRow = {
+  influencerId: string;
+  name: string;
+  primaryPlatform: string | null;
+  handle: string | null;
+  category: string | null;
+  audienceSize: number;
+  createdAt: string | null;
+
+  // applicant decision flags
+  isShortlisted: 0 | 1;
+  isUndicided: 0 | 1;
+  isRejected: 0 | 1;
+
+  // approval / contract flags
+  isAssigned: 0 | 1;
+  isContracted: 0 | 1;
+  contractId: string | null;
+  feeAmount: number;
+  isAccepted: 0 | 1;
+
+  // contract rejection (separate from applicant rejection)
+  isContractRejected?: 0 | 1;
+  rejectedReason: string;
+};
+
+export type GetListByCampaignResponse = {
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  applicantCount: number;
+  isContracted: 0 | 1;
+  contractId: string | null;
+  influencers: CampaignApplicantInfluencerRow[];
+};
+
+export async function apiGetListByCampaign(
+  payload: GetListByCampaignPayload
+) {
+  return apiPost<GetListByCampaignResponse>(
+    `${Apply_Base}/list`,
+    {
+      campaignId: payload.campaignId,
+      page: payload.page ?? 1,
+      limit: payload.limit ?? 10,
+      search: payload.search,
+      sortField: payload.sortField,
+      createdPage: payload.createdPage,
+      sortOrder: payload.sortOrder ?? 0,
+      isShortlisted: payload.isShortlisted,
+      isUndicided: payload.isUndicided,
+      isRejected: payload.isRejected,
+    }
+  );
+}
+
+export type ApplicantDecisionField =
+  | "isShortlisted"
+  | "isUndicided"
+  | "isRejected";
+
+export type SetApplicantDecisionStatusPayload = {
+  campaignId: string;
+  influencerId: string;
+  field: ApplicantDecisionField;
+};
+
+export type SetApplicantDecisionStatusResponse = {
+  message: string;
+  applicant: {
+    influencerId: string;
+    name: string;
+    isShortlisted: 0 | 1;
+    isUndicided: 0 | 1;
+    isRejected: 0 | 1;
+  };
+};
+
+export async function apiSetApplicantDecisionStatus(
+  payload: SetApplicantDecisionStatusPayload
+) {
+  return apiPost<SetApplicantDecisionStatusResponse>(
+    `${Apply_Base}/update-status`,
+    {
+      campaignId: payload.campaignId,
+      influencerId: payload.influencerId,
+      field: payload.field,
+    }
+  );
+}
+
+/** -------- Campaign Invitations By Brand + Campaign (NEW) -------- */
+export type GetCampaignInvitationsByBrandAndCampaignPayload = {
+  brandId: string;
+  campaignId: string;
+  status?: string;
+  influencerId?: string;
+  platform?: "youtube" | "instagram" | "tiktok";
+  handle?: string;
+};
+
+export type GetCampaignInvitationsByBrandAndCampaignResponse = {
+  status: "success" | "error";
+  total: number;
+  brandId: string;
+  campaignId: string;
+  invitations: CampaignInvitationRow[];
+};
+
+export async function apiGetCampaignInvitationsByBrandAndCampaign(
+  payload: GetCampaignInvitationsByBrandAndCampaignPayload
+) {
+  return apiPost<GetCampaignInvitationsByBrandAndCampaignResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/get-invitations`,
+    {
+      brandId: payload.brandId,
+      campaignId: payload.campaignId,
+      status: payload.status,
+      influencerId: payload.influencerId,
+      platform: payload.platform,
+      handle: payload.handle,
+    }
+  );
 }
