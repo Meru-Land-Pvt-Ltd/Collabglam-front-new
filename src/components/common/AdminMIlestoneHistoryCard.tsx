@@ -10,14 +10,14 @@ import Swal from "sweetalert2";
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 interface MilestoneEntry {
   milestoneHistoryId?: string;
-  milestoneId?: string; // ✅ required for /milestone/release
+  milestoneId?: string;
   influencerId?: string;
   campaignId?: string;
   milestoneTitle?: string;
   amount?: number;
   milestoneDescription?: string;
   createdAt?: string;
-  status?: string; // 'initiated' | 'paid' | etc
+  status?: string;
   released?: boolean;
 }
 
@@ -42,7 +42,7 @@ const formatCurrency = (amt?: number) =>
     minimumFractionDigits: 2,
   });
 
-/* ─── Skeleton Loader (black/white) ──────────────────────────────────────── */
+/* ─── Skeleton Loader ────────────────────────────────────────────────────── */
 const TimelineSkeleton: React.FC<{ rows?: number }> = ({ rows = 3 }) => (
   <div className="relative">
     <span className="absolute left-5 top-6 bottom-0 w-[2px] bg-gray-200" />
@@ -62,7 +62,7 @@ const TimelineSkeleton: React.FC<{ rows?: number }> = ({ rows = 3 }) => (
   </div>
 );
 
-/* ─── Admin Milestone Card (Black/White UI) ─────────────────────────────── */
+/* ─── Admin Milestone Card ──────────────────────────────────────────────── */
 export default function AdminMilestoneHistoryCard({
   brandId,
   campaignId,
@@ -79,9 +79,15 @@ export default function AdminMilestoneHistoryCard({
     () => Boolean(brandId && campaignId && influencerId),
     [brandId, campaignId, influencerId]
   );
+
   const handleViewDeliverable = () => {
-    if (!campaignId) return;
-    router.push(`/admin/campaigns/deliverables/${encodeURIComponent(campaignId)}`);
+    if (!campaignId || !influencerId) return;
+
+    router.push(
+      `/admin/campaigns/deliverables/${encodeURIComponent(
+        campaignId
+      )}?influencerId=${encodeURIComponent(influencerId)}`
+    );
   };
 
   const fetchMilestones = useCallback(async () => {
@@ -95,11 +101,14 @@ export default function AdminMilestoneHistoryCard({
     setError(null);
 
     try {
-      const res = await post<{ milestones: MilestoneEntry[] }>("/milestone/getMilestome", {
-        brandId,
-        campaignId,
-        influencerId,
-      });
+      const res = await post<{ milestones: MilestoneEntry[] }>(
+        "/milestone/getMilestome",
+        {
+          brandId,
+          campaignId,
+          influencerId,
+        }
+      );
 
       setMilestones(Array.isArray(res?.milestones) ? res.milestones : []);
     } catch (err: any) {
@@ -163,12 +172,18 @@ export default function AdminMilestoneHistoryCard({
   };
 
   const renderStatus = (m: MilestoneEntry) => {
-    const rawStatus: string | undefined = m.status || (m as any).payoutStatus || undefined;
+    const rawStatus: string | undefined =
+      m.status || (m as any).payoutStatus || undefined;
+
     const badgeBase =
       "inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full border";
 
     if (rawStatus === "paid") {
-      return <span className={`${badgeBase} bg-black text-white border-black`}>Paid</span>;
+      return (
+        <span className={`${badgeBase} bg-black text-white border-black`}>
+          Paid
+        </span>
+      );
     }
 
     if (rawStatus === "initiated" || (m.released && !rawStatus)) {
@@ -181,7 +196,9 @@ export default function AdminMilestoneHistoryCard({
 
     if (m.released) {
       return (
-        <span className={`${badgeBase} bg-white text-black border-gray-300`}>Released</span>
+        <span className={`${badgeBase} bg-white text-black border-gray-300`}>
+          Released
+        </span>
       );
     }
 
@@ -196,7 +213,6 @@ export default function AdminMilestoneHistoryCard({
     <div
       className={`relative p-6 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 ${className}`}
     >
-      {/* Header (black/white) */}
       <div className="flex items-center gap-3 mb-5">
         <div className="w-12 h-12 flex items-center justify-center rounded-full bg-black shadow-sm">
           <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -213,7 +229,9 @@ export default function AdminMilestoneHistoryCard({
 
       {!canFetch && (
         <div className="space-y-3">
-          <p className="text-red-600 font-medium">Missing brandId / campaignId / influencerId.</p>
+          <p className="text-red-600 font-medium">
+            Missing brandId / campaignId / influencerId.
+          </p>
         </div>
       )}
 
@@ -254,10 +272,8 @@ export default function AdminMilestoneHistoryCard({
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: idx * 0.08, duration: 0.35 }}
                 >
-                  {/* No white dot, keep simple black dot */}
                   <span className="w-4 h-4 mt-1 rounded-full bg-black" />
 
-                  {/* White card, black text */}
                   <div className="flex-1 space-y-1 bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-300">
                     <div className="flex justify-between items-center gap-3">
                       <h4 className="text-base font-semibold text-black">
@@ -276,7 +292,6 @@ export default function AdminMilestoneHistoryCard({
                       {m.milestoneDescription || "–"}
                     </p>
 
-                    {/* Status + Release button logic */}
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                       {!m.released && (
                         <Button
@@ -292,7 +307,7 @@ export default function AdminMilestoneHistoryCard({
                         variant="outline"
                         className="border-black text-black hover:bg-gray-100"
                         onClick={handleViewDeliverable}
-                        disabled={!campaignId}
+                        disabled={!campaignId || !influencerId}
                       >
                         View Deliverable
                       </Button>

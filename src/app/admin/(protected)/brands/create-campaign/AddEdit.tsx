@@ -1602,10 +1602,6 @@ function CreateManualScreen({
             </Button>
 
             <span aria-hidden className="h-5 w-px bg-[#E6E6E6]" />
-
-            <Button variant="raised" className="shadow-none" onClick={saveDraftManually} disabled={draftSaving || publishing}>
-              {draftSaving ? "Saving…" : draftJustSaved ? "Saved" : "Save as Draft"}
-            </Button>
           </>
         }
         right={

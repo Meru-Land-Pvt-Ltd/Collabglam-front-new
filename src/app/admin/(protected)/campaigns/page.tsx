@@ -307,6 +307,7 @@ export default function AdminCampaignsPage() {
                               >
                                 <HiOutlineEye className="h-5 w-5 text-black" />
                               </Link>
+                              
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>View Details</TooltipContent>
