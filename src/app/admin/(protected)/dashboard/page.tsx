@@ -10,7 +10,6 @@ import {
   BarChart3,
   Briefcase,
   Building2,
-  ChevronRight,
   Crown,
   ExternalLink,
   FolderKanban,
@@ -133,6 +132,14 @@ type SafeResult<T> = {
   error: string | null;
 };
 
+type ActionItem = {
+  title: string;
+  href: string;
+  icon: React.ElementType;
+  description: string;
+  priority: number;
+};
+
 const API = {
   me: "/admins/me",
   campaigns: "/admins/campaign/list",
@@ -165,7 +172,7 @@ function formatMoney(value?: number) {
   if (value == null || Number.isNaN(value)) return "-";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
     maximumFractionDigits: 0,
   }).format(value);
 }
@@ -185,22 +192,32 @@ function getRoleTone(role?: AdminRole) {
   return "bg-emerald-100 text-emerald-700";
 }
 
-function getPublishSummary(campaigns: CampaignItem[]) {
-  return campaigns.reduce(
-    (acc, item) => {
-      const key = String(item.publishStatus || item.status || "draft").toLowerCase();
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
-}
-
 function getDashboardTitle(role?: AdminRole) {
   if (role === "super_admin") return "Super Admin Dashboard";
   if (role === "revenue_head") return "Revenue Head Dashboard";
   if (role === "bme") return "BME Dashboard";
   return "IME Dashboard";
+}
+
+function getDashboardSubtitle(role?: AdminRole) {
+  if (role === "super_admin") {
+    return "See platform-wide teams, brands, campaigns, and management visibility in one place.";
+  }
+  if (role === "revenue_head") {
+    return "Track your team, monitor campaigns, and move quickly to high-priority workflows.";
+  }
+  if (role === "bme") {
+    return "Focus on assigned brands, campaigns, and communication without extra clutter.";
+  }
+  return "Manage influencer work, campaign visibility, and important operational actions.";
+}
+
+function getPublishSummary(campaigns: CampaignItem[]) {
+  return campaigns.reduce((acc, item) => {
+    const key = String(item.publishStatus || item.status || "draft").toLowerCase();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 }
 
 function extractArray<T = any>(payload: any): T[] {
@@ -212,7 +229,11 @@ function extractArray<T = any>(payload: any): T[] {
 
 function extractObject<T = any>(payload: any): T | null {
   if (!payload) return null;
-  if (payload?.data?.data && typeof payload.data.data === "object" && !Array.isArray(payload.data.data)) {
+  if (
+    payload?.data?.data &&
+    typeof payload.data.data === "object" &&
+    !Array.isArray(payload.data.data)
+  ) {
     return payload.data.data as T;
   }
   if (payload?.data && typeof payload.data === "object" && !Array.isArray(payload.data)) {
@@ -232,7 +253,11 @@ function getErrorMessage(error: any, fallback: string) {
   return apiMessage || genericMessage || fallback;
 }
 
-async function safeGet<T = any>(url: string, config?: any, fallbackLabel = "Request"): Promise<SafeResult<T>> {
+async function safeGet<T = any>(
+  url: string,
+  config?: any,
+  fallbackLabel = "Request"
+): Promise<SafeResult<T>> {
   try {
     const response = await api.get(url, config);
     return {
@@ -249,25 +274,28 @@ async function safeGet<T = any>(url: string, config?: any, fallbackLabel = "Requ
   }
 }
 
-function getQuickLinks(role?: AdminRole) {
-  const common = [
+function getPriorityActions(role?: AdminRole): ActionItem[] {
+  const common: ActionItem[] = [
     {
-      title: "Dashboard",
+      title: "Open Dashboard",
       href: "/admin",
       icon: LayoutDashboard,
-      description: "Overview and role-scoped summary",
+      description: "Go to your admin overview",
+      priority: 1,
     },
     {
-      title: "Campaigns",
+      title: "Open Campaigns",
       href: "/admin/campaigns",
       icon: FolderKanban,
-      description: "Open and manage visible campaigns",
+      description: "View and manage campaigns",
+      priority: 2,
     },
     {
-      title: "Messages",
+      title: "Open Messages",
       href: "/admin/messages",
       icon: Mail,
       description: "Check communication and updates",
+      priority: 6,
     },
   ];
 
@@ -275,78 +303,88 @@ function getQuickLinks(role?: AdminRole) {
     return [
       ...common,
       {
-        title: "Brands",
+        title: "Manage Brands",
         href: "/admin/brands",
         icon: Building2,
-        description: "Platform-wide brand management",
+        description: "Platform-wide brand control",
+        priority: 3,
       },
       {
-        title: "Influencers",
-        href: "/admin/influencers",
-        icon: Users,
-        description: "See all influencer operations",
-      },
-      {
-        title: "Employees",
+        title: "Manage Employees",
         href: "/admin/employees",
         icon: Shield,
-        description: "Manage admins and executives",
+        description: "See admins and executive users",
+        priority: 4,
       },
       {
-        title: "Role Management",
+        title: "Manage Roles",
         href: "/admin/role",
         icon: Crown,
-        description: "Control permissions and access",
+        description: "Access and permission control",
+        priority: 5,
       },
-    ];
+      {
+        title: "View Influencers",
+        href: "/admin/influencers",
+        icon: Users,
+        description: "Open influencer operations",
+        priority: 7,
+      },
+    ].sort((a, b) => a.priority - b.priority);
   }
 
   if (role === "revenue_head") {
     return [
       ...common,
       {
-        title: "Brands",
+        title: "Manage Brands",
         href: "/admin/brands",
         icon: Building2,
-        description: "View and manage assigned brands",
+        description: "See assigned brands",
+        priority: 3,
       },
       {
-        title: "Influencer Pipeline",
+        title: "Track Pipeline",
         href: "/admin/influencer-pipeline",
         icon: TrendingUp,
-        description: "Track pipeline progress",
+        description: "Follow team progress",
+        priority: 4,
       },
       {
         title: "Subscriptions",
         href: "/admin/subscriptions",
         icon: Briefcase,
-        description: "Review billing and plans",
+        description: "Billing and plans",
+        priority: 5,
       },
-    ];
+    ].sort((a, b) => a.priority - b.priority);
   }
 
   if (role === "bme") {
     return [
       ...common,
       {
-        title: "Brands",
+        title: "Manage Brands",
         href: "/admin/brands",
         icon: Building2,
-        description: "View assigned brands",
+        description: "Open assigned brands",
+        priority: 3,
       },
       {
         title: "Inbound Emails",
         href: "/admin/inbound-emails",
         icon: Mail,
-        description: "Monitor incoming leads and updates",
+        description: "Check lead communication",
+        priority: 4,
       },
       {
         title: "Documents",
         href: "/admin/documents",
         icon: Shield,
-        description: "Open business documents and policies",
+        description: "Reference docs and policies",
+        priority: 5,
       },
-    ];
+    ].sort((a, b) => a.priority - b.priority);
   }
 
   return [
@@ -356,26 +394,30 @@ function getQuickLinks(role?: AdminRole) {
       href: "/admin/influencers",
       icon: Users,
       description: "Manage influencer records",
+      priority: 3,
     },
     {
       title: "Influencer Data",
       href: "/admin/influencer-data",
       icon: BarChart3,
-      description: "View data and performance",
+      description: "Open performance data",
+      priority: 4,
     },
     {
-      title: "Influencer Pipeline",
+      title: "Track Pipeline",
       href: "/admin/influencer-pipeline",
       icon: TrendingUp,
-      description: "Track outreach and progress",
+      description: "Manage outreach flow",
+      priority: 5,
     },
     {
       title: "Documents",
       href: "/admin/documents",
       icon: Shield,
-      description: "Open reference content and policies",
+      description: "Reference operational docs",
+      priority: 6,
     },
-  ];
+  ].sort((a, b) => a.priority - b.priority);
 }
 
 export default function AdminDashboardPage() {
@@ -383,6 +425,7 @@ export default function AdminDashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fatalError, setFatalError] = useState<string | null>(null);
 
   const [state, setState] = useState<DashboardState>({
     me: null,
@@ -395,26 +438,23 @@ export default function AdminDashboardPage() {
   });
 
   const [sectionErrors, setSectionErrors] = useState<SectionErrorMap>({});
-  const [fatalError, setFatalError] = useState<string | null>(null);
 
   const role = state.me?.role;
-  const quickLinks = useMemo(() => getQuickLinks(role), [role]);
-
+  const actions = useMemo(() => getPriorityActions(role), [role]);
   const publishSummary = useMemo(() => getPublishSummary(state.campaigns), [state.campaigns]);
-
-  const totalBudget = useMemo(
-    () =>
-      state.campaigns.reduce(
-        (sum, item) => sum + Number(item.campaignBudget || item.budget || item.influencerBudget || 0),
-        0
-      ),
-    [state.campaigns]
-  );
 
   const visibleErrorCount = useMemo(
     () => Object.values(sectionErrors).filter(Boolean).length,
     [sectionErrors]
   );
+
+  const totalBudget = useMemo(() => {
+    return state.campaigns.reduce((sum, item) => {
+      return sum + Number(item.campaignBudget || item.budget || item.influencerBudget || 0);
+    }, 0);
+  }, [state.campaigns]);
+
+  const topActions = useMemo(() => actions.slice(0, 4), [actions]);
 
   const loadDashboard = async (mode: "initial" | "refresh" = "initial") => {
     try {
@@ -436,7 +476,6 @@ export default function AdminDashboardPage() {
         ) {
           router.replace("/admin/login");
         }
-
         return;
       }
 
@@ -519,23 +558,18 @@ export default function AdminDashboardPage() {
         if (entry.key === "campaigns") {
           nextState.campaigns = extractArray<CampaignItem>(result.data);
         }
-
         if (entry.key === "allocations") {
           nextState.myAllocations = extractArray<BrandAllocation>(result.data);
         }
-
         if (entry.key === "bmeTeam") {
           nextState.bmeTeam = extractArray<ExecutiveAdmin>(result.data);
         }
-
         if (entry.key === "imeTeam") {
           nextState.imeTeam = extractArray<ExecutiveAdmin>(result.data);
         }
-
         if (entry.key === "revenueHeads") {
           nextState.allRevenueHeads = extractArray<ExecutiveAdmin>(result.data);
         }
-
         if (entry.key === "managedBrands") {
           nextState.managedBrands = extractArray<any>(result.data).map((item: any) => ({
             _id: item._id,
@@ -589,7 +623,7 @@ export default function AdminDashboardPage() {
                   <h1 className="text-2xl font-semibold text-slate-900">Unable to open dashboard</h1>
                   <p className="mt-2 text-sm text-slate-600">{fatalError}</p>
                   <p className="mt-2 text-sm text-slate-500">
-                    This usually means your login expired or the profile API is unavailable.
+                    Your login may have expired or the profile API is unavailable.
                   </p>
                 </div>
               </div>
@@ -615,24 +649,22 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <FallbackRedirectCard
-              title="Campaigns"
-              href="/admin/campaigns"
-              description="Open campaign management directly"
-              icon={FolderKanban}
-            />
-            <FallbackRedirectCard
-              title="Brands"
-              href="/admin/brands"
-              description="Go to brand management"
-              icon={Building2}
-            />
-            <FallbackRedirectCard
-              title="Messages"
-              href="/admin/messages"
-              description="Open communication center"
-              icon={Mail}
-            />
+            {getPriorityActions("super_admin").slice(0, 3).map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:bg-slate-50"
+                >
+                  <div className="inline-flex rounded-2xl bg-slate-100 p-3 text-slate-700">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="mt-4 text-lg font-semibold text-slate-900">{item.title}</div>
+                  <div className="mt-1 text-sm text-slate-500">{item.description}</div>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -642,263 +674,266 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <Shield className="h-3.5 w-3.5" />
-                Role Scoped Overview
+        <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 p-6 text-white sm:p-8">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+              <div className="max-w-3xl">
+                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/90">
+                  <Shield className="h-3.5 w-3.5" />
+                  Priority Overview
+                </div>
+
+                <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+                  {getDashboardTitle(role)}
+                </h1>
+
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  {getDashboardSubtitle(role)}
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-900">
+                    {titleCaseRole(role)}
+                  </span>
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
+                    {state.me?.email || "-"}
+                  </span>
+                  {visibleErrorCount > 0 && (
+                    <span className="rounded-full bg-amber-400/20 px-3 py-1 text-xs font-medium text-amber-200">
+                      {visibleErrorCount} section{visibleErrorCount > 1 ? "s" : ""} unavailable
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-                {getDashboardTitle(role)}
-              </h1>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => void loadDashboard("refresh")}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+                >
+                  <RefreshCcw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+                  Refresh
+                </button>
 
-              <p className="mt-2 max-w-3xl text-sm text-slate-500">
-                This dashboard keeps working even if some APIs are unavailable. Each section loads independently,
-                so admins still see the most important data and quick navigation for their role.
-              </p>
-
-              {visibleErrorCount > 0 ? (
-                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  {visibleErrorCount} section{visibleErrorCount > 1 ? "s" : ""} could not be loaded
-                </div>
-              ) : null}
+                <Link
+                  href={topActions[1]?.href || "/admin/campaigns"}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                >
+                  Priority Action
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
             </div>
+          </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                onClick={() => void loadDashboard("refresh")}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
-              >
-                <RefreshCcw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-                Refresh
-              </button>
+          <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4 sm:p-6">
+            <KpiCard
+              icon={<Briefcase className="h-5 w-5" />}
+              label={role === "super_admin" ? "Visible Campaigns" : "Scoped Campaigns"}
+              value={String(state.campaigns.length)}
+              helper={sectionErrors.campaigns ? "Campaign API unavailable" : "Campaigns visible in your scope"}
+              tone={sectionErrors.campaigns ? "warning" : "default"}
+            />
 
-              <Link
-                href="/admin/campaigns"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-black px-4 py-3 text-sm font-semibold text-white"
-              >
-                Open Campaigns
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+            <KpiCard
+              icon={<TrendingUp className="h-5 w-5" />}
+              label="Visible Budget"
+              value={formatMoney(totalBudget)}
+              helper="Budget based on available campaign records"
+            />
+
+            <KpiCard
+              icon={<Building2 className="h-5 w-5" />}
+              label={role === "super_admin" ? "Managed Brands" : "Allocated Brands"}
+              value={String(role === "super_admin" ? state.managedBrands.length : state.myAllocations.length)}
+              helper={
+                role === "super_admin"
+                  ? sectionErrors.managedBrands
+                    ? "Managed brands API unavailable"
+                    : "Platform-level visibility"
+                  : sectionErrors.allocations
+                    ? "Allocation API unavailable"
+                    : "Assigned to your access scope"
+              }
+              tone={
+                role === "super_admin"
+                  ? sectionErrors.managedBrands
+                    ? "warning"
+                    : "default"
+                  : sectionErrors.allocations
+                    ? "warning"
+                    : "default"
+              }
+            />
+
+            <KpiCard
+              icon={role === "super_admin" ? <Crown className="h-5 w-5" /> : <Users className="h-5 w-5" />}
+              label={
+                role === "super_admin"
+                  ? "Revenue Heads"
+                  : role === "revenue_head"
+                    ? "Team Size"
+                    : "Permissions"
+              }
+              value={
+                role === "super_admin"
+                  ? String(state.allRevenueHeads.length)
+                  : role === "revenue_head"
+                    ? String(state.bmeTeam.length + state.imeTeam.length)
+                    : String(state.me?.permissions?.length || 0)
+              }
+              helper={
+                role === "super_admin"
+                  ? sectionErrors.revenueHeads
+                    ? "Revenue head API unavailable"
+                    : "Active leadership accounts"
+                  : role === "revenue_head"
+                    ? "BME + IME under your visibility"
+                    : "Current granted access items"
+              }
+              tone={
+                role === "super_admin" && sectionErrors.revenueHeads ? "warning" : "default"
+              }
+            />
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  <UserCircle2 className="h-3.5 w-3.5" />
-                  Logged In Admin
-                </div>
-
-                <h2 className="mt-3 text-2xl font-semibold text-slate-900">
-                  {state.me?.name || state.me?.email || "Admin User"}
-                </h2>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                  <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", getRoleTone(role))}>
-                    {titleCaseRole(role)}
-                  </span>
-                  <span>{state.me?.email || "-"}</span>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <ProfileMiniInfo label="Status" value={state.me?.status || "-"} />
-                <ProfileMiniInfo label="Joined" value={formatDate(state.me?.createdAt)} />
-                <ProfileMiniInfo label="Last Login" value={formatDate(state.me?.lastLoginAt)} />
-                <ProfileMiniInfo label="Proxy Email" value={state.me?.proxyEmail || "-"} />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Quick Redirects</h3>
-                <p className="mt-1 text-sm text-slate-500">Fast navigation based on role access</p>
-              </div>
-              <ExternalLink className="h-4 w-4 text-slate-300" />
-            </div>
-
-            <div className="space-y-2">
-              {quickLinks.slice(0, 4).map((item) => {
+        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <Card title="Priority Actions" subtitle="Important routes first, without repeated navigation cards">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {topActions.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:bg-slate-100"
+                    className="group rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="rounded-xl bg-white p-2 shadow-sm">
-                        <Icon className="h-4 w-4 text-slate-700" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="inline-flex rounded-2xl bg-white p-3 shadow-sm">
+                        <Icon className="h-5 w-5 text-slate-700" />
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
-                        <p className="truncate text-xs text-slate-500">{item.description}</p>
-                      </div>
+                      <ExternalLink className="h-4 w-4 text-slate-300 transition group-hover:text-slate-500" />
                     </div>
-                    <ArrowRight className="h-4 w-4 text-slate-400" />
+                    <div className="mt-4 text-sm font-semibold text-slate-900">{item.title}</div>
+                    <div className="mt-1 text-sm text-slate-500">{item.description}</div>
                   </Link>
                 );
               })}
             </div>
-          </div>
-        </section>
-
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            icon={<Briefcase className="h-5 w-5" />}
-            label={role === "super_admin" ? "Visible Campaigns" : "My / Scoped Campaigns"}
-            value={String(state.campaigns.length)}
-            helper={sectionErrors.campaigns ? "Campaign API unavailable" : "Role-scoped campaign visibility"}
-            tone={sectionErrors.campaigns ? "warning" : "default"}
-          />
-
-          <StatCard
-            icon={<TrendingUp className="h-5 w-5" />}
-            label="Visible Budget"
-            value={formatMoney(totalBudget)}
-            helper={sectionErrors.campaigns ? "Budget derived from available records only" : "Combined visible campaign budget"}
-            tone={sectionErrors.campaigns ? "warning" : "default"}
-          />
-
-          <StatCard
-            icon={<Building2 className="h-5 w-5" />}
-            label={role === "super_admin" ? "Managed Brands" : "Allocated Brands"}
-            value={String(role === "super_admin" ? state.managedBrands.length : state.myAllocations.length)}
-            helper={
-              role === "super_admin"
-                ? sectionErrors.managedBrands
-                  ? "Managed brand API unavailable"
-                  : "Across platform"
-                : sectionErrors.allocations
-                  ? "Allocation API unavailable"
-                  : "Assigned to your scope"
-            }
-            tone={role === "super_admin" ? (sectionErrors.managedBrands ? "warning" : "default") : (sectionErrors.allocations ? "warning" : "default")}
-          />
-
-          <StatCard
-            icon={role === "super_admin" ? <Crown className="h-5 w-5" /> : <Users className="h-5 w-5" />}
-            label={
-              role === "super_admin"
-                ? "Revenue Heads"
-                : role === "revenue_head"
-                  ? "My Team Size"
-                  : "Active Permissions"
-            }
-            value={
-              role === "super_admin"
-                ? String(state.allRevenueHeads.length)
-                : role === "revenue_head"
-                  ? String(state.bmeTeam.length + state.imeTeam.length)
-                  : String(state.me?.permissions?.length || 0)
-            }
-            helper={
-              role === "super_admin"
-                ? sectionErrors.revenueHeads
-                  ? "Revenue head API unavailable"
-                  : "All active revenue heads"
-                : role === "revenue_head"
-                  ? sectionErrors.bmeTeam || sectionErrors.imeTeam
-                    ? "Some team data unavailable"
-                    : "BME + IME under you"
-                  : "Granted access entries"
-            }
-            tone={
-              role === "super_admin"
-                ? sectionErrors.revenueHeads ? "warning" : "default"
-                : role === "revenue_head"
-                  ? sectionErrors.bmeTeam || sectionErrors.imeTeam ? "warning" : "default"
-                  : "default"
-            }
-          />
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <Card title="Profile Summary" subtitle="Role-aware details visible to every admin">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <InfoRow label="Name" value={state.me?.name || "-"} />
-              <InfoRow label="Role" value={titleCaseRole(state.me?.role)} />
-              <InfoRow label="Email" value={state.me?.email || "-"} />
-              <InfoRow label="Proxy Email" value={state.me?.proxyEmail || "-"} />
-              <InfoRow label="Status" value={state.me?.status || "-"} />
-              <InfoRow label="Joined" value={formatDate(state.me?.createdAt)} />
-            </div>
           </Card>
 
+          <Card title="Admin Profile" subtitle="Important account details only">
+            <div className="space-y-3">
+              <CompactInfo
+                icon={<UserCircle2 className="h-4 w-4" />}
+                label="Name"
+                value={state.me?.name || "Admin User"}
+              />
+              <CompactInfo
+                icon={<Shield className="h-4 w-4" />}
+                label="Role"
+                value={titleCaseRole(role)}
+                badgeClass={getRoleTone(role)}
+              />
+              <CompactInfo
+                icon={<Mail className="h-4 w-4" />}
+                label="Email"
+                value={state.me?.email || "-"}
+              />
+              <CompactInfo
+                icon={<LayoutDashboard className="h-4 w-4" />}
+                label="Status"
+                value={state.me?.status || "-"}
+              />
+              <CompactInfo
+                icon={<Briefcase className="h-4 w-4" />}
+                label="Last Login"
+                value={formatDate(state.me?.lastLoginAt)}
+              />
+              <CompactInfo
+                icon={<Building2 className="h-4 w-4" />}
+                label="Joined"
+                value={formatDate(state.me?.createdAt)}
+              />
+            </div>
+          </Card>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <Card
             title="Campaign Status Mix"
-            subtitle={sectionErrors.campaigns ? "Campaign summary unavailable right now" : "Summary of campaigns visible in this scope"}
+            subtitle={
+              sectionErrors.campaigns
+                ? "Summary unavailable right now"
+                : "Quick breakdown of visible campaign statuses"
+            }
           >
             {sectionErrors.campaigns ? (
               <SectionWarning text={sectionErrors.campaigns} />
-            ) : (
+            ) : Object.entries(publishSummary).length ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {Object.entries(publishSummary).length ? (
-                  Object.entries(publishSummary).map(([key, count]) => (
-                    <MiniStat key={key} label={key.replace(/_/g, " ")} value={String(count)} />
-                  ))
-                ) : (
-                  <EmptyText text="No campaign summary available." />
-                )}
+                {Object.entries(publishSummary).map(([key, count]) => (
+                  <MiniStat key={key} label={key.replace(/_/g, " ")} value={String(count)} />
+                ))}
               </div>
+            ) : (
+              <EmptyText text="No campaign summary available." />
             )}
           </Card>
-        </section>
 
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">Popular Redirects</h3>
-              <p className="mt-1 text-sm text-slate-500">Show most-used areas so everyone can move faster</p>
+          <Card title="Recent Visibility Notes" subtitle="Useful status feedback without clutter">
+            <div className="space-y-3">
+              <NoteRow
+                label="Campaigns"
+                value={
+                  sectionErrors.campaigns
+                    ? sectionErrors.campaigns
+                    : `${state.campaigns.length} campaign records visible`
+                }
+                warning={Boolean(sectionErrors.campaigns)}
+              />
+              <NoteRow
+                label={role === "super_admin" ? "Managed Brands" : "Allocated Brands"}
+                value={
+                  role === "super_admin"
+                    ? sectionErrors.managedBrands || `${state.managedBrands.length} managed brands loaded`
+                    : sectionErrors.allocations || `${state.myAllocations.length} allocated brands loaded`
+                }
+                warning={Boolean(role === "super_admin" ? sectionErrors.managedBrands : sectionErrors.allocations)}
+              />
+              {role === "revenue_head" || role === "super_admin" ? (
+                <>
+                  <NoteRow
+                    label="BME Team"
+                    value={sectionErrors.bmeTeam || `${state.bmeTeam.length} BME records loaded`}
+                    warning={Boolean(sectionErrors.bmeTeam)}
+                  />
+                  <NoteRow
+                    label="IME Team"
+                    value={sectionErrors.imeTeam || `${state.imeTeam.length} IME records loaded`}
+                    warning={Boolean(sectionErrors.imeTeam)}
+                  />
+                </>
+              ) : (
+                <NoteRow
+                  label="Access"
+                  value={`${state.me?.permissions?.length || 0} permission items available`}
+                />
+              )}
             </div>
-            <ChevronRight className="h-4 w-4 text-slate-300" />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {quickLinks.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:bg-slate-100"
-                >
-                  <div className="inline-flex rounded-2xl bg-white p-3 shadow-sm">
-                    <Icon className="h-5 w-5 text-slate-700" />
-                  </div>
-                  <div className="mt-4 text-sm font-semibold text-slate-900">{item.title}</div>
-                  <div className="mt-1 text-sm text-slate-500">{item.description}</div>
-                  <div className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-slate-700">
-                    Open
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+          </Card>
         </section>
 
         {(role === "bme" || role === "ime") && (
           <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-            <Card
-              title={role === "bme" ? "Assigned Brands" : "Assigned Brands"}
-              subtitle="Only your allocated brand details are visible here"
-            >
+            <Card title="Assigned Brands" subtitle="Priority brand visibility for your role">
               {sectionErrors.allocations ? (
                 <SectionWarning text={sectionErrors.allocations} />
               ) : (
                 <SimpleTable
                   columns={["Brand", "Status", "Updated"]}
-                  rows={state.myAllocations.map((item) => [
+                  rows={state.myAllocations.slice(0, 8).map((item) => [
                     item.brandId?.brandName || item.brandId?.companyName || "-",
                     item.status || "-",
                     formatDate(item.updatedAt || item.createdAt),
@@ -908,13 +943,13 @@ export default function AdminDashboardPage() {
               )}
             </Card>
 
-            <Card title="Visible Campaigns" subtitle="Only campaigns in your accessible scope">
+            <Card title="Visible Campaigns" subtitle="Top campaign records in your access scope">
               {sectionErrors.campaigns ? (
                 <SectionWarning text={sectionErrors.campaigns} />
               ) : (
                 <SimpleTable
                   columns={["Campaign", "Brand", "Status", "Budget"]}
-                  rows={state.campaigns.slice(0, 10).map((item) => [
+                  rows={state.campaigns.slice(0, 8).map((item) => [
                     item.campaignTitle || "-",
                     item.brandName || "-",
                     item.publishStatus || item.status || "-",
@@ -928,87 +963,61 @@ export default function AdminDashboardPage() {
         )}
 
         {role === "revenue_head" && (
-          <section className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard
-                icon={<Users className="h-5 w-5" />}
-                label="BME Under Me"
-                value={String(state.bmeTeam.length)}
-                helper={sectionErrors.bmeTeam ? "BME team API unavailable" : "Team members with BME role"}
-                tone={sectionErrors.bmeTeam ? "warning" : "default"}
-              />
-              <StatCard
-                icon={<Users className="h-5 w-5" />}
-                label="IME Under Me"
-                value={String(state.imeTeam.length)}
-                helper={sectionErrors.imeTeam ? "IME team API unavailable" : "Team members with IME role"}
-                tone={sectionErrors.imeTeam ? "warning" : "default"}
-              />
-              <StatCard
-                icon={<BarChart3 className="h-5 w-5" />}
-                label="Scoped Campaigns"
-                value={String(state.campaigns.length)}
-                helper={sectionErrors.campaigns ? "Campaign API unavailable" : "Campaigns visible to your team"}
-                tone={sectionErrors.campaigns ? "warning" : "default"}
-              />
-              <StatCard
-                icon={<Mail className="h-5 w-5" />}
-                label="Team Contacts"
-                value={String(state.bmeTeam.length + state.imeTeam.length)}
-                helper="Direct team strength"
-              />
-            </div>
+          <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+            <Card title="Team Overview" subtitle="Your main operational visibility">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <MiniStat label="BME" value={String(state.bmeTeam.length)} />
+                <MiniStat label="IME" value={String(state.imeTeam.length)} />
+                <MiniStat label="Campaigns" value={String(state.campaigns.length)} />
+                <MiniStat label="Total Team" value={String(state.bmeTeam.length + state.imeTeam.length)} />
+              </div>
+            </Card>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <Card title="BME Team" subtitle="Visible only for your hierarchy">
-                {sectionErrors.bmeTeam ? (
-                  <SectionWarning text={sectionErrors.bmeTeam} />
-                ) : (
-                  <SimpleTable
-                    columns={["Name", "Email", "Status", "Last Login"]}
-                    rows={state.bmeTeam.map((item) => [
-                      item.name || "-",
-                      item.email,
-                      item.status,
-                      formatDate(item.lastLoginAt),
-                    ])}
-                    emptyText="No BME members found."
-                  />
-                )}
-              </Card>
-
-              <Card title="IME Team" subtitle="Visible only for your hierarchy">
-                {sectionErrors.imeTeam ? (
-                  <SectionWarning text={sectionErrors.imeTeam} />
-                ) : (
-                  <SimpleTable
-                    columns={["Name", "Email", "Status", "Last Login"]}
-                    rows={state.imeTeam.map((item) => [
-                      item.name || "-",
-                      item.email,
-                      item.status,
-                      formatDate(item.lastLoginAt),
-                    ])}
-                    emptyText="No IME members found."
-                  />
-                )}
-              </Card>
-            </div>
-
-            <Card title="Revenue Head Campaign View" subtitle="Campaigns accessible to your hierarchy">
+            <Card title="Revenue Head Campaign View" subtitle="Highest priority campaign list for your hierarchy">
               {sectionErrors.campaigns ? (
                 <SectionWarning text={sectionErrors.campaigns} />
               ) : (
                 <SimpleTable
-                  columns={["Campaign", "Brand", "Publish", "Budget", "Created"]}
-                  rows={state.campaigns.slice(0, 12).map((item) => [
+                  columns={["Campaign", "Brand", "Publish", "Budget"]}
+                  rows={state.campaigns.slice(0, 8).map((item) => [
                     item.campaignTitle || "-",
                     item.brandName || "-",
                     item.publishStatus || item.status || "-",
                     formatMoney(item.campaignBudget || item.budget || item.influencerBudget),
-                    formatDate(item.createdAt),
                   ])}
                   emptyText="No campaigns visible for this revenue head."
+                />
+              )}
+            </Card>
+
+            <Card title="BME Team" subtitle="Visible members under your hierarchy">
+              {sectionErrors.bmeTeam ? (
+                <SectionWarning text={sectionErrors.bmeTeam} />
+              ) : (
+                <SimpleTable
+                  columns={["Name", "Email", "Status"]}
+                  rows={state.bmeTeam.slice(0, 8).map((item) => [
+                    item.name || "-",
+                    item.email,
+                    item.status,
+                  ])}
+                  emptyText="No BME members found."
+                />
+              )}
+            </Card>
+
+            <Card title="IME Team" subtitle="Visible members under your hierarchy">
+              {sectionErrors.imeTeam ? (
+                <SectionWarning text={sectionErrors.imeTeam} />
+              ) : (
+                <SimpleTable
+                  columns={["Name", "Email", "Status"]}
+                  rows={state.imeTeam.slice(0, 8).map((item) => [
+                    item.name || "-",
+                    item.email,
+                    item.status,
+                  ])}
+                  emptyText="No IME members found."
                 />
               )}
             </Card>
@@ -1016,109 +1025,62 @@ export default function AdminDashboardPage() {
         )}
 
         {role === "super_admin" && (
-          <section className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
-              <StatCard
-                icon={<Crown className="h-5 w-5" />}
-                label="Revenue Heads"
-                value={String(state.allRevenueHeads.length)}
-                helper={sectionErrors.revenueHeads ? "Revenue head API unavailable" : "All active RH accounts"}
-                tone={sectionErrors.revenueHeads ? "warning" : "default"}
-              />
-              <StatCard
-                icon={<Users className="h-5 w-5" />}
-                label="All BME"
-                value={String(state.bmeTeam.length)}
-                helper={sectionErrors.bmeTeam ? "BME team API unavailable" : "All active BME admins"}
-                tone={sectionErrors.bmeTeam ? "warning" : "default"}
-              />
-              <StatCard
-                icon={<Users className="h-5 w-5" />}
-                label="All IME"
-                value={String(state.imeTeam.length)}
-                helper={sectionErrors.imeTeam ? "IME team API unavailable" : "All active IME admins"}
-                tone={sectionErrors.imeTeam ? "warning" : "default"}
-              />
-              <StatCard
-                icon={<Building2 className="h-5 w-5" />}
-                label="Managed Brands"
-                value={String(state.managedBrands.length)}
-                helper={sectionErrors.managedBrands ? "Managed brand API unavailable" : "Fully managed brands"}
-                tone={sectionErrors.managedBrands ? "warning" : "default"}
-              />
-              <StatCard
-                icon={<Briefcase className="h-5 w-5" />}
-                label="Campaign Universe"
-                value={String(state.campaigns.length)}
-                helper={sectionErrors.campaigns ? "Campaign API unavailable" : "Admin-visible campaigns"}
-                tone={sectionErrors.campaigns ? "warning" : "default"}
-              />
-            </div>
+          <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+            <Card title="Leadership & Team Snapshot" subtitle="Top-level operational overview">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <MiniStat label="Revenue Heads" value={String(state.allRevenueHeads.length)} />
+                <MiniStat label="BME" value={String(state.bmeTeam.length)} />
+                <MiniStat label="IME" value={String(state.imeTeam.length)} />
+                <MiniStat label="Managed Brands" value={String(state.managedBrands.length)} />
+              </div>
+            </Card>
 
-            <div className="grid gap-6 xl:grid-cols-3">
-              <Card title="Revenue Heads" subtitle="All active RH accounts">
-                {sectionErrors.revenueHeads ? (
-                  <SectionWarning text={sectionErrors.revenueHeads} />
-                ) : (
-                  <SimpleTable
-                    columns={["Name", "Email", "Status"]}
-                    rows={state.allRevenueHeads.map((item) => [
-                      item.name || "-",
-                      item.email,
-                      item.status,
-                    ])}
-                    emptyText="No revenue heads found."
-                  />
-                )}
-              </Card>
-
-              <Card title="BME Overview" subtitle="Platform-level BME list">
-                {sectionErrors.bmeTeam ? (
-                  <SectionWarning text={sectionErrors.bmeTeam} />
-                ) : (
-                  <SimpleTable
-                    columns={["Name", "Email", "Reports To"]}
-                    rows={state.bmeTeam.map((item) => [
-                      item.name || "-",
-                      item.email,
-                      item.parentAdmin?.name || item.parentAdmin?.email || "-",
-                    ])}
-                    emptyText="No BME records found."
-                  />
-                )}
-              </Card>
-
-              <Card title="IME Overview" subtitle="Platform-level IME list">
-                {sectionErrors.imeTeam ? (
-                  <SectionWarning text={sectionErrors.imeTeam} />
-                ) : (
-                  <SimpleTable
-                    columns={["Name", "Email", "Reports To"]}
-                    rows={state.imeTeam.map((item) => [
-                      item.name || "-",
-                      item.email,
-                      item.parentAdmin?.name || item.parentAdmin?.email || "-",
-                    ])}
-                    emptyText="No IME records found."
-                  />
-                )}
-              </Card>
-            </div>
-
-            <Card title="Managed Brands" subtitle="Visible only for super admin">
+            <Card title="Managed Brands" subtitle="Top managed brands first">
               {sectionErrors.managedBrands ? (
                 <SectionWarning text={sectionErrors.managedBrands} />
               ) : (
                 <SimpleTable
-                  columns={["Brand", "Revenue Head", "BME", "IME", "Subscription"]}
-                  rows={state.managedBrands.slice(0, 12).map((item) => [
+                  columns={["Brand", "Revenue Head", "BME", "IME"]}
+                  rows={state.managedBrands.slice(0, 8).map((item) => [
                     item.brandName || item.companyName || "-",
                     item.assignedRm || "-",
                     item.assignedBm || "-",
                     item.assignedIm || "-",
-                    item.subscription?.status || "-",
                   ])}
                   emptyText="No managed brands found."
+                />
+              )}
+            </Card>
+
+            <Card title="Revenue Heads" subtitle="Leadership visibility">
+              {sectionErrors.revenueHeads ? (
+                <SectionWarning text={sectionErrors.revenueHeads} />
+              ) : (
+                <SimpleTable
+                  columns={["Name", "Email", "Status"]}
+                  rows={state.allRevenueHeads.slice(0, 8).map((item) => [
+                    item.name || "-",
+                    item.email,
+                    item.status,
+                  ])}
+                  emptyText="No revenue heads found."
+                />
+              )}
+            </Card>
+
+            <Card title="Platform Campaign View" subtitle="Main campaign view without repeated extra sections">
+              {sectionErrors.campaigns ? (
+                <SectionWarning text={sectionErrors.campaigns} />
+              ) : (
+                <SimpleTable
+                  columns={["Campaign", "Brand", "Status", "Budget"]}
+                  rows={state.campaigns.slice(0, 8).map((item) => [
+                    item.campaignTitle || "-",
+                    item.brandName || "-",
+                    item.publishStatus || item.status || "-",
+                    formatMoney(item.campaignBudget || item.budget || item.influencerBudget),
+                  ])}
+                  emptyText="No campaigns available."
                 />
               )}
             </Card>
@@ -1140,19 +1102,16 @@ function Card({
 }) {
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-          {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
-        </div>
-        <ChevronRight className="h-4 w-4 text-slate-300" />
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+        {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
       {children}
     </div>
   );
 }
 
-function StatCard({
+function KpiCard({
   icon,
   label,
   value,
@@ -1189,20 +1148,61 @@ function StatCard({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 break-all text-sm font-medium text-slate-900">{value}</div>
-    </div>
-  );
-}
-
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-1 text-lg font-semibold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function CompactInfo({
+  icon,
+  label,
+  value,
+  badgeClass,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  badgeClass?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="rounded-xl bg-white p-2 text-slate-600 shadow-sm">{icon}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+        {badgeClass ? (
+          <div className={cn("mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold", badgeClass)}>
+            {value}
+          </div>
+        ) : (
+          <div className="mt-1 truncate text-sm font-medium text-slate-900">{value}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NoteRow({
+  label,
+  value,
+  warning = false,
+}: {
+  label: string;
+  value: string;
+  warning?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border px-4 py-3",
+        warning ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"
+      )}
+    >
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={cn("mt-1 text-sm", warning ? "text-amber-800" : "text-slate-700")}>{value}</div>
     </div>
   );
 }
@@ -1220,44 +1220,6 @@ function SectionWarning({ text }: { text: string }) {
     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
       {text}
     </div>
-  );
-}
-
-function ProfileMiniInfo({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-sm font-medium text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function FallbackRedirectCard({
-  title,
-  href,
-  description,
-  icon: Icon,
-}: {
-  title: string;
-  href: string;
-  description: string;
-  icon: React.ElementType;
-}) {
-  return (
-    <Link
-      href={href}
-      className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm transition hover:bg-slate-50"
-    >
-      <div className="inline-flex rounded-2xl bg-slate-100 p-3 text-slate-700">
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="mt-4 text-lg font-semibold text-slate-900">{title}</div>
-      <div className="mt-1 text-sm text-slate-500">{description}</div>
-      <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-        Open
-        <ArrowRight className="h-4 w-4" />
-      </div>
-    </Link>
   );
 }
 

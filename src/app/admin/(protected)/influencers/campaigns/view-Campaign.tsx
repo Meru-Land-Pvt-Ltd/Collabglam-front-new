@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { post } from "@/lib/api";
 import {
@@ -20,13 +20,18 @@ import {
 
 interface Campaign {
   _id?: string;
-  id?: string;             // from backend: id = campaignsId
-  campaignId?: string;     // explicit field if you want to use it
-  name: string;            // alias for campaignName
+  id?: string;
+  campaignId?: string;
+  name: string;
   campaignName?: string;
   brandName?: string;
-  appliedDate?: string;
+  appliedDate?: string | null;
   status: "pending" | "approved" | "rejected";
+  startDate?: string | null;
+  endDate?: string | null;
+  goal?: string;
+  applicantCount?: number;
+  isActive?: number;
 }
 
 interface InfluencerLite {
@@ -43,37 +48,39 @@ interface GetCampaignsResponse {
   influencer?: InfluencerLite;
 }
 
-// 🔗 change this to match your real details route, e.g. "/brand/campaigns"
 const CAMPAIGN_ROUTE_BASE = "/admin/campaigns/view?id=";
+
+function formatDate(value?: string | null) {
+  if (!value) return "-";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "-";
+  return dt.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export default function InfluencerCampaignsPage() {
   const params = useSearchParams();
   const router = useRouter();
   const influencerId = params.get("influencerId");
 
-  // Early return if influencerId is missing
-  if (!influencerId) {
-    return (
-      <div className="p-6">
-        <p className="text-red-600">Error: Missing influencer ID in the URL.</p>
-      </div>
-    );
-  }
-
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [filter, setFilter] = useState<"all" | "approved">("all");
+  const [filter, setFilter] = useState<"all" | "approved" | "pending" | "rejected">("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // pagination from backend
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
-  // influencer info from backend
-  const [influencerName, setInfluencerName] = useState<string>("");
-  const [influencerEmail, setInfluencerEmail] = useState<string>("");
+  const [influencerName, setInfluencerName] = useState("");
+  const [influencerEmail, setInfluencerEmail] = useState("");
 
   useEffect(() => {
+    if (!influencerId) return;
+
     let isMounted = true;
 
     async function load() {
@@ -81,23 +88,28 @@ export default function InfluencerCampaignsPage() {
         setLoading(true);
         setError(null);
 
-        const data = await post<GetCampaignsResponse>("/influencer/get-campaign", {
-          influencerId: influencerId as string,
+        const data = await post<GetCampaignsResponse>("/admin/campaign/getByInfluencerId", {
+          influencerId,
           page,
           limit: 10,
           search: "",
           sortBy: "createdAt",
           sortOrder: "desc",
+          status: "all",
         });
 
         if (!isMounted) return;
 
-        setCampaigns(data?.campaigns ?? []);
-        setPages(data?.pages ?? 1);
+        setCampaigns(Array.isArray(data?.campaigns) ? data.campaigns : []);
+        setPages(data?.pages || 1);
+        setTotal(data?.total || 0);
 
         if (data?.influencer) {
           setInfluencerName(data.influencer.name ?? "");
           setInfluencerEmail(data.influencer.email ?? "");
+        } else {
+          setInfluencerName("");
+          setInfluencerEmail("");
         }
       } catch (err: any) {
         if (!isMounted) return;
@@ -108,57 +120,74 @@ export default function InfluencerCampaignsPage() {
     }
 
     load();
+
     return () => {
       isMounted = false;
     };
   }, [influencerId, page]);
 
-  // Apply status filter (client-side)
-  const filtered = campaigns.filter((c) =>
-    filter === "all" ? true : c.status === "approved"
-  );
+  const filtered = useMemo(() => {
+    if (filter === "all") return campaigns;
+    return campaigns.filter((c) => c.status === filter);
+  }, [campaigns, filter]);
 
-  if (loading) return <p className="p-6">Loading campaigns...</p>;
-  if (error)
+  if (!influencerId) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600">Error: Missing influencer ID in the URL.</p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <p className="p-6">Loading campaigns...</p>;
+  }
+
+  if (error) {
     return (
       <div className="p-6">
         <p className="text-red-600">Error loading campaigns: {error}</p>
       </div>
     );
+  }
 
   const headingName =
-    influencerName || influencerEmail || influencerId || "Unknown Influencer";
+    influencerName?.trim() || influencerEmail?.trim() || influencerId;
 
   return (
     <div className="p-6 space-y-4">
-      {/* Top heading with influencer name */}
       <div>
-        <h1 className="text-2xl font-bold">
-          Campaigns for {headingName}
-        </h1>
+        <h1 className="text-2xl font-bold">Campaigns for {headingName}</h1>
         <p className="text-sm text-gray-500">
-          ID: {influencerId}
           {influencerEmail ? ` • ${influencerEmail}` : ""}
+          {typeof total === "number" ? ` • ${total} total` : ""}
         </p>
       </div>
 
-      {/* Filter */}
       <div className="mb-4 flex items-center space-x-2">
         <span>Show:</span>
-        <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
-          <SelectTrigger className="w-32">
+        <Select
+          value={filter}
+          onValueChange={(v) =>
+            setFilter(v as "all" | "approved" | "pending" | "rejected")
+          }
+        >
+          <SelectTrigger className="w-36">
             <SelectValue placeholder="Filter" />
           </SelectTrigger>
           <SelectContent className="bg-white">
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Table */}
       {filtered.length === 0 ? (
-        <p>No campaigns to display.</p>
+        <div className="rounded-lg border p-6 text-sm text-gray-600">
+          No campaigns to display.
+        </div>
       ) : (
         <Table>
           <TableHeader>
@@ -187,18 +216,12 @@ export default function InfluencerCampaignsPage() {
                   onClick={handleRowClick}
                   className="cursor-pointer hover:bg-muted/60 transition-colors"
                 >
-                  <TableCell className="text-xs text-gray-500">
-                    {id}
-                  </TableCell>
+                  <TableCell className="text-xs text-gray-500">{id}</TableCell>
                   <TableCell className="font-medium underline-offset-2 hover:underline">
                     {campaignName}
                   </TableCell>
                   <TableCell>{c.brandName ?? "-"}</TableCell>
-                  <TableCell>
-                    {c.appliedDate
-                      ? new Date(c.appliedDate).toLocaleDateString()
-                      : "-"}
-                  </TableCell>
+                  <TableCell>{formatDate(c.appliedDate)}</TableCell>
                   <TableCell
                     className={`font-medium ${
                       {
@@ -217,7 +240,6 @@ export default function InfluencerCampaignsPage() {
         </Table>
       )}
 
-      {/* Pagination */}
       <div className="flex items-center justify-between mt-4">
         <button
           disabled={page <= 1}

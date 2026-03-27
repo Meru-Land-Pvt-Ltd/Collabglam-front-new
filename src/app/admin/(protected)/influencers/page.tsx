@@ -22,6 +22,8 @@ import {
   Clock3,
   Sparkles,
   ArrowUpRight,
+  Globe2,
+  Layers3,
 } from "lucide-react";
 
 import {
@@ -44,36 +46,62 @@ import {
 import { Card } from "@/components/ui/card";
 
 // ---------------- Types ----------------
-interface GetListResponse {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-  sortBy?: string;
-  sortOrder?: "asc" | "desc";
-  influencers: Influencer[];
+interface NamedEntity {
+  _id?: string;
+  name: string;
+}
+
+interface SocialProfile {
+  provider?: string;
+  handle?: string;
+  username?: string;
+  followers?: number;
+  url?: string;
+  picture?: string;
+}
+
+interface PageCounts {
+  page1?: number;
+  page2?: number;
+  page3?: number;
+}
+
+interface Onboarding {
+  route?: string;
+  page1Done?: boolean;
+  page2Done?: boolean;
+  page3Done?: boolean;
+  ispage2Skip?: boolean;
+  ispage3Skip?: boolean;
 }
 
 interface Influencer {
   _id: string;
-  name: string;
+  influencerId?: string;
   email: string;
-  phone?: string;
-  primaryPlatform?: string | null;
-  planName?: string;
-  expiresAt?: string | null;
-  subscriptionExpired?: boolean;
-  countryName?: string;
+  name: string;
+  country?: NamedEntity | null;
+  languages?: NamedEntity[];
+  categories?: NamedEntity[];
   proxyEmail?: string;
+  primaryPlatform?: string | null;
+  socialProfiles?: SocialProfile[];
+  pageCounts?: PageCounts;
+  onboarding?: Onboarding;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-type SortField =
-  | "name"
-  | "email"
-  | "primaryPlatform"
-  | "planName"
-  | "expiresAt"
-  | "createdAt";
+interface GetListResponse {
+  page: number;
+  limit: number;
+  total: number;
+  pages?: number;
+  count?: number;
+  influencers: Influencer[];
+}
+
+type SortField = "name" | "email" | "primaryPlatform" | "createdAt" | "updatedAt";
 
 // -------------- Constants --------------
 const API_ENDPOINT = "/admin/influencer/list";
@@ -81,26 +109,25 @@ const DEFAULT_LIMIT = 10;
 const ROW_OPTIONS = [10, 20, 50, 100] as const;
 
 const HEADERS: {
-  key: SortField | "status";
+  key: SortField | "country" | "categories" | "onboarding";
   label: string;
   sortable?: boolean;
   align?: "left" | "center" | "right";
 }[] = [
-  { key: "name", label: "Influencer", sortable: true, align: "left" },
-  { key: "email", label: "Email", sortable: true, align: "left" },
-  { key: "primaryPlatform", label: "Platform", sortable: true, align: "center" },
-  { key: "planName", label: "Plan", sortable: true, align: "center" },
-  { key: "expiresAt", label: "Expires", sortable: true, align: "center" },
-  { key: "status", label: "Status", sortable: false, align: "center" },
-];
+    { key: "name", label: "Influencer", sortable: true, align: "left" },
+    { key: "email", label: "Email", sortable: true, align: "left" },
+    { key: "primaryPlatform", label: "Platform", sortable: true, align: "center" },
+    { key: "country", label: "Country", sortable: false, align: "center" },
+    { key: "categories", label: "Categories", sortable: false, align: "center" },
+    { key: "onboarding", label: "Onboarding", sortable: false, align: "center" },
+  ];
 
 const ALLOWED_SORT = new Set<SortField>([
   "name",
   "email",
   "primaryPlatform",
-  "planName",
-  "expiresAt",
   "createdAt",
+  "updatedAt",
 ]);
 
 // -------------- Helpers --------------
@@ -113,14 +140,6 @@ function formatDate(value?: string | null) {
     month: "short",
     day: "2-digit",
   });
-}
-
-function getDaysUntil(value?: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const diff = date.getTime() - Date.now();
-  return Math.ceil(diff / (24 * 60 * 60 * 1000));
 }
 
 function getInitials(name?: string) {
@@ -136,16 +155,49 @@ function normalizePlatform(platform?: string | null) {
   return String(platform || "").trim().toLowerCase();
 }
 
-function getPlanLabel(influencer: Influencer) {
-  if (influencer.planName?.trim()) return influencer.planName;
-  return influencer.subscriptionExpired ? "Free Plan" : "—";
+function getCountryName(influencer: Influencer) {
+  return influencer.country?.name || "—";
 }
 
-function getStatusTone(expired?: boolean) {
-  if (expired) {
-    return "bg-blue-50 text-blue-700 border-blue-200";
+function getCategoryNames(influencer: Influencer) {
+  return influencer.categories?.map((item) => item.name).filter(Boolean) || [];
+}
+
+function getLanguageNames(influencer: Influencer) {
+  return influencer.languages?.map((item) => item.name).filter(Boolean) || [];
+}
+
+function getSocialProfileCount(influencer: Influencer) {
+  return influencer.socialProfiles?.length || 0;
+}
+
+function getCompletedPages(influencer: Influencer) {
+  const onboarding = influencer.onboarding;
+  if (!onboarding) return 0;
+
+  let count = 0;
+  if (onboarding.page1Done) count += 1;
+  if (onboarding.page2Done || onboarding.ispage2Skip) count += 1;
+  if (onboarding.page3Done || onboarding.ispage3Skip) count += 1;
+  return count;
+}
+
+function isFullyOnboarded(influencer: Influencer) {
+  return getCompletedPages(influencer) === 3;
+}
+
+function getOnboardingTone(influencer: Influencer) {
+  const completed = getCompletedPages(influencer);
+
+  if (completed === 3) {
+    return "bg-emerald-50 text-emerald-700 border-emerald-200";
   }
-  return "bg-[#fff1f4] text-[#ef2f5b] border-[#f8bfd0]";
+
+  if (completed >= 1) {
+    return "bg-amber-50 text-amber-700 border-amber-200";
+  }
+
+  return "bg-slate-50 text-slate-600 border-slate-200";
 }
 
 function PlatformBadge({ platform }: { platform?: string | null }) {
@@ -185,13 +237,18 @@ function PlatformBadge({ platform }: { platform?: string | null }) {
   );
 }
 
-function StatusBadge({ expired }: { expired?: boolean }) {
+function OnboardingBadge({ influencer }: { influencer: Influencer }) {
+  const completed = getCompletedPages(influencer);
+
   return (
     <Badge
       variant="outline"
-      className={cn("rounded-full px-3 py-1 text-xs font-bold", getStatusTone(expired))}
+      className={cn(
+        "rounded-full px-3 py-1 text-xs font-bold",
+        getOnboardingTone(influencer)
+      )}
     >
-      {expired ? "Free Plan" : "Active"}
+      {completed === 3 ? "Completed" : `${completed}/3 Done`}
     </Badge>
   );
 }
@@ -275,9 +332,10 @@ const AdminInfluencersPage = () => {
       };
 
       const res = await post<GetListResponse>(API_ENDPOINT, params);
+
       setRows(res.influencers || []);
       setTotal(res.total || 0);
-      setTotalPages(res.totalPages || 1);
+      setTotalPages(res.pages || Math.max(1, Math.ceil((res.total || 0) / limit)));
       setError(null);
     } catch (err: any) {
       console.error(err);
@@ -305,19 +363,16 @@ const AdminInfluencersPage = () => {
   };
 
   const stats = React.useMemo(() => {
-    const active = rows.filter((item) => !item.subscriptionExpired).length;
-    const freePlan = rows.filter((item) => item.subscriptionExpired).length;
-    const expiringSoon = rows.filter((item) => {
-      const days = getDaysUntil(item.expiresAt);
-      return !item.subscriptionExpired && typeof days === "number" && days >= 0 && days <= 7;
-    }).length;
+    const completed = rows.filter((item) => isFullyOnboarded(item)).length;
     const withPlatform = rows.filter((item) => Boolean(item.primaryPlatform)).length;
+    const withSocialProfile = rows.filter((item) => getSocialProfileCount(item) > 0).length;
+    const withCategories = rows.filter((item) => (item.categories?.length || 0) > 0).length;
 
     return {
-      active,
-      freePlan,
-      expiringSoon,
+      completed,
       withPlatform,
+      withSocialProfile,
+      withCategories,
     };
   }, [rows]);
 
@@ -339,7 +394,8 @@ const AdminInfluencersPage = () => {
                   Influencer Management
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600">
-                  View all creators, track plan health, and jump directly into profile or campaign activity from one clean admin table.
+                  View all creators, inspect onboarding progress, and access profile or campaign
+                  activity from one clean admin table.
                 </p>
               </div>
 
@@ -378,21 +434,21 @@ const AdminInfluencersPage = () => {
               icon={Users}
             />
             <SummaryCard
-              title="Active Plans"
-              value={stats.active}
-              hint="Creators currently on active subscriptions"
+              title="Onboarding Complete"
+              value={stats.completed}
+              hint="Creators with all pages completed"
               icon={BadgeCheck}
             />
             <SummaryCard
-              title="Free Plan"
-              value={stats.freePlan}
-              hint="Creators marked as expired / free"
+              title="With Platform"
+              value={stats.withPlatform}
+              hint="Creators who selected a primary platform"
               icon={Sparkles}
             />
             <SummaryCard
-              title="Expiring Soon"
-              value={stats.expiringSoon}
-              hint="Plans ending within 7 days"
+              title="With Social Profile"
+              value={stats.withSocialProfile}
+              hint="Creators who connected at least one profile"
               icon={Clock3}
             />
           </div>
@@ -401,15 +457,17 @@ const AdminInfluencersPage = () => {
             <div className="border-b border-slate-200 px-5 py-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="text-lg font-black tracking-tight text-slate-900">Influencer Directory</h2>
+                  <h2 className="text-lg font-black tracking-tight text-slate-900">
+                    Influencer Directory
+                  </h2>
                   <p className="mt-1 text-sm font-medium text-slate-500">
-                    Sorted, searchable list of all creators from the admin panel.
+                    Searchable list of creators from the admin panel API.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
                   <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                    {stats.withPlatform} with platform
+                    {stats.withCategories} with categories
                   </span>
                   <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                     {total} total
@@ -432,14 +490,20 @@ const AdminInfluencersPage = () => {
                       <TableHead
                         key={String(key)}
                         onClick={() =>
-                          key !== "status" ? toggleSort(key as SortField, sortable) : undefined
+                          ALLOWED_SORT.has(key as SortField)
+                            ? toggleSort(key as SortField, sortable)
+                            : undefined
                         }
                         className={cn(
                           "py-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-500",
-                          sortable && key !== "status" && ALLOWED_SORT.has(key as SortField)
+                          sortable && ALLOWED_SORT.has(key as SortField)
                             ? "cursor-pointer select-none"
                             : "",
-                          align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"
+                          align === "center"
+                            ? "text-center"
+                            : align === "right"
+                              ? "text-right"
+                              : "text-left"
                         )}
                       >
                         <div
@@ -448,8 +512,8 @@ const AdminInfluencersPage = () => {
                             align === "center"
                               ? "justify-center"
                               : align === "right"
-                              ? "justify-end"
-                              : "justify-start"
+                                ? "justify-end"
+                                : "justify-start"
                           )}
                         >
                           {label}
@@ -476,10 +540,7 @@ const AdminInfluencersPage = () => {
                     ))
                   ) : rows.length === 0 ? (
                     <TableRow>
-                      <TableCell
-                        colSpan={HEADERS.length + 1}
-                        className="py-14 text-center"
-                      >
+                      <TableCell colSpan={HEADERS.length + 1} className="py-14 text-center">
                         <div className="mx-auto max-w-md space-y-2">
                           <h3 className="text-lg font-black text-slate-900">No influencers found</h3>
                           <p className="text-sm font-medium text-slate-500">
@@ -490,42 +551,60 @@ const AdminInfluencersPage = () => {
                     </TableRow>
                   ) : (
                     rows.map((inf) => {
-                      const expired = Boolean(inf.subscriptionExpired);
-                      const daysLeft = getDaysUntil(inf.expiresAt);
-                      const planLabel = getPlanLabel(inf);
-
+                      const categoryNames = getCategoryNames(inf);
+                      const languageNames = getLanguageNames(inf);
+                      const socialProfileCount = getSocialProfileCount(inf);
+                      const completedPages = getCompletedPages(inf);
+                      const profilePicture = inf.socialProfiles?.find((profile) => profile.picture)?.picture;
                       return (
                         <TableRow
                           key={inf._id}
                           className={cn(
                             "border-slate-100 transition-colors hover:bg-slate-50/80",
-                            expired && "bg-blue-50/30"
+                            isFullyOnboarded(inf) && "bg-emerald-50/20"
                           )}
                         >
                           <TableCell className="py-4">
-                            <div className="flex min-w-[240px] items-center gap-3">
-                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black text-slate-800">
+                            <div className="flex min-w-[260px] items-center gap-3">
+                              {profilePicture ? (
+                                <img
+                                  src={profilePicture}
+                                  alt={inf.name || "Influencer"}
+                                  className="h-11 w-11 rounded-2xl object-cover border border-slate-200 bg-slate-100"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = "none";
+                                    const next = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                    if (next) next.style.display = "flex";
+                                  }}
+                                />
+                              ) : null}
+
+                              <div
+                                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-sm font-black text-slate-800"
+                                style={{ display: profilePicture ? "none" : "flex" }}
+                              >
                                 {getInitials(inf.name)}
                               </div>
+
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-extrabold text-slate-900">
                                   {inf.name || "—"}
                                 </div>
                                 <div className="mt-1 truncate text-xs font-medium text-slate-500">
-                                  {inf.countryName || inf.proxyEmail || "Creator profile"}
+                                  {inf.proxyEmail || "Creator profile"}
                                 </div>
                               </div>
                             </div>
                           </TableCell>
 
                           <TableCell className="py-4">
-                            <div className="min-w-[210px]">
+                            <div className="min-w-[220px]">
                               <div className="truncate text-sm font-semibold text-slate-700">
                                 {inf.email || "—"}
                               </div>
-                              {inf.phone ? (
-                                <div className="mt-1 text-xs font-medium text-slate-500">{inf.phone}</div>
-                              ) : null}
+                              <div className="mt-1 truncate text-xs font-medium text-slate-500">
+                                {languageNames.length ? languageNames.join(", ") : "No languages"}
+                              </div>
                             </div>
                           </TableCell>
 
@@ -534,39 +613,37 @@ const AdminInfluencersPage = () => {
                           </TableCell>
 
                           <TableCell className="py-4 text-center">
-                            <Badge className="rounded-full border-0 bg-slate-900 px-3 py-1 text-white hover:bg-slate-900">
-                              {planLabel}
-                            </Badge>
-                          </TableCell>
-
-                          <TableCell className="py-4 text-center">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-sm font-semibold text-slate-700">
-                                {formatDate(inf.expiresAt)}
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="inline-flex items-center gap-1 text-sm font-semibold text-slate-700">
+                                <Globe2 className="h-3.5 w-3.5" />
+                                {getCountryName(inf)}
                               </span>
-                              {typeof daysLeft === "number" ? (
-                                <span
-                                  className={cn(
-                                    "text-xs font-semibold",
-                                    daysLeft < 0
-                                      ? "text-red-600"
-                                      : daysLeft <= 7
-                                      ? "text-amber-600"
-                                      : "text-slate-500"
-                                  )}
-                                >
-                                  {daysLeft < 0
-                                    ? `${Math.abs(daysLeft)} days ago`
-                                    : daysLeft === 0
-                                    ? "today"
-                                    : `in ${daysLeft} days`}
-                                </span>
-                              ) : null}
+                              <span className="text-xs font-medium text-slate-500">
+                                Updated {formatDate(inf.updatedAt)}
+                              </span>
                             </div>
                           </TableCell>
 
                           <TableCell className="py-4 text-center">
-                            <StatusBadge expired={expired} />
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="inline-flex items-center gap-1 text-sm font-semibold text-slate-700">
+                                <Layers3 className="h-3.5 w-3.5" />
+                                {categoryNames.length} categories
+                              </span>
+                              <span className="max-w-[220px] truncate text-xs font-medium text-slate-500">
+                                {categoryNames.length ? categoryNames.join(", ") : "No categories"}
+                              </span>
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-4 text-center">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <OnboardingBadge influencer={inf} />
+                              <span className="text-xs font-medium text-slate-500">
+                                {completedPages}/3 pages • {socialProfileCount} social profile
+                                {socialProfileCount === 1 ? "" : "s"}
+                              </span>
+                            </div>
                           </TableCell>
 
                           <TableCell className="py-4 text-center">
@@ -629,7 +706,8 @@ const AdminInfluencersPage = () => {
               <div className="flex flex-col gap-4 border-t border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="text-sm font-semibold text-slate-500">
                   Showing <span className="font-extrabold text-slate-800">{showingFrom}</span>–
-                  <span className="font-extrabold text-slate-800">{showingTo}</span> of <span className="font-extrabold text-slate-800">{total}</span>
+                  <span className="font-extrabold text-slate-800">{showingTo}</span> of{" "}
+                  <span className="font-extrabold text-slate-800">{total}</span>
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

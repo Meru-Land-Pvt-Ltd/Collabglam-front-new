@@ -6,28 +6,21 @@ import { get } from "@/lib/api";
 import {
   ChevronLeft,
   Mail,
-  Phone,
   MapPin,
   Calendar,
   Users,
-  Flag,
-  CheckCircle,
-  XCircle,
-  ExternalLink,
-  ShieldCheck,
-  Lock,
-  Unlock,
   Globe,
-  Package,
-  CreditCard,
+  CheckCircle,
+  ExternalLink,
   BarChart2,
   Hash,
   Tag,
-  Star,
   Info,
-  FileText,
   ArrowUpRight,
+  Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,274 +47,234 @@ import {
 /*                                   Types                                    */
 /* -------------------------------------------------------------------------- */
 
-interface WeightItem {
-  code?: string;
+interface NamedItem {
+  _id?: string | null;
+  name?: string | null;
+}
+
+interface PostSponsor {
   name?: string;
-  weight?: number;
-}
-interface KV {
-  [k: string]: any;
-}
-
-interface UserLite {
-  userId?: string;
-  fullname?: string;
-  username?: string;
-  url?: string;
-  picture?: string;
-  followers?: number;
-  engagements?: number;
-}
-
-interface Sponsor {
-  domain?: string;
   logo_url?: string;
-  name?: string;
+  domain?: string;
 }
 
-interface Post {
+interface PostItem {
   id?: string;
   text?: string;
   url?: string;
   created?: string;
+  type?: string;
   likes?: number;
   comments?: number;
   views?: number;
-  video?: string;
+  plays?: number;
   image?: string;
   thumbnail?: string;
-  type?: string;
-  title?: string;
   mentions?: string[];
   hashtags?: string[];
-  sponsors?: Sponsor[];
+  sponsors?: PostSponsor[];
 }
 
-interface Audience {
-  notable?: number;
-  genders?: WeightItem[];
-  geoCountries?: WeightItem[];
-  ages?: WeightItem[];
-  gendersPerAge?: { code?: string; male?: number; female?: number }[];
-  languages?: WeightItem[];
-  notableUsers?: UserLite[];
-  audienceLookalikes?: UserLite[];
-  geoCities?: { name?: string; weight?: number }[];
-  geoStates?: { name?: string; weight?: number }[];
-  credibility?: number;
-  interests?: { name?: string; weight?: number }[];
-  brandAffinity?: { name?: string; weight?: number }[];
-  audienceReachability?: WeightItem[];
-  audienceTypes?: WeightItem[];
-  ethnicities?: WeightItem[];
+interface StatWithCompared {
+  value?: number;
+  compared?: number;
 }
 
-interface CategoryLink {
-  categoryId: number;
-  categoryName: string;
-  subcategoryId: string;
-  subcategoryName: string;
+interface StatsBlock {
+  avgLikes?: StatWithCompared;
+  avgShares?: StatWithCompared;
+  avgComments?: StatWithCompared;
+  followers?: StatWithCompared;
+  paidPostPerformance?: number;
 }
 
-interface SocialProfile {
-  provider: "youtube" | "tiktok" | "instagram" | string;
-  // Identity
+interface HistoryPoint {
+  month?: string;
+  avg_likes?: number;
+  avg_engagements?: number;
+}
+
+interface StatsByContentTypeEntry {
+  engagements?: number;
+  engagementRate?: number;
+  avgLikes?: number;
+  avgComments?: number;
+  avgShares?: number;
+  avgReelsPlays?: number;
+  statHistory?: HistoryPoint[];
+}
+
+interface AudienceWeightItem {
+  code?: string;
+  name?: string;
+  weight?: number;
+}
+
+interface AudienceGenderPerAge {
+  code?: string;
+  male?: number;
+  female?: number;
+}
+
+interface AudienceGeoCity {
+  name?: string;
+  weight?: number;
+  country?: string;
+  state?: string;
+}
+
+interface AudienceUser {
   userId?: string;
   username?: string;
   fullname?: string;
-  handle?: string;
   url?: string;
   picture?: string;
-  // Metrics
   followers?: number;
   engagements?: number;
-  engagementRate?: number;
-  averageViews?: number;
-  avgViews?: number;
-  // State/meta
+}
+
+interface AudienceData {
+  languages?: AudienceWeightItem[];
+  ethnicities?: AudienceWeightItem[];
+  genders?: AudienceWeightItem[];
+  geoCountries?: AudienceWeightItem[];
+  geoStates?: AudienceWeightItem[];
+  ages?: AudienceWeightItem[];
+  interests?: AudienceWeightItem[];
+  brandAffinity?: AudienceWeightItem[];
+  gendersPerAge?: AudienceGenderPerAge[];
+  geoCities?: AudienceGeoCity[];
+  notableUsers?: AudienceUser[];
+  credibility?: number;
+  notable?: number;
+}
+
+interface ModashCategory {
+  categoryId?: string | number | null;
+  categoryName?: string | null;
+  subcategoryId?: string | number | null;
+  subcategoryName?: string | null;
+}
+
+interface TagWeight {
+  tag?: string;
+  weight?: number;
+}
+
+interface BrandAffinityItem {
+  id?: number | string;
+  name?: string;
+}
+
+interface Page1ProfileData {
+  profile?: {
+    userId?: string;
+    username?: string;
+    fullname?: string;
+    handle?: string;
+    url?: string;
+    picture?: string;
+    followers?: number;
+    engagements?: number;
+    engagementRate?: number;
+  };
   isPrivate?: boolean;
   isVerified?: boolean;
   accountType?: string;
-  secUid?: string;
-  // Localization
-  city?: string;
-  state?: string;
-  country?: string;
-  ageGroup?: string;
-  gender?: string;
-  language?: { code?: string; name?: string };
-  // Content stats & posts
-  statsByContentType?: KV;
-  stats?: KV;
-  recentPosts?: Post[];
-  popularPosts?: Post[];
-  // Counts (normalized)
+  secUid?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  ageGroup?: string | null;
+  gender?: string | null;
+  language?: string | { code?: string; name?: string } | null;
+  statsByContentType?: {
+    all?: StatsByContentTypeEntry;
+    reels?: StatsByContentTypeEntry;
+    posts?: StatsByContentTypeEntry;
+    videos?: StatsByContentTypeEntry;
+    [key: string]: StatsByContentTypeEntry | undefined;
+  };
+  stats?: StatsBlock;
+  recentPosts?: PostItem[];
+  popularPosts?: PostItem[];
+  sponsoredPosts?: PostItem[];
   postsCount?: number;
   avgLikes?: number;
   avgComments?: number;
   avgReelsPlays?: number;
-  totalLikes?: number;
-  totalViews?: number;
-  // Bio/tags/brand
   bio?: string;
-  categories?: CategoryLink[];
-  hashtags?: { tag?: string; weight?: number }[];
-  mentions?: { tag?: string; weight?: number }[];
-  brandAffinity?: { id?: number; name?: string }[];
-  // Audience
-  audience?: Audience;
-  audienceCommenters?: Audience;
-  lookalikes?: UserLite[];
-  // Paid/sponsored
-  sponsoredPosts?: Post[];
-  paidPostPerformance?: number;
-  paidPostPerformanceViews?: number;
-  sponsoredPostsMedianViews?: number;
-  sponsoredPostsMedianLikes?: number;
-  nonSponsoredPostsMedianViews?: number;
-  nonSponsoredPostsMedianLikes?: number;
-  // Misc
-  audienceExtra?: KV;
-  providerRaw?: KV;
-  // Doc timestamps (from Modash model timestamps: true)
-  createdAt?: string;
-  updatedAt?: string;
+  categories?: ModashCategory[];
+  hashtags?: TagWeight[];
+  mentions?: TagWeight[];
+  brandAffinity?: BrandAffinityItem[];
+  audience?: AudienceData;
 }
 
-interface LanguageRef {
-  languageId?: string;
-  code: string;
-  name: string;
+interface Page1Item {
+  platform?: string;
+  handle?: string;
+  username?: string;
+  data?: Page1ProfileData;
 }
 
-interface Onboarding {
-  // 4.1
-  formats: string[];
-  budgets: { format: string; range: string }[];
-  projectLength?: string;
-  capacity?: string;
-  // 4.2
-  categoryId?: number;
-  categoryName?: string;
-  subcategories: CategoryLink[];
-  collabTypes: string[];
-  allowlisting: boolean;
-  cadences?: string[];
-  // 4.3
-  selectedPrompts?: { group: string; prompt: string }[];
-  promptAnswers?: { group: string; prompt: string; answer: string }[];
+interface InfluencerResponse {
+  influencer?: InfluencerDoc;
 }
 
-interface PaymentMethod {
-  paymentId: string;
-  type: 0 | 1;
-  isDefault: boolean;
-  bank?: {
-    accountHolder?: string;
-    accountNumber?: string;
-    ifsc?: string;
-    swift?: string;
-    bankName?: string;
-    branch?: string;
-    countryId?: string;
-    countryName?: string;
-  };
-  paypal?: {
-    email?: string;
-    username?: string;
-  };
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface SubscriptionFeature {
-  key: string;
-  limit: number;
-  used: number;
-}
-
-interface InfluencerDetail {
-  influencerId: string;
+interface InfluencerDoc {
+  _id?: string;
+  influencerId?: string;
+  email?: string;
   name?: string;
-  email: string;
-  password?: string;
-  phone?: string;
-  primaryPlatform?: "youtube" | "tiktok" | "instagram" | "other" | null;
-  socialProfiles: SocialProfile[];
   countryId?: string;
-  country?: string;
-  callingId?: string;
-  callingcode?: string;
-  city?: string;
-  dateOfBirth?: string;
-  gender?: "Female" | "Male" | "Non-binary" | "Prefer not to say" | "";
-  languages: LanguageRef[];
-  onboarding: Onboarding;
-  createdAt: string;
-  updatedAt: string;
-  otpCode?: string;
-  otpExpiresAt?: string;
-  otpVerified: boolean;
-  passwordResetCode?: string;
-  passwordResetExpiresAt?: string;
-  passwordResetVerified?: boolean;
-  paymentMethods: PaymentMethod[];
-  subscription: {
-    planName: string;
-    planId: string;
-    startedAt?: string;
-    expiresAt?: string;
-    features: SubscriptionFeature[];
-  };
-  subscriptionExpired: boolean;
-  failedLoginAttempts?: number;
-  lockUntil?: string | null;
-  isUnsubscribed?: boolean;
+  countryName?: string;
+  languages?: NamedItem[];
+  categories?: NamedItem[];
+  page1?: Page1Item[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /* -------------------------------------------------------------------------- */
 /*                                UI Utilities                                */
 /* -------------------------------------------------------------------------- */
 
-const fmtDate = (iso?: string) =>
+const fmtDate = (iso?: string | null) =>
   iso
-    ? new Date(iso).toLocaleString(undefined, {
+    ? new Date(iso).toLocaleDateString(undefined, {
         year: "numeric",
         month: "short",
         day: "numeric",
       })
     : "—";
 
-const fmtDateTime = (iso?: string) =>
+const fmtDateTime = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleString() : "—";
 
-const fmtNum = (n?: number) => {
-  if (n === undefined || n === null) return "—";
+const fmtNum = (n?: number | null) => {
+  if (n === undefined || n === null || Number.isNaN(n)) return "—";
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return `${n}`;
 };
 
-const ageFromDob = (iso?: string) => {
-  if (!iso) return "—";
-  const dob = new Date(iso);
-  const diff = Date.now() - dob.getTime();
-  const ageDate = new Date(diff);
-  return Math.abs(ageDate.getUTCFullYear() - 1970);
+const fmtPercent = (n?: number | null) => {
+  if (n === undefined || n === null || Number.isNaN(n)) return "—";
+  return `${(n * 100).toFixed(2)}%`;
 };
 
-const Copyable: React.FC<{ value?: string; className?: string }> = ({
+const Copyable: React.FC<{ value?: string | null; className?: string }> = ({
   value,
   className,
 }) => {
   if (!value) return <span>—</span>;
+
   return (
     <button
       type="button"
-      className={`text-blue-600 hover:underline hover:text-blue-800 ${
-        className ?? ""
-      }`}
+      className={`text-blue-600 hover:underline hover:text-blue-800 ${className ?? ""}`}
       onClick={() => navigator.clipboard.writeText(value)}
       title="Copy"
     >
@@ -336,16 +289,16 @@ const Pill: React.FC<{
 }> = ({ children, tone = "default" }) => (
   <span
     className={
-      `px-2 py-1 rounded-full text-xs font-medium ` +
+      "px-2 py-1 rounded-full text-xs font-medium " +
       (tone === "success"
         ? "bg-green-100 text-green-700"
         : tone === "danger"
-        ? "bg-red-100 text-red-700"
-        : tone === "warning"
-        ? "bg-yellow-100 text-yellow-800"
-        : tone === "muted"
-        ? "bg-slate-100 text-slate-700"
-        : "bg-blue-100 text-blue-700")
+          ? "bg-red-100 text-red-700"
+          : tone === "warning"
+            ? "bg-yellow-100 text-yellow-800"
+            : tone === "muted"
+              ? "bg-slate-100 text-slate-700"
+              : "bg-blue-100 text-blue-700")
     }
   >
     {children}
@@ -360,24 +313,28 @@ const Section: React.FC<{
   children?: React.ReactNode;
 }> = ({ title, subtitle, right, className, children }) => (
   <Card
-    className={`p-6 bg-white/80 backdrop-blur-sm border-0 shadow-xl ${
-      className ?? ""
-    }`}
+    className={`p-6 bg-white/80 backdrop-blur-sm border-0 shadow-xl ${className ?? ""}`}
   >
     <div className="flex items-start justify-between gap-4 mb-4">
       <div>
         <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           {title}
         </h3>
-        {subtitle && (
-          <p className="text-slate-600 text-sm mt-1">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-slate-600 text-sm mt-1">{subtitle}</p>}
       </div>
       {right}
     </div>
     {children}
   </Card>
 );
+
+const fmtWeightPercent = (value?: number) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return "—";
+
+  const percent = value <= 1 ? value * 100 : value;
+
+  return `${percent.toFixed(2)}%`;
+};
 
 const KVRow: React.FC<{ label: string; value?: React.ReactNode }> = ({
   label,
@@ -391,39 +348,135 @@ const KVRow: React.FC<{ label: string; value?: React.ReactNode }> = ({
   </div>
 );
 
+function getInitials(name?: string | null) {
+  return (
+    (name || "Influencer")
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "IN"
+  );
+}
+
+function normalizePlatform(platform?: string | null) {
+  return String(platform || "").trim().toLowerCase();
+}
+
+function getLanguageLabel(
+  value?: string | { code?: string; name?: string } | null,
+) {
+  if (!value) return "—";
+  if (typeof value === "string") return value;
+  return value.name || value.code || "—";
+}
+
+function getStatValue(
+  direct?: number,
+  fromStats?: StatWithCompared,
+  fromFallback?: number,
+) {
+  return direct ?? fromStats?.value ?? fromFallback ?? undefined;
+}
+
+function getPostViews(post: PostItem) {
+  return post.views ?? post.plays;
+}
+
 /* -------------------------------------------------------------------------- */
-/*                          Helper: merge Modash data                         */
+/*                              Normalized Profile                            */
 /* -------------------------------------------------------------------------- */
 
-const mergeSocialProfilesFromResponse = (resp: any): SocialProfile[] => {
-  const profiles: SocialProfile[] = [];
+interface NormalizedSocialProfile {
+  provider: string;
+  username?: string;
+  fullname?: string;
+  handle?: string;
+  url?: string;
+  picture?: string;
+  followers?: number;
+  engagements?: number;
+  engagementRate?: number;
+  isPrivate?: boolean;
+  isVerified?: boolean;
+  accountType?: string;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  ageGroup?: string | null;
+  gender?: string | null;
+  language?: string;
+  stats?: StatsBlock;
+  statsByContentType?: Page1ProfileData["statsByContentType"];
+  recentPosts?: PostItem[];
+  popularPosts?: PostItem[];
+  sponsoredPosts?: PostItem[];
+  postsCount?: number;
+  avgLikes?: number;
+  avgComments?: number;
+  avgReelsPlays?: number;
+  bio?: string;
+  categories?: ModashCategory[];
+  hashtags?: TagWeight[];
+  mentions?: TagWeight[];
+  brandAffinity?: BrandAffinityItem[];
+  audience?: AudienceData;
+}
 
-  const add = (src: any) => {
-    if (!src) return;
-    if (Array.isArray(src)) profiles.push(...src);
-    else if (typeof src === "object") profiles.push(src);
-  };
+function normalizeProfiles(page1?: Page1Item[]): NormalizedSocialProfile[] {
+  return (page1 || []).map((item) => {
+    const data = item.data || {};
+    const profile = data.profile || {};
+    const allStats = data.statsByContentType?.all;
+    const reelsStats = data.statsByContentType?.reels;
 
-  // new shapes
-  add(resp.modash);
-  add(resp.modashProfiles);
-
-  // legacy / convenience shapes
-  add(resp.socialProfiles);
-  add(resp.influencer?.socialProfiles);
-
-  // dedupe by provider + (userId || username || handle)
-  const seen = new Set<string>();
-  return profiles.filter((p) => {
-    const key = `${p.provider || ""}-${p.userId || p.username || p.handle || ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+    return {
+      provider: item.platform || "unknown",
+      username: profile.username || item.username,
+      fullname: profile.fullname,
+      handle: profile.handle || item.handle,
+      url: profile.url,
+      picture: profile.picture,
+      followers: getStatValue(undefined, data.stats?.followers, profile.followers),
+      engagements: profile.engagements || allStats?.engagements,
+      engagementRate:
+        profile.engagementRate ??
+        allStats?.engagementRate ??
+        reelsStats?.engagementRate,
+      isPrivate: data.isPrivate,
+      isVerified: data.isVerified,
+      accountType: data.accountType,
+      city: data.city,
+      state: data.state,
+      country: data.country,
+      ageGroup: data.ageGroup,
+      gender: data.gender,
+      language: getLanguageLabel(data.language),
+      stats: data.stats,
+      statsByContentType: data.statsByContentType,
+      recentPosts: data.recentPosts || [],
+      popularPosts: data.popularPosts || [],
+      sponsoredPosts: data.sponsoredPosts || [],
+      postsCount: data.postsCount,
+      avgLikes: getStatValue(data.avgLikes, data.stats?.avgLikes, allStats?.avgLikes),
+      avgComments: getStatValue(
+        data.avgComments,
+        data.stats?.avgComments,
+        allStats?.avgComments,
+      ),
+      avgReelsPlays: data.avgReelsPlays ?? reelsStats?.avgReelsPlays,
+      bio: data.bio,
+      categories: data.categories || [],
+      hashtags: data.hashtags || [],
+      mentions: data.mentions || [],
+      brandAffinity: data.brandAffinity || [],
+      audience: data.audience,
+    };
   });
-};
+}
 
 /* -------------------------------------------------------------------------- */
-/*                                Main Component                             */
+/*                                Main Component                              */
 /* -------------------------------------------------------------------------- */
 
 export default function AdminInfluencerView() {
@@ -431,50 +484,27 @@ export default function AdminInfluencerView() {
   const params = useSearchParams();
   const id = params.get("influencerId");
 
-  const [data, setData] = useState<InfluencerDetail | null>(null);
+  const [data, setData] = useState<InfluencerDoc | null>(null);
+  const [profiles, setProfiles] = useState<NormalizedSocialProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetcher = async () => {
       if (!id) return;
+
       setLoading(true);
       try {
-        const resp: any = await get("/admin/influencer/getById", { id });
+        const resp: InfluencerResponse | InfluencerDoc = await get(
+          "/admin/influencer/getById",
+          { id },
+        );
 
-        // support both { influencer, ... } and plain influencer shape
-        const influencerDoc = resp.influencer ?? resp;
+        const influencerDoc =
+          (resp as InfluencerResponse)?.influencer ?? (resp as InfluencerDoc);
 
-        const mergedProfiles = mergeSocialProfilesFromResponse(resp);
-
-        const merged: InfluencerDetail = {
-          ...(influencerDoc as any),
-          socialProfiles: mergedProfiles,
-          languages: influencerDoc.languages ?? [],
-          onboarding:
-            influencerDoc.onboarding ??
-            ({
-              formats: [],
-              budgets: [],
-              subcategories: [],
-              collabTypes: [],
-              allowlisting: false,
-              cadences: [],
-              selectedPrompts: [],
-              promptAnswers: [],
-            } as Onboarding),
-          paymentMethods: influencerDoc.paymentMethods ?? [],
-          subscription:
-            influencerDoc.subscription ??
-            ({
-              planName: "free",
-              planId: "",
-              features: [],
-            } as InfluencerDetail["subscription"]),
-          subscriptionExpired: influencerDoc.subscriptionExpired ?? false,
-        };
-
-        setData(merged);
+        setData(influencerDoc);
+        setProfiles(normalizeProfiles(influencerDoc.page1));
         setError(null);
       } catch (e: any) {
         setError(e?.message ?? "Failed to load influencer");
@@ -482,16 +512,11 @@ export default function AdminInfluencerView() {
         setLoading(false);
       }
     };
+
     fetcher();
   }, [id]);
 
-  const primaryProfile = useMemo(() => {
-    if (!data?.socialProfiles?.length) return undefined;
-    return (
-      data.socialProfiles.find((p) => p.provider === data.primaryPlatform) ||
-      data.socialProfiles[0]
-    );
-  }, [data]);
+  const primaryProfile = useMemo(() => profiles[0], [profiles]);
 
   if (loading) {
     return (
@@ -508,11 +533,6 @@ export default function AdminInfluencerView() {
               </div>
             </div>
           </Card>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Skeleton className="h-64" />
-            <Skeleton className="h-64" />
-            <Skeleton className="h-64" />
-          </div>
         </div>
       </div>
     );
@@ -527,12 +547,13 @@ export default function AdminInfluencerView() {
             onClick={() => router.back()}
             className="mb-4 hover:bg-white/80"
           >
-            <ChevronLeft className="mr-2 h-4 w-4" /> Back
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
           </Button>
+
           <Card className="p-6 border-red-200 bg-red-50 shadow-xl">
             <div className="flex items-center gap-3">
-              <XCircle className="h-6 w-6 text-red-600" />
-              <p className="text-red-600 font-medium">Error: {error}</p>
+              <span className="text-red-600 font-medium">Error: {error}</span>
             </div>
           </Card>
         </div>
@@ -542,7 +563,6 @@ export default function AdminInfluencerView() {
 
   if (!data) return null;
 
-  /* --------------------------------- Header -------------------------------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -552,7 +572,8 @@ export default function AdminInfluencerView() {
             onClick={() => router.back()}
             className="hover:bg-white/80 shadow-sm"
           >
-            <ChevronLeft className="mr-2 h-4 w-4" /> Back to Influencers
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back to Influencers
           </Button>
         </div>
 
@@ -562,12 +583,12 @@ export default function AdminInfluencerView() {
               {primaryProfile?.picture ? (
                 <img
                   src={primaryProfile.picture}
-                  alt={data.name ?? data.email}
+                  alt={data.name ?? data.email ?? "Influencer"}
                   className="h-28 w-28 md:h-32 md:w-32 rounded-full object-cover border-4 border-white shadow-lg ring-4 ring-blue-100"
                 />
               ) : (
                 <div className="h-28 w-28 md:h-32 md:w-32 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-4xl md:text-5xl font-bold shadow-lg ring-4 ring-blue-100">
-                  {(data.name || data.email)?.charAt(0).toUpperCase()}
+                  {getInitials(data.name || data.email)}
                 </div>
               )}
             </div>
@@ -577,43 +598,24 @@ export default function AdminInfluencerView() {
                 <h1 className="text-3xl md:text-4xl font-bold text-slate-900 truncate">
                   {data.name || "Unnamed Influencer"}
                 </h1>
-                <span className="hidden md:inline text-slate-300">•</span>
-                <Pill tone={data.subscriptionExpired ? "danger" : "success"}>
-                  {data.subscriptionExpired
-                    ? "Subscription Expired"
-                    : "Subscription Active"}
-                </Pill>
-                {data.otpVerified && (
+
+                {primaryProfile?.isVerified && (
                   <Pill tone="success">
                     <span className="inline-flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3" /> OTP Verified
+                      <CheckCircle className="h-3 w-3" />
+                      Verified
                     </span>
                   </Pill>
                 )}
-                {data.lockUntil ? (
-                  <Pill tone="warning">
-                    <span className="inline-flex items-center gap-1">
-                      <Lock className="h-3 w-3" /> Locked
-                    </span>
-                  </Pill>
-                ) : (
-                  <Pill tone="muted">
-                    <span className="inline-flex items-center gap-1">
-                      <Unlock className="h-3 w-3" /> Unlocked
-                    </span>
-                  </Pill>
-                )}
-                {data.isUnsubscribed && (
-                  <Pill tone="muted">
-                    <span className="inline-flex items-center gap-1">
-                      <XCircle className="h-3 w-3" /> Unsubscribed
-                    </span>
-                  </Pill>
-                )}
-                {data.primaryPlatform && (
+
+                {primaryProfile?.provider && (
                   <Badge className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white">
-                    Primary: {String(data.primaryPlatform).toUpperCase()}
+                    {primaryProfile.provider.toUpperCase()}
                   </Badge>
+                )}
+
+                {primaryProfile?.accountType && (
+                  <Pill tone="muted">{primaryProfile.accountType}</Pill>
                 )}
               </div>
 
@@ -622,52 +624,46 @@ export default function AdminInfluencerView() {
                   <Mail className="h-4 w-4 text-blue-600" />
                   <Copyable value={data.email} />
                 </div>
-                <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-2 rounded-lg">
-                  <Phone className="h-4 w-4 text-green-600" />
-                  <span>{data.phone || "—"}</span>
-                </div>
+
                 <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-2 rounded-lg">
                   <MapPin className="h-4 w-4 text-red-600" />
-                  <span>
-                    {[data.city, data.country].filter(Boolean).join(", ") ||
-                      "—"}
-                  </span>
+                  <span>{data.countryName || "—"}</span>
                 </div>
+
                 <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-2 rounded-lg">
                   <Calendar className="h-4 w-4 text-purple-600" />
-                  <span>
-                    {fmtDate(data.dateOfBirth)}
-                    {data.dateOfBirth
-                      ? ` • ${ageFromDob(data.dateOfBirth)} yrs`
-                      : ""}
-                  </span>
+                  <span>{fmtDate(data.createdAt)}</span>
                 </div>
+
                 <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-2 rounded-lg">
                   <Users className="h-4 w-4 text-orange-600" />
-                  <span>{data.gender || "—"}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-2 rounded-lg">
-                  <Flag className="h-4 w-4 text-indigo-600" />
-                  <span
-                    className="truncate"
-                    title={data.languages
-                      ?.map((l) => l.name)
-                      .join(", ")}
-                  >
+                  <span>
                     {data.languages?.length
-                      ? data.languages.map((l) => l.name).join(", ")
+                      ? data.languages.map((l) => l.name).filter(Boolean).join(", ")
                       : "—"}
                   </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-2 rounded-lg">
+                  <Tag className="h-4 w-4 text-indigo-600" />
+                  <span>
+                    {data.categories?.length
+                      ? data.categories.map((c) => c.name).filter(Boolean).join(", ")
+                      : "—"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 text-slate-700 bg-slate-50 p-2 rounded-lg">
+                  <Sparkles className="h-4 w-4 text-emerald-600" />
+                  <span>{profiles.length} connected profile{profiles.length === 1 ? "" : "s"}</span>
                 </div>
               </div>
 
               <div className="text-xs text-slate-500 flex flex-wrap gap-4">
                 <span>
-                  Influencer ID: <Copyable value={data.influencerId} />
+                  Influencer ID:{" "}
+                  <Copyable value={data.influencerId || data._id} />
                 </span>
-                {data.callingcode && (
-                  <span>Calling Code: {data.callingcode}</span>
-                )}
                 <span>Created: {fmtDateTime(data.createdAt)}</span>
                 <span>Updated: {fmtDateTime(data.updatedAt)}</span>
               </div>
@@ -675,71 +671,160 @@ export default function AdminInfluencerView() {
           </div>
         </Card>
 
-        {/* --------------------------------- Tabs -------------------------------- */}
-        <Tabs defaultValue="social" className="space-y-6">
+        <Tabs defaultValue="profiles" className="space-y-6">
           <TabsList className="bg-white shadow-lg p-1 border-0">
             <TabsTrigger
-              value="social"
+              value="overview"
               className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
             >
-              Social Profiles
+              Overview
             </TabsTrigger>
             <TabsTrigger
-              value="onboarding"
+              value="profiles"
               className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
             >
-              Onboarding
+              Profiles
             </TabsTrigger>
             <TabsTrigger
-              value="payments"
+              value="posts"
               className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
             >
-              Payments
+              Posts
             </TabsTrigger>
             <TabsTrigger
-              value="subscription"
+              value="audience"
               className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
             >
-              Subscription
+              Audience
             </TabsTrigger>
           </TabsList>
 
-          {/* ------------------------------ Social Tab ------------------------------ */}
-          <TabsContent value="social" className="space-y-4">
-            {data.socialProfiles?.length ? (
-              data.socialProfiles.map((p, idx) => (
+          <TabsContent value="overview">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+              <Card className="p-4 bg-blue-50/70 border-0 shadow-lg">
+                <div className="text-xs text-slate-600">Followers</div>
+                <div className="text-2xl font-bold text-blue-700">
+                  {fmtNum(primaryProfile?.followers)}
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-green-50/70 border-0 shadow-lg">
+                <div className="text-xs text-slate-600">Engagement Rate</div>
+                <div className="text-2xl font-bold text-green-700">
+                  {fmtPercent(primaryProfile?.engagementRate)}
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-purple-50/70 border-0 shadow-lg">
+                <div className="text-xs text-slate-600">Avg Likes</div>
+                <div className="text-2xl font-bold text-purple-700">
+                  {fmtNum(primaryProfile?.avgLikes)}
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-pink-50/70 border-0 shadow-lg">
+                <div className="text-xs text-slate-600">Avg Comments</div>
+                <div className="text-2xl font-bold text-pink-700">
+                  {fmtNum(primaryProfile?.avgComments)}
+                </div>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+              <Section
+                title={
+                  <>
+                    <Info className="h-5 w-5" />
+                    Influencer Details
+                  </>
+                }
+              >
+                <KVRow label="Name" value={data.name} />
+                <KVRow label="Email" value={<Copyable value={data.email} />} />
+                <KVRow label="Country" value={data.countryName} />
+                <KVRow
+                  label="Languages"
+                  value={
+                    data.languages?.length
+                      ? data.languages.map((l) => l.name).filter(Boolean).join(", ")
+                      : "—"
+                  }
+                />
+                <KVRow
+                  label="Categories"
+                  value={
+                    data.categories?.length
+                      ? data.categories.map((c) => c.name).filter(Boolean).join(", ")
+                      : "—"
+                  }
+                />
+              </Section>
+
+              <Section
+                title={
+                  <>
+                    <BarChart2 className="h-5 w-5" />
+                    Primary Profile Summary
+                  </>
+                }
+                subtitle={primaryProfile?.bio || "No bio available"}
+              >
+                <KVRow label="Platform" value={primaryProfile?.provider} />
+                <KVRow
+                  label="Username"
+                  value={
+                    primaryProfile?.username ? `@${primaryProfile.username}` : "—"
+                  }
+                />
+                <KVRow label="Handle" value={primaryProfile?.handle} />
+                <KVRow
+                  label="Location"
+                  value={
+                    [primaryProfile?.city, primaryProfile?.state, primaryProfile?.country]
+                      .filter(Boolean)
+                      .join(", ") || "—"
+                  }
+                />
+                <KVRow label="Language" value={primaryProfile?.language} />
+                <KVRow label="Posts Count" value={fmtNum(primaryProfile?.postsCount)} />
+                <KVRow
+                  label="Avg Reels Plays"
+                  value={fmtNum(primaryProfile?.avgReelsPlays)}
+                />
+              </Section>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="profiles" className="space-y-4">
+            {profiles.length ? (
+              profiles.map((profile, idx) => (
                 <Section
-                  key={`${p.provider}-${idx}`}
+                  key={`${profile.provider}-${idx}`}
                   title={
                     <>
-                      <Globe className="h-5 w-5" />{" "}
-                      <span className="capitalize">{p.provider}</span>
-                      {p.isVerified && (
+                      <Globe className="h-5 w-5" />
+                      <span className="capitalize">{profile.provider}</span>
+                      {profile.isVerified && (
                         <Badge
                           variant="secondary"
                           className="ml-2 bg-blue-100 text-blue-700"
                         >
-                          <CheckCircle className="h-3 w-3 mr-1" />
                           Verified
-                        </Badge>
-                      )}
-                      {data.primaryPlatform === p.provider && (
-                        <Badge className="ml-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white">
-                          Primary
                         </Badge>
                       )}
                     </>
                   }
-                  subtitle={p.bio}
+                  subtitle={profile.bio}
                   right={
-                    p.url ? (
+                    profile.url ? (
                       <a
-                        href={p.url}
+                        href={profile.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
                       >
-                        View <ExternalLink className="h-4 w-4" />
+                        View
+                        <ExternalLink className="h-4 w-4" />
                       </a>
                     ) : undefined
                   }
@@ -748,36 +833,32 @@ export default function AdminInfluencerView() {
                     <Card className="p-4 bg-blue-50/60">
                       <div className="text-xs text-slate-600">Followers</div>
                       <div className="text-2xl font-bold text-blue-700">
-                        {fmtNum(p.followers)}
+                        {fmtNum(profile.followers)}
                       </div>
                     </Card>
+
                     <Card className="p-4 bg-green-50/60">
-                      <div className="text-xs text-slate-600">
-                        Engagement Rate
-                      </div>
+                      <div className="text-xs text-slate-600">Engagement Rate</div>
                       <div className="text-2xl font-bold text-green-700">
-                        {p.engagementRate !== undefined
-                          ? `${(p.engagementRate * 100).toFixed(2)}%`
-                          : "—"}
+                        {fmtPercent(profile.engagementRate)}
                       </div>
                     </Card>
+
                     <Card className="p-4 bg-purple-50/60">
                       <div className="text-xs text-slate-600">Avg Likes</div>
                       <div className="text-2xl font-bold text-purple-700">
-                        {fmtNum(p.avgLikes)}
+                        {fmtNum(profile.avgLikes)}
                       </div>
                     </Card>
+
                     <Card className="p-4 bg-pink-50/60">
-                      <div className="text-xs text-slate-600">
-                        Avg Comments
-                      </div>
+                      <div className="text-xs text-slate-600">Avg Comments</div>
                       <div className="text-2xl font-bold text-pink-700">
-                        {fmtNum(p.avgComments)}
+                        {fmtNum(profile.avgComments)}
                       </div>
                     </Card>
                   </div>
 
-                  {/* Meta */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
                     <Card className="p-4">
                       <div className="font-semibold mb-2 flex items-center gap-2">
@@ -786,135 +867,112 @@ export default function AdminInfluencerView() {
                       </div>
                       <KVRow
                         label="Username"
-                        value={p.username ? `@${p.username}` : "—"}
+                        value={profile.username ? `@${profile.username}` : "—"}
                       />
-                      <KVRow label="Full Name" value={p.fullname} />
-                      <KVRow label="Handle" value={p.handle} />
-                      <KVRow label="Account Type" value={p.accountType} />
+                      <KVRow label="Full Name" value={profile.fullname} />
+                      <KVRow label="Handle" value={profile.handle} />
+                      <KVRow label="Account Type" value={profile.accountType} />
                       <KVRow
                         label="Private"
-                        value={
-                          p.isPrivate ? (
-                            <Pill tone="warning">Yes</Pill>
-                          ) : (
-                            <span>No</span>
-                          )
-                        }
-                      />
-                      <KVRow
-                        label="Profile Created"
-                        value={fmtDateTime(p.createdAt)}
-                      />
-                      <KVRow
-                        label="Profile Updated"
-                        value={fmtDateTime(p.updatedAt)}
+                        value={profile.isPrivate ? <Pill tone="warning">Yes</Pill> : "No"}
                       />
                     </Card>
+
                     <Card className="p-4">
                       <div className="font-semibold mb-2 flex items-center gap-2">
                         <MapPin className="h-4 w-4" />
                         Localization
                       </div>
-                      <KVRow label="City" value={p.city} />
-                      <KVRow label="State" value={p.state} />
-                      <KVRow label="Country" value={p.country} />
-                      <KVRow
-                        label="Language"
-                        value={[p.language?.name, p.language?.code]
-                          .filter(Boolean)
-                          .join(" • ")}
-                      />
-                      <KVRow label="Age Group" value={p.ageGroup} />
-                      <KVRow label="Gender" value={p.gender} />
+                      <KVRow label="City" value={profile.city} />
+                      <KVRow label="State" value={profile.state} />
+                      <KVRow label="Country" value={profile.country} />
+                      <KVRow label="Language" value={profile.language} />
+                      <KVRow label="Age Group" value={profile.ageGroup} />
+                      <KVRow label="Gender" value={profile.gender} />
                     </Card>
+
                     <Card className="p-4">
                       <div className="font-semibold mb-2 flex items-center gap-2">
                         <BarChart2 className="h-4 w-4" />
-                        Summary
+                        Stats
                       </div>
                       <KVRow
-                        label="Posts"
-                        value={fmtNum(p.postsCount)}
+                        label="Posts Count"
+                        value={fmtNum(profile.postsCount)}
                       />
                       <KVRow
-                        label="Total Likes"
-                        value={fmtNum(p.totalLikes)}
+                        label="Followers"
+                        value={fmtNum(profile.stats?.followers?.value ?? profile.followers)}
                       />
                       <KVRow
-                        label="Total Views"
-                        value={fmtNum(p.totalViews)}
+                        label="Avg Shares"
+                        value={fmtNum(profile.stats?.avgShares?.value)}
                       />
                       <KVRow
-                        label="Avg Views"
-                        value={fmtNum(p.avgViews ?? p.averageViews)}
-                      />
-                      <KVRow
-                        label="Avg Reels Plays"
-                        value={fmtNum(p.avgReelsPlays)}
+                        label="Paid Post Performance"
+                        value={fmtNum(profile.stats?.paidPostPerformance)}
                       />
                     </Card>
                   </div>
 
-                  {/* Categories / Tags / Brand affinity */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
                     <Card className="p-4">
                       <div className="font-semibold mb-3 flex items-center gap-2">
                         <Tag className="h-4 w-4" />
                         Categories
                       </div>
-                      {p.categories?.length ? (
+
+                      {profile.categories?.length ? (
                         <div className="flex flex-wrap gap-2">
-                          {p.categories.map((c, i) => (
+                          {profile.categories.map((c, i) => (
                             <Badge
-                              key={`${c.subcategoryId}-${i}`}
+                              key={`${c.categoryName}-${c.subcategoryName}-${i}`}
                               variant="outline"
                               className="border-slate-300"
                             >
-                              {c.categoryName} • {c.subcategoryName}
+                              {[c.categoryName, c.subcategoryName].filter(Boolean).join(" • ") || "—"}
                             </Badge>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-sm text-slate-500">
-                          No categories
-                        </div>
+                        <div className="text-sm text-slate-500">No categories</div>
                       )}
                     </Card>
+
                     <Card className="p-4">
                       <div className="font-semibold mb-3 flex items-center gap-2">
                         <Hash className="h-4 w-4" />
                         Hashtags & Mentions
                       </div>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {p.hashtags?.map((h, i) => (
+
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {profile.hashtags?.slice(0, 12).map((h, i) => (
                           <Badge
                             key={`h-${i}`}
                             variant="secondary"
                             className="bg-slate-100 text-slate-800"
                           >
-                            #{h.tag}{" "}
-                            {h.weight ? `(${h.weight})` : ""}
+                            #{h.tag}
                           </Badge>
                         ))}
-                        {p.mentions?.map((m, i) => (
+
+                        {profile.mentions?.slice(0, 12).map((m, i) => (
                           <Badge
                             key={`m-${i}`}
                             variant="secondary"
                             className="bg-indigo-100 text-indigo-800"
                           >
-                            @{m.tag}{" "}
-                            {m.weight ? `(${m.weight})` : ""}
+                            @{m.tag}
                           </Badge>
                         ))}
                       </div>
-                      {p.brandAffinity?.length ? (
+
+                      {profile.brandAffinity?.length ? (
                         <>
                           <Separator className="my-3" />
-                          <div className="text-sm text-slate-600 mb-1">
-                            Brand Affinity
-                          </div>
+                          <div className="text-sm text-slate-600 mb-1">Brand Affinity</div>
                           <div className="flex flex-wrap gap-2">
-                            {p.brandAffinity.map((b, i) => (
+                            {profile.brandAffinity.slice(0, 12).map((b, i) => (
                               <Badge
                                 key={`ba-${i}`}
                                 variant="outline"
@@ -928,916 +986,281 @@ export default function AdminInfluencerView() {
                       ) : null}
                     </Card>
                   </div>
-
-                  {/* Audience */}
-                  <Accordion type="single" collapsible className="mt-4">
-                    <AccordionItem value="audience">
-                      <AccordionTrigger className="text-left">
-                        <div className="font-semibold flex items-center gap-2">
-                          <Users className="h-4 w-4" /> Audience Insights
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                          <Card className="p-4">
-                            <div className="font-semibold mb-2">
-                              Overview
-                            </div>
-                            <KVRow
-                              label="Credibility"
-                              value={
-                                p.audience?.credibility ?? "—"
-                              }
-                            />
-                            <KVRow
-                              label="Notable %"
-                              value={p.audience?.notable ?? "—"}
-                            />
-                            <KVRow
-                              label="Top Languages"
-                              value={
-                                p.audience?.languages
-                                  ?.slice(0, 5)
-                                  .map(
-                                    (a) =>
-                                      `${a.name ?? a.code}${
-                                        a.weight
-                                          ? ` (${a.weight})`
-                                          : ""
-                                      }`,
-                                  )
-                                  .join(", ") || "—"
-                              }
-                            />
-                            <KVRow
-                              label="Top Interests"
-                              value={
-                                p.audience?.interests
-                                  ?.slice(0, 5)
-                                  .map(
-                                    (i) =>
-                                      `${i.name}${
-                                        i.weight
-                                          ? ` (${i.weight})`
-                                          : ""
-                                      }`,
-                                  )
-                                  .join(", ") || "—"
-                              }
-                            />
-                          </Card>
-                          <Card className="p-4">
-                            <div className="font-semibold mb-2">
-                              Top Countries
-                            </div>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Country</TableHead>
-                                  <TableHead className="text-right">
-                                    Weight
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {(p.audience?.geoCountries ?? [])
-                                  .slice(0, 8)
-                                  .map((c, i) => (
-                                    <TableRow key={i}>
-                                      <TableCell>
-                                        {c.name ?? c.code}
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        {c.weight}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                              </TableBody>
-                            </Table>
-                          </Card>
-                          <Card className="p-4">
-                            <div className="font-semibold mb-2">
-                              Ages
-                            </div>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Age</TableHead>
-                                  <TableHead className="text-right">
-                                    Weight
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {(p.audience?.ages ?? []).map(
-                                  (a, i) => (
-                                    <TableRow key={i}>
-                                      <TableCell>
-                                        {a.code ?? a.name}
-                                      </TableCell>
-                                      <TableCell className="text-right">
-                                        {a.weight}
-                                      </TableCell>
-                                    </TableRow>
-                                  ),
-                                )}
-                              </TableBody>
-                            </Table>
-                          </Card>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-
-                  {/* Posts */}
-                  <Accordion type="multiple" className="mt-4">
-                    <AccordionItem value="recent">
-                      <AccordionTrigger>
-                        <div className="font-semibold">
-                          Recent Posts
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <ScrollArea className="h-64 rounded border bg-slate-50">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Title</TableHead>
-                                <TableHead className="text-right">
-                                  Likes
-                                </TableHead>
-                                <TableHead className="text-right">
-                                  Comments
-                                </TableHead>
-                                <TableHead className="text-right">
-                                  Views
-                                </TableHead>
-                                <TableHead></TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {(p.recentPosts ?? []).map(
-                                (post, i) => (
-                                  <TableRow
-                                    key={i}
-                                    className="hover:bg-white"
-                                  >
-                                    <TableCell>
-                                      {fmtDate(post.created)}
-                                    </TableCell>
-                                    <TableCell>
-                                      {post.type ?? "—"}
-                                    </TableCell>
-                                    <TableCell
-                                      className="max-w-[320px] truncate"
-                                      title={
-                                        post.title || post.text
-                                      }
-                                    >
-                                      {post.title ||
-                                        post.text ||
-                                        "—"}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {fmtNum(post.likes)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {fmtNum(post.comments)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {fmtNum(post.views)}
-                                    </TableCell>
-                                    <TableCell>
-                                      {post.url && (
-                                        <a
-                                          href={post.url}
-                                          target="_blank"
-                                          className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
-                                        >
-                                          Open{" "}
-                                          <ArrowUpRight className="h-4 w-4" />
-                                        </a>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                ),
-                              )}
-                            </TableBody>
-                          </Table>
-                        </ScrollArea>
-                      </AccordionContent>
-                    </AccordionItem>
-                    <AccordionItem value="popular">
-                      <AccordionTrigger>
-                        <div className="font-semibold">
-                          Popular Posts
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <ScrollArea className="h-64 rounded border bg-slate-50">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Title</TableHead>
-                                <TableHead className="text-right">
-                                  Likes
-                                </TableHead>
-                                <TableHead className="text-right">
-                                  Comments
-                                </TableHead>
-                                <TableHead className="text-right">
-                                  Views
-                                </TableHead>
-                                <TableHead></TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {(p.popularPosts ?? []).map(
-                                (post, i) => (
-                                  <TableRow key={i}>
-                                    <TableCell
-                                      className="max-w-[320px] truncate"
-                                      title={
-                                        post.title || post.text
-                                      }
-                                    >
-                                      {post.title ||
-                                        post.text ||
-                                        "—"}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {fmtNum(post.likes)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {fmtNum(post.comments)}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {fmtNum(post.views)}
-                                    </TableCell>
-                                    <TableCell>
-                                      {post.url && (
-                                        <a
-                                          href={post.url}
-                                          target="_blank"
-                                          className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
-                                        >
-                                          Open{" "}
-                                          <ArrowUpRight className="h-4 w-4" />
-                                        </a>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                ),
-                              )}
-                            </TableBody>
-                          </Table>
-                        </ScrollArea>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-
-                  {/* Paid / Sponsored */}
-                  <Accordion type="single" collapsible className="mt-4">
-                    <AccordionItem value="paid">
-                      <AccordionTrigger>
-                        <div className="font-semibold flex items-center gap-2">
-                          <CreditCard className="h-4 w-4" /> Sponsored
-                          Performance
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <Card className="p-4">
-                            <KVRow
-                              label="Paid Post Performance (Likes)"
-                              value={fmtNum(p.paidPostPerformance)}
-                            />
-                            <KVRow
-                              label="Paid Post Performance (Views)"
-                              value={fmtNum(
-                                p.paidPostPerformanceViews,
-                              )}
-                            />
-                          </Card>
-                          <Card className="p-4">
-                            <KVRow
-                              label="Sponsored Median Likes"
-                              value={fmtNum(
-                                p.sponsoredPostsMedianLikes,
-                              )}
-                            />
-                            <KVRow
-                              label="Sponsored Median Views"
-                              value={fmtNum(
-                                p.sponsoredPostsMedianViews,
-                              )}
-                            />
-                            <KVRow
-                              label="Non-Sponsored Median Likes"
-                              value={fmtNum(
-                                p.nonSponsoredPostsMedianLikes,
-                              )}
-                            />
-                            <KVRow
-                              label="Non-Sponsored Median Views"
-                              value={fmtNum(
-                                p.nonSponsoredPostsMedianViews,
-                              )}
-                            />
-                          </Card>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-
-                  {/* Raw provider payload */}
-                  {p.providerRaw && (
-                    <Accordion
-                      type="single"
-                      collapsible
-                      className="mt-4"
-                    >
-                      <AccordionItem value="raw">
-                        <AccordionTrigger>
-                          <div className="font-semibold flex items-center gap-2">
-                            <FileText className="h-4 w-4" />
-                            Raw Provider Payload
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <ScrollArea className="h-64 rounded border bg-slate-50">
-                            <pre className="text-xs p-3 font-mono whitespace-pre-wrap">
-                              {JSON.stringify(
-                                p.providerRaw,
-                                null,
-                                2,
-                              )}
-                            </pre>
-                          </ScrollArea>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  )}
                 </Section>
               ))
             ) : (
-              <Card className="p-6 text-slate-600">
-                No social profiles connected.
-              </Card>
+              <Card className="p-6 text-slate-600">No page1 social profiles found.</Card>
             )}
           </TabsContent>
 
-          {/* ----------------------------- Onboarding Tab ----------------------------- */}
-          <TabsContent value="onboarding">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TabsContent value="posts" className="space-y-6">
+            {profiles.map((profile, idx) => (
               <Section
+                key={`posts-${profile.provider}-${idx}`}
                 title={
                   <>
-                    <Star className="h-5 w-5" /> Preferences
+                    <ImageIcon className="h-5 w-5" />
+                    <span className="capitalize">{profile.provider}</span> Posts
                   </>
                 }
               >
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-sm text-slate-600 mb-2 font-medium">
-                      Formats
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {data.onboarding?.formats?.length ? (
-                        data.onboarding.formats.map((f) => (
-                          <Badge
-                            key={f}
-                            variant="secondary"
-                            className="bg-blue-100 text-blue-700"
-                          >
-                            {f}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-slate-500">—</span>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-slate-600 mb-2 font-medium">
-                      Budget Ranges
-                    </div>
-                    <div className="space-y-2">
-                      {data.onboarding?.budgets?.length ? (
-                        data.onboarding.budgets.map((b, i) => (
-                          <div
-                            key={i}
-                            className="flex justify-between items-center p-3 bg-slate-50 rounded-lg"
-                          >
-                            <span className="font-medium text-slate-900">
-                              {b.format}
-                            </span>
-                            <Badge className="bg-green-100 text-green-700">
-                              {b.range}
-                            </Badge>
-                          </div>
-                        ))
-                      ) : (
-                        <span className="text-slate-500">—</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Section>
-
-              <Section
-                title={
-                  <>
-                    <Package className="h-5 w-5" /> Work Details
-                  </>
-                }
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card className="p-4 bg-blue-50/60">
-                    <div className="text-sm text-slate-600">
-                      Project Length
-                    </div>
-                    <div className="font-semibold text-slate-900">
-                      {data.onboarding?.projectLength || "—"}
-                    </div>
-                  </Card>
-                  <Card className="p-4 bg-green-50/60">
-                    <div className="text-sm text-slate-600">
-                      Capacity
-                    </div>
-                    <div className="font-semibold text-slate-900">
-                      {data.onboarding?.capacity || "—"}
-                    </div>
-                  </Card>
-                </div>
-                <Separator className="my-4" />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card className="p-4">
-                    <div className="text-xs text-slate-600">
-                      Allowlisting
-                    </div>
-                    <div className="mt-1">
-                      {data.onboarding?.allowlisting ? (
-                        <Pill tone="success">Enabled</Pill>
-                      ) : (
-                        <Pill tone="muted">Disabled</Pill>
-                      )}
-                    </div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="text-xs text-slate-600">
-                      Collaboration Types
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {data.onboarding?.collabTypes?.length ? (
-                        data.onboarding.collabTypes.map((t) => (
-                          <Badge
-                            key={t}
-                            variant="outline"
-                            className="border-slate-300"
-                          >
-                            {t}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-slate-500">
-                          —
-                        </span>
-                      )}
-                    </div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="text-xs text-slate-600">
-                      Cadences
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {data.onboarding?.cadences?.length ? (
-                        data.onboarding.cadences.map((c) => (
-                          <Badge
-                            key={c}
-                            variant="secondary"
-                            className="bg-purple-100 text-purple-700"
-                          >
-                            {c}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-slate-500">
-                          —
-                        </span>
-                      )}
-                    </div>
-                  </Card>
-                </div>
-                <Separator className="my-4" />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card className="p-4">
-                    <div className="font-semibold mb-2">
-                      Category
-                    </div>
-                    <KVRow
-                      label="Category Name"
-                      value={
-                        data.onboarding?.categoryName || "—"
-                      }
-                    />
-                    <div className="text-sm text-slate-600 mb-2">
-                      Subcategories
-                    </div>
-                    {data.onboarding?.subcategories?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {data.onboarding.subcategories.map(
-                          (sc, i) => (
-                            <Badge
-                              key={`${sc.subcategoryId}-${i}`}
-                              variant="outline"
-                              className="border-slate-300"
-                              title={`${sc.categoryName} • ${sc.subcategoryName}`}
-                            >
-                              {sc.categoryName} •{" "}
-                              {sc.subcategoryName}
-                            </Badge>
-                          ),
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-slate-500">—</div>
-                    )}
-                  </Card>
-                  <Card className="p-4">
-                    <div className="font-semibold mb-2">
-                      Prompting
-                    </div>
-                    <div className="mb-3">
-                      <div className="text-sm text-slate-600 mb-1">
-                        Selected Prompts
-                      </div>
-                      {data.onboarding?.selectedPrompts?.length ? (
-                        <ul className="list-disc list-inside text-sm text-slate-800 space-y-1">
-                          {data.onboarding.selectedPrompts.map(
-                            (sp, i) => (
-                              <li key={i}>
-                                <span className="text-slate-500">
-                                  [{sp.group}]
-                                </span>{" "}
-                                {sp.prompt}
-                              </li>
-                            ),
-                          )}
-                        </ul>
-                      ) : (
-                        <span className="text-slate-500">
-                          —
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-sm text-slate-600 mb-1">
-                        Prompt Answers
-                      </div>
-                      {data.onboarding?.promptAnswers?.length ? (
+                <Accordion type="multiple" className="space-y-2">
+                  <AccordionItem value={`recent-${idx}`}>
+                    <AccordionTrigger>Recent Posts</AccordionTrigger>
+                    <AccordionContent>
+                      <ScrollArea className="h-72 rounded border bg-slate-50">
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="w-28">
-                                Group
-                              </TableHead>
-                              <TableHead>Prompt</TableHead>
-                              <TableHead>Answer</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Text</TableHead>
+                              <TableHead className="text-right">Likes</TableHead>
+                              <TableHead className="text-right">Comments</TableHead>
+                              <TableHead className="text-right">Views</TableHead>
+                              <TableHead></TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {data.onboarding.promptAnswers.map(
-                              (pa, i) => (
-                                <TableRow key={i}>
-                                  <TableCell className="text-slate-600 text-xs">
-                                    {pa.group}
-                                  </TableCell>
-                                  <TableCell className="text-slate-900 text-sm max-w-[320px] whitespace-pre-wrap">
-                                    {pa.prompt}
-                                  </TableCell>
-                                  <TableCell className="text-slate-900 text-sm max-w-[420px] whitespace-pre-wrap">
-                                    {pa.answer}
-                                  </TableCell>
-                                </TableRow>
-                              ),
-                            )}
+                            {(profile.recentPosts || []).map((post, i) => (
+                              <TableRow key={i}>
+                                <TableCell>{fmtDate(post.created)}</TableCell>
+                                <TableCell>{post.type || "—"}</TableCell>
+                                <TableCell className="max-w-[360px] truncate" title={post.text}>
+                                  {post.text || "—"}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {fmtNum(post.likes)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {fmtNum(post.comments)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {fmtNum(getPostViews(post))}
+                                </TableCell>
+                                <TableCell>
+                                  {post.url && (
+                                    <a
+                                      href={post.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+                                    >
+                                      Open
+                                      <ArrowUpRight className="h-4 w-4" />
+                                    </a>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
                           </TableBody>
                         </Table>
-                      ) : (
-                        <span className="text-slate-500">
-                          —
-                        </span>
-                      )}
-                    </div>
-                  </Card>
-                </div>
+                      </ScrollArea>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value={`popular-${idx}`}>
+                    <AccordionTrigger>Popular Posts</AccordionTrigger>
+                    <AccordionContent>
+                      <ScrollArea className="h-72 rounded border bg-slate-50">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Text</TableHead>
+                              <TableHead className="text-right">Likes</TableHead>
+                              <TableHead className="text-right">Comments</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(profile.popularPosts || []).map((post, i) => (
+                              <TableRow key={i}>
+                                <TableCell>{fmtDate(post.created)}</TableCell>
+                                <TableCell>{post.type || "—"}</TableCell>
+                                <TableCell className="max-w-[360px] truncate" title={post.text}>
+                                  {post.text || "—"}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {fmtNum(post.likes)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {fmtNum(post.comments)}
+                                </TableCell>
+                                <TableCell>
+                                  {post.url && (
+                                    <a
+                                      href={post.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+                                    >
+                                      Open
+                                      <ArrowUpRight className="h-4 w-4" />
+                                    </a>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value={`sponsored-${idx}`}>
+                    <AccordionTrigger>Sponsored Posts</AccordionTrigger>
+                    <AccordionContent>
+                      <ScrollArea className="h-72 rounded border bg-slate-50">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Text</TableHead>
+                              <TableHead className="text-right">Likes</TableHead>
+                              <TableHead className="text-right">Comments</TableHead>
+                              <TableHead>Sponsors</TableHead>
+                              <TableHead></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(profile.sponsoredPosts || []).map((post, i) => (
+                              <TableRow key={i}>
+                                <TableCell>{fmtDate(post.created)}</TableCell>
+                                <TableCell>{post.type || "—"}</TableCell>
+                                <TableCell className="max-w-[320px] truncate" title={post.text}>
+                                  {post.text || "—"}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {fmtNum(post.likes)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {fmtNum(post.comments)}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-1">
+                                    {(post.sponsors || []).map((s, sponsorIdx) => (
+                                      <Badge key={sponsorIdx} variant="outline">
+                                        {s.name || s.domain || "Sponsor"}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {post.url && (
+                                    <a
+                                      href={post.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+                                    >
+                                      Open
+                                      <ArrowUpRight className="h-4 w-4" />
+                                    </a>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </Section>
-            </div>
+            ))}
           </TabsContent>
 
-          {/* ------------------------------ Payments Tab ----------------------------- */}
-          <TabsContent value="payments">
-            <Section
-              title={
-                <>
-                  <CreditCard className="h-5 w-5" /> Payment
-                  Methods
-                </>
-              }
-              subtitle="Only one default payment method is allowed (enforced by validation)."
-            >
-              {data.paymentMethods?.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead>Type</TableHead>
-                      <TableHead>Details</TableHead>
-                      <TableHead>Default</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Updated</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.paymentMethods.map((pm) => (
-                      <TableRow key={pm.paymentId}>
-                        <TableCell className="font-medium">
-                          {pm.type === 0 ? "PayPal" : "Bank"}
-                        </TableCell>
-                        <TableCell>
-                          {pm.type === 0 ? (
-                            <div className="space-y-1">
-                              <div>
-                                Email:{" "}
-                                <Copyable
-                                  value={pm.paypal?.email}
-                                />
-                              </div>
-                              {pm.paypal?.username && (
-                                <div>
-                                  Username: {pm.paypal.username}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              <div>
-                                Holder:{" "}
-                                {pm.bank?.accountHolder || "—"}
-                              </div>
-                              <div>
-                                Account No:{" "}
-                                {pm.bank?.accountNumber || "—"}
-                              </div>
-                              <div>
-                                IFSC: {pm.bank?.ifsc || "—"} •
-                                SWIFT: {pm.bank?.swift || "—"}
-                              </div>
-                              <div>
-                                Bank: {pm.bank?.bankName || "—"} (
-                                {pm.bank?.countryName || "—"})
-                              </div>
-                              {pm.bank?.branch && (
-                                <div>
-                                  Branch: {pm.bank.branch}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {pm.isDefault ? (
-                            <Pill tone="success">Default</Pill>
-                          ) : (
-                            <span className="text-slate-500">
-                              —
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {fmtDateTime(pm.createdAt)}
-                        </TableCell>
-                        <TableCell>
-                          {fmtDateTime(pm.updatedAt)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="text-slate-600">
-                  No payment methods added.
-                </div>
-              )}
-            </Section>
-          </TabsContent>
+          <TabsContent value="audience" className="space-y-6">
+            {profiles.map((profile, idx) => (
+              <Section
+                key={`audience-${profile.provider}-${idx}`}
+                title={
+                  <>
+                    <Users className="h-5 w-5" />
+                    <span className="capitalize">{profile.provider}</span> Audience
+                  </>
+                }
+              >
+                {profile.audience ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <Card className="p-4">
+                      <div className="font-semibold mb-2">Overview</div>
+                      <KVRow label="Credibility" value={profile.audience.credibility ?? "—"} />
+                      <KVRow label="Notable" value={profile.audience.notable ?? "—"} />
+                      <KVRow
+                        label="Top Languages"
+                        value={
+                          profile.audience.languages?.slice(0, 5)
+                            .map((item) => item.name || item.code)
+                            .filter(Boolean)
+                            .join(", ") || "—"
+                        }
+                      />
+                      <KVRow
+                        label="Top Interests"
+                        value={
+                          profile.audience.interests?.slice(0, 5)
+                            .map((item) => item.name || item.code)
+                            .filter(Boolean)
+                            .join(", ") || "—"
+                        }
+                      />
+                    </Card>
 
-          {/* ---------------------------- Subscription Tab --------------------------- */}
-          <TabsContent value="subscription">
-            <Section
-              title={
-                <>
-                  <ShieldCheck className="h-5 w-5" /> Subscription
-                </>
-              }
-            >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                <div className="space-y-1">
-                  <div className="text-sm text-slate-600">
-                    Plan
-                  </div>
-                  <div className="text-2xl font-bold text-slate-900">
-                    {data.subscription?.planName?.toUpperCase()}{" "}
-                    <span className="text-xs text-slate-500">
-                      ({data.subscription?.planId})
-                    </span>
-                  </div>
-                </div>
-                <Badge
-                  className={`px-4 py-2 text-lg ${
-                    data.subscriptionExpired
-                      ? "bg-red-500"
-                      : "bg-gradient-to-r from-blue-500 to-indigo-600"
-                  } text-white`}
-                >
-                  {data.subscriptionExpired ? "EXPIRED" : "ACTIVE"}
-                </Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <Card className="p-4 bg-blue-50/60">
-                  <div className="text-xs text-slate-600">
-                    Started
-                  </div>
-                  <div className="text-lg font-semibold">
-                    {fmtDateTime(data.subscription?.startedAt)}
-                  </div>
-                </Card>
-                <Card className="p-4 bg-purple-50/60">
-                  <div className="text-xs text-slate-600">
-                    Expires
-                  </div>
-                  <div className="text-lg font-semibold">
-                    {fmtDateTime(data.subscription?.expiresAt)}
-                  </div>
-                </Card>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead>Feature</TableHead>
-                      <TableHead>Limit</TableHead>
-                      <TableHead>Used</TableHead>
-                      <TableHead>Remaining</TableHead>
-                      <TableHead>Progress</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.subscription?.features?.map((f, idx) => {
-                      const remaining = Math.max(
-                        0,
-                        (f.limit ?? 0) - (f.used ?? 0),
-                      );
-                      const pct = f.limit
-                        ? Math.min(
-                            100,
-                            (f.used / f.limit) * 100,
-                          )
-                        : 0;
-                      return (
-                        <TableRow
-                          key={`${f.key}-${idx}`}
-                          className={
-                            idx % 2 === 0
-                              ? "bg-white"
-                              : "bg-slate-50"
-                          }
-                        >
-                          <TableCell className="font-medium capitalize">
-                            {f.key?.replace(/_/g, " ")}
-                          </TableCell>
-                          <TableCell>{f.limit}</TableCell>
-                          <TableCell>{f.used}</TableCell>
-                          <TableCell
-                            className={
-                              remaining === 0
-                                ? "text-red-600 font-semibold"
-                                : "text-green-700 font-semibold"
-                            }
-                          >
-                            {remaining}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="w-24 h-2 bg-slate-200 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full ${
-                                    pct > 80
-                                      ? "bg-red-500"
-                                      : pct > 50
-                                      ? "bg-yellow-500"
-                                      : "bg-green-500"
-                                  }`}
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                              <span className="text-xs text-slate-600">
-                                {pct.toFixed(0)}%
-                              </span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+                    <Card className="p-4">
+                      <div className="font-semibold mb-2">Top Countries</div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Country</TableHead>
+                            <TableHead className="text-right">Weight</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(profile.audience.geoCountries || []).slice(0, 8).map((item, i) => (
+                            <TableRow key={i}>
+                              <TableCell>{item.name || item.code || "—"}</TableCell>
+                              <TableCell className="text-right">
+                                {fmtWeightPercent(item.weight)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Card>
 
-              <Separator className="my-6" />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="p-4">
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    <Lock className="h-4 w-4" /> Login & Security
+                    <Card className="p-4">
+                      <div className="font-semibold mb-2">Age Distribution</div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Age</TableHead>
+                            <TableHead className="text-right">Weight</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(profile.audience.ages || []).map((item, i) => (
+                            <TableRow key={i}>
+                              <TableCell>{item.code || item.name || "—"}</TableCell>
+                              <TableCell className="text-right">
+                                {fmtWeightPercent(item.weight)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Card>
                   </div>
-                  <KVRow
-                    label="Failed Login Attempts"
-                    value={data.failedLoginAttempts ?? 0}
-                  />
-                  <KVRow
-                    label="Lock Until"
-                    value={
-                      data.lockUntil
-                        ? fmtDateTime(data.lockUntil)
-                        : "—"
-                    }
-                  />
-                  <KVRow
-                    label="Password Reset Verified"
-                    value={
-                      data.passwordResetVerified ? (
-                        <Pill tone="success">Yes</Pill>
-                      ) : (
-                        <Pill tone="muted">No</Pill>
-                      )
-                    }
-                  />
-                  <KVRow
-                    label="Password Reset Expires"
-                    value={fmtDateTime(
-                      data.passwordResetExpiresAt,
-                    )}
-                  />
-                </Card>
-                <Card className="p-4">
-                  <div className="font-semibold mb-2 flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4" /> OTP & Email
-                    Status
-                  </div>
-                  <KVRow
-                    label="OTP Verified"
-                    value={
-                      data.otpVerified ? (
-                        <Pill tone="success">Yes</Pill>
-                      ) : (
-                        <Pill tone="muted">No</Pill>
-                      )
-                    }
-                  />
-                  <KVRow
-                    label="OTP Code"
-                    value={
-                      data.otpCode ? "••••••" : "—"
-                    }
-                  />
-                  <KVRow
-                    label="OTP Expires"
-                    value={fmtDateTime(data.otpExpiresAt)}
-                  />
-                  <KVRow
-                    label="Unsubscribed"
-                    value={
-                      data.isUnsubscribed ? (
-                        <Pill tone="warning">Yes</Pill>
-                      ) : (
-                        <Pill tone="muted">No</Pill>
-                      )
-                    }
-                  />
-                </Card>
-              </div>
-            </Section>
+                ) : (
+                  <div className="text-slate-600">No audience data available.</div>
+                )}
+              </Section>
+            ))}
           </TabsContent>
         </Tabs>
-
-        <Card className="p-4 bg-white/60 backdrop-blur-sm text-sm text-slate-600 shadow-lg border-0">
-          <div className="flex flex-col md:flex-row justify-between gap-2">
-            <span>Account Created: {fmtDateTime(data.createdAt)}</span>
-            <span>Last Updated: {fmtDateTime(data.updatedAt)}</span>
-          </div>
-        </Card>
       </div>
     </div>
   );

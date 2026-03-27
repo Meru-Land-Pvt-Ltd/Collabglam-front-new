@@ -4,13 +4,15 @@
 @custom-variant dark (&:is(.dark *));
 
 .no-scrollbar::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 
 /* Hide scrollbar for IE, Edge and Firefox */
 .no-scrollbar {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }
 
 /* Add this to your app/globals.css or main CSS file */
@@ -20,6 +22,7 @@
     transform: translateY(-50px);
     opacity: 1;
   }
+
   100% {
     transform: translateY(100vh);
     opacity: 0;
@@ -33,6 +36,7 @@
 .animate-confetti-fall {
   animation: confetti-fall 3s ease-in forwards;
 }
+
 /* -----------------------------
    Tailwind theme tokens
    ----------------------------- */
@@ -1673,60 +1677,80 @@
     inherits: false;
   }
 
+  @property --cg-gradient-angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+  }
+
   .cg-ai-glow {
     position: relative;
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    padding: 3px;
+    /* gradient border thickness */
+    border-radius: 16px;
     isolation: isolate;
-    border-radius: 0.75rem;
-    /* 12px */
   }
 
-  /* crisp spinning gradient ring */
   .cg-ai-glow::before {
     content: "";
     position: absolute;
-    inset: -0.25rem;
-    /* -4px */
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    mask-composite: exclude;
-    padding: 0.5rem;
-    /* 8px */
+    inset: 0;
     border-radius: inherit;
-    z-index: -1;
-    pointer-events: none;
-
-    /* SVG colors in a conic ring */
     background: conic-gradient(from var(--cg-gradient-angle),
-        #ffbf00,
-        #ff8c01,
-        #ffffff,
-        #ff5e7e,
-        #ff8c01,
-        #ffbf00);
-
-    animation: cg-rotate 4s linear infinite;
+        #ffb11a,
+        #ff7a18,
+        #ff5ea8,
+        #f3d7b6,
+        #fff3e8,
+        #ff8c1a,
+        #ffb11a);
+    animation: cg-rotate 3s linear infinite;
+    z-index: -1;
   }
 
-  /* soft outer spinning glow */
   .cg-ai-glow::after {
     content: "";
     position: absolute;
-    inset: -0.375rem;
-    /* -6px */
+    inset: -4px;
     border-radius: inherit;
+    background: conic-gradient(from var(--cg-gradient-angle),
+        rgba(255, 177, 26, 0.55),
+        rgba(255, 122, 24, 0.45),
+        rgba(255, 94, 168, 0.35),
+        rgba(243, 215, 182, 0.28),
+        rgba(255, 140, 26, 0.42),
+        rgba(255, 177, 26, 0.55));
+    filter: blur(12px);
+    animation: cg-rotate 3s linear infinite;
     z-index: -2;
     pointer-events: none;
+  }
 
-    filter: blur(1.125rem);
-    /* 18px */
-    opacity: 0.9;
+  .cg-ai-glow>button {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    min-height: 50px;
+    padding: 0 22px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, #1e1f22 0%, #111214 100%);
+    color: #fff;
+  }
 
-    animation: cg-rotate 2.5s linear infinite;
+  .cg-ai-glow>button:hover {
+    background: linear-gradient(180deg, #24262a 0%, #151619 100%);
+  }
+
+  @keyframes cg-rotate {
+    0% {
+      --cg-gradient-angle: 0deg;
+    }
+
+    100% {
+      --cg-gradient-angle: 360deg;
+    }
   }
 
   @keyframes cg-rotate {
