@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Eye, FileText, PenLine } from "lucide-react";
+import { AlertCircle, ChevronDown, Eye, FileText, PenLine } from "lucide-react";
 import { HiDocumentText, HiOutlineEye, HiX } from "react-icons/hi";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -23,12 +23,19 @@ import CampaignFilter, {
 } from "@/components/ui/brand/CampaignFilter";
 
 import {
-  apiGetAcceptedAdminCreatedCampaigns,
   apiGetAllCampaigns,
   apiGetAppliedCampaigns,
   apiGetContractedCampaigns,
+  apiGetInfluencerSignature,
   apiGetMyCampaigns,
+  apiUploadInfluencerSignature,
 } from "../../services/influencerApi";
+import MinimalPdfPreview from "@/components/ui/MinimalPdfPreview";
+import { ArrowSquareInIcon, DownloadSimpleIcon, InfoIcon, Signature } from "@phosphor-icons/react";
+// import { useSidebarWidth } from "./useSidebarWidth";
+import InfluencerSidebarShell from "./InfluencerSidebarShell";
+import { Dialog, DialogContent, DialogOverlay } from "@/components/ui/dialog";
+import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 
 /* ─────────────────────────── Toast / Confirm ─────────────────────────── */
 
@@ -168,19 +175,30 @@ type ContractInfluencerContent = {
   legalName?: string;
   contactName?: string;
   postingHandleUrl?: string;
-  contactEmail?: string;
-  contactPhone?: string;
+  email?: string;
+  phone?: string;
   whatsApp?: string;
-  address?: string;
+  taxFormType?: string;
+  taxId?: string;
+
+  // address fields
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  zipPostalCode?: string;
+  country?: string;
 
   ftcAcknowledgement?: string;
   shipToName?: string;
   shipToAddress?: string;
   shipToPhone?: string;
   deliveryNotes?: string;
+  notes?: string
 };
 
 type ContractMeta = {
+  _id?: string;
   status?: ContractStatus | string;
   confirmations?: { brand?: PartyConfirm; influencer?: PartyConfirm };
   acceptances?: { brand?: PartyAcceptance; influencer?: PartyAcceptance };
@@ -215,7 +233,14 @@ type LocalInfluencer = {
   contactEmail: string;
   contactPhone: string;
   whatsApp: string;
-  address: string;
+  // address: string;
+
+  addressLine1: string; // NEW
+  addressLine2: string; // NEW
+  city: string;         // NEW
+  state: string;        // NEW
+  zip: string;          // NEW
+  country: string;      // NEW
   ftcAcknowledgement: string;
   shipToName: string;
   shipToAddress: string;
@@ -224,19 +249,31 @@ type LocalInfluencer = {
 
   payoutMethod: string;
   payoutAccount: string;
+  taxFormType: string;
   taxId: string;
-
+  notes: string;
 };
 
 const emptyLocal: LocalInfluencer = {
   legalName: "",
   contactName: "",
   postingHandleUrl: "",
+
   contactEmail: "",
   contactPhone: "",
+
+  taxFormType: "",
+  taxId: "",
+
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  state: "",
+  zip: "",
+  country: "",
   whatsApp: "",
-  address: "",
   ftcAcknowledgement: "",
+
   shipToName: "",
   shipToAddress: "",
   shipToPhone: "",
@@ -244,7 +281,7 @@ const emptyLocal: LocalInfluencer = {
 
   payoutMethod: "",
   payoutAccount: "",
-  taxId: "",
+  notes: ""
 };
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
@@ -264,13 +301,20 @@ const sanitizeLocal = (p: LocalInfluencer): LocalInfluencer => ({
   legalName: trimStr(p.legalName),
   contactName: trimStr(p.contactName),
   postingHandleUrl: trimStr(p.postingHandleUrl),
+
   contactEmail: trimStr(p.contactEmail),
   contactPhone: trimStr(p.contactPhone),
   whatsApp: trimStr(p.whatsApp),
-  address: trimStr(p.address),
 
+  addressLine1: trimStr(p.addressLine1),
+  addressLine2: trimStr(p.addressLine2),
+  city: trimStr(p.city),
+  state: trimStr(p.state),
+  zip: trimStr(p.zip),
+  country: trimStr(p.country),
 
   ftcAcknowledgement: trimStr(p.ftcAcknowledgement),
+
   shipToName: trimStr(p.shipToName),
   shipToAddress: trimStr(p.shipToAddress),
   shipToPhone: trimStr(p.shipToPhone),
@@ -278,26 +322,39 @@ const sanitizeLocal = (p: LocalInfluencer): LocalInfluencer => ({
 
   payoutMethod: trimStr(p.payoutMethod),
   payoutAccount: trimStr(p.payoutAccount),
-  taxId: trimStr(p.taxId),
-});
 
+  taxFormType: trimStr(p.taxFormType),
+  taxId: trimStr(p.taxId),
+  notes: trimStr(p.notes)
+});
 const toContractInfluencerPayload = (
   p: LocalInfluencer
 ): ContractInfluencerContent => ({
   legalName: p.legalName,
   contactName: p.contactName,
   postingHandleUrl: p.postingHandleUrl,
-  contactEmail: p.contactEmail,
-  contactPhone: p.contactPhone,
+
+  email: p.contactEmail,
+  phone: p.contactPhone,
   whatsApp: p.whatsApp,
-  address: p.address,
+
+  taxFormType: p.taxFormType,
+  taxId: p.taxId,
+
+  addressLine1: p.addressLine1,
+  addressLine2: p.addressLine2,
+  city: p.city,
+  state: p.state,
+  zipPostalCode: p.zip,
+  country: p.country,
 
   ftcAcknowledgement: p.ftcAcknowledgement,
+
   shipToName: p.shipToName,
   shipToAddress: p.shipToAddress,
   shipToPhone: p.shipToPhone,
   deliveryNotes: p.deliveryNotes,
-
+  notes: p.notes,
 });
 
 function hasAcceptedCurrent(
@@ -368,100 +425,8 @@ function computeDaysLeft(endAt?: string) {
   );
 }
 
-const toIdString = (value: any): string => {
-  if (!value) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "object") {
-    if (value._id) return String(value._id);
-    if (value.id) return String(value.id);
-  }
-  return String(value);
-};
-
-function extractCampaignArray(res: any): any[] {
-  return Array.isArray(res)
-    ? res
-    : Array.isArray(res?.campaigns)
-      ? res.campaigns
-      : Array.isArray(res?.items)
-        ? res.items
-        : Array.isArray(res?.data)
-          ? res.data
-          : Array.isArray(res?.contracts)
-            ? res.contracts
-            : [];
-}
-
-function normalizeAcceptedAdminCampaigns(res: any): any[] {
-  const invitations = Array.isArray(res?.invitations) ? res.invitations : [];
-
-  return invitations
-    .map((item: any) => {
-      const campaign =
-        item?.campaignDetails && typeof item.campaignDetails === "object"
-          ? item.campaignDetails
-          : item?.campaignId && typeof item.campaignId === "object"
-            ? item.campaignId
-            : null;
-
-      if (!campaign) return null;
-
-      const campaignId = toIdString(
-        campaign?._id || campaign?.id || item?.campaignId
-      );
-
-      return {
-        ...campaign,
-        _id: campaignId,
-        id: campaignId,
-        campaignId,
-        brandId: campaign?.brandId ?? item?.brandId ?? "",
-        hasApplied: Number(campaign?.hasApplied ?? 1),
-        isAccepted: Number(campaign?.isAccepted ?? 1),
-        isApproved: Number(campaign?.isApproved ?? 1),
-        isActive: Number(campaign?.isActive ?? 1),
-        invitationStatus: item?.status || "accepted",
-        invitedByAdmin: true,
-        invitationId: toIdString(item?._id),
-      };
-    })
-    .filter(Boolean);
-}
-
-function mergeCampaignLists(adminCampaigns: any[], myCampaigns: any[]) {
-  const map = new Map<string, any>();
-
-  [...adminCampaigns, ...myCampaigns].forEach((item) => {
-    const id = toIdString(item?._id || item?.id || item?.campaignId);
-    if (!id) return;
-
-    const prev = map.get(id) || {};
-
-    map.set(id, {
-      ...prev,
-      ...item,
-      _id: id,
-      id,
-      campaignId: id,
-      brandId: item?.brandId ?? prev?.brandId ?? "",
-      contractId: toIdString(
-        item?.contractId ||
-        item?.contract?._id ||
-        item?.contract?.contractId ||
-        prev?.contractId ||
-        ""
-      ),
-      hasApplied: Number(item?.hasApplied ?? prev?.hasApplied ?? 1),
-      isAccepted: Number(item?.isAccepted ?? prev?.isAccepted ?? 0),
-      isApproved: Number(item?.isApproved ?? prev?.isApproved ?? 1),
-      isContracted: Number(item?.isContracted ?? prev?.isContracted ?? 0),
-    });
-  });
-
-  return Array.from(map.values());
-}
-
 function mapApiCampaign(c: any): CampaignData {
+  const resolvedContractId = c.contract?._id || "";
   const platforms: string[] = Array.isArray(c.platformSelection)
     ? c.platformSelection
     : [];
@@ -487,23 +452,13 @@ function mapApiCampaign(c: any): CampaignData {
       ? c.images
       : [];
 
-  const id = toIdString(c._id || c.id || c.campaignId);
-  const resolvedBrandId = toIdString(c.brandId);
-  const resolvedBrandName =
-    c.brandName ||
-    c.brand?.name ||
-    (typeof c.brandId === "object"
-      ? c.brandId?.brandName || c.brandId?.name || ""
-      : "");
+  const id = c._id || c.id || c.campaignId || "";
 
-  const resolvedContractId = toIdString(
-    c.contractId || c.contract?._id || c.contract?.contractId || ""
-  );
 
   return {
     id,
-    brandId: resolvedBrandId,
-    brandName: resolvedBrandName,
+    brandId: c.brandId || "",
+    brandName: c.brandName || "",
     title,
     productOrServiceName: title,
     description: c.description || "",
@@ -554,6 +509,7 @@ function campaignToPreview(campaign: CampaignData) {
 
 function toContractMeta(doc: any): ContractMeta {
   return {
+    _id: doc?._id,
     status: doc?.status,
     confirmations: doc?.confirmations || {},
     acceptances: doc?.acceptances || {},
@@ -583,7 +539,11 @@ function pickActiveContract(arr: any[], preferredContractId?: string) {
 
   let chosen =
     (preferredContractId
-      ? list.find((x) => String(x.contractId) === String(preferredContractId))
+      ? list.find(
+        (x) =>
+          String(x._id) === String(preferredContractId) ||
+          String(x.contractId) === String(preferredContractId)
+      )
       : null) ||
     list.find((x) => normStatus(x.status) !== CONTRACT_STATUS.SUPERSEDED) ||
     list[0] ||
@@ -591,7 +551,9 @@ function pickActiveContract(arr: any[], preferredContractId?: string) {
 
   if (chosen?.supersededBy) {
     const child = list.find(
-      (x) => String(x.contractId) === String(chosen.supersededBy)
+      (x) =>
+        String(x._id) === String(chosen.supersededBy) ||
+        String(x.contractId) === String(chosen.supersededBy)
     );
     if (child) chosen = child;
   }
@@ -632,7 +594,7 @@ function FloatingInput({
       />
       <label
         htmlFor={id}
-        className="absolute left-4 top-2 text-xs text-[#FFBF00] font-medium pointer-events-none"
+        className="absolute left-4 top-2 text-xs text-[#1A1A1A] font-medium pointer-events-none"
       >
         {label}
       </label>
@@ -671,7 +633,7 @@ function FloatingTextarea({
       />
       <label
         htmlFor={id}
-        className="absolute left-4 top-2 text-xs text-[#FFBF00] font-medium pointer-events-none"
+        className="absolute left-4 top-2 text-xs text-[#1A1A1A] font-medium pointer-events-none"
       >
         {label}
       </label>
@@ -1296,7 +1258,7 @@ function ContractActionBar({
               "view"
             )
           }
-          className="flex-1 py-2 px-3 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-medium border border-gray-200 transition-colors flex items-center justify-center gap-1"
+          className="flex-1 py-2 px-3 rounded-lg bg-gray-50  text-gray-700 text-xs font-medium border border-gray-200 transition-colors flex items-center justify-center gap-1"
         >
           <Eye className="h-3 w-3" />
           View
@@ -1311,15 +1273,78 @@ function ContractActionBar({
 }
 
 /* ───────────────────────── Contract Modal ───────────────────────── */
+// Add this hook directly in the file — no import needed
+function useInfluencerSidebarWidth() {
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    // Try all possible sidebar selectors until one matches
+    const selectors = [
+      '[data-sidebar]',
+      '.sidebar',
+      'aside',
+      'nav[class*="sidebar"]',
+      'div[class*="sidebar"]',
+      '[class*="sidebar"]',
+    ];
+
+    const sidebar = selectors.reduce<Element | null>(
+      (found, sel) => found ?? document.querySelector(sel),
+      null
+    );
+
+    if (!sidebar) return;
+
+    const update = () => setWidth(sidebar.getBoundingClientRect().width);
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(sidebar);
+    return () => ro.disconnect();
+  }, []);
+
+  return width;
+}
+
+const getInfluencerId = () => {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("influencerId") || "";
+};
+
+const fileToDataUrl = (file: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+const urlToDataUrl = async (url: string) => {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return fileToDataUrl(blob);
+};
+
+const extractSignatureUrl = (res: any) => {
+  // adjust keys to your real backend response
+  return (
+    res?.data?.signatureUrl ||
+    res?.data?.url ||
+    res?.data?.signature?.url ||
+    res?.data?.signature?.signatureUrl ||
+    ""
+  );
+};
 
 function InfluencerContractModal({
+
   open,
   onClose,
   contractId,
   campaign,
   readOnly = false,
   onAfterAction,
-  initialMode = "edit",
+  sidebarOffset = 400,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1327,19 +1352,24 @@ function InfluencerContractModal({
   campaign: CampaignData;
   readOnly?: boolean;
   onAfterAction?: () => void;
-  initialMode?: "view" | "edit";
+  sidebarOffset?: number;
 }) {
   const [local, setLocal] = useState<LocalInfluencer>(emptyLocal);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [liteLoaded, setLiteLoaded] = useState(false);
   const [effectiveContractId, setEffectiveContractId] =
     useState<string>(contractId);
   const [meta, setMeta] = useState<ContractMeta | null>(null);
-  const [mode, setMode] = useState<"view" | "edit">(initialMode);
   const [showSignModal, setShowSignModal] = useState(false);
-
-  const st = normStatus(meta?.status);
+  const [showAcceptSignatureModal, setShowAcceptSignatureModal] = useState(false);
+  const [signatureChecked, setSignatureChecked] = useState(false);
+  const [signatureLoading, setSignatureLoading] = useState(false);
+  const [savedSignatureUrl, setSavedSignatureUrl] = useState("");
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedSignaturePreview, setSelectedSignaturePreview] = useState("");
   const influencerAccepted = hasAcceptedCurrent(meta, "influencer");
   const brandAccepted = hasAcceptedCurrent(meta, "brand");
   const brandSigned = !!meta?.signatures?.brand?.signed;
@@ -1354,7 +1384,9 @@ function InfluencerContractModal({
     (campaign as any).paymentType ??
     (campaign as any).laneType ??
     "fixed";
+
   const isGifting = campaignType === "gifting";
+
   const canEdit = useMemo(() => {
     if (readOnly) return false;
     if (locked || readyToSign) return false;
@@ -1363,16 +1395,111 @@ function InfluencerContractModal({
     return true;
   }, [readOnly, locked, readyToSign, rejected, superseded, anyoneSigned]);
 
-  useEffect(() => {
-    if (!canEdit && mode === "edit") setMode("view");
-  }, [canEdit, mode]);
-
   const cleanupPreview = useCallback(() => {
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return "";
     });
+    setPreviewBlob(null);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (selectedSignaturePreview) {
+        URL.revokeObjectURL(selectedSignaturePreview);
+      }
+    };
+  }, [selectedSignaturePreview]);
+
+  const handleSignatureFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (selectedSignaturePreview) {
+      URL.revokeObjectURL(selectedSignaturePreview);
+    }
+
+    const localPreviewUrl = URL.createObjectURL(file);
+
+    setSignatureFile(file);
+    setSelectedSignaturePreview(localPreviewUrl);
+
+    // important: clear old saved signature so submit uses the new uploaded file
+    setSavedSignatureUrl("");
+  };
+
+  const openAcceptSignatureFlow = async () => {
+    const influencerId = getInfluencerId();
+    if (!influencerId) {
+      toast({
+        icon: "error",
+        title: "Missing influencer",
+        text: "Influencer ID not found.",
+      });
+      return;
+    }
+
+    setSignatureLoading(true);
+    setSignatureChecked(false);
+    setSignatureFile(null);
+    setSavedSignatureUrl("");
+
+    try {
+      const res = await apiGetInfluencerSignature(influencerId);
+      const existingUrl = extractSignatureUrl(res);
+
+      if (existingUrl) {
+        setSavedSignatureUrl(existingUrl);
+      }
+
+      setShowAcceptSignatureModal(true);
+    } catch (e) {
+      // if signature is not found, still open modal and allow upload
+      setShowAcceptSignatureModal(true);
+    } finally {
+      setSignatureLoading(false);
+    }
+  };
+
+  const mapApiToLocal = (inf?: ContractInfluencerContent): LocalInfluencer => ({
+    legalName: inf?.legalName || "",
+    contactName: inf?.contactName || "",
+    postingHandleUrl: inf?.postingHandleUrl || "",
+
+    // ✅ FIXED mapping
+    contactEmail: inf?.email || "",
+    contactPhone: inf?.phone || "",
+
+    whatsApp: inf?.whatsApp || "",
+
+    taxFormType: inf?.taxFormType || "",
+    taxId: inf?.taxId || "",
+
+    addressLine1: inf?.addressLine1 || "",
+    addressLine2: inf?.addressLine2 || "",
+    city: inf?.city || "",
+    state: inf?.state || "",
+
+    // ✅ IMPORTANT
+    zip: inf?.zipPostalCode || "",
+
+    country: inf?.country || "",
+
+    ftcAcknowledgement: inf?.ftcAcknowledgement || "",
+
+    shipToName: inf?.shipToName || "",
+    shipToAddress: inf?.shipToAddress || "",
+    shipToPhone: inf?.shipToPhone || "",
+    deliveryNotes: inf?.deliveryNotes || "",
+
+    payoutMethod: "",
+    payoutAccount: "",
+
+    // ✅ notes
+    notes: inf?.notes || "",
+  });
 
   const toLocalFromLite = useCallback((lite: any): LocalInfluencer => {
     const primary = (lite?.primaryPlatform || "").toLowerCase();
@@ -1399,12 +1526,23 @@ function InfluencerContractModal({
       legalName: bestName,
       contactName: bestName,
       postingHandleUrl: bestHandle,
+
       contactEmail: lite?.email || "",
       contactPhone: lite?.phone || "",
       whatsApp: lite?.whatsapp || "",
-      address: lite?.address || "",
+
+      addressLine1: "",
+      addressLine2: "",
+      city: "",
+      state: "",
+      zip: "",
+      country: "",
+
+      taxFormType: "",
+      taxId: "",
 
       ftcAcknowledgement: "",
+
       shipToName: "",
       shipToAddress: "",
       shipToPhone: "",
@@ -1412,7 +1550,7 @@ function InfluencerContractModal({
 
       payoutMethod: "",
       payoutAccount: "",
-      taxId: "",
+      notes:""
     };
   }, []);
 
@@ -1464,36 +1602,71 @@ function InfluencerContractModal({
       if (chosen) {
         const nextMeta = toContractMeta(chosen);
         setMeta(nextMeta);
-        setEffectiveContractId(nextMeta.contractId || contractId);
+
+        // prefer _id first
+        setEffectiveContractId(nextMeta._id || nextMeta.contractId || contractId);
 
         const contentInfluencer = chosen?.content?.influencer || {};
         setLocal((prev) =>
           sanitizeLocal({
             ...prev,
+
             legalName: contentInfluencer.legalName ?? prev.legalName,
+
             contactName:
               contentInfluencer.contactName ??
               contentInfluencer.legalName ??
               prev.contactName,
+
             postingHandleUrl:
               contentInfluencer.postingHandleUrl ?? prev.postingHandleUrl,
+
+
             contactEmail:
-              contentInfluencer.contactEmail ?? prev.contactEmail,
+              contentInfluencer.email ?? prev.contactEmail,
+
             contactPhone:
-              contentInfluencer.contactPhone ?? prev.contactPhone,
+              contentInfluencer.phone ?? prev.contactPhone,
+
             whatsApp: contentInfluencer.whatsApp ?? prev.whatsApp,
-            address: contentInfluencer.address ?? prev.address,
+
+
+            addressLine1:
+              contentInfluencer.addressLine1 ?? prev.addressLine1,
+            addressLine2:
+              contentInfluencer.addressLine2 ?? prev.addressLine2,
+            city: contentInfluencer.city ?? prev.city,
+            state: contentInfluencer.state ?? prev.state,
+
+
+            zip:
+              contentInfluencer.zipPostalCode ?? prev.zip,
+
+            country: contentInfluencer.country ?? prev.country,
+
+            taxFormType:
+              contentInfluencer.taxFormType ?? prev.taxFormType,
+
+            taxId:
+              contentInfluencer.taxId ?? prev.taxId,
+
+            notes:
+              contentInfluencer.notes ?? prev.notes,
 
             ftcAcknowledgement:
               contentInfluencer.ftcAcknowledgement ?? prev.ftcAcknowledgement,
-            shipToName: contentInfluencer.shipToName ?? prev.shipToName,
-            shipToAddress: contentInfluencer.shipToAddress ?? prev.shipToAddress,
-            shipToPhone: contentInfluencer.shipToPhone ?? prev.shipToPhone,
-            deliveryNotes: contentInfluencer.deliveryNotes ?? prev.deliveryNotes,
 
-            payoutMethod: contentInfluencer.payoutMethod ?? prev.payoutMethod,
-            payoutAccount: contentInfluencer.payoutAccount ?? prev.payoutAccount,
-            taxId: contentInfluencer.taxId ?? prev.taxId,
+            shipToName:
+              contentInfluencer.shipToName ?? prev.shipToName,
+
+            shipToAddress:
+              contentInfluencer.shipToAddress ?? prev.shipToAddress,
+
+            shipToPhone:
+              contentInfluencer.shipToPhone ?? prev.shipToPhone,
+
+            deliveryNotes:
+              contentInfluencer.deliveryNotes ?? prev.deliveryNotes,
           })
         );
       } else {
@@ -1508,6 +1681,7 @@ function InfluencerContractModal({
 
   const markViewed = useCallback(async (id: string) => {
     try {
+      console.log("markViewed", id)
       await post("/contract/viewed", { contractId: id, role: "influencer" });
     } catch {
       // non-fatal
@@ -1532,13 +1706,8 @@ function InfluencerContractModal({
   }, [open, fetchInfluencerLite, fetchContractMeta, cleanupPreview]);
 
   useEffect(() => {
-    if (!open) return;
-    if (initialMode === "edit" && !readOnly) setMode("edit");
-    else setMode("view");
-  }, [open, initialMode, readOnly]);
-
-  useEffect(() => {
     if (!open || !effectiveContractId) return;
+    console.log("effectiveContractId", effectiveContractId)
     markViewed(effectiveContractId);
   }, [open, effectiveContractId, markViewed]);
 
@@ -1553,7 +1722,11 @@ function InfluencerContractModal({
         );
 
         cleanupPreview();
-        const url = URL.createObjectURL(res.data);
+
+        const blob = res.data as Blob;
+        const url = URL.createObjectURL(blob);
+
+        setPreviewBlob(blob);
         setPreviewUrl(url);
 
         if (!silent) toast({ icon: "info", title: "PDF loaded" });
@@ -1573,53 +1746,115 @@ function InfluencerContractModal({
 
   useEffect(() => {
     if (!open) return;
-    if ((mode === "view" || mode === "edit") && !previewUrl && effectiveContractId) {
+    if (!previewUrl && effectiveContractId) {
       generatePreview(true).catch(() => { });
     }
-  }, [mode, open, previewUrl, effectiveContractId, generatePreview]);
+  }, [open, previewUrl, effectiveContractId, generatePreview]);
+
+  const handleAcceptWithSignature = async () => {
+    if (!signatureChecked) {
+      toast({
+        icon: "error",
+        title: "Confirmation required",
+        text: "Please confirm that you agree to all terms before signing.",
+      });
+      return;
+    }
+
+    setIsWorking(true);
+
+    try {
+      const payload = toContractInfluencerPayload(sanitizeLocal(local));
+      let signatureDataUrl = "";
+
+      if (signatureFile) {
+        // best path: use local file directly
+        signatureDataUrl = await fileToDataUrl(signatureFile);
+
+        const influencerId = getInfluencerId();
+        const formData = new FormData();
+        formData.append("influencerId", influencerId);
+        formData.append("signature", signatureFile);
+
+        const uploadRes = await apiUploadInfluencerSignature(formData);
+        const uploadedUrl = extractSignatureUrl(uploadRes);
+        if (uploadedUrl) {
+          setSavedSignatureUrl(uploadedUrl);
+        }
+      } else if (savedSignatureUrl) {
+        // fallback only when using an already-saved signature
+        signatureDataUrl = await urlToDataUrl(savedSignatureUrl);
+      } else {
+        toast({
+          icon: "error",
+          title: "Signature required",
+          text: "Please upload a signature before continuing.",
+        });
+        return;
+      }
+
+      await post("/contract/influencer/confirm", {
+        contractId: effectiveContractId,
+        influencer: payload,
+      });
+
+      // await post("/contract/sign", {
+      //   contractId: effectiveContractId,
+      //   role: "influencer",
+      //   name: local.legalName || local.contactName,
+      //   email: local.contactEmail,
+      //   signatureImageDataUrl: signatureDataUrl,
+      // });
+
+      toast({
+        icon: "success",
+        title: "Accepted & Signed",
+        text: "Contract accepted successfully.",
+      });
+
+      setShowAcceptSignatureModal(false);
+      await fetchContractMeta();
+      onAfterAction?.();
+      await generatePreview(true);
+      onClose();
+    } catch (e: any) {
+      toast({
+        icon: "error",
+        title: "Error",
+        text: apiMessage(e, "Failed to accept and sign."),
+      });
+    } finally {
+      setIsWorking(false);
+    }
+  };
 
   const acceptOrSave = async () => {
+    if (!hasAcceptedCurrent(meta, "influencer")) {
+      await openAcceptSignatureFlow();
+      return;
+    }
+
     setIsWorking(true);
     try {
       const payload = toContractInfluencerPayload(sanitizeLocal(local));
 
-      if (!hasAcceptedCurrent(meta, "influencer")) {
-        const ok = await askConfirm(
-          "Accept Contract?",
-          "Your details will be submitted to the brand."
-        );
-        if (!ok) return;
-
-        await post("/contract/influencer/confirm", {
-          contractId: effectiveContractId,
-          influencer: payload,
-        });
-
-        toast({
-          icon: "success",
-          title: "Accepted",
-          text: "Details saved and contract accepted.",
-        });
-      } else {
-        await post("/contract/influencer/update", {
-          contractId: effectiveContractId,
-          influencerUpdates: {
-            content: {
-              influencer: payload,
-            },
+      await post("/contract/influencer/update", {
+        contractId: effectiveContractId,
+        influencerUpdates: {
+          content: {
+            influencer: payload,
           },
-        });
+        },
+      });
 
-        toast({
-          icon: "success",
-          title: "Saved",
-          text: "Your changes were saved.",
-        });
-      }
+      toast({
+        icon: "success",
+        title: "Saved",
+        text: "Your changes were saved.",
+      });
 
       await fetchContractMeta();
       onAfterAction?.();
-      setMode("view");
       await generatePreview(true);
     } catch (e: any) {
       toast({
@@ -1633,7 +1868,7 @@ function InfluencerContractModal({
   };
 
   const openSignature = () => {
-    if (locked) return;
+    if (locked) return false;
 
     if (!readyToSign) {
       toast({
@@ -1665,469 +1900,432 @@ function InfluencerContractModal({
     setShowSignModal(true);
   };
 
-  const signWithSignature = async (signatureDataUrl: string) => {
-    setIsWorking(true);
-    try {
-      await post("/contract/sign", {
-        contractId: effectiveContractId,
-        role: "influencer",
-        name: local.legalName || local.contactName,
-        email: local.contactEmail,
-        signatureImageDataUrl: signatureDataUrl,
-      });
+  // const signWithSignature = async (signatureDataUrl: string) => {
+  //   setIsWorking(true);
+  //   try {
+  //     await post("/contract/sign", {
+  //       contractId: effectiveContractId,
+  //       role: "influencer",
+  //       name: local.legalName || local.contactName,
+  //       email: local.contactEmail,
+  //       signatureImageDataUrl: signatureDataUrl,
+  //     });
 
-      toast({
-        icon: "success",
-        title: "Signed",
-        text: "Signature recorded.",
-      });
+  //     toast({
+  //       icon: "success",
+  //       title: "Signed",
+  //       text: "Signature recorded.",
+  //     });
 
-      setShowSignModal(false);
-      await fetchContractMeta();
-      onAfterAction?.();
-      onClose();
-    } catch (e: any) {
-      toast({
-        icon: "error",
-        title: "Sign Error",
-        text: apiMessage(e, "Failed to sign."),
-      });
-    } finally {
-      setIsWorking(false);
-    }
-  };
+  //     setShowSignModal(false);
+  //     await fetchContractMeta();
+  //     onAfterAction?.();
+  //     onClose();
+  //   } catch (e: any) {
+  //     toast({
+  //       icon: "error",
+  //       title: "Sign Error",
+  //       text: apiMessage(e, "Failed to sign."),
+  //     });
+  //   } finally {
+  //     setIsWorking(false);
+  //   }
+  // };
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      <div className="absolute right-0 top-0 h-full w-full bg-white shadow-2xl border-l flex flex-col">
-        <div className="relative h-24 overflow-hidden">
-          <div
-            className="absolute inset-0"
-          // style={{
-          //   background: "linear-gradient(135deg, #FFBF00 0%, #FFDB58 100%)",
-          // }}
-          />
-          <div className="relative z-10 p-5 text-gray-900 flex items-center justify-between h-full">
-            <div className="min-w-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/30 backdrop-blur-md flex items-center justify-center">
-                  <HiDocumentText className="w-6 h-6 text-gray-900" />
-                </div>
-                <div className="truncate">
-                  <div className="text-xs font-medium opacity-90 uppercase tracking-wider">
-                    {mode === "view"
-                      ? "View Contract"
-                      : influencerAccepted
-                        ? "Edit Contract Details"
-                        : "Accept Contract"}
-                  </div>
-                  <div className="text-lg font-bold truncate">
-                    {campaign?.productOrServiceName || "Campaign"}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-gray-800 truncate">
-                    {campaign?.brandName ? `${campaign.brandName}` : ""}{" "}
-                    {/* {campaign?.brandName && campaign?.id ? "•" : ""}{" "} */}
-                    {/* {campaign?.id ? `#${campaign.id.slice(-6)}` : ""} */}
-                  </div>
-                </div>
-              </div>
+    <TooltipProvider delayDuration={150}>
+      <InfluencerSidebarShell
+        isOpen={open && !showAcceptSignatureModal}
+        onClose={onClose}
+        title={influencerAccepted ? "UPDATE CONTRACT" : "ACCEPT CONTRACT"}
+        subtitle={`${campaign?.productOrServiceName || "Agreement"} • ${campaign?.brandName || ""}`}
+        previewUrl={previewUrl}
+        previewBlob={previewBlob}
+        sidebarOffset={sidebarOffset}
+        footer={
+          <>
+            <div className="mr-auto min-w-0 flex-1 text-xs">
+              {locked ? (
+                <span className="text-emerald-600">
+                  Locked — all required signatures have been captured.
+                </span>
+              ) : influencerAccepted ? (
+                <span className="text-emerald-600">
+                  Accepted — you can update and sign.
+                </span>
+              ) : (
+                <span className="text-amber-600">
+                  Fill details to accept the contract.
+                </span>
+              )}
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="inline-flex rounded-full border border-gray-300 overflow-hidden">
-                <button
-                  className={`px-3 py-1.5 text-sm ${mode === "view" ? "bg-white" : "bg-gray-100"
-                    } transition`}
-                  onClick={() => setMode("view")}
-                >
-                  View
-                </button>
-                {canEdit && (
-                  <button
-                    className={`px-3 py-1.5 text-sm ${mode === "edit" ? "bg-white" : "bg-gray-100"
-                      } transition`}
-                    onClick={() => setMode("edit")}
-                  >
-                    Edit
-                  </button>
-                )}
-              </div>
-              <button
-                className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200 hover:scale-110"
-                onClick={onClose}
-              >
-                <HiX className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-5 pt-3 flex flex-wrap gap-2 text-[11px]">
-          {meta?.status && (
-            <span
-              className={`px-2 py-1 rounded-full border ${locked
-                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                : "bg-yellow-50 border-yellow-200 text-yellow-700"
-                }`}
+            <Button
+              variant="outline"
+              className="shrink-0"
+              onClick={() =>
+                previewUrl ? window.open(previewUrl, "_blank") : generatePreview()
+              }
             >
-              Status: {String(meta.status).toUpperCase()}
-            </span>
-          )}
+              <Eye className="mr-2 h-5 w-5" />
+              Preview
+            </Button>
 
-          {(!!meta?.resendOf || (meta?.resendIteration ?? 0) > 0) && (
-            <span className="px-2 py-1 rounded-full border bg-blue-50 border-blue-200 text-blue-700">
-              Resent
-            </span>
-          )}
+            <Button
+              variant="secondary"
+              className="shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
+              onClick={() => {
+                if (previewUrl) {
+                  const a = document.createElement("a");
+                  a.href = previewUrl;
+                  a.download = `${campaign?.productOrServiceName || "contract"}.pdf`;
+                  a.click();
+                } else {
+                  generatePreview();
+                }
+              }}
+            >
+              <DownloadSimpleIcon />
+              <span>Download</span>
+            </Button>
 
-          <span className="px-2 py-1 rounded-full border bg-gray-50 border-gray-200 text-gray-700">
-            You: {influencerAccepted ? "Accepted" : "Pending"}
-          </span>
-
-          <span className="px-2 py-1 rounded-full border bg-gray-50 border-gray-200 text-gray-700">
-            Brand: {brandAccepted ? "Accepted" : "Pending"}
-          </span>
-
-          <span className="px-2 py-1 rounded-full border bg-gray-50 border-gray-200 text-gray-700">
-            You Signed: {influencerSigned ? "Yes" : "No"}
-          </span>
-
-          <span className="px-2 py-1 rounded-full border bg-gray-50 border-gray-200 text-gray-700">
-            Brand Signed: {brandSigned ? "Yes" : "No"}
-          </span>
-
-          {meta?.awaitingRole ? (
-            <span className="px-2 py-1 rounded-full border bg-gray-50 border-gray-200 text-gray-700">
-              Awaiting: {String(meta.awaitingRole)}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="h-[calc(100%-6.5rem)] overflow-y-auto">
-          {mode === "view" && (
-            <div className="p-5">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="font-semibold text-gray-800">Contract PDF</div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        previewUrl
-                          ? window.open(previewUrl, "_blank")
-                          : generatePreview()
-                      }
-                    >
-                      <HiOutlineEye className="mr-2 h-5 w-5" />
-                      {previewUrl ? "Open in New Tab" : "Load PDF"}
-                    </Button>
-                  </div>
-                </div>
-
-                {previewUrl ? (
-                  <iframe
-                    className="w-full h-[70vh] rounded border"
-                    src={previewUrl}
-                  />
-                ) : (
-                  <div className="rounded-lg border border-dashed p-10 text-center text-gray-500">
-                    Load the PDF to view your contract.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {mode === "edit" && (
-            <div className="p-5">
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 xl:sticky xl:top-4 self-start">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="font-semibold text-gray-800">Contract PDF</div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          previewUrl
-                            ? window.open(previewUrl, "_blank")
-                            : generatePreview()
-                        }
-                      >
-                        <HiOutlineEye className="mr-2 h-5 w-5" />
-                        {previewUrl ? "Open in New Tab" : "Load PDF"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => generatePreview()}
-                        disabled={isWorking}
-                      >
-                        Refresh
-                      </Button>
-                    </div>
-                  </div>
-
-                  {previewUrl ? (
-                    <iframe
-                      className="w-full h-[70vh] rounded border"
-                      src={previewUrl}
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-dashed p-10 text-center text-gray-500">
-                      Load the PDF to view your contract.
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-                  <div className="font-semibold text-gray-800 mb-3">
-                    {influencerAccepted
-                      ? "Edit Your Contract Details"
-                      : "Fill Your Details to Accept"}
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    <FloatingInput
-                      id="legalName"
-                      label="Legal Name"
-                      value={local.legalName}
-                      onChange={(v) => setLocal((p) => ({ ...p, legalName: v }))}
-                      disabled={!canEdit}
-                    />
-
-                    <FloatingInput
-                      id="contactName"
-                      label="Contact Name"
-                      value={local.contactName}
-                      onChange={(v) =>
-                        setLocal((p) => ({ ...p, contactName: v }))
-                      }
-                      disabled={!canEdit}
-                    />
-
-                    <FloatingInput
-                      id="postingHandleUrl"
-                      label="Posting Handle / Profile URL"
-                      value={local.postingHandleUrl}
-                      onChange={(v) =>
-                        setLocal((p) => ({ ...p, postingHandleUrl: v }))
-                      }
-                      disabled={!canEdit}
-                    />
-
-                    {/* <FloatingInput
-                      id="contactEmail"
-                      label="Contact Email"
-                      value={local.contactEmail}
-                      onChange={(v) =>
-                        setLocal((p) => ({ ...p, contactEmail: v }))
-                      }
-                      disabled={!canEdit}
-                    /> */}
-
-                    {/* <FloatingInput
-                      id="contactPhone"
-                      label="Contact Phone"
-                      value={local.contactPhone}
-                      onChange={(v) =>
-                        setLocal((p) => ({ ...p, contactPhone: v }))
-                      }
-                      disabled={!canEdit}
-                    /> */}
-
-                    {/* <FloatingInput
-                      id="whatsApp"
-                      label="WhatsApp"
-                      value={local.whatsApp}
-                      onChange={(v) => setLocal((p) => ({ ...p, whatsApp: v }))}
-                      disabled={!canEdit}
-                    /> */}
-                  </div>
-
-                  <div className="mt-3">
-                    <FloatingTextarea
-                      id="address"
-                      label="Address"
-                      value={local.address}
-                      onChange={(v) => setLocal((p) => ({ ...p, address: v }))}
-                      rows={4}
-                      disabled={!canEdit}
-                    />
-                  </div>
-                  <div className="mt-5 border-t pt-4">
-                    <div className="text-sm font-semibold text-gray-800 mb-3">
-                      FTC / Disclosure Acknowledgement
-                    </div>
-
-                    <FloatingTextarea
-                      id="ftcAcknowledgement"
-                      label="FTC / Disclosure Acknowledgement"
-                      value={local.ftcAcknowledgement}
-                      onChange={(v) =>
-                        setLocal((p) => ({ ...p, ftcAcknowledgement: v }))
-                      }
-                      rows={4}
-                      disabled={!canEdit}
-                    />
-                  </div>
-
-                  {isGifting && (
-                    <div className="mt-5 border-t pt-4">
-                      <div className="text-sm font-semibold text-gray-800 mb-3">
-                        Shipping Details
-                      </div>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                        <FloatingInput
-                          id="shipToName"
-                          label="Ship-To Name"
-                          value={local.shipToName}
-                          onChange={(v) => setLocal((p) => ({ ...p, shipToName: v }))}
-                          disabled={!canEdit}
-                        />
-
-                        <FloatingInput
-                          id="shipToPhone"
-                          label="Shipping Phone Number"
-                          value={local.shipToPhone}
-                          onChange={(v) => setLocal((p) => ({ ...p, shipToPhone: v }))}
-                          disabled={!canEdit}
-                        />
-                      </div>
-
-                      <div className="mt-3">
-                        <FloatingTextarea
-                          id="shipToAddress"
-                          label="Shipping Address"
-                          value={local.shipToAddress}
-                          onChange={(v) => setLocal((p) => ({ ...p, shipToAddress: v }))}
-                          rows={3}
-                          disabled={!canEdit}
-                        />
-                      </div>
-
-                      <div className="mt-3">
-                        <FloatingTextarea
-                          id="deliveryNotes"
-                          label="Delivery Instructions"
-                          value={local.deliveryNotes}
-                          onChange={(v) => setLocal((p) => ({ ...p, deliveryNotes: v }))}
-                          rows={3}
-                          disabled={!canEdit}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <div className="mt-5 border-t pt-4">
-                    <div className="text-sm font-semibold text-gray-800 mb-1">
-                      Payout Setup
-                    </div>
-                    <div className="text-xs text-gray-500 mb-3">
-                      Private — only you can see this. Never shared with the brand.
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                      <div className="lg:col-span-2">
-                        <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Payout Method
-                        </label>
-                        <select
-                          value={local.payoutMethod}
-                          onChange={(e) =>
-                            setLocal((p) => ({ ...p, payoutMethod: e.target.value }))
-                          }
-                          disabled={!canEdit}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-gray-700 disabled:bg-gray-50 disabled:text-gray-400"
-                        >
-                          <option value="">— Select payout method —</option>
-                          <option value="paypal">PayPal</option>
-                          <option value="bank_transfer">Bank Transfer / ACH</option>
-                          <option value="wise">Wise</option>
-                          <option value="payoneer">Payoneer</option>
-                          <option value="platform_wallet">CollabGlam Wallet</option>
-                        </select>
-                      </div>
-
-                      {/* <FloatingInput
-                        id="payoutAccount"
-                        label="Payout Account Email / ID"
-                        value={local.payoutAccount}
-                        onChange={(v) => setLocal((p) => ({ ...p, payoutAccount: v }))}
-                        disabled={!canEdit}
-                      /> */}
-
-                      <FloatingInput
-                        id="taxId"
-                        label="Tax ID (if applicable)"
-                        value={local.taxId}
-                        onChange={(v) => setLocal((p) => ({ ...p, taxId: v }))}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <Button
-                      onClick={acceptOrSave}
-                      disabled={isWorking || !liteLoaded}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    >
-                      {influencerAccepted ? "Save Changes" : "Accept & Save"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 flex items-center justify-between">
-          <div className="text-xs text-gray-600">
-            {locked ? (
-              <span className="text-emerald-600">
-                Locked — all required signatures have been captured.
-              </span>
-            ) : influencerAccepted ? (
-              <span className="text-emerald-600">
-                Accepted — you can view{canEdit ? ", edit," : ""} and sign.
-              </span>
-            ) : (
-              <span className="text-amber-600">
-                Fill details to accept the contract.
-              </span>
-            )}
-          </div>
-
-          {!locked &&
-            readyToSign &&
-            influencerAccepted &&
-            brandAccepted &&
-            !influencerSigned && (
+            {!locked && (
               <Button
-                className="bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] text-gray-900"
-                onClick={openSignature}
-                disabled={isWorking}
+                onClick={acceptOrSave}
+                disabled={isWorking || !liteLoaded}
+                className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
               >
-                <PenLine className="mr-2 h-4 w-4" />
-                Sign as Influencer
+                {influencerAccepted ? "Save Changes" : "Accept & Save"}
               </Button>
             )}
-        </div>
-      </div>
 
-      <SignatureModal
+            {!locked &&
+              readyToSign &&
+              influencerAccepted &&
+              brandAccepted &&
+              !influencerSigned && (
+                <Button
+                  className="shrink-0 bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] text-gray-900"
+                  onClick={openSignature}
+                  disabled={isWorking}
+                >
+                  <PenLine className="mr-2 h-4 w-4" />
+                  Sign as Influencer
+                </Button>
+              )}
+          </>
+        }
+      >
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 border-b border-gray-100 pb-3 text-xl font-semibold text-gray-800">
+            {influencerAccepted
+              ? "Edit Your Contract Details"
+              : "Fill Your Details to Accept"}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <FloatingInput
+              id="legalName"
+              label="Legal Name"
+              value={local.legalName}
+              onChange={(v) => setLocal((p) => ({ ...p, legalName: v }))}
+            // disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="contactEmail"
+              label="Email"
+              value={local.contactEmail}
+              onChange={(v) => setLocal((p) => ({ ...p, contactEmail: v }))}
+            //disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="contactPhone"
+              label="Phone"
+              value={local.contactPhone}
+              onChange={(v) => setLocal((p) => ({ ...p, contactPhone: v }))}
+            //disabled={!canEdit}
+            />
+
+            <FloatingSelect
+              label="Tax Form Type"
+              required
+              value={local.taxFormType || ""}
+              onValueChange={(v) =>
+                setLocal((p) => ({ ...p, taxFormType: v }))
+              }
+              disabled={!canEdit}
+            >
+              <SelectItem value="W-9">W-9</SelectItem>
+              <SelectItem value="W-8">W-8</SelectItem>
+            </FloatingSelect>
+            <FloatingInput
+              id="taxId"
+              label="Tax ID (SSN/EIN)"
+              value={local.taxId}
+              onChange={(v) => setLocal((p) => ({ ...p, taxId: v }))}
+            // disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="addressLine1"
+              label="Address Line 1"
+              value={local.addressLine1}
+              onChange={(v) => setLocal((p) => ({ ...p, addressLine1: v }))}
+            // disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="addressLine2"
+              label="Address Line 2"
+              value={local.addressLine2}
+              onChange={(v) => setLocal((p) => ({ ...p, addressLine2: v }))}
+            //disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="city"
+              label="City"
+              value={local.city}
+              onChange={(v) => setLocal((p) => ({ ...p, city: v }))}
+            //disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="state"
+              label="State"
+              value={local.state}
+              onChange={(v) => setLocal((p) => ({ ...p, state: v }))}
+            //disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="zip"
+              label="ZIP / Postal Code"
+              value={local.zip}
+              onChange={(v) => setLocal((p) => ({ ...p, zip: v }))}
+            //disabled={!canEdit}
+            />
+
+            <FloatingInput
+              id="country"
+              label="Country"
+              value={local.country}
+              onChange={(v) => setLocal((p) => ({ ...p, country: v }))}
+            //disabled={!canEdit}
+            />
+
+
+            <FloatingTextarea
+              id="notes"
+              label="Notes (optional)"
+              value={local.notes}
+              onChange={(v) => setLocal((p) => ({ ...p, notes: v }))}
+              rows={3}
+            />
+
+          </div>
+
+          {/* <div className="mt-3">
+            <FloatingTextarea
+              id="address"
+              label="Address"
+              value={local.address}
+              onChange={(v) => setLocal((p) => ({ ...p, address: v }))}
+              rows={4}
+              disabled={!canEdit}
+            />
+          </div> */}
+
+
+          <div className="mt-5 border-t pt-4">
+            <div className="mb-3 text-xl font-semibold text-gray-800">
+              FTC / Disclosure Acknowledgement
+            </div>
+            <FloatingTextarea
+              id="ftcAcknowledgement"
+              label="FTC / Disclosure Acknowledgement"
+              value={local.ftcAcknowledgement}
+              onChange={(v) =>
+                setLocal((p) => ({ ...p, ftcAcknowledgement: v }))
+              }
+              rows={4}
+            //disabled={!canEdit}
+            />
+          </div>
+
+          {isGifting && (
+            <div className="mt-5 border-t pt-4">
+              <div className="mb-3 font-semibold text-gray-800">
+                Shipping Details
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <FloatingInput
+                  id="shipToName"
+                  label="Ship-To Name"
+                  value={local.shipToName}
+                  onChange={(v) => setLocal((p) => ({ ...p, shipToName: v }))}
+                  disabled={!canEdit}
+                />
+
+                <FloatingInput
+                  id="shipToPhone"
+                  label="Shipping Phone Number"
+                  value={local.shipToPhone}
+                  onChange={(v) => setLocal((p) => ({ ...p, shipToPhone: v }))}
+                  disabled={!canEdit}
+                />
+              </div>
+
+              <div className="mt-3">
+                <FloatingTextarea
+                  id="shipToAddress"
+                  label="Shipping Address"
+                  value={local.shipToAddress}
+                  onChange={(v) =>
+                    setLocal((p) => ({ ...p, shipToAddress: v }))
+                  }
+                  rows={3}
+                  disabled={!canEdit}
+                />
+              </div>
+
+              <div className="mt-3">
+                <FloatingTextarea
+                  id="deliveryNotes"
+                  label="Delivery Instructions"
+                  value={local.deliveryNotes}
+                  onChange={(v) =>
+                    setLocal((p) => ({ ...p, deliveryNotes: v }))
+                  }
+                  rows={3}
+                  disabled={!canEdit}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </InfluencerSidebarShell>
+
+      <Dialog
+        open={showAcceptSignatureModal}
+        onOpenChange={(open) => {
+          if (!open) setShowAcceptSignatureModal(false);
+        }}
+      >
+        <DialogOverlay className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm" />
+
+        <DialogContent className="fixed left-1/2 top-1/2 z-[9999] w-[95vw] max-w-[480px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[24px] border-0 bg-white p-4 shadow-2xl">
+          <div className="space-y-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleSignatureFileChange}
+            />
+
+            <button
+              type="button"
+              className="block w-full rounded-2xl bg-[#F9F9F9] p-5 text-left"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="flex min-h-[140px] items-center justify-center rounded-2xl bg-white p-4">
+                {selectedSignaturePreview || savedSignatureUrl ? (
+                  <img
+                    src={selectedSignaturePreview || savedSignatureUrl}
+                    alt="Signature"
+                    className="max-h-24 w-auto object-contain"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-gray-400">
+                    <Signature className="h-32 w-32 text-black" />
+                    <span className="text-sm text-gray-500">
+                      Click to upload signature
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[13px] text-gray-400">
+                  <InfoIcon className="h-4 w-4" />
+                  <span>
+                    {selectedSignaturePreview || savedSignatureUrl
+                      ? "Signature is selected as primary"
+                      : "Click the signature area to upload"}
+                  </span>
+                </div>
+
+                <span className="flex items-center gap-1 text-[13px] font-medium text-gray-900">
+                  {selectedSignaturePreview || savedSignatureUrl
+                    ? "Change signature"
+                    : "Upload signature"}
+                  <ChevronDown className="h-4 w-4" />
+                </span>
+              </div>
+            </button>
+
+            <label className="flex cursor-pointer items-start gap-4 rounded-2xl border border-gray-100 bg-white p-5 transition-colors hover:bg-gray-50/50">
+              <div className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  checked={signatureChecked}
+                  onChange={(e) => setSignatureChecked(e.target.checked)}
+                />
+                <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white" />
+              </div>
+
+              <span className="text-[15px] leading-relaxed text-gray-800">
+                By signing, I confirm that I have read and therefore agree to all
+                contractual terms, which I acknowledge as legally binding.
+              </span>
+            </label>
+
+            {!signatureChecked && (
+              <div className="flex items-start gap-3 rounded-xl bg-[#FFF1F0] px-4 py-3 text-[14px] leading-tight text-[#E04438]">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>Please confirm that you agree to all terms before signing the contract.</p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="ghost"
+                className="rounded-xl px-6 text-gray-500 hover:bg-gray-100"
+                onClick={() => setShowAcceptSignatureModal(false)}
+              >
+                Cancel
+              </Button>
+
+              <Button
+                onClick={handleAcceptWithSignature}
+                disabled={
+                  !signatureChecked ||
+                  isWorking ||
+                  signatureLoading ||
+                  (!savedSignatureUrl && !signatureFile)
+                }
+                className="rounded-xl bg-black px-8 text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                Sign & Accept
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* <SignatureModal
         open={showSignModal}
         onClose={() => setShowSignModal(false)}
         title="Sign as Influencer"
         onSubmit={signWithSignature}
-      />
-    </div>
+      /> */}
+    </TooltipProvider>
   );
 }
 
@@ -2155,7 +2353,8 @@ export default function MyCampaignsPage() {
   const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [sidebarOffset, setSidebarOffset] = useState(0);
   const [activeTab, setActiveTab] = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [campaignType, setCampaignType] = useState("all");
@@ -2187,7 +2386,22 @@ export default function MyCampaignsPage() {
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
 
   const router = useRouter();
+  useEffect(() => {
+    if (!pageRef.current) return;
 
+    const update = () => {
+      if (pageRef.current) {
+        setSidebarOffset(pageRef.current.getBoundingClientRect().left);
+      }
+    };
+
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(document.documentElement);
+
+    return () => ro.disconnect();
+  }, []);
   const fetchCampaigns = useCallback(
     async (tab: string = activeTab) => {
       setIsLoading(true);
@@ -2209,60 +2423,32 @@ export default function MyCampaignsPage() {
         if (tab === "applied") {
           res = await apiGetAppliedCampaigns(id, token);
         } else if (tab === "active") {
-          const [myCampaignsResult, adminAcceptedResult] = await Promise.allSettled([
-            apiGetMyCampaigns(
-              {
-                influencerId: id,
-                page: 1,
-                limit: 10,
-                search: searchInput || "",
-              },
-              token
-            ),
-            apiGetAcceptedAdminCreatedCampaigns(
-              {
-                influencerId: id,
-                page: 1,
-                limit: 100,
-                includeCampaign: 1,
-                includeNames: 1,
-                includeFullCampaignDetails: 1,
-              },
-              token
-            ),
-          ]);
-
-          const myCampaignsData =
-            myCampaignsResult.status === "fulfilled"
-              ? extractCampaignArray(myCampaignsResult.value)
-              : [];
-
-          const adminAcceptedData =
-            adminAcceptedResult.status === "fulfilled"
-              ? normalizeAcceptedAdminCampaigns(adminAcceptedResult.value)
-              : [];
-
-          if (
-            myCampaignsResult.status === "rejected" &&
-            adminAcceptedResult.status === "rejected"
-          ) {
-            throw (
-              myCampaignsResult.reason ||
-              adminAcceptedResult.reason ||
-              new Error("Failed to load active campaigns.")
-            );
-          }
-
-          res = {
-            campaigns: mergeCampaignLists(adminAcceptedData, myCampaignsData),
-          };
+          res = await apiGetMyCampaigns(
+            {
+              influencerId: id,
+              page: 1,
+              limit: 10,
+              search: searchInput || "",
+            },
+            token
+          );
         } else if (tab === "Contracted") {
           res = await apiGetContractedCampaigns(id, token);
         } else {
           res = await apiGetAllCampaigns(id);
         }
 
-        const rawCampaigns = extractCampaignArray(res);
+        const rawCampaigns = Array.isArray(res)
+          ? res
+          : Array.isArray((res as any)?.campaigns)
+            ? (res as any).campaigns
+            : Array.isArray((res as any)?.items)
+              ? (res as any).items
+              : Array.isArray((res as any)?.data)
+                ? (res as any).data
+                : Array.isArray((res as any)?.contracts)
+                  ? (res as any).contracts
+                  : [];
 
         const mapped = rawCampaigns.map(mapApiCampaign);
         setCampaigns(mapped);
@@ -2587,10 +2773,9 @@ export default function MyCampaignsPage() {
     creatorStatus !== "all" ||
     categoryIds.length > 0 ||
     aiCreated;
-
   return (
     <TooltipProvider>
-      <div className="min-h-screen">
+      <div className="min-h-screen" >
         <div className="max-w-[1400px] mx-auto px-6 py-10 space-y-10">
           <div className="flex items-center justify-between">
             <div>
@@ -2728,7 +2913,8 @@ export default function MyCampaignsPage() {
                 const { form, meta: previewMeta } = campaignToPreview(campaign);
                 const contractMeta = metaCache[campaign.id] ?? null;
                 const effectiveContractId =
-                  contractMeta?.contractId || campaign.contractId;
+                  contractMeta?._id || contractMeta?.contractId || campaign.contractId;
+                console.log("contractMeta", contractMeta)
 
                 const contractProp =
                   campaign.isContracted === 1 && effectiveContractId
@@ -2800,8 +2986,8 @@ export default function MyCampaignsPage() {
           contractId={editorContractId}
           campaign={editorCampaign}
           readOnly={editorReadOnly}
-          initialMode={editorInitialMode}
           onAfterAction={refreshMeta}
+          sidebarOffset={sidebarOffset}
         />
       )}
 

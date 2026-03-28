@@ -16,7 +16,6 @@ export type ApplicantDecisionField =
   | "isShortlisted"
   | "isUndicided"
   | "isRejected";
-
 export type InfluencerRow = {
   id: string;
   profile: {
@@ -35,6 +34,7 @@ export type InfluencerRow = {
   appliedDate: string;
   status?: string;
   budget?: string;
+  contractId?: string;
 };
 
 type BulkHeaderRenderer = (args: {
@@ -48,11 +48,12 @@ type RowRenderer = (row: InfluencerRow) => React.ReactNode;
 type InfluencerTableProps = {
   rows: InfluencerRow[];
   onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
-  variant?: "default" | "shortlisted" | "recommended";
+  variant?: "default" | "shortlisted" | "recommended" | "active";
   renderRecommendedActions?: RowRenderer;
   renderShortlistedActions?: RowRenderer;
+  renderActiveActions?: RowRenderer;
   renderStatus?: RowRenderer;
-
+  renderDefaultActions?: (row: InfluencerRow) => React.ReactNode;
   selectable?: boolean;
   selectedIds?: string[];
   onToggleRow?: (id: string) => void;
@@ -237,18 +238,27 @@ function PillTag({ text, title }: { text: string; title?: string }) {
   );
 }
 
-function ActionGroup({
-  onAction,
+// AFTER
+export function ActionGroup({
+  onReject,
+  onUndecided,
+  onSelect,
+  disabledButtons = {},
 }: {
-  onAction?: (action: ApplicantDecisionField) => void;
+  onReject?: () => void;
+  onUndecided?: () => void;
+  onSelect?: () => void;
+  disabledButtons?: { reject?: boolean; undecided?: boolean; select?: boolean };
 }) {
   const b = "var(--Light-Border-Primary,#D6D6D6)";
 
   return (
     <div className="inline-flex items-stretch justify-center h-[3.375rem] w-fit">
+
       <button
         type="button"
-        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
+        disabled={disabledButtons.reject}
+        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         style={{
           borderTop: `1px solid ${b}`,
           borderBottom: `1px solid ${b}`,
@@ -256,21 +266,21 @@ function ActionGroup({
           borderRadius: "0.5rem 0 0 0.5rem",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background =
-            "var(--Light-Background-Negative-Subtle, #F9CACA)";
+          if (!disabledButtons.reject)
+            e.currentTarget.style.background = "var(--Light-Background-Negative-Subtle, #F9CACA)";
         }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         aria-label="Reject"
-        onClick={() => onAction?.("isRejected")}
+        onClick={disabledButtons.reject ? undefined : onReject}
       >
         <X size={18} weight="bold" />
       </button>
 
+
       <button
         type="button"
-        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
+        disabled={disabledButtons.undecided}
+        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         style={{
           borderTop: `1px solid ${b}`,
           borderBottom: `1px solid ${b}`,
@@ -278,21 +288,21 @@ function ActionGroup({
           borderRadius: 0,
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background =
-            "var(--Light-Background-BrandSubtle, #FFF9E6)";
+          if (!disabledButtons.undecided)
+            e.currentTarget.style.background = "var(--Light-Background-BrandSubtle, #FFF9E6)";
         }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         aria-label="Undecided"
-        onClick={() => onAction?.("isUndicided")}
+        onClick={disabledButtons.undecided ? undefined : onUndecided}
       >
         <QuestionMark size={18} weight="bold" />
       </button>
 
+
       <button
         type="button"
-        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer"
+        disabled={disabledButtons.select}
+        className="flex items-center justify-center h-full w-[3.3125rem] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
         style={{
           borderTop: `1px solid ${b}`,
           borderBottom: `1px solid ${b}`,
@@ -301,13 +311,12 @@ function ActionGroup({
           borderRadius: "0 0.5rem 0.5rem 0",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.background = "var(--Success-50, #EAF6EC)";
+          if (!disabledButtons.select)
+            e.currentTarget.style.background = "var(--Success-50, #EAF6EC)";
         }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-        }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         aria-label="Selected"
-        onClick={() => onAction?.("isShortlisted")}
+        onClick={disabledButtons.select ? undefined : onSelect}
       >
         <Check size={18} weight="bold" />
       </button>
@@ -331,10 +340,11 @@ function XScroll({ children }: { children: React.ReactNode }) {
 
 const colDefault = {
   profile: "min-w-[16rem] flex-[3_1_0%] min-w-0",
-  category: "min-w-[10rem] flex-[2.5_1_0%] min-w-0",
-  followers: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
-  engagement: "min-w-[9rem] flex-[2.5_1_0%] min-w-0",
-  applied: "min-w-[10rem] flex-[2.5_1_0%] min-w-0",
+  category: "min-w-[10rem] flex-[2.2_1_0%] min-w-0",
+  status: "min-w-[10rem] flex-[2.2_1_0%] min-w-0",
+  followers: "min-w-[9rem] flex-[2.2_1_0%] min-w-0",
+  engagement: "min-w-[9rem] flex-[2.2_1_0%] min-w-0",
+  applied: "min-w-[10rem] flex-[2.2_1_0%] min-w-0",
   actions: "min-w-[18rem] flex-[3_1_0%] min-w-0",
 };
 
@@ -352,10 +362,14 @@ function DefaultTable({
   rows,
   onActionClick,
   renderBulkHeader,
+  renderActions,
+  renderStatus,
 }: {
   rows: InfluencerRow[];
   onActionClick?: (row: InfluencerRow, action: ApplicantDecisionField) => void;
   renderBulkHeader?: BulkHeaderRenderer;
+  renderActions?: RowRenderer;
+  renderStatus?: RowRenderer;
 }) {
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
 
@@ -432,7 +446,12 @@ function DefaultTable({
                 <span style={headerTextStyle}>Category</span>
                 <HeaderCarets />
               </div>
-
+              <div
+                className={`${colDefault.status} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
+              >
+                <span style={headerTextStyle}>Status</span>
+                <HeaderCarets />
+              </div>
               <div
                 className={`${colDefault.followers} flex h-14 items-center justify-between px-4 py-[0.625rem]`}
               >
@@ -467,10 +486,10 @@ function DefaultTable({
               const plat = getPlatformRows(r);
               const appliedText =
                 typeof r.appliedDate === "string" &&
-                r.appliedDate.toLowerCase().startsWith("applied")
+                  r.appliedDate.toLowerCase().startsWith("applied")
                   ? r.appliedDate
                   : `applied ${r.appliedDate}`;
-
+              const statusText = r.status ?? "Shortlisted";
               return (
                 <div
                   key={r.id}
@@ -539,7 +558,11 @@ function DefaultTable({
                   >
                     <PillTag text={r.category} />
                   </div>
-
+                  <div
+                    className={`${colDefault.status} flex h-[5.5rem] items-center justify-center bg-white px-4 py-[0.625rem]`}
+                  >
+                    {renderStatus ? renderStatus(r) : <PillTag text={statusText} />}
+                  </div>
                   <div
                     className={`${colDefault.followers} flex h-[5.5rem] bg-white px-4 py-[0.625rem]`}
                   >
@@ -633,15 +656,21 @@ function DefaultTable({
                   <div
                     className={`${colDefault.actions} flex h-[5.5rem] items-center justify-end gap-2 bg-white pl-4 pr-4 py-[0.625rem] rounded-r-[0.75rem]`}
                   >
-                    <ActionGroup onAction={(action) => onActionClick?.(r, action)} />
 
-                    <button
+                    {(renderActions ? renderActions(r) : null) ?? (
+                      <ActionGroup
+                        onReject={() => onActionClick?.(r, "isRejected")}
+                        onUndecided={() => onActionClick?.(r, "isUndicided")}
+                        onSelect={() => onActionClick?.(r, "isShortlisted")}
+                      />
+                    )}
+                    {/* <button
                       type="button"
                       aria-label="More actions"
                       className="flex items-center justify-center h-9 w-9 aspect-square cursor-pointer rounded-[0.5rem] transition-colors hover:bg-[#EDEDED]"
                     >
                       <DotsThree size={20} weight="bold" />
-                    </button>
+                    </button> */}
                   </div>
                 </div>
               );
@@ -685,7 +714,7 @@ function ShortlistedTable({
 
   const allChecked = selectable
     ? selectableRows.length > 0 &&
-      selectableRows.every((row) => selectedIds.includes(row.id))
+    selectableRows.every((row) => selectedIds.includes(row.id))
     : rows.length > 0 && rows.every((r) => Boolean(selected[r.id]));
 
   const someChecked = selectable
@@ -931,7 +960,11 @@ function ShortlistedTable({
                   <div
                     className={`${colShort.status} flex h-[5.5rem] items-center justify-center px-4`}
                   >
-                    {renderStatus ? renderStatus(r) : <PillTag text={statusText} />}
+                    {renderStatus ? (
+                      renderStatus(r)
+                    ) : (
+                      <PillTag text={statusText} />
+                    )}
                   </div>
 
                   <div
@@ -1010,7 +1043,7 @@ function RecommendedTable({
             const plat = getPlatformRows(r);
             const appliedText =
               typeof r.appliedDate === "string" &&
-              r.appliedDate.toLowerCase().startsWith("applied")
+                r.appliedDate.toLowerCase().startsWith("applied")
                 ? r.appliedDate
                 : `applied ${r.appliedDate}`;
 
@@ -1202,8 +1235,10 @@ export function InfluencerTable({
   rows,
   onActionClick,
   variant = "default",
+  renderDefaultActions,
   renderRecommendedActions,
   renderShortlistedActions,
+  renderActiveActions,
   renderStatus,
   selectable = false,
   selectedIds = [],
@@ -1222,11 +1257,11 @@ export function InfluencerTable({
     );
   }
 
-  if (variant === "shortlisted") {
+  if (variant === "shortlisted" || variant === "active") {
     return (
       <ShortlistedTable
         rows={rows}
-        renderActions={renderShortlistedActions}
+        renderActions={variant === "active" ? renderActiveActions : renderShortlistedActions}
         renderStatus={renderStatus}
         selectable={selectable}
         selectedIds={selectedIds}
@@ -1244,6 +1279,7 @@ export function InfluencerTable({
       rows={rows}
       onActionClick={onActionClick}
       renderBulkHeader={renderBulkHeader}
+      renderActions={renderDefaultActions}
     />
   );
 }

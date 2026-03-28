@@ -13,6 +13,7 @@ const MILESTONE_BASE = "/milestone";
 const DELIVERABLE_BASE = "/deliverable";
 const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 const Apply_Base = "/apply";
+const CONTRACT_BASE = "/contract";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -1619,4 +1620,61 @@ export type BrandLiteResponse = {
 
 export async function apiGetBrandLite(brandId: string) {
   return apiGet<BrandLiteResponse>(`${BRAND_BASE}/lite`, { brandId });
+}
+
+export type BrandProfileResponse = {
+  _id: string;
+  brandId: string;
+  brandName?: string;
+  name?: string;
+  email?: string;
+  companySize?: string;
+  industry?: string;
+
+  page1?: Array<{ question: string; answers: string[] }>;
+  page2?: Array<{ question: string; answers: string[] }>;
+  page3?: Array<{ question: string; answers: string[] }>;
+
+  ispage1Skip?: boolean;
+  ispage2Skip?: boolean;
+  ispage3Skip?: boolean;
+
+  proxyEmail?: string;
+  profilePic?: string;
+  isProfilePicSkip?: boolean;
+
+  subscription?: any;
+  subscriptionDetails?: any;
+
+  createdAt?: string;
+  updatedAt?: string;
+
+  [key: string]: any;
+};
+
+export async function apiGetBrandProfile(brandId: string) {
+  return apiPost<BrandProfileResponse>(`${BRAND_BASE}/profile`, {
+    brandId,
+  });
+}
+
+export async function apigetSignatureExistance(brandId: string) {
+  console.log("called apigetSignatureExistance")
+  return apiGet(`${CONTRACT_BASE}/signature/${brandId}`)
+}
+
+
+export async function apipostSignatureUpload(payload: {
+  brandId: string;
+  signature: File;
+}) {
+  const formData = new FormData();
+  formData.append("brandId", payload.brandId);
+  formData.append("signature", payload.signature);
+
+  return apiPost(`${CONTRACT_BASE}/upload`, formData);
+}
+
+export async function apiGetManageContractInfo(contractId:string) {
+  return apiGet(`${CONTRACT_BASE}/manage/${contractId}`)
 }

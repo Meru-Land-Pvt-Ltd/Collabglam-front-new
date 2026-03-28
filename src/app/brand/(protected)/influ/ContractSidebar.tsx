@@ -12,6 +12,9 @@ import {
   ClipboardText,
   PenNib,
   SealCheck,
+  Signature,
+  DownloadSimpleIcon,
+  ArrowSquareInIcon,
 } from "@phosphor-icons/react";
 import { FloatingInput } from "@/components/ui/floatingInput";
 import {
@@ -22,9 +25,14 @@ import {
 import { LabeledTextarea } from "@/components/ui/textAreaComp";
 import { FloatingDateInput } from "@/components/ui/date";
 import { FloatingTagInput } from "@/components/ui/tagInput";
-
+// import MinimalPdfPreview from "./MinimalPdfPreview";
+import dynamic from "next/dynamic";
+import SignatureModal from "./SignatureModal";
+import { apigetSignatureExistance, apipostSignatureUpload } from "../../services/brandApi";
+const MinimalPdfPreview = dynamic(() => import("@/components/ui/MinimalPdfPreview"), {
+  ssr: false,
+});
 type PaymentType = "fixed_payment" | "milestone_based" | "product_gifting";
-
 type ContractMeta = {
   contractId: string;
   campaignId: string;
@@ -49,9 +57,11 @@ type ContractMilestone = {
 type ScheduleADeliverable = {
   id: string;
   srNo: number;
-  platformHandle: string;
+  platform: string;
+  handle: string;
   deliverableFormat: string;
   qty: string;
+  draftRequired: boolean;
   draftDue: string;
   liveDate: string;
 };
@@ -71,6 +81,8 @@ type ContractFormState = {
     noticeEmail: string;
     noticePhone: string;
     billingAddress: string;
+    brandPoc: string;
+    brandPocDesignation: string;
   };
   influencer: {
     legalName: string;
@@ -175,7 +187,7 @@ type ContractSidebarExtractedProps = {
   campaignTimeline?: { startDate?: string | Date; endDate?: string | Date } | null;
   onSuccess?: () => void | Promise<void>;
   initialContract?: ContractMeta | null;
-
+  forcedPaymentType?: PaymentType;
   // optional bulk support
   mode?: "single" | "bulk";
   bulkInfluencers?: any[];
@@ -193,6 +205,11 @@ const PAYMENT_TYPE = {
   GIFTING: "product_gifting",
 } as const;
 
+const CONTRACT_TYPE_LABELS: Record<PaymentType, string> = {
+  fixed_payment: "Fixed Contract",
+  milestone_based: "Milestone Contract",
+  product_gifting: "Product Gifting Contract",
+};
 const YES_NO_BOOL_OPTIONS = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
@@ -211,7 +228,7 @@ const DELIVERABLE_FORMAT_OPTIONS = [
 const PAYMENT_TYPE_OPTIONS = [
   { value: "fixed_payment", label: "Fixed Payment" },
   { value: "milestone_based", label: "Milestone Based" },
-  { value: "product_gifting", label: "Product Gifting" },
+  // { value: "product_gifting", label: "Product Gifting" },
 ];
 
 const PAYMENT_STRUCTURE_OPTIONS = [
@@ -298,7 +315,8 @@ const SIDEBAR_TOOLTIPS = {
   brandNoticePhone: "Phone number for urgent campaign or contract communication.",
   brandBillingAddress:
     "Official billing address used for invoicing and records.",
-
+  brandPoc: "",
+  brandPocDesignation: "",
   campaignTitle:
     "Internal or external campaign title / ID used to identify this agreement.",
   campaignProductsServices: "Products or services covered by this contract.",
@@ -332,7 +350,7 @@ const SIDEBAR_TOOLTIPS = {
   reshootFee: "Fee applicable when a reshoot is requested.",
   minimumLivePeriod: "Minimum time the content must stay live.",
 
-  totalCampaignFee: "Total compensation for the campaign.",
+  totalCampaignFee: "Total compensation for the influencer.",
   currency: "Currency in which compensation is denominated.",
   paymentStructure: "How payment is split across milestones or stages.",
   customSplit: "Custom breakdown of the payment structure.",
@@ -519,11 +537,13 @@ function defaultUsageRightsRows(): UsageRightsRow[] {
 
 function createDefaultScheduleDeliverable(index: number = 1): ScheduleADeliverable {
   return {
-    id: `deliverable-${index}`,
+    id: createRowId(),
     srNo: index,
-    platformHandle: "",
+    platform: "",
+    handle: "",
     deliverableFormat: "",
     qty: "1",
+    draftRequired: false,
     draftDue: "",
     liveDate: "",
   };
@@ -537,6 +557,8 @@ function createDefaultContractForm(): ContractFormState {
       noticeEmail: "",
       noticePhone: "",
       billingAddress: "",
+      brandPoc: "",
+      brandPocDesignation: "",
     },
     influencer: {
       legalName: "",
@@ -558,20 +580,20 @@ function createDefaultContractForm(): ContractFormState {
       minimumVideoSpecs: "",
       preShootScriptRequired: false,
       preShootScriptDue: "",
-      preShootScriptReviewBusinessDays: "2",
+      preShootScriptReviewBusinessDays: "",
       mandatoryTagsMentionsLinksCodes: "",
       review: {
-        includedRevisionRounds: "1",
+        includedRevisionRounds: "",
         additionalRevisionFee: "",
         reshootObligation:
-          "No reshoot required except for material failure to follow approved brief",
+          "",
         reshootFee: "",
         minimumLivePeriod: "",
       },
       commercial: {
         totalCampaignFee: "",
-        currency: "USD",
-        paymentStructure: "50% advance / 50% balance",
+        currency: "",
+        paymentStructure: "",
         customSplit: "",
         advancePaymentTrigger: "",
         remainingPaymentTrigger: "",
@@ -582,51 +604,51 @@ function createDefaultContractForm(): ContractFormState {
         milestones: [createDefaultCommercialMilestone()],
       },
       rawFiles: {
-        rawSourceFileDelivery: "Not included",
+        rawSourceFileDelivery: "",
         deliveryDue: "",
         format: "",
         analyticsReportingDeadline: "",
         analyticsReportingItems: "",
       },
       shipping: {
-        productShippingApplicable: "No",
+        productShippingApplicable: "",
         shipToName: "",
         shipToAddress: "",
         shipToPhone: "",
         productReceiptConfirmationDeadline: "",
-        productReturnable: "Gift / keep product",
+        productReturnable: "",
         returnWindowMethod: "",
         riskOfLossNotes: "",
       },
       usageRights: {
         rows: defaultUsageRightsRows(),
-        attributionRequirement: "No attribution required",
+        attributionRequirement: "",
         attributionText: "",
-        editingRights: "Cropping / resizing only",
+        editingRights: "",
         musicStockAssetResponsibility:
-          "Brand responsible for separate commercial licensing",
+          "",
       },
       compliance: {
         creativeBriefMandatoryTalkingPoints: "",
         restrictedStatements: "",
       },
       exclusivity: {
-        competitorBlackout: "None",
+        competitorBlackout: "",
         categoryCompetitorList: "",
         blackoutPeriod: "",
-        optionalMoralsClause: "Not included",
+        optionalMoralsClause: "",
       },
       cancellation: {
-        killFeeOrProrata: "None",
+        killFeeOrProrata: "",
         refundOfUnearnedAdvance:
-          "Yes — on material non-performance / uncured breach",
+          "",
       },
       dispute: {
-        governingLaw: "Nevada, USA",
-        disputeResolutionMethod: "AAA arbitration",
+        governingLaw: "",
+        disputeResolutionMethod: "",
         disputeVenue: "",
-        arbitrationSeat: "Las Vegas, Nevada, USA",
-        attorneysFees: "Each Party bears own fees",
+        arbitrationSeat: "",
+        attorneysFees: "",
       },
     },
   };
@@ -698,7 +720,60 @@ function toast(opts: {
     customClass: { popup: "rounded-lg border border-gray-200" },
   });
 }
+function extractBrandSignature(response: any) {
+  const payload = response?.data ?? response ?? {};
+  const message = String(payload?.message || "");
 
+  // The record might be an object (from some endpoints) or the payload itself is the doc
+  const record =
+    payload?.data ||
+    payload?.activeSignature ||
+    payload?.brandSignature ||
+    null;
+
+  // ✅ _id is at the TOP LEVEL of payload (from GET /contract/signature/:brandId)
+  // record?.signature is the data URL string — not an object with _id
+  const signatureId =
+    typeof payload?._id === "string" && payload._id
+      ? payload._id
+      : typeof record?._id === "string" && record._id
+        ? record._id
+        : "";
+
+  // signature is also directly on payload
+  const rawSignature =
+    typeof payload?.signature === "string" && payload.signature
+      ? payload.signature
+      : typeof record?.signature === "string"
+        ? record.signature
+        : typeof record?.dataUrl === "string"
+          ? record.dataUrl
+          : typeof record?.image === "string"
+            ? record.image
+            : typeof record?.imageUrl === "string"
+              ? record.imageUrl
+              : typeof record?.signatureUrl === "string"
+                ? record.signatureUrl
+                : "";
+
+  const src =
+    rawSignature.trim().startsWith("<svg")
+      ? `data:image/svg+xml;utf8,${encodeURIComponent(rawSignature)}`
+      : rawSignature;
+
+  const notFound =
+    message.toLowerCase().includes("active brand signature not found") ||
+    message.toLowerCase().includes("signature not found");
+
+  console.log("extractBrandSignature →", { signatureId, hasRawSig: !!rawSignature, notFound });
+
+  return {
+    hasSignature: Boolean(rawSignature) && !notFound,
+    src,
+    signatureData: rawSignature,
+    signatureId,
+  };
+}
 export default function ContractSidebarExtracted({
   open,
   onClose,
@@ -710,26 +785,34 @@ export default function ContractSidebarExtracted({
   campaignTimeline = null,
   onSuccess,
   initialContract = null,
+  forcedPaymentType,
   mode = "single",
   bulkInfluencers = [],
 }: ContractSidebarExtractedProps) {
   const isBulkMode = mode === "bulk";
   const primaryInfluencer = isBulkMode ? bulkInfluencers?.[0] ?? null : influencer;
-
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [resolvedBrandId, setResolvedBrandId] = useState<string | null>(brandIdProp);
   const [currentContract, setCurrentContract] = useState<ContractMeta | null>(
     initialContract
   );
   const [requestedEffDate, setRequestedEffDate] = useState("");
   const [requestedEffTz, setRequestedEffTz] = useState(DEFAULT_TIMEZONE);
-
+  const [hasActiveBrandSignature, setHasActiveBrandSignature] = useState(false);
+  const [checkingSignature, setCheckingSignature] = useState(false);
+  const [activeBrandSignatureData, setActiveBrandSignatureData] = useState("");
+  const [inlineSignatureTab, setInlineSignatureTab] = useState<"default" | "draw">("default");
+  const [inlineDrawnSig, setInlineDrawnSig] = useState("");
+  const [inlineAgreed, setInlineAgreed] = useState(false);
+  const [inlineShowError, setInlineShowError] = useState(false);
   const [contractForm, setContractForm] = useState<ContractFormState>(
     createDefaultContractForm()
   );
+  const [activeBrandSignatureId, setActiveBrandSignatureId] = useState("");
   const [deliverables, setDeliverables] = useState<ScheduleADeliverable[]>([
     createDefaultScheduleDeliverable(),
   ]);
-
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [currencyOptions, setCurrencyOptions] = useState<CurrencyOption[]>([]);
   const [tzOptions, setTzOptions] = useState<TzOption[]>([]);
   const [contractLoading, setContractLoading] = useState(false);
@@ -738,23 +821,156 @@ export default function ContractSidebarExtracted({
   const [previewUrl, setPreviewUrl] = useState("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
+  const [signatureStatus, setSignatureStatus] = useState<
+    "idle" | "checking" | "exists" | "missing"
+  >("idle");
+  console.log("resolvebrandId", resolvedBrandId)
+  const [activeBrandSignatureSrc, setActiveBrandSignatureSrc] = useState("");
+
+  const handleDownloadContract = useCallback(
+    async (filename = "BrandxInfluencer_contract.pdf") => {
+      try {
+        setContractLoading(true);
+
+        // 1. If preview already exists, download that directly
+        if (previewBlob) {
+          const url = URL.createObjectURL(previewBlob);
+
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+
+          URL.revokeObjectURL(url);
+          return;
+        }
+
+        // 2. Otherwise fetch saved/generated contract from backend
+        const contractId = currentContract?.contractId;
+        if (!contractId) {
+          Swal.fire(
+            "Info",
+            "Generate a preview first or create the contract before downloading.",
+            "info"
+          );
+          return;
+        }
+
+        const res = await api.post(
+          "/contract/viewPdf",
+          { contractId },
+          { responseType: "blob" }
+        );
+
+        const blob = new Blob([res.data], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        URL.revokeObjectURL(url);
+      } catch (e: any) {
+        Swal.fire(
+          "Error",
+          e?.response?.data?.message || e?.message || "Failed to download contract PDF.",
+          "error"
+        );
+      } finally {
+        setContractLoading(false);
+      }
+    },
+    [previewBlob, currentContract?.contractId]
+  );
+
+  useEffect(() => {
+    if (!open || !resolvedBrandId) {
+      setSignatureStatus("idle");
+      setActiveBrandSignatureSrc("");
+      setActiveBrandSignatureData("");
+      setActiveBrandSignatureId("");
+      return;
+    }
+
+    let mounted = true;
+
+    (async () => {
+      setSignatureStatus("checking");
+
+      try {
+        const res = await apigetSignatureExistance(resolvedBrandId);
+        if (!mounted) return;
+
+        const { hasSignature, src, signatureData, signatureId } = extractBrandSignature(res);
+
+        console.log("Signature check →", { hasSignature, signatureId });
+
+        if (hasSignature) {
+          setSignatureStatus("exists");          // ← THIS WAS MISSING
+          setActiveBrandSignatureSrc(src || ""); // ← THIS WAS MISSING
+          setActiveBrandSignatureData(signatureData || ""); // ← THIS WAS MISSING
+          setActiveBrandSignatureId(signatureId || "");
+        } else {
+          setSignatureStatus("missing");
+          setActiveBrandSignatureSrc("");
+          setActiveBrandSignatureData("");
+          setActiveBrandSignatureId("");
+        }
+      } catch (error: any) {
+        if (!mounted) return;
+        const status = error?.response?.status;
+        const message = error?.response?.data?.message || error?.message || "";
+        const notFound =
+          status === 404 ||
+          String(message).toLowerCase().includes("active brand signature not found") ||
+          String(message).toLowerCase().includes("signature not found");
+
+        setSignatureStatus(notFound ? "missing" : "missing");
+        setActiveBrandSignatureSrc("");
+        setActiveBrandSignatureData("");
+        setActiveBrandSignatureId("");
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [open, resolvedBrandId]);
+  useEffect(() => {
+    if (!open) return;
+
+    setInlineSignatureTab("default");
+    setInlineDrawnSig("");
+    setInlineAgreed(false);
+    setInlineShowError(false);
+  }, [open]);
+
 
   useEffect(() => {
     if (brandIdProp) {
       setResolvedBrandId(brandIdProp);
       return;
     }
-    if (typeof window !== "undefined") {
-      setResolvedBrandId(localStorage.getItem("brandId"));
-    }
-  }, [brandIdProp]);
 
+    if (typeof window !== "undefined") {
+      const storedBrandId = localStorage.getItem("brandId");
+      setResolvedBrandId(storedBrandId || null);
+    }
+  }, [brandIdProp, open]);
+
+  const isPreShootScriptRequired = Boolean(
+    getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
+  );
   const activePaymentType = useMemo(
     () => normalizePaymentType(contractForm.campaign.paymentType),
     [contractForm.campaign.paymentType]
   );
 
   const clearPreview = useCallback(() => {
+    setPreviewBlob(null);
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return "";
@@ -775,6 +991,8 @@ export default function ContractSidebarExtracted({
         base.brand.noticeEmail = localStorage.getItem("brandEmail") || "";
         base.brand.noticePhone = localStorage.getItem("brandPhone") || "";
         base.brand.billingAddress = localStorage.getItem("brandAddress") || "";
+        // base.brand.brandPoc = localStorage.getItem("brandPOC") || "";
+        // base.brand.brandPocDesignation = localStorage.getItem("brandPOCDesignation") || "";
       }
 
       base.influencer.legalName = inf?.name || "";
@@ -817,7 +1035,8 @@ export default function ContractSidebarExtracted({
       }
 
       const seededDeliverable = createDefaultScheduleDeliverable();
-      seededDeliverable.platformHandle = inf?.handle ? sanitizeHandle(inf.handle) : "";
+      seededDeliverable.platform = inf?.primaryPlatform || "";
+      seededDeliverable.handle = inf?.handle ? sanitizeHandle(inf.handle) : "";
 
       const initialPaymentType = normalizePaymentType(
         meta?.content?.campaign?.paymentType || base.campaign.paymentType
@@ -835,15 +1054,15 @@ export default function ContractSidebarExtracted({
       merged.scheduleA.commercial.milestones =
         Array.isArray(rawMilestones) && rawMilestones.length
           ? rawMilestones.map((row: any, index: number) => ({
-              id: createRowId(),
-              milestoneName: String(row?.milestoneName || `Milestone ${index + 1}`),
-              paymentAmount: String(row?.paymentAmount || ""),
-              triggerEvent: String(row?.triggerEvent || ""),
-              dueDate: String(row?.dueDate || ""),
-            }))
+            id: createRowId(),
+            milestoneName: String(row?.milestoneName || `Milestone ${index + 1}`),
+            paymentAmount: String(row?.paymentAmount || ""),
+            triggerEvent: String(row?.triggerEvent || ""),
+            dueDate: String(row?.dueDate || ""),
+          }))
           : initialPaymentType === PAYMENT_TYPE.MILESTONE
-          ? [createDefaultCommercialMilestone()]
-          : [];
+            ? [createDefaultCommercialMilestone()]
+            : [];
 
       const usageRows = meta?.content?.scheduleA?.usageRights?.rows;
       const deliverablesFromMeta = meta?.content?.scheduleA?.deliverables;
@@ -861,14 +1080,16 @@ export default function ContractSidebarExtracted({
       setDeliverables(
         Array.isArray(deliverablesFromMeta) && deliverablesFromMeta.length
           ? deliverablesFromMeta.map((row: any, index: number) => ({
-              id: createRowId(),
-              srNo: Number(row?.srNo ?? index + 1),
-              platformHandle: String(row?.platformHandle || ""),
-              deliverableFormat: String(row?.deliverableFormat || ""),
-              qty: String(row?.qty ?? "1"),
-              draftDue: String(row?.draftDue || ""),
-              liveDate: String(row?.liveDate || ""),
-            }))
+            id: createRowId(),
+            srNo: Number(row?.srNo ?? index + 1),
+            platform: String(row?.platform || inf?.primaryPlatform || ""),
+            handle: String(row?.handle || row?.platformHandle || ""),
+            deliverableFormat: String(row?.deliverableFormat || ""),
+            qty: String(row?.qty ?? "1"),
+            draftRequired: Boolean(row?.draftRequired ?? true),
+            draftDue: String(row?.draftDue || ""),
+            liveDate: String(row?.liveDate || ""),
+          }))
           : [seededDeliverable]
       );
 
@@ -971,8 +1192,8 @@ export default function ContractSidebarExtracted({
                 typeof t?.value === "string" && t.value.trim()
                   ? t.value.trim()
                   : Array.isArray(t?.utc) && t.utc.length
-                  ? String(t.utc[0]).trim()
-                  : `timezone-${index}`;
+                    ? String(t.utc[0]).trim()
+                    : `timezone-${index}`;
 
               return [
                 canonical,
@@ -1004,13 +1225,17 @@ export default function ContractSidebarExtracted({
     clearPreview();
   }, [contractForm, deliverables, requestedEffDate, requestedEffTz, open, clearPreview]);
 
-  const buildContentPayload = useCallback(() => {
+  const buildContentPayload = useCallback((signatureId: string = "") => {
     const content = deepClone(contractForm);
     const paymentType = activePaymentType;
     content.campaign.paymentType = paymentType;
 
     return {
       ...content,
+      brand: {
+        ...content.brand,
+        brandSignature: signatureId || activeBrandSignatureId || "",
+      },
       campaign: {
         ...content.campaign,
         paymentType,
@@ -1020,9 +1245,11 @@ export default function ContractSidebarExtracted({
         ...content.scheduleA,
         deliverables: deliverables.map((row, index) => ({
           srNo: index + 1,
-          platformHandle: row.platformHandle,
+          platform: row.platform,
+          handle: row.handle,
           deliverableFormat: row.deliverableFormat,
           qty: Number(row.qty || "0") || 0,
+          draftRequired: row.draftRequired,
           draftDue: row.draftDue,
           liveDate: row.liveDate,
         })),
@@ -1040,11 +1267,11 @@ export default function ContractSidebarExtracted({
           milestones:
             paymentType === PAYMENT_TYPE.MILESTONE
               ? content.scheduleA.commercial.milestones.map((row) => ({
-                  milestoneName: row.milestoneName,
-                  paymentAmount: Number(row.paymentAmount || "0") || 0,
-                  triggerEvent: row.triggerEvent,
-                  dueDate: row.dueDate,
-                }))
+                milestoneName: row.milestoneName,
+                paymentAmount: Number(row.paymentAmount || "0") || 0,
+                triggerEvent: row.triggerEvent,
+                dueDate: row.dueDate,
+              }))
               : [],
         },
         usageRights: {
@@ -1058,7 +1285,7 @@ export default function ContractSidebarExtracted({
         },
       },
     };
-  }, [contractForm, deliverables, requestedEffDate, activePaymentType]);
+  }, [contractForm, deliverables, requestedEffDate, activePaymentType, activeBrandSignatureId]);
 
   const buildBrandUpdatesPayload = useCallback(() => {
     return {
@@ -1165,15 +1392,18 @@ export default function ContractSidebarExtracted({
       deliverables.forEach((row, index) => {
         const label = `Deliverable #${index + 1}`;
         const qtyNum = Number(row.qty || "");
-        if (!row.deliverableFormat.trim()) {
-          messages.push(`${label}: deliverable format is required.`);
-        }
-        if (!row.platformHandle.trim()) {
-          messages.push(`${label}: platform / handle is required.`);
-        }
-        if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
-          messages.push(`${label}: quantity must be at least 1.`);
-        }
+        // if (!row.deliverableFormat.trim()) {
+        //   messages.push(`${label}: deliverable format is required.`);
+        // }
+        // if (!row.platform.trim()) {
+        //   messages.push(`${label}: platform is required.`);
+        // }
+        // if (!row.handle.trim()) {
+        //   messages.push(`${label}: handle is required.`);
+        // }
+        // if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
+        //   messages.push(`${label}: quantity must be at least 1.`);
+        // }
       });
       if (messages.length) {
         add("scheduleA.deliverables", messages.join(" "));
@@ -1189,6 +1419,20 @@ export default function ContractSidebarExtracted({
 
     return true;
   }, [activePaymentType, contractForm, deliverables, requestedEffDate]);
+
+
+  const handleOpenPreviewInNewTab = useCallback(() => {
+    if (!previewUrl) {
+      toast({
+        icon: "info",
+        title: "Preview required",
+        text: "Generate preview first to open the PDF in a new tab.",
+      });
+      return;
+    }
+
+    window.open(previewUrl, "_blank", "noopener,noreferrer");
+  }, [previewUrl]);
 
   const handleGeneratePreview = useCallback(async () => {
     if (!resolvedBrandId || !campaignId) return;
@@ -1264,9 +1508,37 @@ export default function ContractSidebarExtracted({
         );
       }
 
+      const blob =
+        res?.data instanceof Blob
+          ? res.data
+          : new Blob([res.data], { type: "application/pdf" });
+
+      const contentType =
+        res?.headers?.["content-type"] || res?.headers?.["Content-Type"] || blob.type;
+
+      console.log("Preview response content-type:", contentType);
+      console.log("Preview blob type:", blob.type);
+      console.log("Preview blob size:", blob.size);
+
+      if (!contentType?.includes("pdf") && blob.type && !blob.type.includes("pdf")) {
+        let serverMessage = "Server did not return a PDF preview.";
+
+        try {
+          const text = await blob.text();
+          console.error("Non-PDF preview response:", text);
+          serverMessage = text || serverMessage;
+        } catch (readErr) {
+          console.error("Could not read non-PDF blob:", readErr);
+        }
+
+        throw new Error(serverMessage);
+      }
+
+      setPreviewBlob(blob);
+
       setPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(res.data);
+        return URL.createObjectURL(blob);
       });
 
       toast({
@@ -1275,13 +1547,27 @@ export default function ContractSidebarExtracted({
         text: isBulkMode ? "Sample preview generated for bulk contract." : undefined,
       });
     } catch (e: any) {
+      console.error("Preview generation failed:", e);
+
+      let errorText =
+        e?.response?.data?.message ||
+        e?.message ||
+        "Could not generate preview.";
+
+      if (e?.response?.data instanceof Blob) {
+        try {
+          const blobText = await e.response.data.text();
+          errorText = blobText || errorText;
+          console.error("Preview error blob text:", blobText);
+        } catch (blobErr) {
+          console.error("Could not parse error blob:", blobErr);
+        }
+      }
+
       toast({
         icon: "error",
         title: "Preview failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Could not generate preview.",
+        text: errorText,
       });
     } finally {
       setIsPreviewLoading(false);
@@ -1301,22 +1587,12 @@ export default function ContractSidebarExtracted({
     buildBrandUpdatesPayload,
   ]);
 
-  const handleSubmit = useCallback(async () => {
+  const handleActualSubmit = useCallback(async (signatureBrand?: string, signatureId?: string) => {
     if (!resolvedBrandId || !campaignId) return;
-
-    if (!previewUrl) {
-      toast({
-        icon: "info",
-        title: "Preview required",
-        text: "Generate preview before proceeding.",
-      });
-      return;
-    }
-
-    if (!validateForPreview()) return;
 
     setIsSubmitLoading(true);
     try {
+      const contentWithSig = buildContentPayload(signatureId || "");
       if (isBulkMode) {
         const influencerIds = (bulkInfluencers || [])
           .map((item) => item?.influencerId)
@@ -1338,27 +1614,29 @@ export default function ContractSidebarExtracted({
           content: buildBulkContentPayload(),
           requestedEffectiveDate: requestedEffDate,
           requestedEffectiveDateTimezone: requestedEffTz,
+          // ...(signatureBrand ? { signatureId } : {}),
+          signatureBrand: signatureId
         });
 
         const sentCount = res?.sentCount || res?.data?.sentCount || influencerIds.length;
         const failed = res?.failed || res?.data?.failed || [];
-
         toast({
           icon: failed.length ? "info" : "success",
           title: `${sentCount} contract${sentCount > 1 ? "s" : ""} sent`,
-          text: failed.length
-            ? `${failed.length} failed.`
-            : "Bulk contract send completed.",
+          text: failed.length ? `${failed.length} failed.` : "Bulk contract send completed.",
         });
       } else if (!currentContract?.contractId) {
         await post("/contract/initiate", {
           brandId: resolvedBrandId,
           campaignId,
           influencerId: primaryInfluencer.influencerId,
-          content: buildContentPayload(),
+          content: contentWithSig,
           requestedEffectiveDate: requestedEffDate,
           requestedEffectiveDateTimezone: requestedEffTz,
+          // ...(signatureBrand ? { signatureId } : {}),
+          signatureBrand: signatureId
         });
+
         toast({
           icon: "success",
           title: "Sent",
@@ -1370,7 +1648,9 @@ export default function ContractSidebarExtracted({
           content: buildContentPayload(),
           requestedEffectiveDate: requestedEffDate,
           requestedEffectiveDateTimezone: requestedEffTz,
+          ...(signatureBrand ? { signatureBrand } : {}),
         });
+
         toast({
           icon: "success",
           title: "Resent",
@@ -1382,7 +1662,9 @@ export default function ContractSidebarExtracted({
           brandId: resolvedBrandId,
           type: 0,
           brandUpdates: buildBrandUpdatesPayload(),
+          ...(signatureBrand ? { signatureBrand } : {}),
         });
+
         toast({
           icon: "success",
           title: "Updated",
@@ -1396,10 +1678,7 @@ export default function ContractSidebarExtracted({
       toast({
         icon: "error",
         title: "Action failed",
-        text:
-          e?.response?.data?.message ||
-          e?.message ||
-          "Failed to process contract.",
+        text: e?.response?.data?.message || e?.message || "Failed to process contract.",
       });
     } finally {
       setIsSubmitLoading(false);
@@ -1407,8 +1686,6 @@ export default function ContractSidebarExtracted({
   }, [
     resolvedBrandId,
     campaignId,
-    previewUrl,
-    validateForPreview,
     isBulkMode,
     bulkInfluencers,
     buildBulkContentPayload,
@@ -1421,14 +1698,75 @@ export default function ContractSidebarExtracted({
     onSuccess,
     onClose,
   ]);
+  const getLatestBrandSignature = useCallback(async (): Promise<{ signatureData: string; signatureId: string }> => {
+    if (!resolvedBrandId) return { signatureData: "", signatureId: "" };
 
+    try {
+      const res = await apigetSignatureExistance(resolvedBrandId);
+      const { hasSignature, src, signatureData, signatureId } = extractBrandSignature(res);
+
+      console.log("Fresh signature fetch:", { hasSignature, signatureId });
+
+      if (hasSignature) {
+        setSignatureStatus("exists");
+        setActiveBrandSignatureSrc(src || "");
+        setActiveBrandSignatureData(signatureData || "");
+        setActiveBrandSignatureId(signatureId || "");
+        return { signatureData: signatureData || "", signatureId: signatureId || "" };
+      }
+
+      setSignatureStatus("missing");
+      setActiveBrandSignatureSrc("");
+      setActiveBrandSignatureData("");
+      setActiveBrandSignatureId("");
+      return { signatureData: "", signatureId: "" };
+    } catch (error: any) {
+      setActiveBrandSignatureId("");
+      return { signatureData: "", signatureId: "" };
+    }
+  }, [resolvedBrandId]);
+  const handleSubmit = useCallback(async () => {
+    if (!resolvedBrandId || !campaignId) return;
+
+    if (!previewUrl) {
+      toast({ icon: "info", title: "Preview required", text: "Generate preview before proceeding." });
+      return;
+    }
+
+    if (!validateForPreview()) return;
+
+    const { signatureData, signatureId } = await getLatestBrandSignature();
+
+    if (signatureData) {
+      // Signature exists — require inline agreement
+      if (!inlineAgreed) {
+        setInlineShowError(true);
+        // Scroll to signature section
+        document.getElementById("signature-section")?.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+      await handleActualSubmit(signatureData, signatureId);
+      return;
+    }
+
+    // No signature — open modal
+    setShowSignatureModal(true);
+  }, [
+    resolvedBrandId,
+    campaignId,
+    previewUrl,
+    validateForPreview,
+    getLatestBrandSignature,
+    inlineAgreed,
+    handleActualSubmit,
+  ]);
   const submitLabel = isBulkMode
     ? "Send Bulk Contracts"
     : !currentContract?.contractId
-    ? "Send Contract"
-    : isRejectedMeta(currentContract)
-    ? "Resend Contract"
-    : "Update Contract";
+      ? "Send Contract"
+      : isRejectedMeta(currentContract)
+        ? "Resend Contract"
+        : "Update Contract";
 
   const todayStr = toInputDate(new Date());
 
@@ -1461,7 +1799,36 @@ export default function ContractSidebarExtracted({
     },
     [contractForm.scheduleA.usageRights.rows, setContractField]
   );
+  const handlePaymentTypeChange = useCallback((value: string) => {
+    const nextType = normalizePaymentType(value);
 
+    setContractForm((prev) => {
+      const next = deepClone(prev);
+      next.campaign.paymentType = nextType;
+
+      // if (nextType === PAYMENT_TYPE.MILESTONE) {
+      //   if (!next.scheduleA.commercial.milestones.length) {
+      //     next.scheduleA.commercial.milestones = [createDefaultCommercialMilestone()];
+      //   }
+      //   next.scheduleA.commercial.paymentStructure = "";
+      // }
+
+      // if (nextType === PAYMENT_TYPE.FIXED) {
+      //   next.scheduleA.commercial.milestones = [];
+      //   if (!next.scheduleA.commercial.paymentStructure) {
+      //     next.scheduleA.commercial.paymentStructure = "50% advance / 50% balance";
+      //   }
+      // }
+
+      // if (nextType === PAYMENT_TYPE.GIFTING) {
+      //   next.scheduleA.commercial.milestones = [];
+      //   next.scheduleA.commercial.paymentStructure = "";
+      //   next.scheduleA.commercial.totalCampaignFee = "0";
+      // }
+
+      return next;
+    });
+  }, []);
   if (!open) return null;
   if (!isBulkMode && !primaryInfluencer) return null;
   if (isBulkMode && !bulkInfluencers?.length) return null;
@@ -1477,8 +1844,53 @@ export default function ContractSidebarExtracted({
             ? `${campaignTitle || contractForm.campaign.campaignTitleOrId || "Agreement"} • ${bulkInfluencers.length} influencers selected`
             : `${campaignTitle || contractForm.campaign.campaignTitleOrId || "Agreement"} • ${primaryInfluencer?.name || ""}`
         }
+        campaignPaymentType={activePaymentType}
+        onCampaignPaymentTypeChange={handlePaymentTypeChange}
         previewUrl={previewUrl}
+        previewBlob={previewBlob}
         onClosePreview={clearPreview}
+        onDownload={() =>
+          handleDownloadContract(
+            `${(campaignTitle || contractForm.campaign.campaignTitleOrId || "contract")
+              .replace(/\s+/g, "_")}.pdf`
+          )
+        }
+        isDownloading={contractLoading}
+        onOpenInNewTab={handleOpenPreviewInNewTab}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={handleGeneratePreview}
+              disabled={isPreviewLoading || isSubmitLoading || !resolvedBrandId}
+            >
+              {isPreviewLoading ? (
+                <>
+                  <span className="mr-2 animate-spin">⏳</span> Generating…
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-2 h-5 w-5" /> Preview
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={handleSubmit}
+              disabled={!previewUrl || isSubmitLoading || isPreviewLoading || !resolvedBrandId}
+            >
+              {isSubmitLoading ? (
+                <>
+                  <span className="mr-2 animate-spin">⏳</span> Processing…
+                </>
+              ) : isBulkMode ? (
+                `${submitLabel}${bulkInfluencers.length ? ` (${bulkInfluencers.length})` : ""}`
+              ) : (
+                submitLabel
+              )}
+            </Button>
+          </>
+        }
       >
         {contractLoading ? (
           <div className="p-6 text-sm text-gray-600">Loading contract…</div>
@@ -1496,6 +1908,7 @@ export default function ContractSidebarExtracted({
                   }
                   state={formErrors["brand.legalName"] ? "error" : undefined}
                   errorText={formErrors["brand.legalName"] || ""}
+                  required
                 />
 
                 <FloatingInput
@@ -1506,9 +1919,10 @@ export default function ContractSidebarExtracted({
                   onValueChange={(value: string) =>
                     setContractField("brand.contactPersonName", value)
                   }
+                  required
                 />
 
-                <FloatingInput
+                {/* <FloatingInput
                   id="brand-notice-email"
                   label="Notice Email"
                   info={SIDEBAR_TOOLTIPS.brandNoticeEmail}
@@ -1516,9 +1930,10 @@ export default function ContractSidebarExtracted({
                   onValueChange={(value: string) =>
                     setContractField("brand.noticeEmail", value)
                   }
-                />
+                  required
+                /> */}
 
-                <FloatingInput
+                {/* <FloatingInput
                   id="brand-notice-phone"
                   label="Notice Phone"
                   info={SIDEBAR_TOOLTIPS.brandNoticePhone}
@@ -1526,7 +1941,8 @@ export default function ContractSidebarExtracted({
                   onValueChange={(value: string) =>
                     setContractField("brand.noticePhone", value)
                   }
-                />
+                  required
+                /> */}
 
                 <LabeledTextarea
                   id="brand-billing-address"
@@ -1536,7 +1952,30 @@ export default function ContractSidebarExtracted({
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                     setContractField("brand.billingAddress", e.target.value)
                   }
+                  required
                 />
+
+                {/* <FloatingInput
+                  id="brand-poc"
+                  label="Brand POC"
+                  info={SIDEBAR_TOOLTIPS.brandPoc}
+                  value={getAtPath(contractForm, "brand.brandPoc")}
+                  onValueChange={(value: string) =>
+                    setContractField("brand.brandPoc", value)
+                  }
+                // required
+                /> */}
+
+                {/* <FloatingInput
+                  id="brand-poc-designation"
+                  label="Brand POC Designation"
+                  info={SIDEBAR_TOOLTIPS.brandPocDesignation}
+                  value={getAtPath(contractForm, "brand.brandPocDesignation")}
+                  onValueChange={(value: string) =>
+                    setContractField("brand.brandPocDesignation", value)
+                  }
+                // required
+                /> */}
               </div>
             </SidebarSection>
 
@@ -1552,6 +1991,7 @@ export default function ContractSidebarExtracted({
                   }
                   state={formErrors["campaign.campaignTitleOrId"] ? "error" : undefined}
                   errorText={formErrors["campaign.campaignTitleOrId"] || ""}
+                  required
                 />
 
                 <LabeledTextarea
@@ -1567,39 +2007,11 @@ export default function ContractSidebarExtracted({
                 <FloatingSelect
                   label="Campaign Payment Type"
                   value={getAtPath(contractForm, "campaign.paymentType")}
-                  onValueChange={(value) => {
-                    const nextType = normalizePaymentType(value);
-                    setContractForm((prev) => {
-                      const next = deepClone(prev);
-                      next.campaign.paymentType = nextType;
-
-                      if (nextType === PAYMENT_TYPE.MILESTONE) {
-                        if (!next.scheduleA.commercial.milestones.length) {
-                          next.scheduleA.commercial.milestones = [createDefaultCommercialMilestone()];
-                        }
-                        next.scheduleA.commercial.paymentStructure = "";
-                      }
-
-                      if (nextType === PAYMENT_TYPE.FIXED) {
-                        next.scheduleA.commercial.milestones = [];
-                        if (!next.scheduleA.commercial.paymentStructure) {
-                          next.scheduleA.commercial.paymentStructure =
-                            "50% advance / 50% balance";
-                        }
-                      }
-
-                      if (nextType === PAYMENT_TYPE.GIFTING) {
-                        next.scheduleA.commercial.milestones = [];
-                        next.scheduleA.commercial.paymentStructure = "";
-                        next.scheduleA.commercial.totalCampaignFee = "0";
-                      }
-
-                      return next;
-                    });
-                  }}
+                  onValueChange={handlePaymentTypeChange}
                   searchable={false}
                   state={formErrors["campaign.paymentType"] ? "error" : undefined}
                   errorText={formErrors["campaign.paymentType"] || ""}
+                  disabled
                 >
                   {PAYMENT_TYPE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
@@ -1632,6 +2044,7 @@ export default function ContractSidebarExtracted({
                     }}
                     state={formErrors["requestedEffDate"] ? "error" : undefined}
                     errorText={formErrors["requestedEffDate"] || ""}
+                    required
                   />
                 </div>
 
@@ -1687,25 +2100,43 @@ export default function ContractSidebarExtracted({
                       ) : null}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <FloatingInput
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {/* <FloatingInput
                         id={`deliverable-sr-${row.id}`}
                         label="Sr. No."
                         type="number"
                         value={String(index + 1)}
                         onValueChange={() => undefined}
                         disabled
-                      />
+                      /> */}
+
+                      <FloatingSelect
+                        label="Platform"
+                        info={SIDEBAR_TOOLTIPS.platformHandle}
+                        value={row.platform}
+                        onValueChange={(value) =>
+                          setDeliverables((prev) =>
+                            prev.map((item) =>
+                              item.id === row.id ? { ...item, platform: value } : item
+                            )
+                          )
+                        }
+                        searchable={false}
+                      >
+                        <SelectItem value="Instagram">Instagram</SelectItem>
+                        <SelectItem value="YouTube">YouTube</SelectItem>
+                        <SelectItem value="TikTok">TikTok</SelectItem>
+                      </FloatingSelect>
 
                       <FloatingInput
-                        id={`deliverable-platform-${row.id}`}
-                        label="Platform / Handle"
-                        info={SIDEBAR_TOOLTIPS.platformHandle}
-                        value={row.platformHandle}
+                        id={`deliverable-handle-${row.id}`}
+                        label="Handle"
+                        info="Creator handle for this platform."
+                        value={row.handle}
                         onValueChange={(value: string) =>
                           setDeliverables((prev) =>
                             prev.map((item) =>
-                              item.id === row.id ? { ...item, platformHandle: value } : item
+                              item.id === row.id ? { ...item, handle: value } : item
                             )
                           )
                         }
@@ -1725,60 +2156,95 @@ export default function ContractSidebarExtracted({
                           )
                         }
                       />
+
+                      <FloatingSelect
+                        label="Deliverable Format"
+                        info={SIDEBAR_TOOLTIPS.deliverableFormat}
+                        value={row.deliverableFormat}
+                        onValueChange={(value) =>
+                          setDeliverables((prev) =>
+                            prev.map((item) =>
+                              item.id === row.id ? { ...item, deliverableFormat: value } : item
+                            )
+                          )
+                        }
+                        searchable={false}
+                      >
+                        {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </FloatingSelect>
                     </div>
 
-                    <FloatingSelect
-                      label="Deliverable Format"
-                      info={SIDEBAR_TOOLTIPS.deliverableFormat}
-                      value={row.deliverableFormat}
-                      onValueChange={(value) =>
-                        setDeliverables((prev) =>
-                          prev.map((item) =>
-                            item.id === row.id ? { ...item, deliverableFormat: value } : item
-                          )
-                        )
-                      }
-                      searchable={false}
-                    >
-                      {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </FloatingSelect>
+
 
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <FloatingDateInput
-                        id={`deliverable-draft-${row.id}`}
-                        label="Draft Due"
-                        info={SIDEBAR_TOOLTIPS.draftDue}
-                        type="date"
-                        value={row.draftDue}
-                        min={todayStr}
-                        onValueChange={(value) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, draftDue: value } : item
-                            )
-                          )
-                        }
-                      />
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            id={`deliverable-draft-required-${row.id}`}
+                            type="checkbox"
+                            checked={row.draftRequired}
+                            onChange={(e) =>
+                              setDeliverables((prev) =>
+                                prev.map((item) =>
+                                  item.id === row.id
+                                    ? {
+                                      ...item,
+                                      draftRequired: e.target.checked,
+                                      draftDue: e.target.checked ? item.draftDue : "",
+                                    }
+                                    : item
+                                )
+                              )
+                            }
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <label
+                            htmlFor={`deliverable-draft-required-${row.id}`}
+                            className="text-sm font-medium text-gray-700"
+                          >
+                            Draft Required
+                          </label>
+                        </div>
 
-                      <FloatingDateInput
-                        id={`deliverable-live-${row.id}`}
-                        label="Live Date"
-                        info={SIDEBAR_TOOLTIPS.liveDate}
-                        type="date"
-                        value={row.liveDate}
-                        min={todayStr}
-                        onValueChange={(value) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, liveDate: value } : item
-                            )
-                          )
-                        }
-                      />
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <FloatingDateInput
+                            id={`deliverable-draft-${row.id}`}
+                            label="Draft Due"
+                            info={SIDEBAR_TOOLTIPS.draftDue}
+                            type="date"
+                            value={row.draftDue}
+                            min={todayStr}
+                            disabled={!row.draftRequired}
+                            onValueChange={(value) =>
+                              setDeliverables((prev) =>
+                                prev.map((item) =>
+                                  item.id === row.id ? { ...item, draftDue: value } : item
+                                )
+                              )
+                            }
+                          />
+
+                          <FloatingDateInput
+                            id={`deliverable-live-${row.id}`}
+                            label="Live Date"
+                            info={SIDEBAR_TOOLTIPS.liveDate}
+                            type="date"
+                            value={row.liveDate}
+                            min={todayStr}
+                            onValueChange={(value) =>
+                              setDeliverables((prev) =>
+                                prev.map((item) =>
+                                  item.id === row.id ? { ...item, liveDate: value } : item
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1823,18 +2289,29 @@ export default function ContractSidebarExtracted({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div
+                  className={`grid grid-cols-1 gap-3 ${isPreShootScriptRequired ? "md:grid-cols-3" : "md:grid-cols-1"
+                    }`}
+                >
                   <FloatingSelect
                     label="Pre-Shoot Script Required"
                     info={SIDEBAR_TOOLTIPS.preShootScriptRequired}
-                    value={
-                      getAtPath(contractForm, "scheduleA.preShootScriptRequired", false)
-                        ? "yes"
-                        : "no"
-                    }
-                    onValueChange={(value) =>
-                      setContractField("scheduleA.preShootScriptRequired", value === "yes")
-                    }
+                    value={isPreShootScriptRequired ? "yes" : "no"}
+                    onValueChange={(value) => {
+                      const required = value === "yes";
+
+                      setContractForm((prev) => {
+                        const next = deepClone(prev);
+                        next.scheduleA.preShootScriptRequired = required;
+
+                        if (!required) {
+                          next.scheduleA.preShootScriptDue = "";
+                          next.scheduleA.preShootScriptReviewBusinessDays = "2";
+                        }
+
+                        return next;
+                      });
+                    }}
                     searchable={false}
                   >
                     {YES_NO_BOOL_OPTIONS.map((option) => (
@@ -1844,42 +2321,46 @@ export default function ContractSidebarExtracted({
                     ))}
                   </FloatingSelect>
 
-                  <FloatingDateInput
-                    id="pre-shoot-script-due"
-                    label="Pre-Shoot Script Due"
-                    info={SIDEBAR_TOOLTIPS.preShootScriptDue}
-                    type="date"
-                    value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
-                    min={todayStr}
-                    onValueChange={(value) =>
-                      setContractField("scheduleA.preShootScriptDue", value)
-                    }
-                  />
+                  {isPreShootScriptRequired && (
+                    <>
+                      <FloatingDateInput
+                        id="pre-shoot-script-due"
+                        label="Pre-Shoot Script Due"
+                        info={SIDEBAR_TOOLTIPS.preShootScriptDue}
+                        type="date"
+                        value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
+                        min={todayStr}
+                        onValueChange={(value) =>
+                          setContractField("scheduleA.preShootScriptDue", value)
+                        }
+                      />
 
-                  <FloatingInput
-                    id="pre-shoot-review-days"
-                    label="Script Review Business Days"
-                    info={SIDEBAR_TOOLTIPS.preShootReviewDays}
-                    type="number"
-                    value={getAtPath(
-                      contractForm,
-                      "scheduleA.preShootScriptReviewBusinessDays"
-                    )}
-                    onValueChange={(value: string) =>
-                      setContractField(
-                        "scheduleA.preShootScriptReviewBusinessDays",
-                        value
-                      )
-                    }
-                    state={
-                      formErrors["scheduleA.preShootScriptReviewBusinessDays"]
-                        ? "error"
-                        : undefined
-                    }
-                    errorText={
-                      formErrors["scheduleA.preShootScriptReviewBusinessDays"] || ""
-                    }
-                  />
+                      <FloatingInput
+                        id="pre-shoot-review-days"
+                        label="Script Review Business Days"
+                        info={SIDEBAR_TOOLTIPS.preShootReviewDays}
+                        type="number"
+                        value={getAtPath(
+                          contractForm,
+                          "scheduleA.preShootScriptReviewBusinessDays"
+                        )}
+                        onValueChange={(value: string) =>
+                          setContractField(
+                            "scheduleA.preShootScriptReviewBusinessDays",
+                            value
+                          )
+                        }
+                        state={
+                          formErrors["scheduleA.preShootScriptReviewBusinessDays"]
+                            ? "error"
+                            : undefined
+                        }
+                        errorText={
+                          formErrors["scheduleA.preShootScriptReviewBusinessDays"] || ""
+                        }
+                      />
+                    </>
+                  )}
                 </div>
               </div>
             </SidebarSection>
@@ -1959,7 +2440,7 @@ export default function ContractSidebarExtracted({
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <FloatingInput
                     id="total-campaign-fee"
-                    label="Total Campaign Fee"
+                    label="Infleuncer fees"
                     info={SIDEBAR_TOOLTIPS.totalCampaignFee}
                     type="number"
                     value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
@@ -1972,6 +2453,7 @@ export default function ContractSidebarExtracted({
                         : undefined
                     }
                     errorText={formErrors["scheduleA.commercial.totalCampaignFee"] || ""}
+                    required
                   />
 
                   <FloatingSelect
@@ -1986,6 +2468,7 @@ export default function ContractSidebarExtracted({
                       formErrors["scheduleA.commercial.currency"] ? "error" : undefined
                     }
                     errorText={formErrors["scheduleA.commercial.currency"] || ""}
+                    required
                   >
                     {currencyOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
@@ -2112,6 +2595,7 @@ export default function ContractSidebarExtracted({
                       e.target.value
                     )
                   }
+                  disabled
                 />
               </div>
             </SidebarSection>
@@ -2588,6 +3072,7 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.dispute.disputeResolutionMethod", value)
                   }
                   searchable={false}
+                  required
                 >
                   {DISPUTE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
@@ -2633,150 +3118,198 @@ export default function ContractSidebarExtracted({
                 </FloatingSelect>
               </div>
             </SidebarSection>
+            {signatureStatus === "checking" ? (
+              <SidebarSection title="Signature" icon={<Signature className="h-4 w-4" />}>
+                <div className="text-sm text-gray-500">Checking active signature…</div>
+              </SidebarSection>
+            ) : signatureStatus === "exists" ? (
+              <div id="signature-section">
+                <SidebarSection title="Signature" icon={<Signature className="h-4 w-4" />}>
+                  <SignatureAgreementBlock
+                    signerName={
+                      contractForm.influencer.legalName ||
+                      contractForm.influencer.contactName ||
+                      primaryInfluencer?.name
+                    }
+                    signatureSrc={activeBrandSignatureSrc}
+                    tab={inlineSignatureTab}
+                    onTabChange={setInlineSignatureTab}
+                    drawnSig={inlineDrawnSig}
+                    onDrawnSigChange={setInlineDrawnSig}
+                    agreed={inlineAgreed}
+                    onAgreeChange={(value) => {
+                      setInlineAgreed(value);
+                      if (value) setInlineShowError(false);
+                    }}
+                    showError={inlineShowError}
+                    brandId={resolvedBrandId || undefined}
+                    onSignatureChange={(newSrc) => setActiveBrandSignatureSrc(newSrc)}
+                  />
+                </SidebarSection>
+              </div>
+            ) : null}
 
-            <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-wrap justify-end gap-3 border-t border-gray-200 bg-white/95 p-6 backdrop-blur">
-              <Button
-                variant="outline"
-                onClick={handleGeneratePreview}
-                disabled={isPreviewLoading || isSubmitLoading || !resolvedBrandId}
-              >
-                {isPreviewLoading ? (
-                  <>
-                    <span className="mr-2 animate-spin">⏳</span> Generating…
-                  </>
-                ) : (
-                  <>
-                    <Eye className="mr-2 h-5 w-5" /> Preview
-                  </>
-                )}
-              </Button>
-
-              <Button
-                onClick={handleSubmit}
-                disabled={!previewUrl || isSubmitLoading || isPreviewLoading || !resolvedBrandId}
-              >
-                {isSubmitLoading ? (
-                  <>
-                    <span className="mr-2 animate-spin">⏳</span> Processing…
-                  </>
-                ) : isBulkMode ? (
-                  `${submitLabel}${bulkInfluencers.length ? ` (${bulkInfluencers.length})` : ""}`
-                ) : (
-                  submitLabel
-                )}
-              </Button>
-            </div>
           </>
         )}
       </ContractSidebarShell>
+
+      {resolvedBrandId ? (
+        <SignatureModal
+          open={showSignatureModal}
+          onClose={() => setShowSignatureModal(false)}
+          onConfirm={async () => {
+            setShowSignatureModal(false);
+            const { signatureData, signatureId } = await getLatestBrandSignature();
+            await handleActualSubmit(signatureData, signatureId);
+          }}
+          isLoading={isSubmitLoading}
+          signerName={
+            contractForm.influencer.legalName ||
+            contractForm.influencer.contactName ||
+            primaryInfluencer?.name
+          }
+          brandId={resolvedBrandId}
+        />
+      ) : null}
     </TooltipProvider>
   );
 }
 
-function ContractSidebarShell({
+export function ContractSidebarShell({
   isOpen,
   onClose,
   children,
   title,
   subtitle,
+  campaignPaymentType,
+  onCampaignPaymentTypeChange,
   previewUrl,
+  previewBlob,
   onClosePreview,
+  onDownload,
+  isDownloading,
+  onOpenInNewTab,
+  footer,
 }: {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
   title: string;
   subtitle: string;
+  campaignPaymentType?: PaymentType;
+  onCampaignPaymentTypeChange: (value: string) => void;
   previewUrl: string;
+  previewBlob: Blob | null;
   onClosePreview: () => void;
+  onDownload: () => void;
+  isDownloading?: boolean;
+  onOpenInNewTab: () => void;
+  footer: React.ReactNode;
 }) {
+
+  const contractTypeLabel = campaignPaymentType
+    ? CONTRACT_TYPE_LABELS[campaignPaymentType]
+    : "";
+
   return (
     <div
-      className={`fixed inset-0 z-[120] ${isOpen ? "" : "pointer-events-none"}`}
+      className={`absolute inset-0 z-[120] isolate ${isOpen ? "" : "pointer-events-none"
+        }`}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`absolute inset-0 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300 ${
-          isOpen ? "opacity-100" : "opacity-0"
-        }`}
+        className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"
+          }`}
         onClick={onClose}
       />
 
       <div
-        className={`absolute right-0 top-0 h-full w-full bg-white shadow-2xl transform transition-transform duration-300 ease-out ${
-          isOpen ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`absolute inset-0 overflow-hidden bg-white border-l border-gray-200 shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
+          }`}
       >
-        <div className="relative h-36 overflow-hidden border-b border-[#e5e5e5] bg-white">
-          <div className="relative z-10 flex h-full items-start justify-between p-6">
-            <div className="flex items-start gap-4">
-              <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#e8e8e8] bg-[#f7f7f7] shadow-sm">
-                <FileText className="h-6 w-6 text-[#1a1a1a]" />
+        <div className="relative z-10 h-20 border-b border-[#e5e5e5] bg-white">
+          <div className="flex h-full items-center justify-between px-6">
+            <div className="min-w-0">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]">
+                {title}
               </div>
-
-              <div>
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]">
-                  {title}
-                </div>
-                <div className="text-2xl font-extrabold leading-tight text-[#1a1a1a]">
-                  {subtitle}
-                </div>
+              {/* <div className="truncate text-lg font-bold text-[#1a1a1a]">
+                {subtitle}
+              </div> */}
+              <div className="mt-1">
+                <select
+                  value={campaignPaymentType}
+                  onChange={(e) => onCampaignPaymentTypeChange(e.target.value)}
+                  className="border-0 bg-transparent p-0 pr-5 text-xs font-medium text-[#1a1a1a] outline-none focus:outline-none"
+                  aria-label="Campaign payment type"
+                >
+                  {PAYMENT_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {CONTRACT_TYPE_LABELS[option.value as PaymentType]}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-
-            <button
-              type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-[#e8e8e8] bg-white text-[#9d9d9d] transition-all duration-150 hover:bg-[#f7f7f7] hover:text-[#1a1a1a]"
-              onClick={onClose}
-              aria-label="Close"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={onOpenInNewTab}
+                variant="raised"
+                className="!bg-white !text-black !shadow-none cursor-pointer hover:!bg-white hover:!text-black hover:!shadow-none active:!bg-white"
+              >
+                <ArrowSquareInIcon size={16} />
+              </Button>
+              <Button
+                variant="solid"
+                onClick={onDownload}
+                disabled={isDownloading}
+                className="inline-flex items-center rounded-lg border cursor-pointer border-[#e8e8e8] px-4 py-2 !bg-white !text-black !shadow-none"
+              >
+                <span className="mr-2 inline-flex">
+                  <DownloadSimpleIcon />
+                </span>
+                <span>{isDownloading ? "Downloading..." : "Download"}</span>
+              </Button>
+              <Button
+                type="button"
+                className="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e8e8e8] bg-white !text-black hover:!bg-white "
+                onClick={onClose}
+                aria-label="Close"
+              >
+                ✕
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="flex h-[calc(100%-9rem)]">
+        <div className="relative z-10 flex h-[calc(100%-160px)] bg-white">
+          <div className="h-full w-full overflow-auto px-6 py-5 space-y-5 xl:w-1/2">
+            {children}
+          </div>
+
           {previewUrl ? (
-            <div className="flex w-full flex-col border-r border-gray-100 p-6 sm:w-1/2">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <Eye className="h-4 w-4" />
-                  <span>Preview</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={onClosePreview}
-                  className="rounded-full border border-neutral-300 px-3 py-1 text-xs text-gray-700 hover:bg-neutral-100"
-                >
-                  Close preview
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-gray-50">
-                <iframe
-                  src={previewUrl}
-                  width="100%"
-                  height="100%"
-                  className="border-0"
-                  title="Contract PDF"
-                />
+            <div className="hidden xl:flex xl:w-1/2 flex-col border-l border-gray-100 bg-white">
+              <div className="flex-1 min-h-0">
+                {previewBlob ? <MinimalPdfPreview file={previewBlob} /> : null}
               </div>
             </div>
           ) : (
-            <div className="hidden w-1/2 select-none items-center justify-center p-6 text-gray-400 sm:flex">
+            <div className="hidden xl:flex xl:w-1/2 items-center justify-center border-l border-gray-100 bg-white p-6 text-gray-400">
               <div className="text-center">
                 <Eye className="mx-auto mb-2 h-8 w-8" />
-                <div className="text-sm">Generate a preview to see the PDF here</div>
+                <div className="text-sm">Generate a preview to see the PDF here and send contract</div>
               </div>
             </div>
           )}
+        </div>
 
-          <div
-            className={`${previewUrl ? "w-full sm:w-1/2" : "w-full"} h-full overflow-auto px-6 space-y-5`}
-          >
-            {children}
+        <div className="relative z-10 h-[80px] border-t border-gray-200 bg-white px-6 flex items-center justify-between">
+          <div className="truncate text-lg font-bold text-[#1a1a1a]">
+            {subtitle}
+          </div>
+          <div className="flex h-full items-center justify-end gap-3">
+            {footer}
           </div>
         </div>
       </div>
@@ -2896,5 +3429,169 @@ function CommercialMilestonesEditor({
         </div>
       ))}
     </div>
+  );
+}
+
+function SignatureAgreementBlock({
+  signerName,
+  signatureSrc,
+  tab,
+  onTabChange,
+  drawnSig,
+  onDrawnSigChange,
+  agreed,
+  onAgreeChange,
+  showError,
+  brandId,
+  onSignatureChange,
+}: {
+  signerName?: string;
+  signatureSrc?: string;
+  tab: "default" | "draw";
+  onTabChange: (tab: "default" | "draw") => void;
+  drawnSig: string;
+  onDrawnSigChange: (dataUrl: string) => void;
+  agreed: boolean;
+  onAgreeChange: (v: boolean) => void;
+  showError: boolean;
+  brandId?: string;
+  onSignatureChange?: (newSrc: string) => void;
+}) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [previewSrc, setPreviewSrc] = React.useState(signatureSrc || "");
+
+  React.useEffect(() => {
+    setPreviewSrc(signatureSrc || "");
+  }, [signatureSrc]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !brandId) return;
+
+    // Show local preview immediately
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setPreviewSrc(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    setUploading(true);
+    try {
+      await apipostSignatureUpload({ brandId, signature: file });
+      onSignatureChange?.(URL.createObjectURL(file));
+      toast({ icon: "success", title: "Signature updated" });
+    } catch (err: any) {
+      toast({ icon: "error", title: "Upload failed", text: err?.message || "Could not upload signature." });
+    } finally {
+      setUploading(false);
+      // Reset input so same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {/* Signature display — click to upload */}
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        className="w-full rounded-2xl bg-[#f7f7f7] border border-gray-200 border-dashed px-6 py-6 min-h-[130px] flex items-center justify-center relative group hover:border-gray-400 transition-colors"
+        disabled={uploading}
+      >
+        {uploading ? (
+          <div className="text-sm text-gray-500 animate-pulse">Uploading…</div>
+        ) : previewSrc ? (
+          <>
+            <img
+              src={previewSrc}
+              alt="Brand signature"
+              className="max-h-[100px] max-w-full object-contain"
+            />
+            {/* Hover overlay */}
+            <div className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
+              <span className="opacity-0 group-hover:opacity-100 text-xs text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm transition-opacity">
+                Click to change
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-gray-400">
+            <Signature className="h-8 w-8" />
+            <span className="text-xs">Click to upload signature</span>
+          </div>
+        )}
+      </button>
+
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <Signature size={14} weight="regular" />
+          Signature is selected as primary
+        </div>
+
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-black transition-colors"
+        >
+          Change signature
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+
+      <div className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${showError ? "border-red-200 bg-red-50/60" : "border-gray-200 bg-white"
+        }`}>
+        <Toggle checked={agreed} onChange={onAgreeChange} />
+        <p className="text-sm text-gray-700 leading-relaxed">
+          By signing, I confirm that I have read and therefore agree to all
+          contractual terms, which I acknowledge are legally binding.
+        </p>
+      </div>
+
+      {showError && (
+        <div className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3" role="alert">
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold">!</span>
+          <p className="text-sm font-medium text-red-600">
+            Please confirm that you agree to all terms before signing the contract.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function Toggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${checked ? "bg-black" : "bg-gray-200"
+        }`}
+    >
+      <span
+        className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"
+          }`}
+      />
+    </button>
   );
 }

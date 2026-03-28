@@ -3,18 +3,18 @@
 import { Plus } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useInfluencerCounts } from "./InfluencerCountsContext";
 
-type TabKey = "all influencer" | "active" | "shortlisted" | "undecided" | "rejected";
+type TabKey = "all influencer" | "applied" | "active" | "shortlisted" | "undecided" | "rejected";
 
 export default function CampaignNavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { counts } = useInfluencerCounts();
 
-  // ✅ get campaignId from query (supports ?campaignId= or ?id=)
   const campaignId = (searchParams.get("campaignId") || searchParams.get("id") || "").trim();
 
-  // ✅ helper to keep campaignId in every navigation
   const withCampaignId = (href: string) => {
     if (!campaignId) return href;
     const join = href.includes("?") ? "&" : "?";
@@ -23,18 +23,20 @@ export default function CampaignNavBar() {
 
   const tabs: { key: TabKey; label: string; href: string }[] = [
     { key: "all influencer", label: "All Influencer", href: "/brand/influ/all" },
+    { key: "applied", label: "Applied", href: "/brand/influ/applied" },
     { key: "active", label: "Active", href: "/brand/influ/active" },
     { key: "shortlisted", label: "Shortlisted", href: "/brand/influ/shortlisted" },
     { key: "undecided", label: "Undecided", href: "/brand/influ/undecided" },
     { key: "rejected", label: "Rejected", href: "/brand/influ/rejected" },
   ];
 
-  const counts: Record<TabKey, number> = {
-    "all influencer": 0,
-    active: 0,
-    shortlisted: 0,
-    undecided: 0,
-    rejected: 0,
+  const tabCounts: Record<TabKey, number> = {
+    "all influencer": counts.all,
+    applied: counts.applied,
+    active: counts.active,
+    shortlisted: counts.shortlisted,
+    undecided: counts.undecided,
+    rejected: counts.rejected,
   };
 
   const isActiveHref = (href: string) =>
@@ -48,11 +50,12 @@ export default function CampaignNavBar() {
       >
         {tabs.map((t) => {
           const isActive = isActiveHref(t.href);
+          const count = tabCounts[t.key];
 
           return (
             <Link
               key={t.key}
-              href={withCampaignId(t.href)} // ✅ keep campaignId
+              href={withCampaignId(t.href)}
               aria-current={isActive ? "page" : undefined}
               className={[
                 "inline-flex shrink-0 items-center justify-center",
@@ -69,7 +72,6 @@ export default function CampaignNavBar() {
             >
               <span className="inline-flex items-center gap-[var(--Spacing-8,0.5rem)]">
                 <span>{t.label}</span>
-
                 <span
                   className={[
                     "inline-flex items-center justify-center",
@@ -84,7 +86,7 @@ export default function CampaignNavBar() {
                     isActive ? "text-neutral-900" : "text-neutral-600",
                   ].join(" ")}
                 >
-                  {counts[t.key] ?? 0}
+                  {count}
                 </span>
               </span>
             </Link>
@@ -95,7 +97,7 @@ export default function CampaignNavBar() {
       <div className="ml-3 flex shrink-0 items-center">
         <button
           type="button"
-          onClick={() => router.push(withCampaignId("/brand/influencer/invite"))} // ✅ keep campaignId
+          onClick={() => router.push(withCampaignId("/brand/influencer/invite"))}
           className={[
             "inline-flex items-center justify-center",
             "h-9 md:h-10",

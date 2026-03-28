@@ -7,6 +7,7 @@ export function statusToVariant(status: CampaignStatus): StatusVariant {
   if (status === "paused") return "paused";
   if (status === "draft") return "draft";
   if (status === "scheduled") return "scheduled";
+  if (status === "completed") return "completed";
   return "expired";
 }
 

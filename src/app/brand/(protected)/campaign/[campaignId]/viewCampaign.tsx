@@ -124,12 +124,12 @@ function toHandle(v: any) {
 function safeAvatar(x: any) {
   const u = String(
     x?.profilePic ??
-      x?.avatarUrl ??
-      x?.profile?.avatarUrl ??
-      x?.photo ??
-      x?.image ??
-      x?.profileImage ??
-      ""
+    x?.avatarUrl ??
+    x?.profile?.avatarUrl ??
+    x?.photo ??
+    x?.image ??
+    x?.profileImage ??
+    ""
   ).trim();
   return u || "https://picsum.photos/seed/fallback/200/200";
 }
@@ -158,24 +158,24 @@ function mapRecommendedToRow(x: any): InfluencerRow {
   const platforms =
     rawPlatforms.length > 0
       ? (rawPlatforms
-          .map((p: any) => {
-            const platform = normalizePlatform(p?.platform ?? p?.name ?? p?.type);
-            if (!platform) return null;
-            return {
-              platform,
-              followers: Number(p?.followers ?? p?.followerCount ?? p?.followersCount ?? 0) || 0,
-              engagement: Number(p?.engagement ?? p?.engagementRate ?? p?.er ?? 0) || 0,
-            };
-          })
-          .filter(Boolean) as any)
+        .map((p: any) => {
+          const platform = normalizePlatform(p?.platform ?? p?.name ?? p?.type);
+          if (!platform) return null;
+          return {
+            platform,
+            followers: Number(p?.followers ?? p?.followerCount ?? p?.followersCount ?? 0) || 0,
+            engagement: Number(p?.engagement ?? p?.engagementRate ?? p?.er ?? 0) || 0,
+          };
+        })
+        .filter(Boolean) as any)
       : (asArray(x?.page1)
-          .flatMap((q: any) => (q?.question === "Selected platforms" ? asArray(q?.answers) : []))
-          .map((p: any) => {
-            const platform = normalizePlatform(p);
-            if (!platform) return null;
-            return { platform, followers: 0, engagement: 0 };
-          })
-          .filter(Boolean) as any);
+        .flatMap((q: any) => (q?.question === "Selected platforms" ? asArray(q?.answers) : []))
+        .map((p: any) => {
+          const platform = normalizePlatform(p);
+          if (!platform) return null;
+          return { platform, followers: 0, engagement: 0 };
+        })
+        .filter(Boolean) as any);
 
   const appliedDateRaw = x?.appliedDate ?? x?.matchedAt ?? x?.createdAt ?? x?.updatedAt ?? "";
   const appliedDate = appliedDateRaw ? String(appliedDateRaw).slice(0, 10) : "—";
@@ -261,7 +261,7 @@ function getYoutubeId(url: string) {
       const idx = parts.indexOf("shorts");
       if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
     }
-  } catch {}
+  } catch { }
   return "";
 }
 
@@ -277,6 +277,36 @@ const statuses = [
   { label: "Scheduled", dot: "bg-[#4A90D9]", ring: "bg-[#BDD7F5]" },
   { label: "Completed", dot: "bg-[#F07B3F]", ring: "bg-[#FAD6C0]" },
 ];
+
+function normalizeCampaignStatusValue(status: string) {
+  const v = String(status ?? "").trim().toLowerCase();
+  if (v === "complete") return "completed";
+  return v;
+}
+
+function getAllowedNextStatuses(currentStatus: string): string[] {
+  const current = normalizeCampaignStatusValue(currentStatus);
+
+  switch (current) {
+    case "draft":
+      return ["active"];
+
+    case "scheduled":
+      return ["active"];
+
+    case "active":
+      return ["paused", "completed"];
+
+    case "paused":
+      return ["active", "completed"];
+
+    case "completed":
+      return [];
+
+    default:
+      return [];
+  }
+}
 
 function StatusDot({ dot, ring }: { dot: string; ring: string }) {
   return (
@@ -299,12 +329,27 @@ export function CampaignStatusDropdown({
   currentStatus,
   onStatusChange,
 }: CampaignStatusDropdownProps) {
-  const [value, setValue] = useState<string>(currentStatus?.toLowerCase() || "draft");
+  const [value, setValue] = useState<string>(
+    normalizeCampaignStatusValue(currentStatus || "draft")
+  );
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (currentStatus) setValue(currentStatus.toLowerCase());
+    if (currentStatus) {
+      setValue(normalizeCampaignStatusValue(currentStatus));
+    }
   }, [currentStatus]);
+
+  const currentMeta =
+    statuses.find((s) => s.label.toLowerCase() === value) ?? statuses[2];
+
+  const nextStatusValues = useMemo(() => getAllowedNextStatuses(value), [value]);
+
+  const dropdownOptions = useMemo(() => {
+    return statuses.filter((s) => nextStatusValues.includes(s.label.toLowerCase()));
+  }, [nextStatusValues]);
+
+  const isLocked = value === "completed" || dropdownOptions.length === 0;
 
   const handleChange = async (newValue: string | null) => {
     if (!newValue || newValue === value || loading) return;
@@ -339,14 +384,19 @@ export function CampaignStatusDropdown({
     }
   };
 
+  if (isLocked) {
+    return (
+      <div className="inline-flex items-center gap-1.5 h-8 px-2 bg-transparent text-sm font-medium text-[#1A1A1A]">
+        <StatusDot dot={currentMeta.dot} ring={currentMeta.ring} />
+        <span className="capitalize">{value}</span>
+      </div>
+    );
+  }
+
   return (
     <Combobox value={value} onValueChange={handleChange}>
       <ComboboxTrigger className="inline-flex items-center gap-1.5 h-8 px-2 bg-transparent text-sm font-medium text-[#1A1A1A]">
-        {(() => {
-          const current = statuses.find((s) => s.label.toLowerCase() === value);
-          if (!current) return null;
-          return <StatusDot dot={current.dot} ring={current.ring} />;
-        })()}
+        <StatusDot dot={currentMeta.dot} ring={currentMeta.ring} />
         <span className="capitalize">{value}</span>
       </ComboboxTrigger>
 
@@ -361,7 +411,7 @@ export function CampaignStatusDropdown({
         "
       >
         <ComboboxList>
-          {statuses.map((s) => (
+          {dropdownOptions.map((s) => (
             <ComboboxItem
               key={s.label}
               value={s.label.toLowerCase()}
@@ -384,8 +434,6 @@ const menuItems = [
   { label: "Copy Link", icon: LinkIcon, key: "copylink" },
   { label: "View Influencer list", icon: Eye, key: "viewinfluencerlist" },
   { label: "Invite Influencer", icon: IdentificationCardIcon, key: "inviteinfluencer" },
-  { label: "Link IEM Folder", icon: NewspaperIcon, key: "linkiemfolder" },
-  { label: "Move to workspace", icon: null, key: "moveToWorkspace", hasArrow: true },
 ];
 
 export function InfluencerContextMenu({
@@ -918,6 +966,26 @@ function RecommendedActionItems({
     </>
   );
 }
+function canShowEditCampaign(c: any): boolean {
+  const status = String(c?.status ?? "").trim().toLowerCase();
+
+  if (status === "draft") return true;
+
+  if (status === "active" || status === "scheduled") {
+    const startAtRaw = c?.startAt ?? c?.details?.startAt;
+    if (!startAtRaw) return true;
+
+    const startAt = new Date(startAtRaw);
+    if (Number.isNaN(startAt.getTime())) return true;
+
+    const now = new Date();
+
+    // show edit only until start date is reached
+    return startAt.getTime() > now.getTime();
+  }
+
+  return false;
+}
 
 export default function ViewCampaignPage() {
   const router = useRouter();
@@ -1233,25 +1301,25 @@ export default function ViewCampaignPage() {
 
   const videoReferenceUrl = String(
     (doc as any)?.videoReference ??
-      (doc as any)?.videoReferenceUrl ??
-      (doc as any)?.referenceVideoUrl ??
-      (doc as any)?.videoUrl ??
-      details?.videoReference ??
-      details?.videoReferenceUrl ??
-      details?.referenceVideoUrl ??
-      details?.videoUrl ??
-      ""
+    (doc as any)?.videoReferenceUrl ??
+    (doc as any)?.referenceVideoUrl ??
+    (doc as any)?.videoUrl ??
+    details?.videoReference ??
+    details?.videoReferenceUrl ??
+    details?.referenceVideoUrl ??
+    details?.videoUrl ??
+    ""
   ).trim();
 
   const videoThumbUrl = videoReferenceUrl ? getVideoThumb(videoReferenceUrl) : "";
 
   const targetCountryText = countries.length
     ? countries
-        .map((c: any) =>
-          `${String(c?.flag ?? "")} ${String(c?.countryNameEn ?? c?.countryCode ?? "").trim()}`.trim()
-        )
-        .filter(Boolean)
-        .join(", ")
+      .map((c: any) =>
+        `${String(c?.flag ?? "")} ${String(c?.countryNameEn ?? c?.countryCode ?? "").trim()}`.trim()
+      )
+      .filter(Boolean)
+      .join(", ")
     : "—";
 
   const productUrlRaw =
@@ -1287,6 +1355,7 @@ export default function ViewCampaignPage() {
 
   const startAt = (doc as any)?.startAt ?? details?.startAt ?? null;
   const endAt = (doc as any)?.endAt ?? details?.endAt ?? null;
+  const showEditButton = canShowEditCampaign(doc);
 
   let timelineText = "—";
   try {
@@ -1301,7 +1370,7 @@ export default function ViewCampaignPage() {
     } else if ((doc as any)?.timeline) {
       timelineText = String((doc as any)?.timeline);
     }
-  } catch {}
+  } catch { }
 
   const currency =
     String((doc as any)?.currency ?? details?.currency ?? (doc as any)?.budgetCurrency ?? "USD") || "USD";
@@ -1323,20 +1392,20 @@ export default function ViewCampaignPage() {
 
   const descriptionText = String(
     (doc as any)?.description ??
-      (doc as any)?.campaignDescription ??
-      details?.description ??
-      details?.campaignDescription ??
-      ""
+    (doc as any)?.campaignDescription ??
+    details?.description ??
+    details?.campaignDescription ??
+    ""
   ).trim();
 
   const additionalNotesText = String(
     (doc as any)?.additionalNotes ??
-      (doc as any)?.notes ??
-      (doc as any)?.additionalInformation ??
-      details?.additionalNotes ??
-      details?.notes ??
-      details?.additionalInformation ??
-      ""
+    (doc as any)?.notes ??
+    (doc as any)?.additionalInformation ??
+    details?.additionalNotes ??
+    details?.notes ??
+    details?.additionalInformation ??
+    ""
   ).trim();
 
   const lorem10 = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do.";
@@ -1462,11 +1531,11 @@ export default function ViewCampaignPage() {
             style={
               logoUrl
                 ? {
-                    backgroundImage: `url(${logoUrl})`,
-                    backgroundRepeat: "no-repeat",
-                    backgroundPosition: "11px 24px",
-                    backgroundSize: "78% 52%",
-                  }
+                  backgroundImage: `url(${logoUrl})`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "11px 24px",
+                  backgroundSize: "78% 52%",
+                }
                 : undefined
             }
           />
@@ -1515,6 +1584,9 @@ export default function ViewCampaignPage() {
                 campaignId={campaignId}
                 brandId={brandId}
                 currentStatus={statusText}
+                onStatusChange={(newStatus) => {
+                  setDoc((prev: any) => (prev ? { ...prev, status: newStatus } : prev));
+                }}
               />
 
               <Button
@@ -1554,23 +1626,25 @@ export default function ViewCampaignPage() {
               Overview
             </div>
 
-            <Button
-              variant="raised"
-              size="sm"
-              className="my-0 p-0 h-auto bg-transparent shadow-none hover:bg-transparent active:bg-transparent gap-2"
-              rightIcon={
-                <PencilSimple
-                  weight="bold"
-                  className="text-[#1A1A1A]"
-                  style={{ width: "0.875rem", height: "0.875rem" }}
-                />
-              }
-              onClick={() => router.push(`/brand/campaign/${campaignId}/edit`)}
-            >
-              <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
-                Edit
-              </span>
-            </Button>
+            {showEditButton ? (
+              <Button
+                variant="raised"
+                size="sm"
+                className="my-0 p-0 h-auto bg-transparent shadow-none hover:bg-transparent active:bg-transparent gap-2"
+                rightIcon={
+                  <PencilSimple
+                    weight="bold"
+                    className="text-[#1A1A1A]"
+                    style={{ width: "0.875rem", height: "0.875rem" }}
+                  />
+                }
+                onClick={() => router.push(`/brand/campaign/${campaignId}/edit`)}
+              >
+                <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
+                  Edit
+                </span>
+              </Button>
+            ) : null}
           </div>
 
           <div className="flex w-full flex-col items-center justify-center gap-5 self-stretch rounded-[0.75rem] border border-[#E6E6E6] p-4">
@@ -1614,9 +1688,8 @@ export default function ViewCampaignPage() {
               <button
                 type="button"
                 onClick={() => setBudgetTab("remaining")}
-                className={`flex h-8 px-3 items-center justify-center gap-1 self-stretch rounded-[0.5rem] ${
-                  budgetTab === "remaining" ? "bg-white" : "bg-transparent"
-                }`}
+                className={`flex h-8 px-3 items-center justify-center gap-1 self-stretch rounded-[0.5rem] ${budgetTab === "remaining" ? "bg-white" : "bg-transparent"
+                  }`}
               >
                 <span className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
                   Remaining Budget
@@ -1626,9 +1699,8 @@ export default function ViewCampaignPage() {
               <button
                 type="button"
                 onClick={() => setBudgetTab("used")}
-                className={`flex h-8 px-3 items-center justify-center gap-1 self-stretch rounded-[0.5rem] ${
-                  budgetTab === "used" ? "bg-white" : "bg-transparent"
-                }`}
+                className={`flex h-8 px-3 items-center justify-center gap-1 self-stretch rounded-[0.5rem] ${budgetTab === "used" ? "bg-white" : "bg-transparent"
+                  }`}
               >
                 <span className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
                   Used Budget

@@ -7,6 +7,7 @@ import {
   FileMinus,
   PaperPlaneTilt,
   Users,
+  Wallet,
   YoutubeLogo,
   InstagramLogo,
   TiktokLogo,
@@ -51,40 +52,62 @@ function getDefaultIcon(label: string) {
   if (key === "instagram") return <InstagramLogo weight="regular" />;
   if (key === "tiktok" || key === "tik tok") return <TiktokLogo weight="regular" />;
 
-  if (key === "contract") return <FileMinus weight="regular" />;
+  if (key === "wallet balance" || key === "wallet" || key === "budget") {
+    return <Wallet weight="regular" />;
+  }
+  if (key === "applied" || key === "applicants") return <FileMinus weight="regular" />;
   if (key === "influencer") return <Users weight="regular" />;
   if (key === "email") return <PaperPlaneTilt weight="regular" />;
 
   return null;
 }
 
-function statusPillBg(variant: StatusVariant) {
-  switch (variant) {
+function normalizeStatusVariant(variant: string): StatusVariant {
+  const v = String(variant || "").trim().toLowerCase();
+
+  if (v === "active") return "active";
+  if (v === "paused") return "paused";
+  if (v === "draft") return "draft";
+  if (v === "scheduled") return "scheduled";
+  if (v === "completed" || v === "complete") return "completed";
+  if (v === "expired") return "expired";
+
+  return "draft";
+}
+
+function statusPillBg(variant: StatusVariant | string) {
+  switch (normalizeStatusVariant(variant)) {
     case "active":
-      return "bg-success-100";
+      return "bg-[#BCE4C5]";
     case "paused":
-      return "bg-warning-200";
+      return "bg-[#F5C6CB]";
     case "draft":
-    case "expired":
+      return "bg-[#E0E0E0]";
     case "scheduled":
+      return "bg-[#BDD7F5]";
     case "completed":
+      return "bg-[#FAD6C0]";
+    case "expired":
     default:
-      return "bg-muted";
+      return "bg-[#E0E0E0]";
   }
 }
 
-function statusDotBg(variant: StatusVariant) {
-  switch (variant) {
+function statusDotBg(variant: StatusVariant | string) {
+  switch (normalizeStatusVariant(variant)) {
     case "active":
-      return "bg-success-500";
+      return "bg-[#28A745]";
     case "paused":
-      return "bg-warning-600";
+      return "bg-[#DC3545]";
     case "draft":
-    case "expired":
+      return "bg-[#9E9E9E]";
     case "scheduled":
+      return "bg-[#4A90D9]";
     case "completed":
+      return "bg-[#F07B3F]";
+    case "expired":
     default:
-      return "bg-muted-foreground";
+      return "bg-[#9E9E9E]";
   }
 }
 
@@ -322,7 +345,7 @@ export default function BrandCampaignCard({
           {/* ✅ Campaign title fix:
               On very small available widths (like when sidebar is open),
               status moves below title so the title NEVER disappears. */}
-          <div className="grid min-w-0 flex-1 grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="grid min-w-0 flex-1 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             {/* title */}
             <div className="min-w-0">
               <div
@@ -357,9 +380,6 @@ export default function BrandCampaignCard({
                 {statusLabel}
               </span>
 
-              {showStatusChevron ? (
-                <CaretDown className="shrink-0 text-muted-foreground" weight="regular" size={16} />
-              ) : null}
             </div>
           </div>
 
@@ -370,7 +390,7 @@ export default function BrandCampaignCard({
             ) : (
               <button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-[0.5rem] text-muted-foreground hover:text-tx-secondary"
+                className="inline-flex h-9 w-5 items-center justify-center rounded-[0.5rem] text-muted-foreground hover:text-tx-secondary"
                 aria-label="More options"
               >
                 <DotsThree weight="bold" size={18} />

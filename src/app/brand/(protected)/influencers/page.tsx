@@ -3,12 +3,13 @@
 
 import React, { Suspense, lazy } from "react";
 import MediaKitPage from "./viewMediaKit";
-
+import ManageProfile from "./manageProfile";
 export default function appliedInfluencer() {
     return (
     <div>
       <Suspense fallback={<div>Loading Media-Kit</div>}>
         <MediaKitPage/>
+        <ManageProfile/>
       </Suspense>
     </div>
   );
