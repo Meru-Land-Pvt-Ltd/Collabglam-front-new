@@ -12,6 +12,7 @@ const LIST_BASE = "/list";
 const MILESTONE_BASE = "/milestone";
 const DELEVERABLE_BASE = "/deliverable";
 const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
+const CONTRACT_BASE = "/contract"
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -1084,4 +1085,16 @@ export async function apiGetAcceptedAdminCreatedCampaigns(
       },
     }
   );
+}
+
+export async function apiUploadInfluencerSignature(payload: FormData) {
+  return apiPost(`${CONTRACT_BASE}/upload-influencer`, payload, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
+
+export async function apiGetInfluencerSignature(influencerId: string) {
+  return apiGet(`${CONTRACT_BASE}/signature-influencer/${influencerId}`);
 }

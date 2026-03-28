@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { MagnifyingGlass, CaretDown, X } from "@phosphor-icons/react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
@@ -14,11 +14,10 @@ import {
   useComboboxAnchor,
 } from "@/components/ui/combobox";
 import { FloatingDateInput } from "@/components/ui/date";
+import { apiGetCategories, getApiErrorMessage } from "@/app/brand/services/brandApi";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type ViewMode = "grid" | "list";
 export type SelectOption = { value: string; label: string };
+type ViewMode = "grid" | "list";
 
 type QuickFilter =
   | "recently_edited"
@@ -39,6 +38,12 @@ export const DEFAULT_DATE_FILTER: DateFilterValue = {
   allDatesOption: "all",
   startDate: "",
   endDate: "",
+};
+
+type BackendCategoryRow = {
+  _id: string;
+  name: string;
+  subcategories?: Array<{ _id: string; name: string; tags?: any[] }>;
 };
 
 export type CampaignFilterProps = {
@@ -63,8 +68,7 @@ export type CampaignFilterProps = {
   viewMode: ViewMode;
   setViewMode: React.Dispatch<React.SetStateAction<ViewMode>>;
 
-  categoryOptions: SelectOption[];
-  catLoading?: boolean;
+  showCreatorStatus?: boolean;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -114,7 +118,7 @@ const dateFieldCls = [
   "[&_svg]:h-4 [&_svg]:w-4",
 ].join(" ");
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Date label helpers ───────────────────────────────────────────────────────
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -152,6 +156,8 @@ function prettyDateLabel(s: string) {
   const d = parseLooseDate(s);
   return d ? formatDDMMYYYY(d) : s;
 }
+
+// ─── Date filter helpers ──────────────────────────────────────────────────────
 
 function getDateFilterLabel(v: DateFilterValue): string {
   if (v.quickFilter) {
@@ -510,6 +516,7 @@ function CategoryMultiCombobox({
   }, [safeOptions, query]);
 
   const comboboxValue = normalizedValues.length === 0 ? ["__all__"] : normalizedValues;
+  const showNoCategories = !loading && filteredOptions.length === 0;
 
   return (
     <div className="inline-flex items-center gap-2">
@@ -526,6 +533,7 @@ function CategoryMultiCombobox({
                 onChange([]);
                 return;
               }
+
               onChange(
                 Array.from(new Set(raw.filter((v) => v !== "__all__")))
                   .filter((v) => v && v !== "__loading__")
@@ -575,6 +583,10 @@ function CategoryMultiCombobox({
                 <ComboboxItem value="__loading__" disabled>
                   Loading...
                 </ComboboxItem>
+              ) : showNoCategories ? (
+                <ComboboxItem value="__empty__" disabled>
+                  No categories found
+                </ComboboxItem>
               ) : (
                 filteredOptions.map((o) => {
                   const v = String(o.value).trim();
@@ -617,9 +629,65 @@ export default function CampaignFilter({
   setSearchInput,
   viewMode,
   setViewMode,
-  categoryOptions,
-  catLoading = false,
+  showCreatorStatus = true,
 }: CampaignFilterProps) {
+  const [categoryOptions, setCategoryOptions] = useState<SelectOption[]>([]);
+  const [catLoading, setCatLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCategories() {
+      try {
+        setCatLoading(true);
+
+        const rows = await apiGetCategories();
+
+        if (!isMounted) return;
+
+        const mapped: SelectOption[] = (Array.isArray(rows) ? rows : [])
+          .filter((item: BackendCategoryRow) => item?._id && item?.name)
+          .map((item: BackendCategoryRow) => ({
+            value: String(item._id),
+            label: String(item.name),
+          }));
+
+        setCategoryOptions(mapped);
+      } catch (error) {
+        console.error("Failed to fetch categories:", getApiErrorMessage(error));
+        if (isMounted) setCategoryOptions([]);
+      } finally {
+        if (isMounted) setCatLoading(false);
+      }
+    }
+
+    loadCategories();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      campaignType !== "all" ||
+      (showCreatorStatus && creatorStatus !== "all") ||
+      categoryIds.length > 0 ||
+      isDateFilterActive(dateFilter) ||
+      aiCreated ||
+      searchInput.trim() !== ""
+    );
+  }, [campaignType, creatorStatus, showCreatorStatus, categoryIds, dateFilter, aiCreated, searchInput]);
+
+  function handleClearFilters() {
+    setCampaignType("all");
+    setCreatorStatus("all");
+    setCategoryIds([]);
+    setDateFilter(DEFAULT_DATE_FILTER);
+    setAiCreated(false);
+    setSearchInput("");
+  }
+
   return (
     <div className="mt-8 flex w-full flex-wrap items-start justify-between gap-x-10 gap-y-3">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-3">
@@ -641,18 +709,19 @@ export default function CampaignFilter({
           ]}
         />
 
-        <SingleSelectCombobox
-          label="Creator Status"
-          ariaLabel="Creator Status"
-          value={creatorStatus}
-          onChange={setCreatorStatus}
-          options={[
-            { value: "all", label: "All" },
-            { value: "invited", label: "Invited" },
-            { value: "applied", label: "Applied" },
-            { value: "approved", label: "Approved" },
-          ]}
-        />
+        {showCreatorStatus ? (
+          <SingleSelectCombobox
+            label="Creator Status"
+            ariaLabel="Creator Status"
+            value={creatorStatus}
+            onChange={setCreatorStatus}
+            options={[
+              { value: "all", label: "All" },
+              { value: "applied", label: "Applied" },
+              { value: "approved", label: "Approved" },
+            ]}
+          />
+        ) : null}
 
         <CategoryMultiCombobox
           label="Category"
@@ -680,6 +749,17 @@ export default function CampaignFilter({
           </label>
           <span className={labelCls}>AI Created</span>
         </div>
+
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={handleClearFilters}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.875rem] font-medium text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors"
+          >
+            <X size={14} weight="bold" />
+            Clear
+          </button>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-3">

@@ -506,23 +506,23 @@ function FloatingShell({
             isFloatingNow && cn(FLOAT_TOP, "translate-y-0", LABEL_FLOAT)
           )}
         >
-<span className={cn("inline-flex items-center", isFloatingNow && cn("px-[6px] -ml-[6px] rounded-xs", patchBg))}>
-  <span className="inline-flex items-center gap-[2px]">
-    <span>{label}</span>
+          <span className={cn("inline-flex items-center", isFloatingNow && cn("px-[6px] -ml-[6px] rounded-xs", patchBg))}>
+            <span className="inline-flex items-center gap-[2px]">
+              <span>{label}</span>
 
-    {required ? (
-      <span className={cn("font-normal", isDisabled ? "text-neutral-400" : "text-[#E53935]")}>*</span>
-    ) : null}
+              {required ? (
+                <span className={cn("font-normal", isDisabled ? "text-neutral-400" : "text-[#E53935]")}>*</span>
+              ) : null}
 
-    {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+              {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
 
-    {info ? (
-      <span className="ml-1 inline-flex pointer-events-auto">
-        <FieldInfoIcon content={info} />
-      </span>
-    ) : null}
-  </span>
-</span>
+              {info ? (
+                <span className="ml-1 inline-flex pointer-events-auto">
+                  <FieldInfoIcon content={info} />
+                </span>
+              ) : null}
+            </span>
+          </span>
         </label>
       </div>
 
@@ -1212,7 +1212,7 @@ export function FloatingMultiSelect({
       if (isNodeInside(dropdownRef.current, target)) return;
       setOpen(false);
       setSearch("");
-      if (selectedRef.current.length === 0) setIsFocused(false);
+      setIsFocused(false);
     },
     true
   );
@@ -1230,7 +1230,7 @@ export function FloatingMultiSelect({
     if (!inWrap && !inDrop) {
       setOpen(false);
       setSearch("");
-      if (selectedRef.current.length === 0) setIsFocused(false);
+      setIsFocused(false);
     }
   });
 
@@ -1241,7 +1241,7 @@ export function FloatingMultiSelect({
       e.preventDefault();
       setOpen(false);
       setSearch("");
-      if (selectedRef.current.length === 0) setIsFocused(false);
+      setIsFocused(false);
       requestAnimationFrame(() => btnRef.current?.focus?.());
     }
   });
@@ -1433,12 +1433,12 @@ export function FloatingMultiSelect({
                 <span
                   ref={chipsRef}
                   className={cn(
-                    "absolute left-[18px] bottom-0",
-                    size === "small" ? "h-[34px]" : "h-[36px]",
-                    "flex flex-nowrap items-end gap-[10px] min-w-0 max-w-full",
+                    "absolute left-[18px] bottom-[6px]",
+                    size === "small" ? "min-h-[28px]" : "min-h-[30px]",
+                    "flex flex-nowrap items-center gap-[10px] min-w-0 max-w-full",
                     "overflow-x-auto overflow-y-hidden whitespace-nowrap",
                     X_SCROLLBAR_BOTTOM,
-                    chipsHasScrollbar ? "pb-0" : "pb-2"
+                    "pb-[6px]"
                   )}
                   style={{
                     right: `${rightPadPx ?? (canClear ? 78 : 48)}px`,

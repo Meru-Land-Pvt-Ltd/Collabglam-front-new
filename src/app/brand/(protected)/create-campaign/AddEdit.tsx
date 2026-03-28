@@ -1673,6 +1673,7 @@ function CreateManualScreen({
 
       setDraftJustSaved(true);
       draftSavedTimerRef.current = window.setTimeout(() => setDraftJustSaved(false), 1200);
+      router.replace("/brand/campaign/draft");
     } catch (e) {
       const backendMsg = extractBackendMessage(e);
       setApiError(backendMsg);
@@ -1680,7 +1681,7 @@ function CreateManualScreen({
     } finally {
       setDraftSaving(false);
     }
-  }, [campaignId, form, pushApiError, extractBackendMessage, extractBackendSuccessMessage]);
+  }, [campaignId, form, pushApiError, extractBackendMessage, extractBackendSuccessMessage,router]);
 
   useEffect(() => {
     return () => {
@@ -1783,14 +1784,14 @@ function CreateManualScreen({
 
         if (status === "scheduled") {
           resetForm();
-          router.replace(`/brand/campaign`);
+          router.replace(`/brand/campaign/scheduled-campaign`);
           onAfterPublish?.();
           return;
         }
 
         if (status === "active") {
           resetForm();
-          router.replace(`/brand/campaign`);
+          router.replace(`/brand/campaign/active`);
           onAfterPublish?.();
           return;
         }
@@ -1851,376 +1852,378 @@ function CreateManualScreen({
           <section className="min-h-0 min-w-0 flex flex-col">
             <div className="cg-panel flex flex-col min-h-0">
               <div className="shrink-0 px-4 sm:px-6 lg:px-10 pt-5">
-                <div className="w-full pb-4">
+                <div className="mx-auto w-full pb-4" style={{ maxWidth: `${formMaxWidth}px` }}>
                   <ProgressBar value={progress} heightClassName="h-[3px]" barClassName="bg-success-500" />
                 </div>
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain cg-scrollbar">
                 <div className="min-w-0 px-4 sm:px-6 lg:px-5 pb-10" style={{ paddingBottom: "calc(var(--cg-bottombar-h) + 32px)" }}>
-                  <div className="border p-5 border-[#D6D6D6] rounded-l">
-                    <div className="bg-white p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="cg-accordion-title">Product / Service Info</div>
-                          <div className="cg-accordion-subtitle">Describe your product or service, the campaign goal, and what you’d like creators to highlight.</div>
-                        </div>
-
-                        <div className="cg-ai-glow">
-                          <Button onClick={onSwitchToAI} className="m-0 shadow-lg">
-                            <SparkleIcon size={20} className="mr-2" />
-                            Create with AI
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-col gap-4">
-                        <FloatingInput
-                          label="Campaign title"
-                          maxLength={100}
-                          required
-                          value={form.title}
-                          onValueChange={(val) => setField("title", val)}
-                          state={stateFor("title")}
-                          errorText={msgFor("title")}
-                        />
-
-                        <LabeledTextarea
-                          label="Description"
-                          required
-                          value={form.description}
-                          minLength={50}
-                          maxLength={4000}
-                          onChange={(e: any) => setField("description", String(e.target.value))}
-                          state={stateFor("description")}
-                          errorText={msgFor("description")}
-                        />
-
-                        {showSparkle && (
-                          <div className="fixed inset-0 flex items-center justify-center pointer-events-none bg-gray-950/60 z-[9999]">
-                            <SparkleAnimation key={String(showSparkle)} className="scale-[1.8]" />
+                  <div className="mx-auto w-full" style={{ maxWidth: `${formMaxWidth}px` }}>
+                    <div className="border p-5 border-[#D6D6D6] rounded-l bg-white">
+                      <div className="bg-white p-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="cg-accordion-title">Product / Service Info</div>
+                            <div className="cg-accordion-subtitle">Describe your product or service, the campaign goal, and what you’d like creators to highlight.</div>
                           </div>
-                        )}
 
-                        <FloatingSelect
-                          {...SEARCHABLE_UI}
-                          label="Campaign Type"
-                          value={form.campaignType}
-                          searchable={false}
-                          onValueChange={(v) => setField("campaignType", v)}
-                          state={stateFor("campaignType")}
-                          errorText={msgFor("campaignType")}
-                        >
-                          {CAMPAIGN_TYPES.map((x) => (
-                            <SelectItem key={x.value} value={x.value}>
-                              {x.label}
-                            </SelectItem>
-                          ))}
-                        </FloatingSelect>
+                          <div className="cg-ai-glow">
+                            <Button onClick={onSwitchToAI} className="m-0 shadow-lg">
+                              <SparkleIcon size={20} className="mr-2" />
+                              Create with AI
+                            </Button>
+                          </div>
+                        </div>
 
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <FloatingSelect
-                            {...catSearchProps}
-                            label="Campaign category"
+                        <div className="mt-4 flex flex-col gap-4">
+                          <FloatingInput
+                            label="Campaign title"
+                            maxLength={100}
                             required
-                            value={form.categoryId}
-                            onValueChange={(id) => {
-                              categoryPicker.selectCategoryId(id);
-                              const opt = categoryOptionsMerged.find((o) => o.value === id);
-                              setField("categoryId", id);
-                              setField("categoryName", opt?.label ?? "");
-                              setField("subcategories", []);
-                            }}
-                            state={stateFor("categoryId")}
-                            errorText={msgFor("categoryId")}
-                            clientFilter={false}
+                            value={form.title}
+                            onValueChange={(val) => setField("title", val)}
+                            state={stateFor("title")}
+                            errorText={msgFor("title")}
+                          />
+
+                          <LabeledTextarea
+                            label="Description"
+                            required
+                            value={form.description}
+                            minLength={50}
+                            maxLength={4000}
+                            onChange={(e: any) => setField("description", String(e.target.value))}
+                            state={stateFor("description")}
+                            errorText={msgFor("description")}
+                          />
+
+                          {showSparkle && (
+                            <div className="fixed inset-0 flex items-center justify-center pointer-events-none bg-gray-950/60 z-[9999]">
+                              <SparkleAnimation key={String(showSparkle)} className="scale-[1.8]" />
+                            </div>
+                          )}
+
+                          <FloatingSelect
+                            {...SEARCHABLE_UI}
+                            label="Campaign Type"
+                            value={form.campaignType}
+                            searchable={false}
+                            onValueChange={(v) => setField("campaignType", v)}
+                            state={stateFor("campaignType")}
+                            errorText={msgFor("campaignType")}
                           >
-                            {categoryOptionsMerged.map((x) => (
+                            {CAMPAIGN_TYPES.map((x) => (
                               <SelectItem key={x.value} value={x.value}>
                                 {x.label}
                               </SelectItem>
                             ))}
                           </FloatingSelect>
 
-                          <FloatingMultiSelect
-                            {...SEARCHABLE_UI}
-                            label="Sub Category"
-                            required
-                            value={form.subcategories}
-                            options={subcategoryOptionsMerged}
-                            onValueChange={(next) => setField("subcategories", next)}
-                            state={stateFor("subcategories")}
-                            errorText={msgFor("subcategories")}
-                            includeAll={false}
-                          />
-                        </div>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <FloatingSelect
+                              {...catSearchProps}
+                              label="Campaign category"
+                              required
+                              value={form.categoryId}
+                              onValueChange={(id) => {
+                                categoryPicker.selectCategoryId(id);
+                                const opt = categoryOptionsMerged.find((o) => o.value === id);
+                                setField("categoryId", id);
+                                setField("categoryName", opt?.label ?? "");
+                                setField("subcategories", []);
+                              }}
+                              state={stateFor("categoryId")}
+                              errorText={msgFor("categoryId")}
+                              clientFilter={false}
+                            >
+                              {categoryOptionsMerged.map((x) => (
+                                <SelectItem key={x.value} value={x.value}>
+                                  {x.label}
+                                </SelectItem>
+                              ))}
+                            </FloatingSelect>
 
-                        <ProductCardUpload
-                          files={form.productFiles}
-                          required
-                          error={Boolean(stateFor("productFiles"))}
-                          errorText={msgFor("productFiles")}
-                          onFilesChange={(next) => {
-                            const errs = validateFiles(next, "Product file");
-                            setProductFileErrors(errs);
-                            if (errs.length) return;
-                            setField("productFiles", next);
-                          }}
-                        />
-
-                        <FloatingInput
-                          label="Product Link / Video references"
-                          value={form.productLink}
-                          onValueChange={(val) => setField("productLink", val)}
-                          state={stateFor("productLink")}
-                          errorText={msgFor("productLink")}
-                        />
-
-                        <div>
-                          <div className={cn("cg-description text-size-[14px] mb-2 flex items-center gap-1", stateFor("goals") && "!text-red-600")}>
-                            <span>Campaign Goals</span>
-                            <span className="!text-red-600">*</span>
+                            <FloatingMultiSelect
+                              {...SEARCHABLE_UI}
+                              label="Sub Category"
+                              required
+                              value={form.subcategories}
+                              options={subcategoryOptionsMerged}
+                              onValueChange={(next) => setField("subcategories", next)}
+                              state={stateFor("subcategories")}
+                              errorText={msgFor("subcategories")}
+                              includeAll={false}
+                            />
                           </div>
 
-                          <ChipMultiSelect options={goalsOptions} value={form.goals} onChange={(next) => setField("goals", next)} />
-
-                          {stateFor("goals") ? <div className="mt-1 text-[14px] text-red-600">{msgFor("goals")}</div> : null}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-10 flex flex-col gap-[40px]">
-                      <AccordionCard title="Creator Requirements" subtitle="Define who you’re looking to collaborate with.">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <FloatingInput
-                            label="Number of Influencers"
-                            type="number"
+                          <ProductCardUpload
+                            files={form.productFiles}
                             required
-                            value={String(form.numberOfInfluencers || "")}
-                            onValueChange={(v) => setField("numberOfInfluencers", clampNonNegative(v))}
-                            state={stateFor("numberOfInfluencers")}
-                            errorText={msgFor("numberOfInfluencers")}
+                            error={Boolean(stateFor("productFiles"))}
+                            errorText={msgFor("productFiles")}
+                            onFilesChange={(next) => {
+                              const errs = validateFiles(next, "Product file");
+                              setProductFileErrors(errs);
+                              if (errs.length) return;
+                              setField("productFiles", next);
+                            }}
                           />
 
-                          <FloatingMultiSelect
-                            {...tierSearchProps}
-                            label="Influencer Tier"
-                            required
-                            value={form.influencerTier}
-                            searchable={false}
-                            options={tierOptions}
-                            onValueChange={(next) => {
-                              setForm((prev) => {
-                                const selected = next ?? [];
+                          <FloatingInput
+                            label="Product Link / Video references"
+                            value={form.productLink}
+                            onValueChange={(val) => setField("productLink", val)}
+                            state={stateFor("productLink")}
+                            errorText={msgFor("productLink")}
+                          />
 
-                                if (selected.length === 0) {
-                                  followersTouchedRef.current.min = false;
-                                  followersTouchedRef.current.max = false;
+                          <div>
+                            <div className={cn("cg-description text-size-[14px] mb-2 flex items-center gap-1", stateFor("goals") && "!text-red-600")}>
+                              <span>Campaign Goals</span>
+                              <span className="!text-red-600">*</span>
+                            </div>
+
+                            <ChipMultiSelect options={goalsOptions} value={form.goals} onChange={(next) => setField("goals", next)} />
+
+                            {stateFor("goals") ? <div className="mt-1 text-[14px] text-red-600">{msgFor("goals")}</div> : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-10 flex flex-col gap-[40px]">
+                        <AccordionCard title="Creator Requirements" subtitle="Define who you’re looking to collaborate with.">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <FloatingInput
+                              label="Number of Influencers"
+                              type="number"
+                              required
+                              value={String(form.numberOfInfluencers || "")}
+                              onValueChange={(v) => setField("numberOfInfluencers", clampNonNegative(v))}
+                              state={stateFor("numberOfInfluencers")}
+                              errorText={msgFor("numberOfInfluencers")}
+                            />
+
+                            <FloatingMultiSelect
+                              {...tierSearchProps}
+                              label="Influencer Tier"
+                              required
+                              value={form.influencerTier}
+                              searchable={false}
+                              options={tierOptions}
+                              onValueChange={(next) => {
+                                setForm((prev) => {
+                                  const selected = next ?? [];
+
+                                  if (selected.length === 0) {
+                                    followersTouchedRef.current.min = false;
+                                    followersTouchedRef.current.max = false;
+
+                                    return {
+                                      ...prev,
+                                      influencerTier: [],
+                                      minFollowers: 0,
+                                      maxFollowers: 0,
+                                    };
+                                  }
+
+                                  const ranges = selected.map((id) => tierRangeById.get(id));
+                                  const agg = aggregateRanges(ranges);
+
+                                  const nextMin = !followersTouchedRef.current.min && agg?.min != null ? agg.min : prev.minFollowers;
+                                  const nextMax = !followersTouchedRef.current.max && agg?.max != null ? agg.max : prev.maxFollowers;
 
                                   return {
                                     ...prev,
-                                    influencerTier: [],
-                                    minFollowers: 0,
-                                    maxFollowers: 0,
+                                    influencerTier: selected,
+                                    minFollowers: nextMin ?? prev.minFollowers,
+                                    maxFollowers: nextMax ?? prev.maxFollowers,
                                   };
-                                }
+                                });
+                              }}
+                              includeAll={false}
+                              state={stateFor("influencerTier")}
+                              errorText={msgFor("influencerTier")}
+                            />
 
-                                const ranges = selected.map((id) => tierRangeById.get(id));
-                                const agg = aggregateRanges(ranges);
+                            <FloatingInput
+                              label="Min Followers"
+                              type="number"
+                              value={String(form.minFollowers || "")}
+                              onValueChange={(v) => {
+                                const n = clampNonNegative(v);
+                                followersTouchedRef.current.min = n > 0;
+                                setField("minFollowers", n);
+                              }}
+                            />
 
-                                const nextMin = !followersTouchedRef.current.min && agg?.min != null ? agg.min : prev.minFollowers;
-                                const nextMax = !followersTouchedRef.current.max && agg?.max != null ? agg.max : prev.maxFollowers;
+                            <FloatingInput
+                              label="Max Followers"
+                              type="number"
+                              value={String(form.maxFollowers || "")}
+                              onValueChange={(v) => {
+                                const n = clampNonNegative(v);
+                                followersTouchedRef.current.max = n > 0;
+                                setField("maxFollowers", n);
+                              }}
+                            />
 
-                                return {
-                                  ...prev,
-                                  influencerTier: selected,
-                                  minFollowers: nextMin ?? prev.minFollowers,
-                                  maxFollowers: nextMax ?? prev.maxFollowers,
-                                };
-                              });
-                            }}
-                            includeAll={false}
-                            state={stateFor("influencerTier")}
-                            errorText={msgFor("influencerTier")}
-                          />
-
-                          <FloatingInput
-                            label="Min Followers"
-                            type="number"
-                            value={String(form.minFollowers || "")}
-                            onValueChange={(v) => {
-                              const n = clampNonNegative(v);
-                              followersTouchedRef.current.min = n > 0;
-                              setField("minFollowers", n);
-                            }}
-                          />
-
-                          <FloatingInput
-                            label="Max Followers"
-                            type="number"
-                            value={String(form.maxFollowers || "")}
-                            onValueChange={(v) => {
-                              const n = clampNonNegative(v);
-                              followersTouchedRef.current.max = n > 0;
-                              setField("maxFollowers", n);
-                            }}
-                          />
-
-                          <FloatingMultiSelect
-                            {...formatSearchProps}
-                            label="Content Format"
-                            required
-                            value={form.contentFormats}
-                            options={formatOptions}
-                            onValueChange={(next) => setField("contentFormats", next)}
-                            includeAll={false}
-                            searchable={false}
-                            state={stateFor("contentFormats")}
-                            errorText={msgFor("contentFormats")}
-                          />
-
-                          <FloatingMultiSelect
-                            {...langSearchProps}
-                            label="Content Language"
-                            value={form.contentLanguage}
-                            options={langOptions}
-                            onValueChange={(next) => setField("contentLanguage", next)}
-                            includeAll={false}
-                          />
-                        </div>
-                      </AccordionCard>
-
-                      <AccordionCard title="Timeline & Payments" subtitle="Set Budget for delivery and how you want to pay creators.">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <FloatingSelect
-                            label="Payment Type"
-                            required
-                            value={form.paymentType}
-                            onValueChange={(v) => setField("paymentType", v)}
-                            state={stateFor("paymentType")}
-                            errorText={msgFor("paymentType")}
-                            searchable={false}
-                            searchPlaceholder={undefined}
-                          >
-                            <SelectItem value="Milestone">Milestone</SelectItem>
-                            <SelectItem value="Fixed">Fixed</SelectItem>
-                            <SelectItem value="Gifting">Gifting</SelectItem>
-                          </FloatingSelect>
-
-                          <FloatingInput
-                            label="Campaign Budget"
-                            required
-                            type="number"
-                            prefixText="$"
-                            value={String(form.campaignBudget || "")}
-                            onValueChange={(v) => setField("campaignBudget", clampNonNegative(v))}
-                            state={stateFor("campaignBudget")}
-                            errorText={msgFor("campaignBudget")}
-                          />
-
-                          <FloatingDateInput
-                            label="Start Date"
-                            required
-                            type="date"
-                            value={form.startDate}
-                            min={TODAY}
-                            onValueChange={(v) => {
-                              setField("startDate", v);
-                              if (form.endDate && isSameOrBeforeISO(form.endDate, v)) {
-                                setField("endDate", addDaysISO(v, 1));
-                              }
-                            }}
-                            state={stateFor("startDate")}
-                            errorText={msgFor("startDate")}
-                          />
-
-                          <FloatingDateInput
-                            label="End Date"
-                            required
-                            type="date"
-                            value={form.endDate}
-                            min={form.startDate ? addDaysISO(form.startDate, 1) : TODAY}
-                            onValueChange={(v) => setField("endDate", v)}
-                            state={stateFor("endDate")}
-                            errorText={msgFor("endDate")}
-                          />
-                        </div>
-                      </AccordionCard>
-
-                      <AccordionCard title="Audience & Platforms" subtitle="Choose where and who this campaign should reach.">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="md:col-span-2">
                             <FloatingMultiSelect
-                              {...SEARCHABLE_UI}
-                              label="Platform Selection"
+                              {...formatSearchProps}
+                              label="Content Format"
                               required
-                              value={form.platforms}
-                              options={MANUAL_PLATFORM_OPTIONS}
-                              onValueChange={(next) => setField("platforms", next)}
+                              value={form.contentFormats}
+                              options={formatOptions}
+                              onValueChange={(next) => setField("contentFormats", next)}
                               includeAll={false}
                               searchable={false}
-                              state={stateFor("platforms")}
-                              errorText={msgFor("platforms")}
+                              state={stateFor("contentFormats")}
+                              errorText={msgFor("contentFormats")}
                             />
-                          </div>
 
-                          <FloatingMultiSelect
-                            {...countrySearchProps}
-                            label="Target country"
-                            required
-                            value={form.targetCountry}
-                            options={countryOptionsForSelect}
-                            onValueChange={(next) => setField("targetCountry", next)}
-                            includeAll={false}
-                            state={stateFor("targetCountry")}
-                            errorText={msgFor("targetCountry")}
-                          />
-
-                          <FloatingMultiSelect
-                            {...ageSearchProps}
-                            label="Target age group"
-                            required
-                            value={form.targetAgeGroups}
-                            searchable={false}
-                            options={ageOptions}
-                            onValueChange={(next) => setField("targetAgeGroups", next)}
-                            includeAll={false}
-                            state={stateFor("targetAgeGroups")}
-                            errorText={msgFor("targetAgeGroups")}
-                          />
-
-                          <div className="md:col-span-2">
-                            <LabeledTextarea
-                              label="Additional notes"
-                              placeholder="Add any extra context, internal notes, or instructions you don’t want to miss."
-                              value={form.additionalNotes}
-                              onChange={(e) => setField("additionalNotes", String((e as any).target.value))}
-                              maxLength={4000}
-                              showAttachment
-                              attachment={form.attachment}
-                              onAttachmentChange={(file) => {
-                                const errs = file ? validateFiles([file], "Attachment") : [];
-                                setAttachmentErrors(errs);
-                                if (errs.length) return;
-                                setField("attachment", file);
-                              }}
-                              accept="image/*,.pdf,.doc,.docx"
-                            />
-                          </div>
-
-                          <div className="md:col-span-2">
-                            <FloatingTagInput
-                              {...hashtagSearchProps}
-                              label="Preferred Hashtags"
-                              value={form.hashtags}
-                              options={hashtagOptions}
-                              onValueChange={(next) => setField("hashtags", next)}
+                            <FloatingMultiSelect
+                              {...langSearchProps}
+                              label="Content Language"
+                              value={form.contentLanguage}
+                              options={langOptions}
+                              onValueChange={(next) => setField("contentLanguage", next)}
                               includeAll={false}
-                              dropdownDirection="up"
                             />
                           </div>
-                        </div>
-                      </AccordionCard>
+                        </AccordionCard>
+
+                        <AccordionCard title="Timeline & Payments" subtitle="Set Budget for delivery and how you want to pay creators.">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <FloatingSelect
+                              label="Payment Type"
+                              required
+                              value={form.paymentType}
+                              onValueChange={(v) => setField("paymentType", v)}
+                              state={stateFor("paymentType")}
+                              errorText={msgFor("paymentType")}
+                              searchable={false}
+                              searchPlaceholder={undefined}
+                            >
+                              <SelectItem value="Milestone">Milestone</SelectItem>
+                              <SelectItem value="Fixed">Fixed</SelectItem>
+                              <SelectItem value="Gifting">Gifting</SelectItem>
+                            </FloatingSelect>
+
+                            <FloatingInput
+                              label="Campaign Budget"
+                              required
+                              type="number"
+                              prefixText="$"
+                              value={String(form.campaignBudget || "")}
+                              onValueChange={(v) => setField("campaignBudget", clampNonNegative(v))}
+                              state={stateFor("campaignBudget")}
+                              errorText={msgFor("campaignBudget")}
+                            />
+
+                            <FloatingDateInput
+                              label="Start Date"
+                              required
+                              type="date"
+                              value={form.startDate}
+                              min={TODAY}
+                              onValueChange={(v) => {
+                                setField("startDate", v);
+                                if (form.endDate && isSameOrBeforeISO(form.endDate, v)) {
+                                  setField("endDate", addDaysISO(v, 1));
+                                }
+                              }}
+                              state={stateFor("startDate")}
+                              errorText={msgFor("startDate")}
+                            />
+
+                            <FloatingDateInput
+                              label="End Date"
+                              required
+                              type="date"
+                              value={form.endDate}
+                              min={form.startDate ? addDaysISO(form.startDate, 1) : TODAY}
+                              onValueChange={(v) => setField("endDate", v)}
+                              state={stateFor("endDate")}
+                              errorText={msgFor("endDate")}
+                            />
+                          </div>
+                        </AccordionCard>
+
+                        <AccordionCard title="Audience & Platforms" subtitle="Choose where and who this campaign should reach.">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="md:col-span-2">
+                              <FloatingMultiSelect
+                                {...SEARCHABLE_UI}
+                                label="Platform Selection"
+                                required
+                                value={form.platforms}
+                                options={MANUAL_PLATFORM_OPTIONS}
+                                onValueChange={(next) => setField("platforms", next)}
+                                includeAll={false}
+                                searchable={false}
+                                state={stateFor("platforms")}
+                                errorText={msgFor("platforms")}
+                              />
+                            </div>
+
+                            <FloatingMultiSelect
+                              {...countrySearchProps}
+                              label="Target country"
+                              required
+                              value={form.targetCountry}
+                              options={countryOptionsForSelect}
+                              onValueChange={(next) => setField("targetCountry", next)}
+                              includeAll={false}
+                              state={stateFor("targetCountry")}
+                              errorText={msgFor("targetCountry")}
+                            />
+
+                            <FloatingMultiSelect
+                              {...ageSearchProps}
+                              label="Target age group"
+                              required
+                              value={form.targetAgeGroups}
+                              searchable={false}
+                              options={ageOptions}
+                              onValueChange={(next) => setField("targetAgeGroups", next)}
+                              includeAll={false}
+                              state={stateFor("targetAgeGroups")}
+                              errorText={msgFor("targetAgeGroups")}
+                            />
+
+                            <div className="md:col-span-2">
+                              <LabeledTextarea
+                                label="Additional notes"
+                                placeholder="Add any extra context, internal notes, or instructions you don’t want to miss."
+                                value={form.additionalNotes}
+                                onChange={(e) => setField("additionalNotes", String((e as any).target.value))}
+                                maxLength={4000}
+                                showAttachment
+                                attachment={form.attachment}
+                                onAttachmentChange={(file) => {
+                                  const errs = file ? validateFiles([file], "Attachment") : [];
+                                  setAttachmentErrors(errs);
+                                  if (errs.length) return;
+                                  setField("attachment", file);
+                                }}
+                                accept="image/*,.pdf,.doc,.docx"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <FloatingTagInput
+                                {...hashtagSearchProps}
+                                label="Preferred Hashtags"
+                                value={form.hashtags}
+                                options={hashtagOptions}
+                                onValueChange={(next) => setField("hashtags", next)}
+                                includeAll={false}
+                                dropdownDirection="up"
+                              />
+                            </div>
+                          </div>
+                        </AccordionCard>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2237,7 +2240,7 @@ function CreateManualScreen({
                 <Info size={20} className="text-black" />
               </div>
 
-              <div className="flex-1 min-h-0 pb-10 px-6 xl:px-10">
+              <div className="flex-1 min-h-0 px-6 xl:px-10 flex items-center justify-center overflow-y-auto mb-17">
                 <ManualPreviewCardStack
                   form={previewForm as any}
                   meta={previewMeta}

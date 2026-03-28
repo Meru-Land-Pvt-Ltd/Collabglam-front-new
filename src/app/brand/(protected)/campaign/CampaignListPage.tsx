@@ -30,7 +30,7 @@ import CampaignFilter, {
   type DateFilterValue,
   type SelectOption,
 } from "./CampaignFilter";
-
+import CampaignCardMenu from "@/components/ui/brand/campaign-card-menu";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -82,7 +82,13 @@ function firstImage(c: any): string | undefined {
   if (!Array.isArray(arr) || !arr[0]) return undefined;
   const v = arr[0];
   if (typeof v === "string") return v;
-  return v?.url ?? v?.src ?? v?.image ?? v?.dataUrl ?? v?.data?.url ?? undefined;
+  return v?.url ?? v?.src ?? v?.image ?? v?.dataUrl ?? v?.dataurl ?? v?.data?.url ?? undefined;
+}
+
+function formatBudget(value: any): string {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("en-IN");
 }
 
 function normalizeMongoId(id: any): string {
@@ -157,6 +163,64 @@ function resolveDateParams(df: DateFilterValue): {
   return {};
 }
 
+function canShowEditCampaign(c: any): boolean {
+  const status = String(c?.status ?? "").trim().toLowerCase();
+
+  if (status === "draft") return true;
+
+  if (status === "active" || status === "scheduled") {
+    const startAtRaw = c?.startAt;
+    if (!startAtRaw) return true;
+
+    const startAt = new Date(startAtRaw);
+    if (Number.isNaN(startAt.getTime())) return true;
+
+    const now = new Date();
+
+    // Show edit only until start date is reached
+    return startAt.getTime() > now.getTime();
+  }
+
+  return false;
+}
+
+function campaignFooterText(c: any) {
+  const status = String(c?.status ?? "").trim().toLowerCase();
+  const scheduleIn = c?.scheduleIn;
+
+  if (status === "completed" || status === "complete") {
+    return "Campaign Completed";
+  }
+
+  if (status === "scheduled" && scheduleIn) {
+    const unit = String(scheduleIn?.unit ?? "").toLowerCase();
+    const value = Number(scheduleIn?.value ?? 0);
+    const text = String(scheduleIn?.text ?? "").trim();
+
+    if (text) {
+      if (unit === "seconds") return text;
+      if (unit === "minutes") return text;
+      if (unit === "hours" && value < 24) return text;
+      if (unit === "days") return text;
+    }
+
+    if (Number.isFinite(value)) {
+      if (unit === "seconds") return `${value}s left`;
+      if (unit === "minutes") return `${value}m left`;
+      if (unit === "hours") return value < 24 ? `${value}h left` : `${Math.ceil(value / 24)}d left`;
+      if (unit === "days") return `${value}d left`;
+    }
+  }
+
+  return scheduleOrExpiryText(
+    c?.status,
+    c?.startAt ?? null,
+    c?.endAt ?? null
+  );
+}
+
+
+
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
 const GRID_WRAP = "mx-auto w-full max-w-[100vw]";
@@ -189,6 +253,10 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const normalizedFixedStatus = String(fixedStatus ?? "").trim().toLowerCase();
+  const showCreatorStatusFilter =
+    normalizedFixedStatus !== "draft" && normalizedFixedStatus !== "scheduled";
+
   // ── Category options ──
   const [categoryOptions, setCategoryOptions] = useState<SelectOption[]>([]);
   const [catLoading, setCatLoading] = useState(false);
@@ -203,12 +271,29 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [errMsg, setErrMsg] = useState<string>("");
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const filteredItems = useMemo(() => {
+    return items.filter((c: any) => {
+      const applicantCount = Number(c.applicantCount ?? 0);
+      const acceptedCount = Number(c.acceptedContracts ?? 0);
+
+      if (creatorStatus === "applied") return applicantCount > 0;
+      if (creatorStatus === "approved") return acceptedCount > 0;
+
+      return true;
+    });
+  }, [items, creatorStatus]);
 
   // ── Debounce search ──
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
     return () => clearTimeout(t);
   }, [searchInput]);
+
+  useEffect(() => {
+    if (!showCreatorStatusFilter && creatorStatus !== "all" && creatorStatus !== "") {
+      setCreatorStatus("all");
+    }
+  }, [showCreatorStatusFilter, creatorStatus]);
 
   // ── Load categories ──
   useEffect(() => {
@@ -387,33 +472,35 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
   // ── Render helpers ──
 
   const renderGridCard = (c: any) => {
-    const footerText = scheduleOrExpiryText(
-      c.status,
-      c.startAt ?? null,
-      c.endAt ?? null
-    );
+    const footerText = campaignFooterText(c);
 
     const campaignId = normalizeMongoId(c.campaignId ?? c._id ?? c.id);
     const campaignTitle = c.campaignTitle ?? "Untitled Campaign";
-
+    const viewHref = `/brand/campaign/${encodeURIComponent(campaignTitle)}?id=${encodeURIComponent(campaignId)}`;
+    const inviteHref = `/brand/browse-influencer`;
+    const showEditButton = canShowEditCampaign(c);
+    const applicantCount = c.applicantCount ?? 0;
+    const acceptedCount = c.acceptedContracts ?? 0;
+    const totalInfluencers = c.numberOfInfluencers ?? 0;
+    const campaignBudget = c.campaignBudget ?? 0;
     const goToInfluencers = () => {
-      if (typeof window !== "undefined") {
-        window.location.href = `/brand/influ/all?campaignId=${encodeURIComponent(campaignId)}`;
-      }
-    };
-
-    const goToActiveContracts = () => {
       if (typeof window !== "undefined") {
         window.location.href = `/brand/influ/active?campaignId=${encodeURIComponent(campaignId)}`;
       }
     };
 
-    const handleView = () => {
+    const goToApplied = () => {
       if (typeof window !== "undefined") {
-        window.location.href = `/brand/campaign/${campaignTitle}?id=${campaignId}`;
+        window.location.href = `/brand/influ/applied?campaignId=${encodeURIComponent(campaignId)}`;
       }
     };
-    
+
+    const handleView = () => {
+      if (typeof window !== "undefined") {
+        window.location.href = viewHref;
+      }
+    };
+
     const handleEdit = () => {
       if (typeof window !== "undefined") {
         window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(campaignId)}`;
@@ -431,18 +518,28 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         name={c.campaignTitle}
         statusLabel={statusLabel(c.status)}
         statusVariant={statusToVariant(c.status)}
+        headerRight={
+          <CampaignCardMenu
+            viewHref={viewHref}
+            inviteHref={inviteHref}
+          />
+        }
         tags={[c.category?.name || "No Category"]}
         stats={[
           { label: "Platform", value: ((c.platformSelection ?? []) as string[]).length },
           {
-            label: "Contract",
+            label: "Budget",
+            value: `$${formatBudget(campaignBudget)}`,
+          },
+          {
+            label: "Applied",
             value: (
               <button
                 type="button"
-                onClick={goToActiveContracts}
+                onClick={goToApplied}
                 className="cursor-pointer text-primary hover:underline"
               >
-                {c.contractsCount ?? 0}
+                {applicantCount}
               </button>
             ),
           },
@@ -454,19 +551,7 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
                 onClick={goToInfluencers}
                 className="cursor-pointer text-primary hover:underline"
               >
-                {c.numberOfInfluencers ?? 0}
-              </button>
-            ),
-          },
-          {
-            label: "Accepted",
-            value: (
-              <button
-                type="button"
-                onClick={goToActiveContracts}
-                className="cursor-pointer text-primary hover:underline"
-              >
-                {c.acceptedContracts ?? 0}
+                {acceptedCount}/{totalInfluencers}
               </button>
             ),
           },
@@ -481,15 +566,18 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
               >
                 View Campaign
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-[2.85rem] w-[2.65rem] rounded-[0.75rem] border-border px-0 shadow-none"
-                onClick={handleEdit}
-                aria-label="Edit campaign"
-              >
-                <PencilSimple size={18} weight="regular" />
-              </Button>
+
+              {showEditButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-[2.85rem] w-[2.65rem] rounded-[0.75rem] border-border px-0 shadow-none"
+                  onClick={handleEdit}
+                  aria-label="Edit campaign"
+                >
+                  <PencilSimple size={18} weight="regular" />
+                </Button>
+              ) : null}
             </div>
             <div className="text-xs text-muted-foreground">{footerText}</div>
           </>
@@ -499,13 +587,21 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
   };
 
   const listItems: ListCardViewItem[] = useMemo(() => {
-    return items.map((c: any) => {
+    return filteredItems.map((c: any) => {
       const platforms = (c.platformSelection ?? []) as string[];
       const campaignId = normalizeMongoId(c.campaignId ?? c._id ?? c.id);
+      const campaignTitle = c.campaignTitle ?? "Untitled Campaign";
+      const viewHref = `/brand/campaign/${encodeURIComponent(campaignTitle)}?id=${encodeURIComponent(campaignId)}`;
+      const inviteHref = `/brand/browse-influencer`;
+      const showEditButton = canShowEditCampaign(c);
+      const applicantCount = c.applicantCount ?? 0;
+      const acceptedCount = c.acceptedContracts ?? 0;
+      const totalInfluencers = c.numberOfInfluencers ?? 0;
+      const campaignBudget = c.campaignBudget ?? 0;
 
       const handleView = () => {
         if (typeof window !== "undefined") {
-          window.location.href = `/brand/campaign/${campaignId}`;
+          window.location.href = viewHref;
         }
       };
 
@@ -523,9 +619,9 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         categoryTag: c.category?.name || "No Category",
         metrics: [
           { id: "platform", label: "Platform", value: platforms.length, icon: MetricIcons.Platform },
-          { id: "contract", label: "Contract", value: c.contractsCount ?? 0, icon: MetricIcons.Contract },
-          { id: "influencer", label: "Influencer", value: c.numberOfInfluencers ?? 0, icon: MetricIcons.Influencer },
-          { id: "accepted", label: "Accepted", value: c.acceptedContracts ?? 0, icon: MetricIcons.Email },
+          { id: "applied", label: "Applied", value: applicantCount, icon: MetricIcons.Contract },
+          { id: "influencer", label: "Influencer", value: `${acceptedCount}/${totalInfluencers}`, icon: MetricIcons.Influencer },
+          { id: "budget", label: "Budget", value: formatBudget(campaignBudget), icon: MetricIcons.Email },
         ],
         statusLabel: statusLabel(c.status),
         statusVariant: (statusToVariant(c.status) as any) ?? "draft",
@@ -534,8 +630,8 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
           <Button
             variant="outline"
             className="min-w-0 w-full truncate whitespace-nowrap rounded-[0.5rem] border-border shadow-none
-               max-[520px]:h-9 max-[520px]:px-3 max-[520px]:text-[0.85rem]
-               min-[981px]:w-auto"
+       max-[520px]:h-9 max-[520px]:px-3 max-[520px]:text-[0.85rem]
+       min-[981px]:w-auto"
             onClick={handleView}
           >
             View Campaign
@@ -543,28 +639,32 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         ),
         menuSlot: (
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-[2.85rem] w-[2.78rem] !ml-0 rounded-[0.5rem] border-border p-0 shadow-none"
-              onClick={handleEdit}
-              aria-label="Edit campaign"
-            >
-              <PencilSimple size={18} weight="regular" />
-            </Button>
+            {showEditButton ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-[2.85rem] w-[2.78rem] !ml-0 rounded-[0.5rem] border-border p-0 shadow-none"
+                onClick={handleEdit}
+                aria-label="Edit campaign"
+              >
+                <PencilSimple size={18} weight="regular" />
+              </Button>
+            ) : null}
+
+            <CampaignCardMenu
+              viewHref={viewHref}
+              inviteHref={inviteHref}
+            />
           </div>
         ),
-        secondaryText: scheduleOrExpiryText(
-          c.status,
-          c.startAt ?? null,
-          c.endAt ?? null
-        ),
+        showMoreButton: false,
+        secondaryText: campaignFooterText(c),
       };
     });
-  }, [items]);
+  }, [filteredItems]);
 
   const showInitialSkeleton = !hasLoadedOnce;
-  const showEmptyState = hasLoadedOnce && !loading && items.length === 0 && !errMsg;
+  const showEmptyState = hasLoadedOnce && !loading && filteredItems.length === 0 && !errMsg;
 
   return (
     <div className="w-full min-w-0 px-4 sm:px-6 md:px-10 lg:px-12 py-6">
@@ -583,8 +683,7 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         setSearchInput={setSearchInput}
         viewMode={viewMode}
         setViewMode={setViewMode}
-        categoryOptions={categoryOptions}
-        catLoading={catLoading}
+        showCreatorStatus={showCreatorStatusFilter}
       />
 
       {errMsg && <div className="mt-4 text-sm text-red-600">{errMsg}</div>}
@@ -610,7 +709,7 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
               <ListCardView items={listItems} />
             ) : (
               <div className={GRID_WRAP}>
-                <div className={CARD_GRID}>{items.map(renderGridCard)}</div>
+                <div className={CARD_GRID}>{filteredItems.map(renderGridCard)}</div>
               </div>
             )}
           </>
@@ -627,7 +726,7 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
           >
             {loadingMore ? "Loading..." : "Load more"}
           </Button>
-        ) : hasLoadedOnce && items.length > 0 ? (
+        ) : hasLoadedOnce && filteredItems.length > 0 ? (
           <div
             className="text-center text-sm"
             style={{ color: "var(--Light-Text-Subtle, #8C8C8C)" }}

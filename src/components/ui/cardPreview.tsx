@@ -36,7 +36,6 @@ export type ManualForm = {
   campaigngoal?: string;
   campaignBudget?: number;
   productImages?: ProductImage[];
-  brandName?: string;
 };
 
 export type PreviewMeta = {
@@ -67,10 +66,11 @@ export type ContractStatus =
 
 export type ContractCardMeta = {
   status?: ContractStatus;
-  confirmations?: {
-    brand?: { confirmed?: boolean };
-    influencer?: { confirmed?: boolean };
+  acceptances?: {
+    brand?: { accepted?: boolean; acceptedVersion?: number };
+    influencer?: { accepted?: boolean; acceptedVersion?: number };
   };
+  version?: number;
   signatures?: {
     brand?: { signed?: boolean };
     influencer?: { signed?: boolean };
@@ -98,26 +98,22 @@ export type ContractCardProps = {
 /* ─────────────────────── Internal helpers ─────────────────────── */
 
 const normSt = (s?: string) => String(s || "").trim().toUpperCase();
-
-function normalizeImageSrc(src?: string) {
-  if (!src) return "";
-
-  let value = String(src).trim();
-
-  // Fix malformed base64 prefix
-  if (value.startsWith("data:image/") && value.includes(";base") && !value.includes(";base64,")) {
-    value = value.replace(";base64 ", ";base64,");
-    value = value.replace(";base ", ";base64,");
-    value = value.replace(";base64", ";base64,");
-  }
-
-  return value;
+function hasAcceptedCurrent(
+  meta: ContractCardMeta | null,
+  role: "brand" | "influencer"
+) {
+  if (!meta) return false;
+  const version = Number(meta.version || 0);
+  const acceptance = meta.acceptances?.[role];
+  return !!(
+    acceptance?.accepted &&
+    Number(acceptance.acceptedVersion || 0) === version
+  );
 }
-
 function getProductImageSrc(img?: ProductImage) {
   if (!img) return "";
-  if (typeof img === "string") return normalizeImageSrc(img);
-  return normalizeImageSrc(img.dataUrl || img.url || "");
+  if (typeof img === "string") return img;
+  return img.dataUrl || img.url || "";
 }
 function resolveContractStatus(meta: ContractCardMeta | null): {
   statusText: string;
@@ -144,8 +140,8 @@ function resolveContractStatus(meta: ContractCardMeta | null): {
   const isSuperseded = st === "SUPERSEDED";
   const isReadyToSign = st === "READY_TO_SIGN" || !!meta?.editsLockedAt;
 
-  const influencerConfirmed = !!meta?.confirmations?.influencer?.confirmed;
-  const brandConfirmed = !!meta?.confirmations?.brand?.confirmed;
+  const influencerConfirmed = hasAcceptedCurrent(meta, "influencer");
+  const brandConfirmed = hasAcceptedCurrent(meta, "brand");
   const influencerSigned = !!meta?.signatures?.influencer?.signed;
   const brandSigned = !!meta?.signatures?.brand?.signed;
   const anyoneSigned = influencerSigned || brandSigned;
@@ -391,16 +387,10 @@ function InviteActions({ invite }: { invite: InviteCardProps }) {
 /* ─────────────────────── Contract actions (inline, replaces Save/View) ─────────────────────── */
 
 function ContractActions({ contract }: { contract: ContractCardProps }) {
-  const {
-    needsAccept,
-    canEdit,
-    canSign,
-    canReject,
-  } = resolveContractStatus(contract.meta);
-  const router = useRouter()
+  const { needsAccept, canEdit, canSign, canReject } = resolveContractStatus(contract.meta);
+
   return (
     <div className="flex items-center gap-1.5 shrink-0">
-      {/* Primary CTA */}
       {(needsAccept || canEdit) && (
         <Button
           onClick={contract.onReviewAccept}
@@ -420,19 +410,19 @@ function ContractActions({ contract }: { contract: ContractCardProps }) {
         </Button>
       )}
 
-      {/* View
       <Button
-        onClick={() => router.push(`/influencer/my-campaigns/${contract.campaignId}`)}
-        className="flex items-center gap-1 rounded-lg border border-neutral-200 px-3 py-2 text-[12px] bg-black text-white font-medium text-neutral-700 transition "
+      variant="ghost"
+        onClick={contract.onView}
+        className="flex items-center gap-1 rounded-lg border hover:bg-gray-100 border-neutral-200 bg-white text-black px-3 py-2 text-[12px] font-medium  "
       >
         <Eye className="h-3 w-3" />
         View
-      </Button> */}
+      </Button>
 
       {canReject && (
         <Button
           onClick={contract.onReject}
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98] "
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
         >
           Reject
         </Button>
@@ -462,6 +452,7 @@ export function ManualPreviewCard({
   showViewMilestone?: boolean;
   onViewMilestone?: () => void;
 }) {
+  console.log("Contract in manualpreview card", contract)
   const title = form.title?.trim() ?? "";
   const desc = form.description?.trim() ?? "";
   const productImages = useMemo(
@@ -499,7 +490,6 @@ export function ManualPreviewCard({
   );
   const goal = useMemo(() => firstAndExtra(goalLabels), [goalLabels]);
   const topBadge = goal.first ? pillText(goal.first, goal.extra) : "";
-  const brandInitial = (form.brandName || "B").trim().charAt(0).toUpperCase();
 
   return (
     <div
@@ -545,7 +535,7 @@ export function ManualPreviewCard({
       <div className="mt-8 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-6">
         <div className="grid h-11 w-11 place-items-center rounded-s border-2 border-neutral-200 bg-white">
           <span className="text-[0.75rem] font-semibold tracking-wide text-neutral-900">
-            {brandInitial}
+            AD
           </span>
         </div>
       </div>
@@ -637,11 +627,9 @@ export function ManualPreviewCard({
           </div>
 
           {invite ? (
-            <div className="shrink-0 ml-auto">
-              <InviteActions invite={invite} />
-            </div>
+            <InviteActions invite={invite} />
           ) : showViewMilestone ? (
-            <div className="ml-auto flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0">
               <Button
                 variant="default"
                 onClick={onViewMilestone}
@@ -651,15 +639,14 @@ export function ManualPreviewCard({
               </Button>
             </div>
           ) : contract ? (
-            <div className="shrink-0 ml-auto">
-              <ContractActions contract={contract} />
-            </div>
+            <ContractActions contract={contract} />
           ) : (
-            <div className="ml-auto flex items-center gap-3 shrink-0">
-              <Button
-                variant="default"
-                onClick={onViewClick}
-              >
+            <div className="flex items-center gap-3 shrink-0 cursor-pointer">
+              <Button variant="ghost" className="shadow-none hover:bg-white">
+                <BookmarkSimpleIcon />
+                <span>Save</span>
+              </Button>
+              <Button variant="default" onClick={onViewClick}>
                 View
               </Button>
             </div>
