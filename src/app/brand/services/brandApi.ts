@@ -1829,3 +1829,73 @@ export async function apiGetMilestonesByInfluencerAndCampaign(
     }
   );
 }
+
+export type GetDeliverablesByBrandPayload = {
+  brandId: string;
+  status?: string;
+  campaignId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type GetDeliverablesByMilestonePayload = {
+  milestoneId: string;
+  brandId?: string;
+  influencerId?: string;
+  campaignId?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type GetDeliverablesListResponse = {
+  success: boolean;
+  message: string;
+  page: number;
+  limit: number;
+  total: number;
+  count: number;
+  data: DeliverableRow[];
+  filters?: {
+    brandId?: string;
+    milestoneId?: string;
+    influencerId?: string;
+    campaignId?: string;
+    status?: string;
+    search?: string;
+  };
+};
+
+export async function apiGetDeliverablesByBrand(
+  payload: GetDeliverablesByBrandPayload
+) {
+  return apiPost<GetDeliverablesListResponse>(
+    `${DELIVERABLE_BASE}/by-brand`,
+    {
+      brandId: payload.brandId,
+      status: payload.status,
+      campaignId: payload.campaignId,
+      search: payload.search,
+      page: payload.page ?? 1,
+      limit: payload.limit ?? 20,
+    }
+  );
+}
+
+export async function apiGetDeliverablesByMilestone(
+  payload: GetDeliverablesByMilestonePayload
+) {
+  return apiPost<GetDeliverablesListResponse>(
+    `${DELIVERABLE_BASE}/by-milestone`,
+    {
+      milestoneId: payload.milestoneId,
+      brandId: payload.brandId,
+      influencerId: payload.influencerId,
+      campaignId: payload.campaignId,
+      status: payload.status,
+      page: payload.page ?? 1,
+      limit: payload.limit ?? 20,
+    }
+  );
+}

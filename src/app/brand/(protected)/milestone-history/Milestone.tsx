@@ -119,7 +119,7 @@ const MilestoneHistoryPage: React.FC = () => {
     router.push(
       `/brand/deleverables?campaignId=${item.campaignId}&brandId=${
         item.brandId || brandId
-      }&influencerId=${item.influencerId}`
+      }&influencerId=${item.influencerId}&milestoneId=${item.milestoneId || ""}&milestoneHistoryId=${item.milestoneHistoryId}`
     );
   };
 

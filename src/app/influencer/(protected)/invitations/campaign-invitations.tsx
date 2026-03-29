@@ -333,9 +333,6 @@ function CampaignDetailsModal({
 
 const STATUS_TABS: { value: InviteTab; label: string }[] = [
     { value: "all", label: "All" },
-    { value: "sent", label: "Pending" },
-    { value: "accepted", label: "Accepted" },
-    { value: "reject", label: "Declined" },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -687,21 +684,36 @@ export default function InvitesPage() {
                                                 </td>
 
                                                 <td className="px-6 py-4 text-center">
-                                                    <Button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (inv.campaignId) {
-                                                                router.push(`/influencer/invitations/${inv.campaignId}?invitationId=${inv.id}`);
-                                                            } else {
-                                                                setDetailsInvite(inv);
-                                                            }
-                                                        }}
-                                                        className="inline-flex items-center gap-2 rounded-[1.75rem] bg-[#1A1A1A] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                        View
-                                                    </Button>
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <Button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (inv.campaignId) {
+                                                                    router.push(`/influencer/invitations/${inv.campaignId}?invitationId=${inv.id}`);
+                                                                } else {
+                                                                    setDetailsInvite(inv);
+                                                                }
+                                                            }}
+                                                            className="inline-flex items-center gap-2 rounded-[1.75rem] bg-[#1A1A1A] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition"
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                            View
+                                                        </Button>
+
+                                                        {inv.status === "accepted" && (
+                                                            <Button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    router.push("/influencer/my-campaigns/view-milestone");
+                                                                }}
+                                                                className="inline-flex items-center gap-2 rounded-[1.75rem] bg-[#1A1A1A] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition"
+                                                            >
+                                                                View Milestone
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                 </td>
+                            
                                             </tr>
                                         ))}
                                     </tbody>

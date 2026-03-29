@@ -1098,3 +1098,211 @@ export async function apiUploadInfluencerSignature(payload: FormData) {
 export async function apiGetInfluencerSignature(influencerId: string) {
   return apiGet(`${CONTRACT_BASE}/signature-influencer/${influencerId}`);
 }
+
+export type CampaignInvitationStatusSummary = {
+  sent: number;
+  accepted: number;
+  reject: number;
+  failed: number;
+};
+
+export type CampaignInvitationStatusCampaign = {
+  campaignId: string;
+  campaignTitle?: string | null;
+  campaignStatus?: string | null;
+  campaignIsActive?: number | null;
+  brandId?: string | null;
+};
+
+export type GetInvitationStatusByCampaignIdInput = {
+  campaignId: string;
+  brandId?: string;
+};
+
+export type GetInvitationStatusByCampaignIdResponse = {
+  status: "success" | "error";
+  campaign: CampaignInvitationStatusCampaign;
+  totalInvitations: number;
+  statusSummary: CampaignInvitationStatusSummary;
+  invitations: CampaignInvitationItem[];
+};
+
+export async function apiGetInvitationStatusByCampaignId(
+  input: GetInvitationStatusByCampaignIdInput,
+  token?: string
+) {
+  const campaignId = String(input.campaignId || "").trim();
+
+  if (!campaignId) {
+    throw new Error("campaignId is required");
+  }
+
+  return apiPost<GetInvitationStatusByCampaignIdResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/get-invitation-status-by-campaign-id`,
+    {
+      campaignId,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+
+export type GetDeliverablesByInfluencerInput = {
+  influencerId: string;
+  status?: string;
+  campaignId?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+};
+
+
+export type GetDeliverablesByMilestoneInput = {
+  milestoneId: string;
+  brandId?: string;
+  influencerId?: string;
+  campaignId?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+};
+
+export type GetDeliverablesListEnvelope = {
+  success: boolean;
+  message: string;
+  page: number;
+  limit: number;
+  total: number;
+  count: number;
+  data: DeliverableItem[];
+  filters?: {
+    brandId?: string;
+    milestoneId?: string;
+    influencerId?: string;
+    campaignId?: string;
+    status?: string;
+    search?: string;
+  };
+};
+
+export async function apiGetDeliverablesByInfluencer(
+  input: GetDeliverablesByInfluencerInput,
+  token?: string
+) {
+  const influencerId = String(input.influencerId || "").trim();
+
+  if (!influencerId) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPostRaw<GetDeliverablesListEnvelope>(
+    `${DELEVERABLE_BASE}/by-brand`,
+    {
+      influencerId,
+      status: input.status,
+      campaignId: input.campaignId,
+      search: input.search,
+      page: input.page ?? 1,
+      limit: input.limit ?? 20,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+export async function apiGetDeliverablesByMilestone(
+  input: GetDeliverablesByMilestoneInput,
+  token?: string
+) {
+  const milestoneId = String(input.milestoneId || "").trim();
+
+  if (!milestoneId) {
+    throw new Error("milestoneId is required");
+  }
+
+  return apiPostRaw<GetDeliverablesListEnvelope>(
+    `${DELEVERABLE_BASE}/by-milestone`,
+    {
+      milestoneId,
+      brandId: input.brandId,
+      influencerId: input.influencerId,
+      campaignId: input.campaignId,
+      status: input.status,
+      page: input.page ?? 1,
+      limit: input.limit ?? 20,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+export type DeliverableStatusSummary = {
+  pending: number;
+  submitted: number;
+  approved: number;
+  revision: number;
+};
+
+export type GetDeliverableStatusByInfluencerIdInput = {
+  influencerId: string;
+  campaignId: string;
+  page?: number;
+  limit?: number;
+};
+
+export type GetDeliverableStatusByInfluencerIdResponse = {
+  success: boolean;
+  message: string;
+  influencerId: string;
+  campaignId: string;
+  statusSummary: DeliverableStatusSummary;
+  page: number;
+  limit: number;
+  total: number;
+  count: number;
+  data: DeliverableItem[];
+  filters?: {
+    influencerId?: string;
+    campaignId?: string;
+  };
+};
+
+export async function apiGetDeliverableStatusByInfluencerId(
+  input: GetDeliverableStatusByInfluencerIdInput,
+  token?: string
+) {
+  const influencerId = String(input.influencerId || "").trim();
+  const campaignId = String(input.campaignId || "").trim();
+
+  if (!influencerId) {
+    throw new Error("influencerId is required");
+  }
+
+  if (!campaignId) {
+    throw new Error("campaignId is required");
+  }
+
+  return apiPostRaw<GetDeliverableStatusByInfluencerIdResponse>(
+    `${DELEVERABLE_BASE}/status/by-influencer`,
+    {
+      influencerId,
+      campaignId,
+      page: input.page ?? 1,
+      limit: input.limit ?? 20,
+    },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}

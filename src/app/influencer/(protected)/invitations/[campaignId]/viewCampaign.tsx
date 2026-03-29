@@ -6,6 +6,7 @@ import {
   apiGetfetchCampaignbyId,
   apiApplyToCampaign,
   apiUpdateInvitationStatus,
+  apiGetInvitationStatusByCampaignId,
   getApiErrorMessage,
 } from "@/app/influencer/services/influencerApi";
 import { ArrowUpRight } from "lucide-react";
@@ -17,6 +18,8 @@ import {
   CaretRight,
   DownloadSimple,
   FilePdf,
+  UsersThree,
+  TrendUp,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/buttonComp";
 import Image from "next/image";
@@ -47,12 +50,25 @@ function normalizeMongoId(id: any): string {
   return "";
 }
 
+function getAssetUrl(item: any): string {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  return String(item?.url || item?.src || item?.path || item?.dataUrl || "").trim();
+}
+
+function formatNumber(value: number) {
+  if (!Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat("en-IN").format(value);
+}
+
 const PAGE_WRAP =
   "flex w-full flex-col items-start gap-7 px-4 py-6 sm:px-6 lg:px-10 xl:px-14";
 
 function plural(n: number, unit: string) {
   return `${n} ${unit}${n === 1 ? "" : "s"}`;
 }
+
+
 
 function TagCard({
   title,
@@ -82,6 +98,26 @@ function TagCard({
         ) : (
           <span className="text-[#969696] text-[0.875rem] leading-[1.25rem]">—</span>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+function InfoCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex p-3 flex-col items-start gap-3 self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
+      <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
+        {title}
+      </div>
+      <div className="w-full text-[#1A1A1A] text-[0.875rem] font-semibold leading-[1.25rem]">
+        {value}
       </div>
     </div>
   );
@@ -162,7 +198,9 @@ function toTagValues(input: any): string[] {
           item?.goal ??
           item?.goalName ??
           item?.type ??
-          item?.campaignType;
+          item?.campaignType ??
+          item?.format ??
+          item?.category;
 
         return typeof value === "string" && value.trim() ? [value.trim()] : [];
       }
@@ -173,6 +211,8 @@ function toTagValues(input: any): string[] {
 
   return Array.from(new Set(values));
 }
+
+
 
 export default function ViewCampaignPage() {
   const router = useRouter();
@@ -245,18 +285,30 @@ export default function ViewCampaignPage() {
       .toLowerCase();
   };
 
+
+  function normalizeDecisionStatus(value: any): "" | "accepted" | "reject" | "sent" | "failed" {
+    const s = String(value || "").trim().toLowerCase();
+
+    if (s === "accepted" || s === "accept") return "accepted";
+    if (s === "reject" || s === "rejected") return "reject";
+    if (s === "sent") return "sent";
+    if (s === "failed") return "failed";
+
+    return "";
+  }
+
+  function syncDecisionStateFromStatus(rawStatus: any) {
+    const status = normalizeDecisionStatus(rawStatus);
+
+    setHasApplied(status === "accepted");
+    setHasRejected(status === "reject");
+  }
   const syncDecisionStateFromDoc = (payload: any) => {
     const applied = Number(payload?.hasApplied ?? 0) === 1;
-    const invitationStatus = resolveInvitationStatus(payload);
+    const invitationStatus = normalizeDecisionStatus(resolveInvitationStatus(payload));
 
-    const rejected =
-      invitationStatus === "reject" ||
-      invitationStatus === "rejected";
-
-    const accepted =
-      invitationStatus === "accepted" ||
-      invitationStatus === "accept" ||
-      applied;
+    const rejected = invitationStatus === "reject";
+    const accepted = invitationStatus === "accepted" || applied;
 
     setHasRejected(rejected);
     setHasApplied(accepted);
@@ -276,7 +328,7 @@ export default function ViewCampaignPage() {
 
     const createdByRole = resolveCreatedByRole(doc);
     const isAdminCreated = createdByRole === "admin";
-    const acceptedStatus = "accepted"; // change only if backend needs "accept"
+    const acceptedStatus = "accepted";
 
     try {
       setIsApplying(true);
@@ -347,7 +399,12 @@ export default function ViewCampaignPage() {
           : prev
       );
     } catch (e) {
-      setErr(getApiErrorMessage(e, isAdminCreated ? "Failed to accept invitation" : "Failed to apply to campaign"));
+      setErr(
+        getApiErrorMessage(
+          e,
+          isAdminCreated ? "Failed to accept invitation" : "Failed to apply to campaign"
+        )
+      );
     } finally {
       setIsApplying(false);
     }
@@ -408,10 +465,7 @@ export default function ViewCampaignPage() {
       localStorage.getItem("influencer_id") ||
       "";
 
-    const savedToken =
-      localStorage.getItem("token") ||
-      localStorage.getItem("accessToken") ||
-      "";
+    const savedToken = localStorage.getItem("token") || localStorage.getItem("accessToken") || "";
 
     setInfluencerId(id);
     setToken(savedToken);
@@ -486,11 +540,19 @@ export default function ViewCampaignPage() {
       setErr("");
 
       try {
-        const res: any = await apiGetfetchCampaignbyId(
-          influencerId,
-          campaignId,
-          token || undefined
-        );
+        const [campaignRes, invitationStatusRes] = await Promise.allSettled([
+          apiGetfetchCampaignbyId(influencerId, campaignId, token || undefined),
+          apiGetInvitationStatusByCampaignId(
+            { campaignId },
+            token || undefined
+          ),
+        ]);
+
+        if (campaignRes.status !== "fulfilled") {
+          throw campaignRes.reason;
+        }
+
+        const res: any = campaignRes.value;
 
         const payload =
           res?.data?.doc ??
@@ -501,9 +563,52 @@ export default function ViewCampaignPage() {
           res ??
           null;
 
+        let mergedPayload = payload;
+
+        if (invitationStatusRes.status === "fulfilled") {
+          const invitationApiData: any = invitationStatusRes.value;
+
+          const invitations = Array.isArray(invitationApiData?.invitations)
+            ? invitationApiData.invitations
+            : [];
+
+          const matchedInvitation =
+            (invitationId
+              ? invitations.find(
+                (item: any) =>
+                  normalizeMongoId(item?._id) === invitationId ||
+                  normalizeMongoId(item?.invitationId) === invitationId
+              )
+              : null) ||
+            invitations.find(
+              (item: any) =>
+                normalizeMongoId(item?.influencerId) === influencerId
+            ) ||
+            null;
+
+          if (matchedInvitation) {
+            const liveStatus = normalizeDecisionStatus(matchedInvitation?.status);
+
+            mergedPayload = {
+              ...payload,
+              invitationId:
+                normalizeMongoId(matchedInvitation?._id) ||
+                normalizeMongoId(matchedInvitation?.invitationId) ||
+                resolveInvitationId(payload),
+              invitationStatus:
+                liveStatus || resolveInvitationStatus(payload),
+              invitation: {
+                ...(payload?.invitation ?? {}),
+                ...matchedInvitation,
+                status: liveStatus || matchedInvitation?.status,
+              },
+            };
+          }
+        }
+
         if (!cancelled) {
-          setDoc(payload);
-          syncDecisionStateFromDoc(payload);
+          setDoc(mergedPayload);
+          syncDecisionStateFromDoc(mergedPayload);
         }
       } catch (e) {
         if (!cancelled) {
@@ -521,7 +626,7 @@ export default function ViewCampaignPage() {
     return () => {
       cancelled = true;
     };
-  }, [influencerId, campaignId, token]);
+  }, [influencerId, campaignId, token, invitationId]);
 
   useEffect(() => {
     syncDecisionStateFromDoc(doc);
@@ -645,10 +750,12 @@ export default function ViewCampaignPage() {
     (doc as any)?.videoReferenceUrl ??
     (doc as any)?.referenceVideoUrl ??
     (doc as any)?.videoUrl ??
+    (doc as any)?.videoLink ??
     details?.videoReference ??
     details?.videoReferenceUrl ??
     details?.referenceVideoUrl ??
     details?.videoUrl ??
+    details?.videoLink ??
     ""
   ).trim();
 
@@ -667,10 +774,7 @@ export default function ViewCampaignPage() {
 
   const pdfItem = Array.isArray(pdfRaw) ? pdfRaw[0] : pdfRaw;
 
-  const pdfUrl =
-    typeof pdfItem === "string"
-      ? pdfItem
-      : pdfItem?.url || pdfItem?.src || pdfItem?.path || "";
+  const pdfUrl = getAssetUrl(pdfItem);
 
   const pdfName =
     typeof pdfItem === "object" && pdfItem?.name
@@ -679,8 +783,7 @@ export default function ViewCampaignPage() {
         ? "Attachment.pdf"
         : "";
 
-  const pdfSizeBytes =
-    typeof pdfItem === "object" && pdfItem?.size != null ? Number(pdfItem.size) : NaN;
+  const pdfSizeBytes = typeof pdfItem === "object" && pdfItem?.size != null ? Number(pdfItem.size) : NaN;
 
   const pdfSizeText =
     Number.isFinite(pdfSizeBytes) && pdfSizeBytes > 0
@@ -697,11 +800,7 @@ export default function ViewCampaignPage() {
     : "—";
 
   const productUrlRaw =
-    details?.productUrl ??
-    details?.productLink ??
-    (doc as any)?.productUrl ??
-    (doc as any)?.productLink ??
-    "";
+    details?.productUrl ?? details?.productLink ?? (doc as any)?.productUrl ?? (doc as any)?.productLink ?? "";
 
   const productUrl = typeof productUrlRaw === "string" ? productUrlRaw : "";
 
@@ -717,21 +816,6 @@ export default function ViewCampaignPage() {
   const startAt = (doc as any)?.startAt ?? details?.startAt ?? null;
   const endAt = (doc as any)?.endAt ?? details?.endAt ?? null;
 
-  let timelineText = "—";
-  try {
-    if (startAt && endAt) {
-      const a = new Date(startAt).getTime();
-      const b = new Date(endAt).getTime();
-      if (Number.isFinite(a) && Number.isFinite(b) && b > a) {
-        const days = Math.ceil((b - a) / 86400000);
-        const months = Math.max(1, Math.round(days / 30));
-        timelineText = plural(months, "month");
-      }
-    } else if ((doc as any)?.timeline) {
-      timelineText = String((doc as any)?.timeline);
-    }
-  } catch { }
-
   const statusText = String((doc as any)?.status ?? "—");
 
   const startDateText = startAt
@@ -743,6 +827,8 @@ export default function ViewCampaignPage() {
     : "—";
 
   const paymentTypeText = String((doc as any)?.paymentType ?? details?.paymentType ?? "—");
+  const campaignBudget = Number((doc as any)?.campaignBudget ?? (doc as any)?.budget ?? 0);
+  const budgetText = campaignBudget > 0 ? formatNumber(campaignBudget) : "—";
 
   const categoryTags = (() => {
     const fromDetails = details?.category?.name ? [String(details.category.name).trim()] : [];
@@ -752,10 +838,7 @@ export default function ViewCampaignPage() {
       .filter(Boolean);
 
     const fromRaw = toTagValues(
-      (doc as any)?.campaignCategory ??
-      (doc as any)?.category ??
-      (doc as any)?.categories ??
-      []
+      (doc as any)?.campaignCategory ?? (doc as any)?.category ?? (doc as any)?.categories ?? []
     );
 
     return Array.from(new Set([...fromDetails, ...fromCategories, ...fromRaw]));
@@ -782,19 +865,17 @@ export default function ViewCampaignPage() {
     return Array.from(new Set([...fromDetails, ...fromCategories, ...fromRaw]));
   })();
 
-  const campaignTypeTags = (() => {
-    return Array.from(
-      new Set(
-        toTagValues(
-          (doc as any)?.campaignType ??
-          (doc as any)?.campaignTypes ??
-          details?.campaignType ??
-          details?.campaignTypes ??
-          []
-        )
+  const campaignTypeTags = Array.from(
+    new Set(
+      toTagValues(
+        (doc as any)?.campaignType ??
+        (doc as any)?.campaignTypes ??
+        details?.campaignType ??
+        details?.campaignTypes ??
+        []
       )
-    );
-  })();
+    )
+  );
 
   const campaignGoalTags = (() => {
     const detailGoals = asArray(details?.campaignGoals ?? []);
@@ -822,11 +903,7 @@ export default function ViewCampaignPage() {
 
         if (goal && typeof goal === "object") {
           const id = normalizeMongoId(goal?.id ?? goal?._id);
-          return (
-            String(goal?.goal ?? goal?.name ?? goal?.label ?? "").trim() ||
-            goalById.get(id) ||
-            ""
-          );
+          return String(goal?.goal ?? goal?.name ?? goal?.label ?? "").trim() || goalById.get(id) || "";
         }
 
         return "";
@@ -836,12 +913,42 @@ export default function ViewCampaignPage() {
     return Array.from(new Set(resolved));
   })();
 
-  const lorem10 = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do.";
+  const contentFormatTags = Array.from(
+    new Set(
+      toTagValues((details as any)?.contentFormats ?? (doc as any)?.contentFormats ?? [])
+    )
+  );
 
-  const backendImageUrls = (productImages ?? [])
-    .map((img: any) => img?.url || img?.src || img?.path || "")
-    .filter(Boolean);
+  const contentLanguageTags = Array.from(
+    new Set(
+      asArray((details as any)?.contentLanguages ?? (doc as any)?.contentLanguages ?? [])
+        .map((item: any) => String(item?.name ?? item?.label ?? item?.value ?? "").trim())
+        .filter(Boolean)
+    )
+  );
 
+  const influencerTierTags = Array.from(
+    new Set(
+      asArray((details as any)?.influencerTiers ?? [])
+        .map((item: any) => {
+          const category = String(item?.category ?? "").trim();
+          const value = String(item?.value ?? "").trim();
+          return [category, value].filter(Boolean).join(" • ");
+        })
+        .filter(Boolean)
+    )
+  );
+
+  const influencerCount = Number((doc as any)?.numberOfInfluencers ?? 0);
+  const minFollowers = Number((doc as any)?.minFollowers ?? 0);
+  const maxFollowers = Number((doc as any)?.maxFollowers ?? 0);
+
+  const followerRangeText =
+    minFollowers > 0 || maxFollowers > 0
+      ? `${minFollowers > 0 ? formatNumber(minFollowers) : "0"} - ${maxFollowers > 0 ? formatNumber(maxFollowers) : "0"}`
+      : "—";
+
+  const backendImageUrls = (productImages ?? []).map((img: any) => getAssetUrl(img)).filter(Boolean);
   const carouselImages = backendImageUrls.length ? backendImageUrls : [];
 
   const scrollToSlide = (idx: number) => {
@@ -897,7 +1004,7 @@ export default function ViewCampaignPage() {
   return (
     <div className={PAGE_WRAP}>
       <div className="w-full mt-[3.5rem]">
-        <div className="flex flex-col items-start gap-5 self-stretch pb-5 border-b border-[#E6EE6E]">
+        <div className="flex flex-col items-start gap-5 self-stretch pb-5 border-b border-[#E6E6E6]">
           <div
             className="h-[6.25rem] w-[6.25rem] rounded-[4rem] border border-white/30 bg-black"
             style={
@@ -905,8 +1012,8 @@ export default function ViewCampaignPage() {
                 ? {
                   backgroundImage: `url(${logoUrl})`,
                   backgroundRepeat: "no-repeat",
-                  backgroundPosition: "11px 24px",
-                  backgroundSize: "78% 52%",
+                  backgroundPosition: "center",
+                  backgroundSize: "cover",
                 }
                 : undefined
             }
@@ -915,39 +1022,29 @@ export default function ViewCampaignPage() {
           <div className="flex w-full items-center justify-between px-1 gap-3">
             <div className="min-w-0">
               <div
-                className="
-                  w-full max-w-[25.0625rem]
-                  text-[#1A1A1A] font-bold text-[1.5rem] leading-8 tracking-normal
-                  line-clamp-2
-                "
+                className="w-full max-w-[25.0625rem] text-[#1A1A1A] font-bold text-[1.5rem] leading-8 tracking-normal line-clamp-2"
                 style={{ fontFamily: "Inter" }}
                 title={(doc as any)?.campaignTitle ?? "Campaign"}
               >
                 {(doc as any)?.campaignTitle ?? "Campaign"}
               </div>
 
-              <div className="mt-1">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[#B8B8B8] text-[0.75rem] leading-4 font-normal">
+                {(doc as any)?.brandName ? <span>{String((doc as any)?.brandName)}</span> : null}
+
                 {productUrl ? (
                   <a
                     href={productUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-[#B8B8B8] text-[0.75rem] leading-4 font-normal"
-                    style={{ fontFamily: "Inter" }}
+                    className="inline-flex items-center gap-1 text-[#B8B8B8]"
                     title={productUrl}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <span className="truncate max-w-[18rem]">{productUrl}</span>
                     <ArrowUpRight className="h-4 w-4" />
                   </a>
-                ) : (
-                  <div
-                    className="text-[#B8B8B8] text-[0.75rem] leading-4 font-normal"
-                    style={{ fontFamily: "Inter" }}
-                  >
-                    —
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -994,7 +1091,7 @@ export default function ViewCampaignPage() {
                   {carouselImages.map((src, idx) => (
                     <div
                       key={`${src}-${idx}`}
-                      className="flex-none w-[13.8125rem] h-[11.5rem] rounded-[1.1875rem] bg-cover bg-center"
+                      className="flex-none w-[13.8125rem] h-[11.5rem] rounded-[1.1875rem] bg-cover bg-center bg-no-repeat border border-[#E6E6E6]"
                       style={{ backgroundImage: `url(${src})` }}
                     />
                   ))}
@@ -1006,9 +1103,7 @@ export default function ViewCampaignPage() {
                   onClick={onPrevSlide}
                   disabled={activeSlide <= 0}
                   className="my-0 absolute left-4 top-[5.625rem] h-[2.75rem] w-[2.75rem] px-0 rounded-[2.5rem] bg-[#F2F2F2] border border-transparent shadow-none"
-                  leftIcon={
-                    <CaretLeft weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />
-                  }
+                  leftIcon={<CaretLeft weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />}
                 />
 
                 <Button
@@ -1017,9 +1112,7 @@ export default function ViewCampaignPage() {
                   onClick={onNextSlide}
                   disabled={activeSlide >= carouselImages.length - 1}
                   className="my-0 absolute right-4 top-[5.625rem] h-[2.75rem] w-[2.75rem] px-0 rounded-[2.5rem] bg-[#F2F2F2] border border-transparent shadow-none"
-                  leftIcon={
-                    <CaretRight weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />
-                  }
+                  leftIcon={<CaretRight weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />}
                 />
 
                 <div className="mt-2 flex w-full items-center justify-center gap-2">
@@ -1046,10 +1139,7 @@ export default function ViewCampaignPage() {
 
       <div className="mb-[1.55rem] mt-[1.75rem] h-px w-full bg-[var(--Light-Border-Subtle,#E6E6E6)]" />
 
-      <div
-        className="flex w-full flex-col items-start gap-6 self-stretch"
-        style={{ fontFamily: "Inter" }}
-      >
+      <div className="flex w-full flex-col items-start gap-6 self-stretch" style={{ fontFamily: "Inter" }}>
         <div className="flex w-full items-center justify-between self-stretch">
           <div className="text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]">
             Timeline &amp; Payments
@@ -1057,19 +1147,15 @@ export default function ViewCampaignPage() {
         </div>
       </div>
 
-      <div className="flex w-full flex-col items-stretch gap-3 sm:flex-row">
+      <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="flex flex-1 flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] p-3 min-h-[12.375rem]">
           <div className="flex h-12 w-12 items-center justify-center gap-[0.625rem] rounded-[0.5rem] bg-[#F2F2F2] p-3">
             <CalendarDots weight="bold" style={{ width: "1.5rem", height: "1.5rem" }} />
           </div>
 
           <div className="mt-auto flex flex-col items-start gap-2 self-stretch">
-            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              Start date
-            </div>
-            <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem]">
-              {startDateText}
-            </div>
+            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">Start date</div>
+            <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem]">{startDateText}</div>
           </div>
         </div>
 
@@ -1079,12 +1165,8 @@ export default function ViewCampaignPage() {
           </div>
 
           <div className="mt-auto flex flex-col items-start gap-2 self-stretch">
-            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              End date
-            </div>
-            <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem]">
-              {endDateText}
-            </div>
+            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">End date</div>
+            <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem]">{endDateText}</div>
           </div>
         </div>
 
@@ -1094,12 +1176,19 @@ export default function ViewCampaignPage() {
           </div>
 
           <div className="mt-auto flex flex-col items-start gap-2 self-stretch">
-            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              Payment type
-            </div>
-            <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem]">
-              {paymentTypeText}
-            </div>
+            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">Payment type</div>
+            <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem]">{paymentTypeText}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-1 flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] p-3 min-h-[12.375rem]">
+          <div className="flex h-12 w-12 items-center justify-center gap-[0.625rem] rounded-[0.5rem] bg-[#F2F2F2] p-3">
+            <TrendUp weight="bold" style={{ width: "1.5rem", height: "1.5rem" }} />
+          </div>
+
+          <div className="mt-auto flex flex-col items-start gap-2 self-stretch">
+            <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">Campaign budget</div>
+            <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem]">{budgetText}</div>
           </div>
         </div>
       </div>
@@ -1114,19 +1203,17 @@ export default function ViewCampaignPage() {
             </div>
 
             <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              {lorem10}
+              Audience targeting and creator requirements from the campaign response.
             </div>
           </div>
         </div>
 
-        <div className="w-full mt-6 flex flex-col sm:flex-row gap-6">
-          <div className="w-full sm:w-1/2 flex flex-col gap-3">
+        <div className="w-full mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="w-full flex flex-col gap-3">
             <div className="flex h-[4.5rem] p-3 flex-col justify-between items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
-              <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-                Target Platform
-              </div>
+              <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">Target Platform</div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {platforms.length ? (
                   platforms.map((p, idx) => {
                     const key = `${p}-${idx}`;
@@ -1188,20 +1275,10 @@ export default function ViewCampaignPage() {
               </div>
             </div>
 
-            <div className="flex p-3 flex-col items-start gap-3 self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
-              <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-                Target Country
-              </div>
-
-              <div className="mt-2 text-[#1A1A1A] text-[0.875rem] font-semibold leading-[1.25rem]">
-                {targetCountryText}
-              </div>
-            </div>
+            <InfoCard title="Target Country" value={targetCountryText} />
 
             <div className="flex p-3 flex-col items-start gap-3 self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
-              <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-                Target age group
-              </div>
+              <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">Target age group</div>
 
               <div className="flex flex-wrap gap-2 self-stretch">
                 {ages.length ? (
@@ -1231,38 +1308,66 @@ export default function ViewCampaignPage() {
             </div>
           </div>
 
-          <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-auto">
-            <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem] self-stretch">
-              Video Reference
+          <div className="w-full flex flex-col gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] p-3 min-h-[8rem] bg-white">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[0.5rem] bg-[#F2F2F2] p-2.5">
+                  <UsersThree weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />
+                </div>
+                <div className="mt-auto flex flex-col gap-1">
+                  <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">No. of influencers</div>
+                  <div className="text-[#1A1A1A] text-[1rem] font-semibold leading-[1.5rem]">
+                    {influencerCount > 0 ? plural(influencerCount, "influencer") : "—"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] p-3 min-h-[8rem] bg-white">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[0.5rem] bg-[#F2F2F2] p-2.5">
+                  <TrendUp weight="bold" style={{ width: "1.25rem", height: "1.25rem" }} />
+                </div>
+                <div className="mt-auto flex flex-col gap-1">
+                  <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">Follower range</div>
+                  <div className="text-[#1A1A1A] text-[1rem] font-semibold leading-[1.5rem]">{followerRangeText}</div>
+                </div>
+              </div>
             </div>
 
-            {videoReferenceUrl ? (
-              <div className="flex flex-col gap-2">
-                <a
-                  href={videoReferenceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem] break-all"
-                >
-                  {videoReferenceUrl}
-                </a>
+            <TagCard title="Influencer tiers" values={influencerTierTags} />
+            <TagCard title="Content formats" values={contentFormatTags} />
+            <TagCard title="Content languages" values={contentLanguageTags} />
 
-                <a
-                  href={videoReferenceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-[12.875rem] h-[10.125rem] rounded-[0.25rem] bg-cover bg-center"
-                  style={{
-                    backgroundImage: videoThumbUrl ? `url(${videoThumbUrl})` : undefined,
-                    backgroundColor: videoThumbUrl ? undefined : "#eee",
-                  }}
-                />
+            <div className="flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-auto">
+              <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem] self-stretch">
+                Video Reference
               </div>
-            ) : (
-              <div className="text-[#969696] text-[0.875rem] font-normal leading-[1.25rem]">
-                —
-              </div>
-            )}
+
+              {videoReferenceUrl ? (
+                <div className="flex flex-col gap-2 w-full">
+                  <a
+                    href={videoReferenceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem] break-all"
+                  >
+                    {videoReferenceUrl}
+                  </a>
+
+                  <a
+                    href={videoReferenceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-[12.875rem] h-[10.125rem] rounded-[0.25rem] bg-cover bg-center bg-no-repeat border border-[#E6E6E6]"
+                    style={{
+                      backgroundImage: videoThumbUrl ? `url(${videoThumbUrl})` : undefined,
+                      backgroundColor: videoThumbUrl ? undefined : "#eee",
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="text-[#969696] text-[0.875rem] font-normal leading-[1.25rem]">—</div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1277,7 +1382,7 @@ export default function ViewCampaignPage() {
             </div>
 
             <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              {lorem10}
+              Notes, attachment, and campaign hashtags.
             </div>
           </div>
         </div>
@@ -1285,13 +1390,11 @@ export default function ViewCampaignPage() {
         <div className="w-full">
           <div className="flex h-[14.8125rem] flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white overflow-hidden">
             <div className="flex w-full items-center self-stretch px-3 py-2 border-b border-[#E6E6E6] rounded-t-[0.6875rem]">
-              <div className="text-[#969696] text-[1rem] font-medium leading-[1.5rem]">
-                Additional Notes
-              </div>
+              <div className="text-[#969696] text-[1rem] font-medium leading-[1.5rem]">Additional Notes</div>
             </div>
 
             <div className="flex flex-1 w-full p-3 items-start justify-between self-stretch overflow-auto">
-              <div className="text-[#1A1A1A] text-[0.875rem] font-medium leading-[1.25rem] whitespace-pre-wrap">
+              <div className="text-[#1A1A1A] text-[0.875rem] font-medium leading-[1.25rem] whitespace-pre-wrap break-all">
                 {additionalNotesText || "—"}
               </div>
             </div>
@@ -1303,9 +1406,7 @@ export default function ViewCampaignPage() {
                 <FilePdf weight="bold" style={{ width: "2rem", height: "2rem" }} />
 
                 <div className="flex flex-col min-w-0">
-                  <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem] truncate">
-                    {pdfName}
-                  </div>
+                  <div className="text-[#1A1A1A] text-[1rem] font-medium leading-[1.5rem] truncate">{pdfName}</div>
                   {pdfSizeText ? (
                     <div className="text-[#969696] text-[0.875rem] font-normal leading-[1.25rem]">
                       {pdfSizeText}
@@ -1319,9 +1420,7 @@ export default function ViewCampaignPage() {
                 size="sm"
                 onClick={onDownloadPdf}
                 className="my-0 h-[2.0625rem] w-[7rem] px-2 rounded-[0.75rem] bg-white border border-transparent shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08),0_4px_8px_-2px_rgba(0,0,0,0.04)]"
-                leftIcon={
-                  <DownloadSimple weight="bold" style={{ width: "0.875rem", height: "0.875rem" }} />
-                }
+                leftIcon={<DownloadSimple weight="bold" style={{ width: "0.875rem", height: "0.875rem" }} />}
               >
                 <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem]">
                   Download
@@ -1330,10 +1429,8 @@ export default function ViewCampaignPage() {
             </div>
           ) : null}
 
-          <div className="mt-5 flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[11.4375rem] gap-[1.3125rem]">
-            <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem]">
-              Hashtags
-            </div>
+          <div className="mt-5 flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 min-h-[11.4375rem] gap-[1.3125rem]">
+            <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem]">Hashtags</div>
 
             <div className="flex flex-wrap gap-2 self-stretch">
               {hashtags.length ? (

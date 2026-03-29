@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
-  apiGetMilestonesByBrand,
+  apiGetDeliverablesByBrand,
   getApiErrorMessage,
 } from "@/app/brand/services/brandApi";
 
@@ -33,14 +33,19 @@ type DeliverableItem = {
   milestoneId?: string;
 };
 
-type MilestoneItem = {
-  _id?: string;
-  title?: string;
-  name?: string;
+type DeliverablesResponseShape = {
+  data?: DeliverableItem[] | { deliverables?: DeliverableItem[]; items?: DeliverableItem[] };
   deliverables?: DeliverableItem[];
-  deliverable?: DeliverableItem[];
-  deliverableApprovals?: DeliverableItem[];
-  submissions?: DeliverableItem[];
+  items?: DeliverableItem[];
+  result?: DeliverableItem[];
+  total?: number;
+  count?: number;
+  pagination?: {
+    total?: number;
+    page?: number;
+    limit?: number;
+    totalPages?: number;
+  };
 };
 
 const formatDateTime = (dateStr?: string) => {
@@ -96,43 +101,25 @@ const getDeliverableLinks = (row: DeliverableItem): DeliverableUrl[] => {
   return fallback;
 };
 
-const extractMilestones = (res: any): MilestoneItem[] => {
+const extractDeliverables = (res: DeliverablesResponseShape): DeliverableItem[] => {
   if (Array.isArray(res)) return res;
-
-  if (Array.isArray(res?.data)) return res.data;
-  if (Array.isArray(res?.milestones)) return res.milestones;
-  if (Array.isArray(res?.data?.milestones)) return res.data.milestones;
+  if (Array.isArray(res?.deliverables)) return res.deliverables;
+  if (Array.isArray(res?.items)) return res.items;
   if (Array.isArray(res?.result)) return res.result;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res?.data?.deliverables)) return res.data.deliverables;
+  if (Array.isArray(res?.data?.items)) return res.data.items;
 
   return [];
 };
 
-const flattenDeliverables = (milestones: MilestoneItem[]): DeliverableItem[] => {
-  const all: DeliverableItem[] = [];
-
-  milestones.forEach((milestone) => {
-    const milestoneTitle = milestone.title || milestone.name || "-";
-    const milestoneId = milestone._id || "";
-
-    const rawDeliverables =
-      milestone.deliverables ||
-      milestone.deliverable ||
-      milestone.deliverableApprovals ||
-      milestone.submissions ||
-      [];
-
-    if (!Array.isArray(rawDeliverables)) return;
-
-    rawDeliverables.forEach((item) => {
-      all.push({
-        ...item,
-        milestoneTitle,
-        milestoneId,
-      });
-    });
-  });
-
-  return all;
+const extractTotal = (res: DeliverablesResponseShape, fallbackLength: number) => {
+  return (
+    res?.pagination?.total ??
+    res?.total ??
+    res?.count ??
+    fallbackLength
+  );
 };
 
 export default function AllDeliverablesPage() {
@@ -148,9 +135,23 @@ export default function AllDeliverablesPage() {
     [searchParams]
   );
 
+  const campaignId = useMemo(
+    () => searchParams.get("campaignId") || "",
+    [searchParams]
+  );
+
+  const search = useMemo(
+    () => searchParams.get("search") || "",
+    [searchParams]
+  );
+
   const [rows, setRows] = useState<DeliverableItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+  const [total, setTotal] = useState(0);
 
   const brandId = useMemo(() => {
     if (searchBrandId) return searchBrandId;
@@ -175,10 +176,16 @@ export default function AllDeliverablesPage() {
     }
   }, [searchBrandId]);
 
+  const totalPages = useMemo(() => {
+    const pages = Math.ceil(total / limit);
+    return pages > 0 ? pages : 1;
+  }, [total, limit]);
+
   const fetchAllDeliverables = useCallback(async () => {
     if (!brandId) {
       setError("Missing brandId. Pass ?brandId=xxxx or store brandId in localStorage.");
       setRows([]);
+      setTotal(0);
       return;
     }
 
@@ -186,24 +193,31 @@ export default function AllDeliverablesPage() {
     setError(null);
 
     try {
-      const res = await apiGetMilestonesByBrand({ brandId });
-      const milestones = extractMilestones(res);
-      const deliverables = flattenDeliverables(milestones);
+      const res = await apiGetDeliverablesByBrand({
+        brandId,
+        status: statusFilter || undefined,
+        campaignId: campaignId || undefined,
+        search: search || undefined,
+        page,
+        limit,
+      });
 
-      const filtered = statusFilter
-        ? deliverables.filter(
-            (item) => (item.status || "").toLowerCase() === statusFilter
-          )
-        : deliverables;
+      const deliverables = extractDeliverables(res as DeliverablesResponseShape);
 
-      setRows(filtered);
+      setRows(deliverables);
+      setTotal(extractTotal(res as DeliverablesResponseShape, deliverables.length));
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to fetch all deliverables"));
+      setError(getApiErrorMessage(err, "Failed to fetch deliverables"));
       setRows([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [brandId, statusFilter]);
+  }, [brandId, statusFilter, campaignId, search, page, limit]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [brandId, statusFilter, campaignId, search]);
 
   useEffect(() => {
     fetchAllDeliverables();
@@ -219,7 +233,7 @@ export default function AllDeliverablesPage() {
                 All Deliverables
               </h1>
               <p className="text-sm text-slate-500">
-                View all deliverables across all milestones for this brand.
+                View all deliverables for this brand.
               </p>
             </div>
 
@@ -247,7 +261,7 @@ export default function AllDeliverablesPage() {
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-500">Total Deliverables</p>
               <p className="mt-2 text-2xl font-bold text-slate-900">
-                {rows.length}
+                {total}
               </p>
             </div>
 
@@ -277,7 +291,7 @@ export default function AllDeliverablesPage() {
         {loading && (
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="text-sm font-medium text-slate-700">
-              Loading all deliverables...
+              Loading deliverables...
             </div>
           </div>
         )}
@@ -304,101 +318,129 @@ export default function AllDeliverablesPage() {
         )}
 
         {!loading && !error && rows.length > 0 && (
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-slate-700">
-                  <tr>
-                    <th className="px-5 py-4 text-left font-semibold">Deliverable</th>
-                    <th className="px-5 py-4 text-left font-semibold">Milestone</th>
-                    <th className="px-5 py-4 text-left font-semibold">Influencer</th>
-                    <th className="px-5 py-4 text-left font-semibold">Status</th>
-                    <th className="px-5 py-4 text-left font-semibold">Links</th>
-                    <th className="px-5 py-4 text-left font-semibold">Created</th>
-                  </tr>
-                </thead>
+          <>
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-700">
+                    <tr>
+                      <th className="px-5 py-4 text-left font-semibold">Deliverable</th>
+                      <th className="px-5 py-4 text-left font-semibold">Milestone</th>
+                      <th className="px-5 py-4 text-left font-semibold">Influencer</th>
+                      <th className="px-5 py-4 text-left font-semibold">Status</th>
+                      <th className="px-5 py-4 text-left font-semibold">Links</th>
+                      <th className="px-5 py-4 text-left font-semibold">Created</th>
+                    </tr>
+                  </thead>
 
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((row, index) => {
-                    const rowId = getDeliverableId(row, index);
-                    const links = getDeliverableLinks(row);
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.map((row, index) => {
+                      const rowId = getDeliverableId(row, index);
+                      const links = getDeliverableLinks(row);
 
-                    return (
-                      <tr
-                        key={rowId}
-                        className="transition-colors hover:bg-slate-50/80"
-                      >
-                        <td className="px-5 py-4 align-top">
-                          <div className="space-y-1">
-                            <div className="font-semibold text-slate-900">
-                              {row.title || "-"}
-                            </div>
-
-                            <div className="max-w-[340px] line-clamp-2 text-slate-600">
-                              {row.description || "-"}
-                            </div>
-
-                            {row.comments ? (
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                                <span className="font-semibold text-slate-700">
-                                  Comment:
-                                </span>{" "}
-                                {row.comments}
+                      return (
+                        <tr
+                          key={rowId}
+                          className="transition-colors hover:bg-slate-50/80"
+                        >
+                          <td className="px-5 py-4 align-top">
+                            <div className="space-y-1">
+                              <div className="font-semibold text-slate-900">
+                                {row.title || "-"}
                               </div>
-                            ) : null}
-                          </div>
-                        </td>
 
-                        <td className="px-5 py-4 align-top text-slate-700">
-                          <div className="max-w-[220px] line-clamp-2">
-                            {row.milestoneTitle || "-"}
-                          </div>
-                        </td>
+                              <div className="max-w-[340px] line-clamp-2 text-slate-600">
+                                {row.description || "-"}
+                              </div>
 
-                        <td className="px-5 py-4 align-top text-slate-700">
-                          {row.influencerName || row.influencer?.name || "-"}
-                        </td>
+                              {row.comments ? (
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                  <span className="font-semibold text-slate-700">
+                                    Comment:
+                                  </span>{" "}
+                                  {row.comments}
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
 
-                        <td className="px-5 py-4 align-top">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass(
-                              row.status
-                            )}`}
-                          >
-                            {row.status || "-"}
-                          </span>
-                        </td>
+                          <td className="px-5 py-4 align-top text-slate-700">
+                            <div className="max-w-[220px] line-clamp-2">
+                              {row.milestoneTitle || "-"}
+                            </div>
+                          </td>
 
-                        <td className="px-5 py-4 align-top">
-                          <div className="flex max-w-[220px] flex-col gap-2">
-                            {links.length === 0 ? (
-                              <span className="text-slate-400">-</span>
-                            ) : (
-                              links.map((link, idx) => (
-                                <a
-                                  key={`${rowId}-link-${idx}`}
-                                  href={link.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="truncate text-sm font-medium text-slate-900 underline underline-offset-4 hover:text-slate-600"
-                                >
-                                  {link.label || `Open link ${idx + 1}`}
-                                </a>
-                              ))
-                            )}
-                          </div>
-                        </td>
+                          <td className="px-5 py-4 align-top text-slate-700">
+                            {row.influencerName || row.influencer?.name || "-"}
+                          </td>
 
-                        <td className="px-5 py-4 align-top text-slate-600">
-                          {formatDateTime(row.createdAt)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <td className="px-5 py-4 align-top">
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass(
+                                row.status
+                              )}`}
+                            >
+                              {row.status || "-"}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4 align-top">
+                            <div className="flex max-w-[220px] flex-col gap-2">
+                              {links.length === 0 ? (
+                                <span className="text-slate-400">-</span>
+                              ) : (
+                                links.map((link, idx) => (
+                                  <a
+                                    key={`${rowId}-link-${idx}`}
+                                    href={link.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="truncate text-sm font-medium text-slate-900 underline underline-offset-4 hover:text-slate-600"
+                                  >
+                                    {link.label || `Open link ${idx + 1}`}
+                                  </a>
+                                ))
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 align-top text-slate-600">
+                            {formatDateTime(row.createdAt)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+              <p className="text-sm text-slate-600">
+                Page {page} of {totalPages}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="border-slate-300 text-slate-700 hover:bg-slate-100"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={loading || page <= 1}
+                >
+                  Previous
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="border-slate-300 text-slate-700 hover:bg-slate-100"
+                  onClick={() => setPage((prev) => prev + 1)}
+                  disabled={loading || page >= totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

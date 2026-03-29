@@ -22,6 +22,7 @@ import {
     apiCreateDeliverableApproval,
     apiGetMilestonesByInfluencer,
     apiListDeliverablesByCampaign,
+    apiGetDeliverableStatusByInfluencerId,
     getApiErrorMessage,
 } from "@/app/influencer/services/influencerApi";
 
@@ -274,8 +275,8 @@ export default function InfluencerMilestonesPage() {
                 influencerId ||
                 (typeof window !== "undefined"
                     ? localStorage.getItem("influencerId") ||
-                      localStorage.getItem("userId") ||
-                      ""
+                    localStorage.getItem("userId") ||
+                    ""
                     : "");
 
             const finalToken =
@@ -283,8 +284,8 @@ export default function InfluencerMilestonesPage() {
                 token ||
                 (typeof window !== "undefined"
                     ? localStorage.getItem("influencerToken") ||
-                      localStorage.getItem("token") ||
-                      ""
+                    localStorage.getItem("token") ||
+                    ""
                     : "");
 
             if (!finalInfluencerId) {
@@ -303,7 +304,15 @@ export default function InfluencerMilestonesPage() {
                 const [milestoneRes, deliverableRes] = await Promise.all([
                     apiGetMilestonesByInfluencer(finalInfluencerId, finalToken),
                     campaignId
-                        ? apiListDeliverablesByCampaign(campaignId, { token: finalToken })
+                        ? apiGetDeliverableStatusByInfluencerId(
+                            {
+                                influencerId: finalInfluencerId,
+                                campaignId,
+                                page: 1,
+                                limit: 200,
+                            },
+                            finalToken
+                        )
                         : Promise.resolve(null),
                 ]);
 
@@ -313,8 +322,8 @@ export default function InfluencerMilestonesPage() {
 
                 const filteredMilestones = campaignId
                     ? milestoneRows.filter(
-                          (item) => String(item.campaignId) === String(campaignId)
-                      )
+                        (item) => String(item.campaignId) === String(campaignId)
+                    )
                     : milestoneRows;
 
                 setMilestones(filteredMilestones);
@@ -324,9 +333,9 @@ export default function InfluencerMilestonesPage() {
                     : [];
 
                 const filteredDeliverables = rawDeliverables.filter((item) => {
-                    if (!campaignId) return true;
                     const sameCampaign =
                         !item.campaignId || String(item.campaignId) === String(campaignId);
+
                     const sameInfluencer =
                         !item.influencerId ||
                         String(item.influencerId) === String(finalInfluencerId);
@@ -463,14 +472,14 @@ export default function InfluencerMilestonesPage() {
 
     const handleSeeDeliverable = (row: CampaignMilestoneRow) => {
         router.push(
-            `/influencer/deliverables?campaignId=${encodeURIComponent(
-                row.campaignId
-            )}&milestoneHistoryId=${encodeURIComponent(row.milestoneHistoryId)}`
+            `/influencer/viewDeliverable?campaignId=${encodeURIComponent(
+                row.campaignId || ""
+            )}&milestoneId=${encodeURIComponent(row.milestoneId || "")}`
         );
     };
 
     const handleAllDeliverables = () => {
-        const base = "/influencer/deliverables";
+        const base = "/influencer/all-deliverables";
         router.push(
             campaignId
                 ? `${base}?campaignId=${encodeURIComponent(campaignId)}`
@@ -635,24 +644,17 @@ export default function InfluencerMilestonesPage() {
                                 null;
 
                             const released = isReleased(row);
-                            const revisionRequested = hasRevisionRequest(
-                                row,
-                                latestDeliverable
-                            );
+                            const revisionRequested = hasRevisionRequest(row, latestDeliverable);
                             const hasSubmittedDeliverable = !!latestDeliverable;
 
                             const showAddDeliverable =
                                 !released && !hasSubmittedDeliverable;
 
                             const showAddRevision =
-                                !released &&
-                                hasSubmittedDeliverable &&
-                                revisionRequested;
+                                !released && hasSubmittedDeliverable && revisionRequested;
 
                             const showLockedButton =
-                                !released &&
-                                hasSubmittedDeliverable &&
-                                !revisionRequested;
+                                !released && hasSubmittedDeliverable && !revisionRequested;
 
                             return (
                                 <div

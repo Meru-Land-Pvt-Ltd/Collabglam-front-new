@@ -2,31 +2,48 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Swal from "sweetalert2";
 
 import { Button } from "@/components/ui/button";
 import {
-  apiGetDeliverablesByMilestone,
-  apiUpdateDeliverableApprovalStatus,
+  apiGetDeliverablesByInfluencer,
   getApiErrorMessage,
-  type DeliverableRow,
-} from "@/app/brand/services/brandApi";
-// If your folder is actually singular, change to:
-// import { ... } from "@/service/brandApi";
+} from "@/app/influencer/services/influencerApi";
 
 type DeliverableUrl = {
   label?: string;
   url?: string;
 };
 
-type Deliverable = DeliverableRow & {
+type DeliverableItem = {
+  _id?: string;
+  delieverableApprovalId?: string;
+  deliverableApprovalId?: string;
+  title?: string;
+  description?: string;
+  comments?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  link?: string;
+  fileUrl?: string;
   url?: DeliverableUrl[];
+  milestoneTitle?: string;
+  milestoneId?: string;
+  campaignId?: string;
+  influencerId?: string;
+  influencerName?: string;
+  influencer?: {
+    _id?: string;
+    name?: string;
+  };
 };
 
 const formatDateTime = (dateStr?: string) => {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
+
   if (Number.isNaN(d.getTime())) return "-";
+
   return d.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
@@ -54,18 +71,25 @@ const badgeClass = (status?: string) => {
   return "border border-slate-200 bg-slate-50 text-slate-700";
 };
 
-const getDeliverableId = (row: Deliverable) =>
-  String(row._id || row.delieverableApprovalId || "");
+const getDeliverableId = (row: DeliverableItem, index: number) =>
+  String(
+    row._id ||
+      row.deliverableApprovalId ||
+      row.delieverableApprovalId ||
+      `deliverable-${index}`
+  );
 
-const getDeliverableLinks = (row: Deliverable): DeliverableUrl[] => {
+const getDeliverableLinks = (row: DeliverableItem): DeliverableUrl[] => {
   const arr = Array.isArray(row.url) ? row.url.filter((x) => x?.url) : [];
 
   if (arr.length) return arr;
 
   const fallback: DeliverableUrl[] = [];
+
   if (typeof row.link === "string" && row.link.trim()) {
     fallback.push({ label: "Open link", url: row.link });
   }
+
   if (typeof row.fileUrl === "string" && row.fileUrl.trim()) {
     fallback.push({ label: "Open file", url: row.fileUrl });
   }
@@ -73,46 +97,72 @@ const getDeliverableLinks = (row: Deliverable): DeliverableUrl[] => {
   return fallback;
 };
 
-export default function DeliverablesPage() {
+const extractDeliverables = (res: any): DeliverableItem[] => {
+  const possibleArrays = [
+    res,
+    res?.data,
+    res?.result,
+    res?.results,
+    res?.items,
+    res?.rows,
+    res?.docs,
+    res?.deliverables,
+    res?.data?.data,
+    res?.data?.result,
+    res?.data?.results,
+    res?.data?.items,
+    res?.data?.rows,
+    res?.data?.docs,
+    res?.data?.deliverables,
+  ];
+
+  for (const value of possibleArrays) {
+    if (Array.isArray(value)) return value;
+  }
+
+  return [];
+};
+
+export default function ViewDeleverablePage() {
   const searchParams = useSearchParams();
 
+  const influencerId = useMemo(
+    () => String(searchParams.get("influencerId") || "").trim(),
+    [searchParams]
+  );
+
   const campaignId = useMemo(
-    () => searchParams.get("campaignId") || "",
+    () => String(searchParams.get("campaignId") || "").trim(),
     [searchParams]
   );
 
   const statusFilter = useMemo(
-    () => searchParams.get("status") || "",
+    () => String(searchParams.get("status") || "").trim().toLowerCase(),
     [searchParams]
   );
 
-  const [rows, setRows] = useState<Deliverable[]>([]);
+  const search = useMemo(
+    () => String(searchParams.get("search") || "").trim(),
+    [searchParams]
+  );
+
+  const page = useMemo(() => {
+    const value = Number(searchParams.get("page") || 1);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }, [searchParams]);
+
+  const limit = useMemo(() => {
+    const value = Number(searchParams.get("limit") || 20);
+    return Number.isFinite(value) && value > 0 ? value : 20;
+  }, [searchParams]);
+
+  const [rows, setRows] = useState<DeliverableItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const milestoneId = useMemo(
-    () => searchParams.get("milestoneId") || "",
-    [searchParams]
-  );
-
-
-
-  const brandId = useMemo(
-    () => searchParams.get("brandId") || "",
-    [searchParams]
-  );
-
-  const influencerId = useMemo(
-    () => searchParams.get("influencerId") || "",
-    [searchParams]
-  );
-
-
-
   const fetchDeliverables = useCallback(async () => {
-    if (!milestoneId) {
-      setError("Missing milestoneId in URL. Example: ?milestoneId=xxxx");
+    if (!influencerId) {
+      setError("Missing influencerId in URL. Example: ?influencerId=xxxx");
       setRows([]);
       return;
     }
@@ -121,124 +171,51 @@ export default function DeliverablesPage() {
     setError(null);
 
     try {
-      const res = await apiGetDeliverablesByMilestone({
-        milestoneId,
-        ...(brandId ? { brandId } : {}),
-        ...(influencerId ? { influencerId } : {}),
-        ...(campaignId ? { campaignId } : {}),
-        ...(statusFilter ? { status: statusFilter } : {}),
-        page: 1,
-        limit: 20,
+      const res = await apiGetDeliverablesByInfluencer({
+        influencerId,
+        status: statusFilter || undefined,
+        campaignId: campaignId || undefined,
+        search: search || undefined,
+        page,
+        limit,
       });
 
-      const list =
-        Array.isArray(res)
-          ? res
-          : Array.isArray((res as any)?.data)
-            ? (res as any).data
-            : Array.isArray((res as any)?.deliverables)
-              ? (res as any).deliverables
-              : Array.isArray((res as any)?.items)
-                ? (res as any).items
-                : [];
+      let deliverables = extractDeliverables(res);
 
-      setRows(list as Deliverable[]);
+      // Safe client-side fallback in case backend ignores any optional filter
+      if (statusFilter) {
+        deliverables = deliverables.filter(
+          (item) => (item.status || "").toLowerCase() === statusFilter
+        );
+      }
+
+      if (search) {
+        const q = search.toLowerCase();
+        deliverables = deliverables.filter((item) => {
+          const text = [
+            item.title,
+            item.description,
+            item.comments,
+            item.milestoneTitle,
+            item.influencerName,
+            item.influencer?.name,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+
+          return text.includes(q);
+        });
+      }
+
+      setRows(deliverables);
     } catch (err) {
       setError(getApiErrorMessage(err, "Failed to fetch deliverables"));
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [milestoneId, brandId, influencerId, campaignId, statusFilter]);
-
-  const updateDeliverableStatus = useCallback(
-    async (
-      row: Deliverable,
-      status: "approved" | "revision",
-      comments?: string
-    ) => {
-      const deliverableId = getDeliverableId(row);
-
-      if (!deliverableId) {
-        Swal.fire({
-          icon: "error",
-          title: "Missing deliverable id",
-          text: "This row does not have a valid deliverable id.",
-          showConfirmButton: false,
-          timer: 1800,
-          timerProgressBar: true,
-        });
-        return;
-      }
-
-      try {
-        setUpdatingId(deliverableId);
-
-        await apiUpdateDeliverableApprovalStatus({
-          deliverableId,
-          status,
-          comments,
-          approvedRole: "Brand",
-        });
-
-        Swal.fire({
-          icon: "success",
-          title: status === "approved" ? "Approved" : "Revision Sent",
-          text:
-            status === "approved"
-              ? "Deliverable approved successfully."
-              : "Revision request sent successfully.",
-          showConfirmButton: false,
-          timer: 1600,
-          timerProgressBar: true,
-        });
-
-        await fetchDeliverables();
-      } catch (err) {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: getApiErrorMessage(err, "Failed to update deliverable status"),
-          showConfirmButton: false,
-          timer: 1800,
-          timerProgressBar: true,
-        });
-      } finally {
-        setUpdatingId(null);
-      }
-    },
-    [fetchDeliverables]
-  );
-
-  const approveDeliverable = useCallback(
-    async (row: Deliverable) => {
-      await updateDeliverableStatus(row, "approved");
-    },
-    [updateDeliverableStatus]
-  );
-
-  const sendRevision = useCallback(
-    async (row: Deliverable) => {
-      const result = await Swal.fire({
-        title: "Send for revision?",
-        input: "textarea",
-        inputLabel: "Comments (optional)",
-        inputPlaceholder: "Write what needs to be changed...",
-        showCancelButton: true,
-        confirmButtonText: "Send Revision",
-        cancelButtonText: "Cancel",
-        confirmButtonColor: "#0f172a",
-      });
-
-      if (!result.isConfirmed) return;
-
-      const comments =
-        typeof result.value === "string" ? result.value : undefined;
-
-      await updateDeliverableStatus(row, "revision", comments);
-    },
-    [updateDeliverableStatus]
-  );
+  }, [influencerId, campaignId, statusFilter, search, page, limit]);
 
   useEffect(() => {
     fetchDeliverables();
@@ -246,23 +223,40 @@ export default function DeliverablesPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl p-4 md:p-6 space-y-5">
+      <div className="mx-auto max-w-7xl space-y-5 p-4 md:p-6">
         <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 p-5 md:p-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between md:p-6">
             <div className="space-y-1">
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                Deliverables
+                View Deliverables
               </h1>
               <p className="text-sm text-slate-500">
-                Review submissions, approve completed work, or send items back
-                for revision.
+                See all deliverables submitted by this influencer.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {influencerId && (
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                  Influencer: {influencerId}
+                </span>
+              )}
+
+              {campaignId && (
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                  Campaign: {campaignId}
+                </span>
+              )}
+
               {statusFilter && (
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
                   Filter: {statusFilter}
+                </span>
+              )}
+
+              {search && (
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                  Search: {search}
                 </span>
               )}
 
@@ -277,6 +271,38 @@ export default function DeliverablesPage() {
             </div>
           </div>
         </div>
+
+        {!loading && !error && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-slate-500">Total Deliverables</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {rows.length}
+              </p>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-slate-500">Pending</p>
+              <p className="mt-2 text-2xl font-bold text-amber-600">
+                {rows.filter((x) => (x.status || "").toLowerCase() === "pending").length}
+              </p>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-slate-500">Approved</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-600">
+                {rows.filter((x) => (x.status || "").toLowerCase() === "approved").length}
+              </p>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-slate-500">Revision</p>
+              <p className="mt-2 text-2xl font-bold text-sky-600">
+                {rows.filter((x) => (x.status || "").toLowerCase() === "revision").length}
+              </p>
+            </div>
+          </div>
+        )}
 
         {loading && (
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -325,24 +351,18 @@ export default function DeliverablesPage() {
                     <th className="px-5 py-4 text-left font-semibold">
                       Status
                     </th>
-                    <th className="px-5 py-4 text-left font-semibold">Links</th>
                     <th className="px-5 py-4 text-left font-semibold">
-                      Created
+                      Links
                     </th>
                     <th className="px-5 py-4 text-left font-semibold">
-                      Actions
+                      Created
                     </th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {rows.map((row) => {
-                    const rowId = getDeliverableId(row);
-                    const status = (row.status || "").toLowerCase();
-                    const isApproved = status === "approved";
-                    const isRevision = status === "revision";
-                    const isUpdating = updatingId === rowId;
-                    const isLocked = isApproved || isRevision;
+                  {rows.map((row, index) => {
+                    const rowId = getDeliverableId(row, index);
                     const links = getDeliverableLinks(row);
 
                     return (
@@ -355,9 +375,11 @@ export default function DeliverablesPage() {
                             <div className="font-semibold text-slate-900">
                               {row.title || "-"}
                             </div>
-                            <div className="max-w-[340px] text-slate-600 line-clamp-2">
+
+                            <div className="max-w-[340px] line-clamp-2 text-slate-600">
                               {row.description || "-"}
                             </div>
+
                             {row.comments ? (
                               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                                 <span className="font-semibold text-slate-700">
@@ -410,40 +432,7 @@ export default function DeliverablesPage() {
                         </td>
 
                         <td className="px-5 py-4 align-top text-slate-600">
-                          {formatDateTime(row.createdAt)}
-                        </td>
-
-                        <td className="px-5 py-4 align-top">
-                          <div className="flex min-w-[190px] flex-col gap-2">
-                            <Button
-                              className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50"
-                              disabled={isLocked || isUpdating || !rowId}
-                              onClick={() => approveDeliverable(row)}
-                            >
-                              {isApproved
-                                ? "Approved"
-                                : isRevision
-                                  ? "Approve Locked"
-                                  : isUpdating
-                                    ? "Updating..."
-                                    : "Approve"}
-                            </Button>
-
-                            <Button
-                              variant="outline"
-                              className="border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                              disabled={isLocked || isUpdating || !rowId}
-                              onClick={() => sendRevision(row)}
-                            >
-                              {isApproved
-                                ? "Revision Locked"
-                                : isRevision
-                                  ? "Revision Sent"
-                                  : isUpdating
-                                    ? "Updating..."
-                                    : "Request Revision"}
-                            </Button>
-                          </div>
+                          {formatDateTime(row.createdAt || row.updatedAt)}
                         </td>
                       </tr>
                     );
