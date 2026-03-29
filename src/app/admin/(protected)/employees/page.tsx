@@ -436,8 +436,8 @@ export default function EmployeesPage() {
       Array.isArray(admin.access)
         ? admin.access
         : Array.isArray(admin.permissions)
-        ? admin.permissions
-        : []
+          ? admin.permissions
+          : []
     );
 
     setSelectedId(admin._id);
@@ -523,8 +523,8 @@ export default function EmployeesPage() {
       const nextRows = Array.isArray(data?.data)
         ? data.data
         : Array.isArray(data)
-        ? data
-        : [];
+          ? data
+          : [];
 
       setRows(nextRows);
 
@@ -633,8 +633,8 @@ export default function EmployeesPage() {
         Array.isArray(row.access)
           ? row.access
           : Array.isArray(row.permissions)
-          ? row.permissions
-          : []
+            ? row.permissions
+            : []
       );
 
       return [
@@ -864,8 +864,8 @@ export default function EmployeesPage() {
                     const rowAccess = Array.isArray(row.access)
                       ? row.access
                       : Array.isArray(row.permissions)
-                      ? row.permissions
-                      : [];
+                        ? row.permissions
+                        : [];
 
                     return (
                       <tr key={row._id} className="hover:bg-black/[0.015]">
@@ -1059,35 +1059,35 @@ export default function EmployeesPage() {
               </div>
 
               <div className="mt-5 rounded-[22px] border border-black/10 bg-white p-5">
-                <div className="grid gap-4 md:grid-cols-4">
-                  <div>
+                <div className="grid gap-4 grid-cols-2">
+                  <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Email
                     </div>
-                    <div className="mt-1 text-sm font-medium text-black">
+                    <div className="mt-1 text-sm font-medium text-black break-all">
                       {selectedEmployee.email}
                     </div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Proxy Email
                     </div>
-                    <div className="mt-1 text-sm font-medium text-black">
+                    <div className="mt-1 text-sm font-medium text-black break-all">
                       {selectedEmployee.proxyEmail || "—"}
                     </div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Last Login
                     </div>
-                    <div className="mt-1 text-sm font-medium text-black">
+                    <div className="mt-1 text-sm font-medium text-black break-words">
                       {formatDT(selectedEmployee.lastLoginAt)}
                     </div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Current ID
                     </div>
