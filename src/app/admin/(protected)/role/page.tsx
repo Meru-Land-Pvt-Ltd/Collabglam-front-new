@@ -1225,7 +1225,7 @@ export default function AdminsPage() {
                     placeholder="jane.doe or jane"
                   />
                   <p className="mt-2 text-xs text-black/50">
-                    Final suffix will be fixed as @reply.collabglam.cloud
+                    Final suffix will be fixed as @team.collabglam.com
                   </p>
                 </div>
 

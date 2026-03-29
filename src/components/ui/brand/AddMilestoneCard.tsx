@@ -66,42 +66,49 @@ function WalletTopupModal({
 
   if (!open) return null;
 
-  const handleTopup = async () => {
-    try {
-      setError("");
+const handleTopup = async () => {
+  try {
+    setError("");
 
-      const amountNum = Number(amount);
+    const amountNum = Number(amount);
 
-      if (!brandId) {
-        setError("Brand ID is missing.");
-        return;
-      }
-
-      if (!amount || Number.isNaN(amountNum) || amountNum <= 0) {
-        setError("Please enter a valid top-up amount greater than 0.");
-        return;
-      }
-
-      setSubmitting(true);
-
-      const res = await apiBrandWalletTopup({
-        brandId,
-        amount: amountNum,
-      });
-
-      onSuccess?.({
-        brandId,
-        amount: amountNum,
-        walletBalance: res.walletBalance,
-        frozenBalance: res.frozenBalance,
-        usableBalance: res.usableBalance,
-      });
-    } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to top up wallet"));
-    } finally {
-      setSubmitting(false);
+    if (!brandId) {
+      setError("Brand ID is missing.");
+      return;
     }
-  };
+
+    if (!amount || Number.isNaN(amountNum) || amountNum <= 0) {
+      setError("Please enter a valid top-up amount greater than 0.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "";
+
+    const res = await apiBrandWalletTopup({
+      brandId,
+      amount: amountNum,
+      successUrl: `${origin}/brand/wallet/topup/success`,
+      cancelUrl: `${origin}/brand/wallet/topup/cancel`,
+    });
+
+    if (res.checkoutUrl) {
+      window.location.href = res.checkoutUrl;
+      return;
+    }
+
+    onSuccess?.({
+      brandId,
+      amount: amountNum,
+    });
+  } catch (err) {
+    setError(getApiErrorMessage(err, "Failed to top up wallet"));
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div
