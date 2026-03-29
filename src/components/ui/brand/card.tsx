@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CaretDown,
   DotsThree,
   FileMinus,
   PaperPlaneTilt,
@@ -14,12 +13,23 @@ import {
 } from "@phosphor-icons/react";
 
 export type CardSize = "sm" | "md" | "lg";
-export type StatusVariant = "active" | "paused" | "draft" | "expired" | "scheduled" | "completed";
+export type StatusVariant =
+  | "active"
+  | "paused"
+  | "draft"
+  | "expired"
+  | "scheduled"
+  | "completed";
 
 export type StatItem = {
   label: string;
   value: React.ReactNode;
   icon?: React.ReactNode;
+};
+
+export type EdgeBadge = {
+  label: string;
+  className?: string;
 };
 
 export interface BrandCampaignCardProps {
@@ -39,23 +49,29 @@ export interface BrandCampaignCardProps {
   tags?: string[];
   stats?: StatItem[];
 
+  edgeBadges?: EdgeBadge[];
+
   headerRight?: React.ReactNode;
   footer?: React.ReactNode;
 }
 
-const cx = (...c: Array<string | undefined | null | false>) => c.filter(Boolean).join(" ");
+const cx = (...c: Array<string | undefined | null | false>) =>
+  c.filter(Boolean).join(" ");
 
 function getDefaultIcon(label: string) {
   const key = label.trim().toLowerCase();
 
-  if (key === "platform" || key === "youtube") return <YoutubeLogo weight="regular" />;
+  if (key === "platform" || key === "youtube")
+    return <YoutubeLogo weight="regular" />;
   if (key === "instagram") return <InstagramLogo weight="regular" />;
-  if (key === "tiktok" || key === "tik tok") return <TiktokLogo weight="regular" />;
+  if (key === "tiktok" || key === "tik tok")
+    return <TiktokLogo weight="regular" />;
 
   if (key === "wallet balance" || key === "wallet" || key === "budget") {
     return <Wallet weight="regular" />;
   }
-  if (key === "applied" || key === "applicants") return <FileMinus weight="regular" />;
+  if (key === "applied" || key === "applicants")
+    return <FileMinus weight="regular" />;
   if (key === "influencer") return <Users weight="regular" />;
   if (key === "email") return <PaperPlaneTilt weight="regular" />;
 
@@ -63,7 +79,9 @@ function getDefaultIcon(label: string) {
 }
 
 function normalizeStatusVariant(variant: string): StatusVariant {
-  const v = String(variant || "").trim().toLowerCase();
+  const v = String(variant || "")
+    .trim()
+    .toLowerCase();
 
   if (v === "active") return "active";
   if (v === "paused") return "paused";
@@ -111,17 +129,7 @@ function statusDotBg(variant: StatusVariant | string) {
   }
 }
 
-/**
- * ✅ Responsive spacing (no fixed width, no layout change)
- * Replaces:
- *   width: 403px;
- *   padding: 20px 16px 0 16px;
- *   gap: 24px;
- *
- * With fluid clamp() so it adapts in grid + with sidebar open.
- */
 function cardSpacing(size: CardSize) {
-  // Base (md) matches your original values at normal widths
   const top = {
     px: "px-[clamp(12px,2.2vw,16px)]",
     pt: "pt-[clamp(16px,2.6vw,20px)]",
@@ -129,7 +137,6 @@ function cardSpacing(size: CardSize) {
     gap: "gap-[clamp(16px,3vw,24px)]",
   };
 
-  // Slightly tighter for sm, slightly roomier for lg
   if (size === "sm") {
     return {
       topWrap: cx(
@@ -168,20 +175,18 @@ function cardSpacing(size: CardSize) {
     };
   }
 
-  // md
   return {
     topWrap: cx("flex w-full flex-col", top.px, top.pt, top.pb, top.gap),
     footerWrap: cx(
       "relative flex w-full flex-col items-center text-center",
-      "px-[clamp(14px,3vw,32px)]", // was px-8, but responsive on smaller screens
-      "pt-[clamp(28px,5vw,40px)]", // was pt-10
-      "pb-[clamp(12px,2.2vw,16px)]", // was pb-4
+      "px-[clamp(14px,3vw,32px)]",
+      "pt-[clamp(28px,5vw,40px)]",
+      "pb-[clamp(12px,2.2vw,16px)]",
       "gap-[clamp(8px,1.8vw,12px)]"
     ),
   };
 }
 
-/** ✅ Skeleton export (Tailwind-only) */
 export function BrandCampaignCardSkeleton({
   size = "md",
   className,
@@ -223,7 +228,10 @@ export function BrandCampaignCardSkeleton({
 
         <div className="flex w-full items-center justify-between gap-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex flex-1 flex-col items-center gap-2 text-center">
+            <div
+              key={i}
+              className="flex flex-1 flex-col items-center gap-2 text-center"
+            >
               <div className="h-4 w-20 animate-pulse rounded-md bg-muted" />
               <div className="h-4 w-16 animate-pulse rounded-md bg-muted" />
             </div>
@@ -260,12 +268,12 @@ export default function BrandCampaignCard({
   showStatusChevron = true,
   tags,
   stats,
+  edgeBadges,
   headerRight,
   footer,
 }: BrandCampaignCardProps) {
   const s = cardSpacing(size);
 
-  /** ✅ Hover-cycle images (no inline styles, no slider) */
   const hoverList = useMemo(() => {
     const list = (logoUrls ?? []).filter(Boolean);
     const unique = Array.from(new Set(list));
@@ -273,13 +281,17 @@ export default function BrandCampaignCard({
   }, [logoUrls, logoUrl]);
 
   const baseSrc = logoUrl ?? hoverList[0] ?? "";
-  const slides = useMemo(() => Array.from(new Set([baseSrc, ...hoverList].filter(Boolean))), [baseSrc, hoverList]);
+  const slides = useMemo(
+    () => Array.from(new Set([baseSrc, ...hoverList].filter(Boolean))),
+    [baseSrc, hoverList]
+  );
 
   const [isHover, setIsHover] = useState(false);
   const [idx, setIdx] = useState(0);
   const intervalRef = useRef<number | null>(null);
 
-  const activeSrc = isHover && slides.length > 1 ? slides[idx % slides.length] : baseSrc;
+  const activeSrc =
+    isHover && slides.length > 1 ? slides[idx % slides.length] : baseSrc;
 
   const clearTimer = () => {
     if (intervalRef.current) {
@@ -306,20 +318,62 @@ export default function BrandCampaignCard({
 
   useEffect(() => () => clearTimer(), []);
 
+  const byAdminBadge = edgeBadges?.find(
+    (badge) => badge.label.trim().toLowerCase() === "by admin"
+  );
+
+  const fullyManagedBadge = edgeBadges?.find(
+    (badge) => badge.label.trim().toLowerCase() === "fully managed"
+  );
+
+  const otherBadges = (edgeBadges ?? []).filter((badge) => {
+    const key = badge.label.trim().toLowerCase();
+    return key !== "by admin" && key !== "fully managed";
+  });
+
   return (
     <div
       data-emc-brand-card
       className={cx(
-        // ✅ No fixed width. Works inside grid, with sidebar, and fills its grid cell.
-        "flex w-full max-w-[403px] min-w-0 flex-col overflow-hidden rounded-[1rem] border border-bd-primary bg-card text-card-foreground",
+        "relative flex w-full max-w-[403px] min-w-0 flex-col overflow-visible rounded-[1rem] border border-bd-primary bg-card text-card-foreground",
         "min-h-[19.375rem]",
         className
       )}
     >
+      {fullyManagedBadge ? (
+        <div className="pointer-events-none absolute right-[10px] top-[-12px] z-30">
+          <span
+            title={fullyManagedBadge.label}
+            className={cx(
+              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.73rem] font-medium leading-none ",
+              "border-[#8F6B00] bg-[#B8860B] text-white"
+            )}
+          >
+            <span className="h-2 w-2 rounded-full bg-[#F7B500]" />
+            {fullyManagedBadge.label}
+          </span>
+        </div>
+      ) : null}
+
+      {otherBadges.length > 0 ? (
+        <div className="pointer-events-none absolute right-[-10px] top-4 z-20 flex flex-col items-end gap-2">
+          {otherBadges.map((badge) => (
+            <span
+              key={badge.label}
+              title={badge.label}
+              className={cx(
+                "inline-flex h-7 items-center rounded-full border px-3 text-[0.72rem] font-semibold leading-none shadow-sm",
+                badge.className ?? "border-border bg-background text-foreground"
+              )}
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       <div className={s.topWrap}>
-        {/* header */}
         <div className={cx("flex w-full items-center", "gap-[clamp(10px,2vw,16px)]")}>
-          {/* logo */}
           <div
             className="h-12 w-12 shrink-0 overflow-hidden rounded-[0.5rem] bg-neutral-900 outline-none"
             role="img"
@@ -342,11 +396,7 @@ export default function BrandCampaignCard({
             ) : null}
           </div>
 
-          {/* ✅ Campaign title fix:
-              On very small available widths (like when sidebar is open),
-              status moves below title so the title NEVER disappears. */}
           <div className="grid min-w-0 flex-1 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            {/* title */}
             <div className="min-w-0">
               <div
                 className="line-clamp-2 break-words text-[1rem] font-semibold leading-6 text-tx-primary"
@@ -356,7 +406,6 @@ export default function BrandCampaignCard({
               </div>
             </div>
 
-            {/* status */}
             <div
               className={cx(
                 "inline-flex items-center gap-1",
@@ -365,8 +414,15 @@ export default function BrandCampaignCard({
                 "max-w-full sm:max-w-[11.5rem]"
               )}
             >
-              <span className={cx("inline-flex items-center rounded-full p-0.5", statusPillBg(statusVariant))}>
-                <span className={cx("h-2 w-2 rounded-full", statusDotBg(statusVariant))} />
+              <span
+                className={cx(
+                  "inline-flex items-center rounded-full p-0.5",
+                  statusPillBg(statusVariant)
+                )}
+              >
+                <span
+                  className={cx("h-2 w-2 rounded-full", statusDotBg(statusVariant))}
+                />
               </span>
 
               <span
@@ -379,11 +435,9 @@ export default function BrandCampaignCard({
               >
                 {statusLabel}
               </span>
-
             </div>
           </div>
 
-          {/* header right */}
           <div className="shrink-0">
             {headerRight ? (
               headerRight
@@ -399,28 +453,44 @@ export default function BrandCampaignCard({
           </div>
         </div>
 
-        {/* tags */}
-        {tags && tags.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {tags.map((t) => (
+        {(tags && tags.length > 0) || byAdminBadge ? (
+          <div className="flex w-full items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {(tags ?? []).map((t) => (
+                <span
+                  key={t}
+                  title={t}
+                  className="inline-flex h-6 max-w-[12rem] items-center justify-center truncate rounded-full bg-brand-50 px-2 text-[0.75rem] font-normal leading-4 text-neutral-750"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+
+            {byAdminBadge ? (
               <span
-                key={t}
-                title={t}
-                className="inline-flex h-6 max-w-[12rem] items-center justify-center truncate rounded-full bg-brand-50 px-2 text-[0.75rem] font-normal leading-4 text-neutral-750"
+                title={byAdminBadge.label}
+                className={cx(
+                  "shrink-0 inline-flex h-7 items-center rounded-full border px-3 text-[0.72rem] font-semibold leading-none shadow-sm",
+                  "border-[#D7E3FF] bg-[#EEF4FF] text-[#2F5BFF]",
+                  byAdminBadge.className
+                )}
               >
-                {t}
+                {byAdminBadge.label}
               </span>
-            ))}
+            ) : null}
           </div>
         ) : null}
 
-        {/* stats */}
         {stats && stats.length > 0 ? (
           <div className="flex w-full items-center justify-between gap-2">
             {stats.map((st, i) => {
               const iconNode = st.icon ?? getDefaultIcon(st.label);
               return (
-                <div key={`${st.label}-${i}`} className="flex flex-1 min-w-0 flex-col items-center gap-2 text-center">
+                <div
+                  key={`${st.label}-${i}`}
+                  className="flex flex-1 min-w-0 flex-col items-center gap-2 text-center"
+                >
                   <div
                     className="w-full truncate text-[0.875rem] font-normal leading-5 text-muted-foreground sm:text-[1rem] sm:leading-6"
                     title={st.label}
@@ -429,7 +499,11 @@ export default function BrandCampaignCard({
                   </div>
 
                   <div className="flex min-w-0 items-center justify-center gap-1">
-                    {iconNode ? <span className="inline-flex rounded-full p-1 text-muted-foreground">{iconNode}</span> : null}
+                    {iconNode ? (
+                      <span className="inline-flex rounded-full p-1 text-muted-foreground">
+                        {iconNode}
+                      </span>
+                    ) : null}
                     <span className="truncate text-[0.875rem] font-medium leading-5 text-tx-primary sm:text-[1rem] sm:leading-6">
                       {st.value}
                     </span>
@@ -441,7 +515,6 @@ export default function BrandCampaignCard({
         ) : null}
       </div>
 
-      {/* footer wrapper (keeps your inset divider look) */}
       {footer ? (
         <div
           className={cx(

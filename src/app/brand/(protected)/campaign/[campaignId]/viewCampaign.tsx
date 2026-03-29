@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { loadStripe } from "@stripe/stripe-js";
 import {
   apiCampaignViewByBrand,
   getApiErrorMessage,
   type EnrichedCampaignDoc,
-  apiGetFrozenAmountForCampaign,
+  apiGetBrandWallet,
+  apiBrandWalletTopup,
+  apiConfirmBrandWalletTopup,
   apiCampaignRecommendedInfluencers,
   apiCampaignDelete,
   apiCampaignUpdateStatus,
@@ -68,18 +71,25 @@ import {
 import { toast } from "@/components/ui/toast";
 import Image from "next/image";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+// const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+// const stripePromise = loadStripe(
+//   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
+// );
 
 interface InfluencerContextMenuProps {
   onViewProfile?: () => void;
   onMoveToFolder?: () => void;
   onViewRateCard?: () => void;
   onCopyProfileLink?: () => void;
+  onViewInfluencerList?: () => void;
+  onInviteInfluencer?: () => void;
   onSaveToHub?: () => void;
   onMoveToWorkspace?: () => void;
   onNotRelevant?: () => void;
   onDelete?: () => void;
   onClose?: () => void;
+  hideInviteInfluencer?: boolean;
+  hideDelete?: boolean;
 }
 
 function asArray<T = any>(v: any): T[] {
@@ -270,6 +280,22 @@ function getVideoThumb(url: string) {
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "";
 }
 
+function getMediaUrl(item: any): string {
+  if (!item) return "";
+  if (typeof item === "string") return item.trim();
+
+  return String(
+    item?.dataUrl ??
+    item?.url ??
+    item?.src ??
+    item?.path ??
+    item?.image ??
+    item?.imageUrl ??
+    item?.secure_url ??
+    ""
+  ).trim();
+}
+
 const statuses = [
   { label: "Active", dot: "bg-[#28A745]", ring: "bg-[#BCE4C5]" },
   { label: "Paused", dot: "bg-[#DC3545]", ring: "bg-[#F5C6CB]" },
@@ -323,11 +349,20 @@ interface CampaignStatusDropdownProps {
   onStatusChange?: (newStatus: string) => void;
 }
 
+interface CampaignStatusDropdownProps {
+  brandId: string;
+  campaignId: string;
+  currentStatus: string;
+  onStatusChange?: (newStatus: string) => void;
+  forceLocked?: boolean;
+}
+
 export function CampaignStatusDropdown({
   brandId,
   campaignId,
   currentStatus,
   onStatusChange,
+  forceLocked = false,
 }: CampaignStatusDropdownProps) {
   const [value, setValue] = useState<string>(
     normalizeCampaignStatusValue(currentStatus || "draft")
@@ -349,10 +384,11 @@ export function CampaignStatusDropdown({
     return statuses.filter((s) => nextStatusValues.includes(s.label.toLowerCase()));
   }, [nextStatusValues]);
 
-  const isLocked = value === "completed" || dropdownOptions.length === 0;
+  const isLocked =
+    forceLocked || value === "completed" || dropdownOptions.length === 0;
 
   const handleChange = async (newValue: string | null) => {
-    if (!newValue || newValue === value || loading) return;
+    if (!newValue || newValue === value || loading || forceLocked) return;
 
     const previous = value;
     setValue(newValue);
@@ -441,8 +477,12 @@ export function InfluencerContextMenu({
   onMoveToFolder,
   onViewRateCard,
   onCopyProfileLink,
+  onViewInfluencerList,
+  onInviteInfluencer,
   onMoveToWorkspace,
   onDelete,
+  hideInviteInfluencer = false,
+  hideDelete = false,
 }: InfluencerContextMenuProps) {
   const [workspaceSubmenuOpen, setWorkspaceSubmenuOpen] = useState(false);
   const menuRootRef = useRef<HTMLDivElement | null>(null);
@@ -463,8 +503,14 @@ export function InfluencerContextMenu({
     viewProfile: onViewProfile,
     moveToFolder: onMoveToFolder,
     viewRateCard: onViewRateCard,
-    copyProfileLink: onCopyProfileLink,
+    copylink: onCopyProfileLink,
+    viewinfluencerlist: onViewInfluencerList,
+    inviteinfluencer: onInviteInfluencer,
   };
+
+  const visibleMenuItems = menuItems.filter(
+    (item) => !(hideInviteInfluencer && item.key === "inviteinfluencer")
+  );
 
   const workspaces = [
     { id: "nike", name: "Nike Workspace", logo: <EnvelopeIcon /> },
@@ -475,23 +521,21 @@ export function InfluencerContextMenu({
 
   return (
     <Combobox>
-      <ComboboxTrigger hideIcon>
-        <Button
-          variant="raised"
-          size="sm"
-          aria-label="More actions"
-          className="
-            my-0
-            h-[2rem] w-[2.4rem]
-            px-[0.5rem]
-            rounded-[0.55rem]
-            border border-[#1A1A1A]
-            bg-white
-            shadow-none
-          "
-        >
-          <DotsThreeIcon size={20} weight="bold" />
-        </Button>
+      <ComboboxTrigger
+        hideIcon
+        aria-label="More actions"
+        className="
+          my-0
+          h-[2rem] w-[2.4rem]
+          px-[0.5rem]
+          rounded-[0.55rem]
+          border border-[#1A1A1A]
+          bg-white
+          shadow-none
+          inline-flex items-center justify-center
+        "
+      >
+        <DotsThreeIcon size={20} weight="bold" />
       </ComboboxTrigger>
 
       <ComboboxContent
@@ -506,9 +550,8 @@ export function InfluencerContextMenu({
         "
       >
         <div ref={menuRootRef} className="flex flex-col gap-[0.5rem]">
-          {menuItems.map(({ label, icon: Icon, key }) => {
-            const isCaretRight =
-              key === "moveToWorkspace" || key === "linkiemfolder" || key === "inviteinfluencer";
+          {visibleMenuItems.map(({ label, icon: Icon, key }) => {
+            const isCaretRight = key === "moveToWorkspace" || key === "linkiemfolder";
             const isWorkspace = key === "moveToWorkspace";
 
             const handleClick = (e: React.MouseEvent) => {
@@ -604,27 +647,31 @@ export function InfluencerContextMenu({
             );
           })}
 
-          <div className="border-t border-[#F0F0F0] my-2" />
-
-          <button
-            onClick={onDelete}
-            className="
-              flex items-center gap-2
-              px-2 py-2
-              rounded-md
-              text-sm font-medium
-              text-[#E53935]
-              hover:bg-[#F5F5F5]
-            "
-          >
-            <Trash size={16} />
-            Delete
-          </button>
+          {!hideDelete ? (
+            <>
+              <div className="border-t border-[#F0F0F0] my-2" />
+              <button
+                onClick={onDelete}
+                className="
+                  flex items-center gap-2
+                  px-2 py-2
+                  rounded-md
+                  text-sm font-medium
+                  text-[#E53935]
+                  hover:bg-[#F5F5F5]
+                "
+              >
+                <Trash size={16} />
+                Delete
+              </button>
+            </>
+          ) : null}
         </div>
       </ComboboxContent>
     </Combobox>
   );
 }
+
 
 function parseRecommendedResponse(
   res: any,
@@ -966,6 +1013,7 @@ function RecommendedActionItems({
     </>
   );
 }
+
 function canShowEditCampaign(c: any): boolean {
   const status = String(c?.status ?? "").trim().toLowerCase();
 
@@ -980,7 +1028,6 @@ function canShowEditCampaign(c: any): boolean {
 
     const now = new Date();
 
-    // show edit only until start date is reached
     return startAt.getTime() > now.getTime();
   }
 
@@ -993,15 +1040,27 @@ export default function ViewCampaignPage() {
   const searchParams = useSearchParams();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [addFundsModalOpen, setAddFundsModalOpen] = useState(false);
+  const [topupAmount, setTopupAmount] = useState("");
+  const [topupLoading, setTopupLoading] = useState(false);
   const idFromQuery = searchParams.get("id");
+  const topupStatus = searchParams.get("topup");
+  const stripeSessionId = searchParams.get("session_id");
 
   const campaignId = useMemo(
     () => normalizeMongoId(idFromQuery ?? (params as any)?.campaignId),
     [idFromQuery, params]
   );
 
+  const handleEdit = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(campaignId)}`;
+    }
+  }, [campaignId]);
+
   const [budgetTab, setBudgetTab] = useState<"remaining" | "used">("remaining");
-  const [frozenAmount, setFrozenAmount] = useState<number>(0);
+  const [usableWalletBalance, setUsableWalletBalance] = useState<number>(0);
+  const [campaignFreezeAmount, setCampaignFreezeAmount] = useState<number>(0);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -1069,6 +1128,34 @@ export default function ViewCampaignPage() {
     };
   }, [brandId, campaignId]);
 
+  const readBrandWallet = useCallback(async () => {
+    if (!brandId || !campaignId) {
+      return { usableBalance: 0, campaignFreezeAmount: 0 };
+    }
+
+    const res: any = await apiGetBrandWallet({ brandId });
+    const walletData = res?.data ?? res?.data?.data ?? res ?? {};
+
+    const usableRaw =
+      walletData?.usableBalance ?? walletData?.walletBalance ?? 0;
+
+    const usable = Number(usableRaw);
+
+    const freezes = Array.isArray(walletData?.freezes) ? walletData.freezes : [];
+    const currentCampaignFreeze = freezes.reduce((sum: number, freeze: any) => {
+      const freezeCampaignId = normalizeMongoId(freeze?.campaignId);
+      if (freezeCampaignId !== campaignId) return sum;
+
+      const amount = Number(freeze?.freezeAmount ?? 0);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+
+    return {
+      usableBalance: Number.isFinite(usable) ? usable : 0,
+      campaignFreezeAmount: currentCampaignFreeze,
+    };
+  }, [brandId, campaignId]);
+
   useEffect(() => {
     if (!brandId || !campaignId) return;
 
@@ -1076,14 +1163,17 @@ export default function ViewCampaignPage() {
 
     const run = async () => {
       try {
-        const res: any = await apiGetFrozenAmountForCampaign({ brandId, campaignId });
-        const amtRaw =
-          res?.frozenAmount ?? res?.data?.frozenAmount ?? res?.data?.doc?.frozenAmount ?? 0;
+        const walletSnapshot = await readBrandWallet();
 
-        const amt = Number(amtRaw);
-        if (!cancelled) setFrozenAmount(Number.isFinite(amt) ? amt : 0);
+        if (!cancelled) {
+          setUsableWalletBalance(walletSnapshot.usableBalance);
+          setCampaignFreezeAmount(walletSnapshot.campaignFreezeAmount);
+        }
       } catch {
-        if (!cancelled) setFrozenAmount(0);
+        if (!cancelled) {
+          setUsableWalletBalance(0);
+          setCampaignFreezeAmount(0);
+        }
       }
     };
 
@@ -1091,7 +1181,58 @@ export default function ViewCampaignPage() {
     return () => {
       cancelled = true;
     };
-  }, [brandId, campaignId]);
+  }, [brandId, campaignId, readBrandWallet]);
+
+  useEffect(() => {
+    if (!brandId || topupStatus !== "success" || !stripeSessionId) return;
+
+    let cancelled = false;
+
+    const confirmTopup = async () => {
+      try {
+        const res: any = await apiConfirmBrandWalletTopup({
+          brandId,
+          sessionId: stripeSessionId,
+        });
+
+        if (cancelled) return;
+
+        const msg =
+          res?.message ??
+          res?.data?.message ??
+          res?.data?.data?.message ??
+          "Funds added successfully";
+
+        const walletSnapshot = await readBrandWallet();
+
+        if (cancelled) return;
+
+        setUsableWalletBalance(walletSnapshot.usableBalance);
+        setCampaignFreezeAmount(walletSnapshot.campaignFreezeAmount);
+        setTopupAmount("");
+        setAddFundsModalOpen(false);
+
+        toast({ icon: "success", title: msg });
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete("topup");
+        url.searchParams.delete("session_id");
+        window.history.replaceState({}, "", url.toString());
+      } catch (e) {
+        if (cancelled) return;
+        toast({
+          icon: "error",
+          title: getApiErrorMessage(e, "Failed to confirm Stripe payment"),
+        });
+      }
+    };
+
+    confirmTopup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, topupStatus, stripeSessionId, readBrandWallet]);
 
   useEffect(() => {
     if (!brandId || !campaignId) return;
@@ -1234,6 +1375,66 @@ export default function ViewCampaignPage() {
     }
   };
 
+  const handleAddFunds = async () => {
+    if (!brandId) {
+      toast({ icon: "error", title: "Missing brandId" });
+      return;
+    }
+
+    const amount = Number(topupAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({ icon: "error", title: "Please enter a valid amount" });
+      return;
+    }
+
+    if (topupLoading) return;
+
+    setTopupLoading(true);
+
+    try {
+      const rawCampaignTitle =
+        String((campaign as any)?.campaignTitle ?? "").trim();
+
+      const safeCampaignTitle = rawCampaignTitle || "campaign";
+
+      const redirectBase = `${window.location.origin}/brand/campaign/${encodeURIComponent(
+        safeCampaignTitle
+      )}?id=${encodeURIComponent(campaignId)}`;
+
+      const successUrl = `${redirectBase}&topup=success&session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${redirectBase}&topup=cancelled`;
+
+      const res: any = await apiBrandWalletTopup({
+        brandId,
+        campaignId,
+        amount,
+        currency: "inr",
+        successUrl,
+        cancelUrl,
+      });
+
+      const checkoutUrl =
+        res?.data?.checkoutUrl ??
+        res?.checkoutUrl ??
+        res?.data?.data?.checkoutUrl;
+
+      if (!checkoutUrl) {
+        throw new Error("Stripe checkout URL not received");
+      }
+
+      window.location.href = checkoutUrl;
+      return;
+    } catch (e) {
+      toast({
+        icon: "error",
+        title: getApiErrorMessage(e, "Failed to start Stripe checkout"),
+      });
+    } finally {
+      setTopupLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={PAGE_WRAP}>
@@ -1290,24 +1491,40 @@ export default function ViewCampaignPage() {
     );
   }
 
-  const details = (doc as any)?.details ?? {};
+  const campaign = ((doc as any)?.data?.doc ?? (doc as any)?.doc ?? doc) as any;
+  const createdByRole = String(campaign?.createdBy?.role ?? "")
+    .trim()
+    .toLowerCase();
+
+  const isAdminCreatedCampaign = createdByRole === "admin";
+
+  const details = campaign?.details ?? {};
   const countries = asArray(details?.targetCountries);
   const ages = asArray(details?.targetAgeRanges);
   const platforms = asArray<string>(
-    (doc as any)?.platformSelection ?? details?.platformSelection ?? details?.platforms
+    (campaign as any)?.platformSelection ?? details?.platformSelection ?? details?.platforms
   );
 
-  const productImages = asArray<any>((doc as any)?.productImages);
+  const productImages = asArray<any>(
+    (campaign as any)?.productImages ??
+    details?.productImages
+  );
+
+  const campaignImageUrls = productImages
+    .map((img: any) => getMediaUrl(img))
+    .filter(Boolean);
 
   const videoReferenceUrl = String(
-    (doc as any)?.videoReference ??
-    (doc as any)?.videoReferenceUrl ??
-    (doc as any)?.referenceVideoUrl ??
-    (doc as any)?.videoUrl ??
+    (campaign as any)?.videoReference ??
+    (campaign as any)?.videoReferenceUrl ??
+    (campaign as any)?.referenceVideoUrl ??
+    (campaign as any)?.videoUrl ??
+    (campaign as any)?.videoLink ??
     details?.videoReference ??
     details?.videoReferenceUrl ??
     details?.referenceVideoUrl ??
     details?.videoUrl ??
+    details?.videoLink ??
     ""
   ).trim();
 
@@ -1315,47 +1532,55 @@ export default function ViewCampaignPage() {
 
   const targetCountryText = countries.length
     ? countries
-      .map((c: any) =>
-        `${String(c?.flag ?? "")} ${String(c?.countryNameEn ?? c?.countryCode ?? "").trim()}`.trim()
-      )
+      .map((c: any) => {
+        const countryName = String(
+          c?.countryName ??
+          c?.countryNameEn ??
+          c?.name ??
+          c?.countryCode ??
+          ""
+        ).trim();
+
+        return `${String(c?.flag ?? "")} ${countryName}`.trim();
+      })
       .filter(Boolean)
       .join(", ")
     : "—";
 
   const productUrlRaw =
+    (campaign as any)?.productUrl ??
+    (campaign as any)?.productLink ??
     details?.productUrl ??
     details?.productLink ??
-    (doc as any)?.productUrl ??
-    (doc as any)?.productLink ??
     "";
 
   const productUrl = typeof productUrlRaw === "string" ? productUrlRaw : "";
 
   const logoUrlRaw =
-    (doc as any)?.brandLogoUrl ??
-    (doc as any)?.brandLogo ??
+    (campaign as any)?.brandLogoUrl ??
+    (campaign as any)?.brandLogo ??
     details?.brandLogoUrl ??
-    details?.brandLogo ??
-    "";
+    details?.brandLogo;
 
-  const logoUrl = typeof logoUrlRaw === "string" ? logoUrlRaw : "";
+  const explicitLogoUrl = getMediaUrl(logoUrlRaw);
+  const logoUrl = explicitLogoUrl || campaignImageUrls[0] || "";
 
-  const totalInfluencers = Number((doc as any)?.numberOfInfluencers ?? details?.numberOfInfluencers ?? 0) || 0;
+  const totalInfluencers = Number((campaign as any)?.numberOfInfluencers ?? details?.numberOfInfluencers ?? 0) || 0;
 
   const selectedList =
-    (doc as any)?.selectedInfluencers ??
-    (doc as any)?.selectedInfluencerIds ??
-    (doc as any)?.selectedCreators ??
-    (doc as any)?.selectedInfluencer ??
+    (campaign as any)?.selectedInfluencers ??
+    (campaign as any)?.selectedInfluencerIds ??
+    (campaign as any)?.selectedCreators ??
+    (campaign as any)?.selectedInfluencer ??
     details?.selectedInfluencers ??
     details?.selectedInfluencerIds ??
     [];
 
   const selectedCount = asArray(selectedList).length;
 
-  const startAt = (doc as any)?.startAt ?? details?.startAt ?? null;
-  const endAt = (doc as any)?.endAt ?? details?.endAt ?? null;
-  const showEditButton = canShowEditCampaign(doc);
+  const startAt = (campaign as any)?.startAt ?? details?.startAt ?? null;
+  const endAt = (campaign as any)?.endAt ?? details?.endAt ?? null;
+  const showEditButton = canShowEditCampaign(campaign);
 
   let timelineText = "—";
   try {
@@ -1367,15 +1592,15 @@ export default function ViewCampaignPage() {
         const months = Math.max(1, Math.round(days / 30));
         timelineText = plural(months, "month");
       }
-    } else if ((doc as any)?.timeline) {
-      timelineText = String((doc as any)?.timeline);
+    } else if ((campaign as any)?.timeline) {
+      timelineText = String((campaign as any)?.timeline);
     }
   } catch { }
 
   const currency =
-    String((doc as any)?.currency ?? details?.currency ?? (doc as any)?.budgetCurrency ?? "USD") || "USD";
+    String((campaign as any)?.currency ?? details?.currency ?? (campaign as any)?.budgetCurrency ?? "USD") || "USD";
 
-  const budgetRaw = (doc as any)?.campaignBudget ?? details?.campaignBudget ?? (doc as any)?.totalBudget ?? null;
+  const budgetRaw = (campaign as any)?.campaignBudget ?? details?.campaignBudget ?? (campaign as any)?.totalBudget ?? null;
 
   const budgetNum =
     typeof budgetRaw === "number" ? budgetRaw : Number(String(budgetRaw ?? "").replace(/[^0-9.]/g, ""));
@@ -1383,25 +1608,25 @@ export default function ViewCampaignPage() {
   const budgetText =
     Number.isFinite(budgetNum) && budgetNum > 0 ? `${currency} $${budgetNum.toLocaleString("en-US")}` : "—";
 
-  const statusText = String((doc as any)?.status ?? "—");
+  const statusText = String((campaign as any)?.status ?? "—");
 
   const startDateText = startAt ? new Date(startAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "—";
   const endDateText = endAt ? new Date(endAt).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "—";
 
-  const paymentTypeText = String((doc as any)?.paymentType ?? details?.paymentType ?? "—");
+  const paymentTypeText = String((campaign as any)?.paymentType ?? details?.paymentType ?? "—");
 
   const descriptionText = String(
-    (doc as any)?.description ??
-    (doc as any)?.campaignDescription ??
+    (campaign as any)?.description ??
+    (campaign as any)?.campaignDescription ??
     details?.description ??
     details?.campaignDescription ??
     ""
   ).trim();
 
   const additionalNotesText = String(
-    (doc as any)?.additionalNotes ??
-    (doc as any)?.notes ??
-    (doc as any)?.additionalInformation ??
+    (campaign as any)?.additionalNotes ??
+    (campaign as any)?.notes ??
+    (campaign as any)?.additionalInformation ??
     details?.additionalNotes ??
     details?.notes ??
     details?.additionalInformation ??
@@ -1410,11 +1635,7 @@ export default function ViewCampaignPage() {
 
   const lorem10 = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do.";
 
-  const backendImageUrls = (productImages ?? [])
-    .map((img: any) => img?.url || img?.src || img?.path || "")
-    .filter(Boolean);
-
-  const carouselImages = backendImageUrls.length ? backendImageUrls : [];
+  const carouselImages = Array.from(new Set(campaignImageUrls));
 
   const hashtags = (() => {
     const detailObjs = asArray((details as any)?.preferredHashtags ?? []);
@@ -1427,9 +1648,9 @@ export default function ViewCampaignPage() {
     });
 
     const raw =
-      (doc as any)?.preferredHashtags ??
+      (campaign as any)?.preferredHashtags ??
       (details as any)?.preferredHashtags ??
-      (doc as any)?.hashtags ??
+      (campaign as any)?.hashtags ??
       (details as any)?.hashtags ??
       [];
 
@@ -1449,10 +1670,10 @@ export default function ViewCampaignPage() {
   })();
 
   const pdfRaw =
-    (doc as any)?.pdf ??
-    (doc as any)?.pdfAttachment ??
-    (doc as any)?.attachment ??
-    (doc as any)?.attachments ??
+    (campaign as any)?.pdf ??
+    (campaign as any)?.pdfAttachment ??
+    (campaign as any)?.attachment ??
+    (campaign as any)?.attachments ??
     details?.pdf ??
     details?.pdfAttachment ??
     details?.attachment ??
@@ -1516,29 +1737,29 @@ export default function ViewCampaignPage() {
     setActiveSlide(bestIdx);
   };
 
-  const remainingValue = Number.isFinite(frozenAmount) ? frozenAmount : 0;
-  const shownBudgetText = budgetTab === "remaining" ? remainingValue.toLocaleString("en-US") : "0";
+  const usableBudgetValue = Number.isFinite(usableWalletBalance) ? usableWalletBalance : 0;
+  const usedBudgetValue = Number.isFinite(campaignFreezeAmount) ? campaignFreezeAmount : 0;
+  const shownBudgetText = (budgetTab === "remaining" ? usableBudgetValue : usedBudgetValue).toLocaleString("en-US");
 
   const showLoadMore = recommendedRows.length > 0 && recommendedHasMore !== false;
 
   return (
     <div className={PAGE_WRAP}>
-      {/* ===== Top Campaign Header ===== */}
       <div className="w-full mt-[3.5rem]">
         <div className="flex flex-col items-start gap-5 self-stretch pb-5 border-b border-[#E6E6E6]">
-          <div
-            className="h-[6.25rem] w-[6.25rem] rounded-[4rem] border border-white/30 bg-black"
-            style={
-              logoUrl
-                ? {
-                  backgroundImage: `url(${logoUrl})`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "11px 24px",
-                  backgroundSize: "78% 52%",
-                }
-                : undefined
-            }
-          />
+          <div className="flex h-[6.25rem] w-[6.25rem] items-center justify-center overflow-hidden rounded-full border border-[#E6E6E6] bg-[#F7F7F7]">
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt={`${(campaign as any)?.campaignTitle ?? "Campaign"} logo`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-[1.5rem] font-semibold text-[#1A1A1A]">
+                {String((campaign as any)?.campaignTitle ?? "C").charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
 
           <div className="flex w-full items-center justify-between px-1 gap-3">
             <div className="min-w-0">
@@ -1549,9 +1770,9 @@ export default function ViewCampaignPage() {
                   line-clamp-2
                 "
                 style={{ fontFamily: "Inter" }}
-                title={(doc as any)?.campaignTitle ?? "Campaign"}
+                title={(campaign as any)?.campaignTitle ?? "Campaign"}
               >
-                {(doc as any)?.campaignTitle ?? "Campaign"}
+                {(campaign as any)?.campaignTitle ?? "Campaign"}
               </div>
 
               <div className="mt-1">
@@ -1584,35 +1805,52 @@ export default function ViewCampaignPage() {
                 campaignId={campaignId}
                 brandId={brandId}
                 currentStatus={statusText}
+                forceLocked={isAdminCreatedCampaign}
                 onStatusChange={(newStatus) => {
                   setDoc((prev: any) => (prev ? { ...prev, status: newStatus } : prev));
                 }}
               />
 
-              <Button
-                variant="raised"
-                size="sm"
-                className="my-0 h-8 rounded-lg border border-[#1A1A1A] bg-white px-2 shadow-none gap-2"
-                rightIcon={<UsersIcon weight="bold" style={{ width: "0.875rem", height: "0.875rem" }} />}
-                onClick={() => router.push(`/brand/campaign/${campaignId}/influencers`)}
-              >
-                <>
-                  <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5 whitespace-nowrap hidden sm:inline">
-                    Browse influencers
-                  </span>
-                  <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5 whitespace-nowrap sm:hidden">
-                    Influencers
-                  </span>
-                </>
-              </Button>
+              {!isAdminCreatedCampaign ? (
+                <Button
+                  variant="raised"
+                  size="sm"
+                  className="my-0 h-8 rounded-lg border border-[#1A1A1A] bg-white px-2 shadow-none gap-2"
+                  rightIcon={<UsersIcon weight="bold" style={{ width: "0.875rem", height: "0.875rem" }} />}
+                  onClick={() => router.push(`/brand/campaign/${campaignId}/influencers`)}
+                >
+                  <>
+                    <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5 whitespace-nowrap hidden sm:inline">
+                      Browse influencers
+                    </span>
+                    <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5 whitespace-nowrap sm:hidden">
+                      Influencers
+                    </span>
+                  </>
+                </Button>
+              ) : null}
 
-              <InfluencerContextMenu onDelete={() => setDeleteDialogOpen(true)} />
+              <InfluencerContextMenu
+                hideInviteInfluencer={isAdminCreatedCampaign}
+                hideDelete={isAdminCreatedCampaign}
+                onCopyProfileLink={async () => {
+                  const link = `${window.location.origin}/brand/viewCampaign?id=${campaignId}`;
+                  try {
+                    await navigator.clipboard.writeText(link);
+                    toast({ icon: "success", title: "Campaign link copied" });
+                  } catch {
+                    toast({ icon: "error", title: "Could not copy campaign link" });
+                  }
+                }}
+                onViewInfluencerList={() => router.push(`/brand/influ/all?campaignId=${campaignId}`)}
+                onInviteInfluencer={() => router.push(`/brand/browse-influencer?campaignId=${campaignId}`)}
+                onDelete={() => setDeleteDialogOpen(true)}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      {/* ===== Overview ===== */}
       <div className="w-full">
         <div className="mt-3 flex flex-col items-start gap-6 self-stretch">
           <div className="flex w-full items-start justify-between self-stretch">
@@ -1638,7 +1876,7 @@ export default function ViewCampaignPage() {
                     style={{ width: "0.875rem", height: "0.875rem" }}
                   />
                 }
-                onClick={() => router.push(`/brand/campaign/${campaignId}/edit`)}
+                onClick={handleEdit}
               >
                 <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
                   Edit
@@ -1658,7 +1896,7 @@ export default function ViewCampaignPage() {
                 <Metric
                   label="Selected Influencer"
                   value={totalInfluencers ? `${pad2(selectedCount)}/${pad2(totalInfluencers)}` : "—"}
-                  onClick={() => router.push(`/brand/influ/shortlisted?campaignId=${campaignId}`)}
+                  onClick={() => router.push(`/brand/influ/active?campaignId=${campaignId}`)}
                 />
                 <Metric label="Timeline" value={timelineText} />
                 <Metric label="Total Budget" value={budgetText} />
@@ -1670,7 +1908,6 @@ export default function ViewCampaignPage() {
 
       <div className="mb-[1.75rem] mt-[1.75rem] h-px w-full bg-[var(--Light-Border-Subtle,#E6E6E6)]" />
 
-      {/* ===== Timeline & Payments ===== */}
       <div className="flex w-full flex-col items-start gap-6 self-stretch" style={{ fontFamily: "Inter" }}>
         <div className="flex w-full items-center justify-between self-stretch">
           <div className="text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]">
@@ -1692,7 +1929,7 @@ export default function ViewCampaignPage() {
                   }`}
               >
                 <span className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
-                  Remaining Budget
+                  Usable Budget
                 </span>
               </button>
 
@@ -1712,7 +1949,7 @@ export default function ViewCampaignPage() {
           <div className="mt-auto flex w-full items-end justify-between self-stretch gap-4">
             <div className="flex flex-col items-start gap-2">
               <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-                {budgetTab === "remaining" ? "Remaining budget" : "Used budget"}
+                {budgetTab === "remaining" ? "Usable budget" : "Used budget"}
               </div>
 
               <div className="flex items-center gap-[0.1rem]">
@@ -1730,7 +1967,7 @@ export default function ViewCampaignPage() {
             <Button
               variant="raised"
               size="sm"
-              onClick={() => router.push(`/brand/campaign/${campaignId}/edit`)}
+              onClick={() => setAddFundsModalOpen(true)}
               className="my-0 h-8 w-[6.375rem] px-2 gap-[0.25rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white shadow-none"
               leftIcon={<PlusCircle weight="bold" style={{ width: "0.875rem", height: "0.875rem" }} />}
             >
@@ -1779,7 +2016,6 @@ export default function ViewCampaignPage() {
 
       <div className="mb-[1.75rem] mt-[1.75rem] h-px w-full bg-[var(--Light-Border-Subtle,#E6E6E6)]" />
 
-      {/* ===== Other Information ===== */}
       <div className="w-full rounded-[1.25rem] bg-[rgba(218,218,218,0.27)] p-5 flex flex-col items-start gap-6">
         <div className="flex w-full justify-between items-start self-stretch">
           <div className="flex flex-col justify-center items-start gap-1 flex-1">
@@ -1838,9 +2074,14 @@ export default function ViewCampaignPage() {
                     {carouselImages.map((src, idx) => (
                       <div
                         key={`${src}-${idx}`}
-                        className="flex-none w-[13.8125rem] h-[11.5rem] rounded-[1.1875rem] bg-cover bg-center"
-                        style={{ backgroundImage: `url(${src})` }}
-                      />
+                        className="relative flex-none w-[13.8125rem] h-[11.5rem] overflow-hidden rounded-[1.1875rem] border border-[#E6E6E6] bg-white"
+                      >
+                        <img
+                          src={src}
+                          alt={`Campaign image ${idx + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
                     ))}
                   </div>
 
@@ -1885,7 +2126,6 @@ export default function ViewCampaignPage() {
         ) : null}
       </div>
 
-      {/* ===== Audience & Platforms ===== */}
       <div className="mt-4 w-full rounded-[1.25rem] bg-[rgba(218,218,218,0.27)] p-5 flex flex-col items-start gap-6">
         <div className="flex w-full justify-between items-start self-stretch">
           <div className="flex flex-col justify-center items-start gap-1 flex-1">
@@ -2041,12 +2281,18 @@ export default function ViewCampaignPage() {
                     href={videoReferenceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="w-[12.875rem] h-[10.125rem] rounded-[0.25rem] bg-cover bg-center"
-                    style={{
-                      backgroundImage: videoThumbUrl ? `url(${videoThumbUrl})` : undefined,
-                      backgroundColor: videoThumbUrl ? undefined : "#eee",
-                    }}
-                  />
+                    className="flex h-[10.125rem] w-[12.875rem] items-center justify-center overflow-hidden rounded-[0.25rem] border border-[#E6E6E6] bg-[#F5F5F5]"
+                  >
+                    {videoThumbUrl ? (
+                      <img
+                        src={videoThumbUrl}
+                        alt="Video reference thumbnail"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-[#969696] text-[0.875rem]">Open video</span>
+                    )}
+                  </a>
                 </div>
               ) : (
                 <div className="text-[#969696] text-[0.875rem] font-normal leading-[1.25rem]">—</div>
@@ -2056,7 +2302,6 @@ export default function ViewCampaignPage() {
         ) : null}
       </div>
 
-      {/* ===== Additional Information ===== */}
       <div className="mt-4 w-full rounded-[1.25rem] bg-[rgba(218,218,218,0.27)] p-5 flex flex-col items-start gap-6">
         <div className="flex w-full justify-between items-start self-stretch">
           <div className="flex flex-col justify-center items-start gap-1 flex-1">
@@ -2162,122 +2407,121 @@ export default function ViewCampaignPage() {
           </div>
         ) : null}
       </div>
+      {!isAdminCreatedCampaign ? (
+        <div className="mt-7 w-full flex flex-col items-start self-stretch">
+          <div
+            className="self-stretch text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]"
+            style={{ fontFamily: "Inter" }}
+          >
+            Recommended Influencer
+          </div>
 
-      {/* ===== Recommended Influencer ===== */}
-      <div className="mt-7 w-full flex flex-col items-start self-stretch">
-        <div
-          className="self-stretch text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]"
-          style={{ fontFamily: "Inter" }}
-        >
-          Recommended Influencer
-        </div>
+          <div
+            className="mt-2 self-stretch text-[#B8B8B8] text-[0.875rem] font-normal leading-[1.25rem]"
+            style={{ fontFamily: "Inter" }}
+          >
+            {lorem10}
+          </div>
 
-        <div
-          className="mt-2 self-stretch text-[#B8B8B8] text-[0.875rem] font-normal leading-[1.25rem]"
-          style={{ fontFamily: "Inter" }}
-        >
-          {lorem10}
-        </div>
-
-        <div className="mt-6 w-full mb-[3.5rem]">
-          {recommendedLoading ? (
-            <div className="w-full rounded-2xl border bg-white p-6 shadow-sm">
-              <div className="h-4 w-48 animate-pulse rounded bg-gray-200" />
-              <div className="mt-3 h-4 w-80 animate-pulse rounded bg-gray-200" />
-              <div className="mt-6 h-28 animate-pulse rounded-2xl bg-gray-100" />
-            </div>
-          ) : recommendedError ? (
-            <div className="w-full rounded-2xl border bg-white p-6 shadow-sm">
-              <div className="text-sm font-semibold text-[#1A1A1A]">
-                Couldn’t load recommended influencers
+          <div className="mt-6 w-full mb-[3.5rem]">
+            {recommendedLoading ? (
+              <div className="w-full rounded-2xl border bg-white p-6 shadow-sm">
+                <div className="h-4 w-48 animate-pulse rounded bg-gray-200" />
+                <div className="mt-3 h-4 w-80 animate-pulse rounded bg-gray-200" />
+                <div className="mt-6 h-28 animate-pulse rounded-2xl bg-gray-100" />
               </div>
-              <div className="mt-2 text-sm text-red-600">{recommendedError}</div>
+            ) : recommendedError ? (
+              <div className="w-full rounded-2xl border bg-white p-6 shadow-sm">
+                <div className="text-sm font-semibold text-[#1A1A1A]">
+                  Couldn’t load recommended influencers
+                </div>
+                <div className="mt-2 text-sm text-red-600">{recommendedError}</div>
 
-              <div className="mt-4">
-                <Button
-                  variant="raised"
-                  size="sm"
-                  className="my-0 rounded-xl border border-[#E6E6E6] bg-white px-4 py-2 text-sm shadow-none"
-                  onClick={() => {
-                    setRecommendedRows([]);
-                    setRecommendedError("");
-                    setRecommendedLoading(true);
-                    setRecommendedPage(1);
-                    setRecommendedHasMore(null);
-
-                    apiCampaignRecommendedInfluencers({
-                      brandId,
-                      campaignId,
-                      page: 1,
-                      limit: RECO_LIMIT,
-                    })
-                      .then((res: any) => {
-                        const { items, hasMore } = parseRecommendedResponse(res, 1, RECO_LIMIT);
-                        const rows = asArray(items).map(mapRecommendedToRow);
-
-                        setRecommendedRows(rows);
-
-                        const finalHasMore =
-                          hasMore === null ? (rows.length < RECO_LIMIT ? false : null) : hasMore;
-                        setRecommendedHasMore(finalHasMore);
-                      })
-                      .catch((e: any) =>
-                        setRecommendedError(
-                          getApiErrorMessage(e, "Failed to load recommended influencers")
-                        )
-                      )
-                      .finally(() => setRecommendedLoading(false));
-                  }}
-                >
-                  Retry
-                </Button>
-              </div>
-            </div>
-          ) : recommendedRows.length ? (
-            <>
-              <InfluencerTable
-                rows={recommendedRows}
-                variant="recommended"
-                renderRecommendedActions={(row) => (
-                  <RecommendedActionItems
-                    row={row}
-                    isInviting={!!invitingIds[row.id]}
-                    onInvite={handleInviteInfluencer}
-                    onDelete={(r) => {
-                      setRecommendedRows((prev) => prev.filter((x) => x.id !== r.id));
-                      toast({ icon: "success", title: `${r.profile.name} removed` });
-                    }}
-                    onViewProfile={(r) => toast({ icon: "success", title: `View profile: ${r.profile.name}` })}
-                    onCopyProfileLink={async (r) => {
-                      const link = `${window.location.origin}/influencer/${r.id}`;
-                      try {
-                        await navigator.clipboard.writeText(link);
-                        toast({ icon: "success", title: "Profile link copied" });
-                      } catch {
-                        toast({ icon: "error", title: "Could not copy link" });
-                      }
-                    }}
-                    onSaveToHub={(r) =>
-                      toast({ icon: "success", title: `Saved ${r.profile.name} to HUB` })
-                    }
-                    onMoveToWorkspace={(r) =>
-                      toast({ icon: "success", title: `Moved ${r.profile.name} to workspace` })
-                    }
-                    onNotRelevant={(r) => {
-                      setRecommendedRows((prev) => prev.filter((x) => x.id !== r.id));
-                      toast({ icon: "success", title: `${r.profile.name} marked not relevant` });
-                    }}
-                  />
-                )}
-              />
-              {showLoadMore && (
-                <div className="mt-3 mb-14 w-full self-stretch">
+                <div className="mt-4">
                   <Button
                     variant="raised"
                     size="sm"
-                    onClick={handleLoadMoreRecommended}
-                    disabled={recommendedLoadingMore}
-                    className="
+                    className="my-0 rounded-xl border border-[#E6E6E6] bg-white px-4 py-2 text-sm shadow-none"
+                    onClick={() => {
+                      setRecommendedRows([]);
+                      setRecommendedError("");
+                      setRecommendedLoading(true);
+                      setRecommendedPage(1);
+                      setRecommendedHasMore(null);
+
+                      apiCampaignRecommendedInfluencers({
+                        brandId,
+                        campaignId,
+                        page: 1,
+                        limit: RECO_LIMIT,
+                      })
+                        .then((res: any) => {
+                          const { items, hasMore } = parseRecommendedResponse(res, 1, RECO_LIMIT);
+                          const rows = asArray(items).map(mapRecommendedToRow);
+
+                          setRecommendedRows(rows);
+
+                          const finalHasMore =
+                            hasMore === null ? (rows.length < RECO_LIMIT ? false : null) : hasMore;
+                          setRecommendedHasMore(finalHasMore);
+                        })
+                        .catch((e: any) =>
+                          setRecommendedError(
+                            getApiErrorMessage(e, "Failed to load recommended influencers")
+                          )
+                        )
+                        .finally(() => setRecommendedLoading(false));
+                    }}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              </div>
+            ) : recommendedRows.length ? (
+              <>
+                <InfluencerTable
+                  rows={recommendedRows}
+                  variant="recommended"
+                  renderRecommendedActions={(row) => (
+                    <RecommendedActionItems
+                      row={row}
+                      isInviting={!!invitingIds[row.id]}
+                      onInvite={handleInviteInfluencer}
+                      onDelete={(r) => {
+                        setRecommendedRows((prev) => prev.filter((x) => x.id !== r.id));
+                        toast({ icon: "success", title: `${r.profile.name} removed` });
+                      }}
+                      onViewProfile={(r) => toast({ icon: "success", title: `View profile: ${r.profile.name}` })}
+                      onCopyProfileLink={async (r) => {
+                        const link = `${window.location.origin}/influencer/${r.id}`;
+                        try {
+                          await navigator.clipboard.writeText(link);
+                          toast({ icon: "success", title: "Profile link copied" });
+                        } catch {
+                          toast({ icon: "error", title: "Could not copy link" });
+                        }
+                      }}
+                      onSaveToHub={(r) =>
+                        toast({ icon: "success", title: `Saved ${r.profile.name} to HUB` })
+                      }
+                      onMoveToWorkspace={(r) =>
+                        toast({ icon: "success", title: `Moved ${r.profile.name} to workspace` })
+                      }
+                      onNotRelevant={(r) => {
+                        setRecommendedRows((prev) => prev.filter((x) => x.id !== r.id));
+                        toast({ icon: "success", title: `${r.profile.name} marked not relevant` });
+                      }}
+                    />
+                  )}
+                />
+                {showLoadMore && (
+                  <div className="mt-3 mb-14 w-full self-stretch">
+                    <Button
+                      variant="raised"
+                      size="sm"
+                      onClick={handleLoadMoreRecommended}
+                      disabled={recommendedLoadingMore}
+                      className="
                       my-0
                       w-full self-stretch
                       h-8
@@ -2290,28 +2534,120 @@ export default function ViewCampaignPage() {
                       bg-white
                       shadow-none
                     "
-                  >
-                    <span
-                      className="text-[0.875rem] font-semibold text-[#1A1A1A]"
-                      style={{ fontFamily: "Inter" }}
                     >
-                      {recommendedLoadingMore ? "Loading..." : "Load more"}
-                    </span>
-                  </Button>
+                      <span
+                        className="text-[0.875rem] font-semibold text-[#1A1A1A]"
+                        style={{ fontFamily: "Inter" }}
+                      >
+                        {recommendedLoadingMore ? "Loading..." : "Load more"}
+                      </span>
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="w-full rounded-2xl border bg-white p-6 shadow-sm">
+                <div className="text-sm font-semibold text-[#1A1A1A]">
+                  No recommended influencers yet
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="w-full rounded-2xl border bg-white p-6 shadow-sm">
-              <div className="text-sm font-semibold text-[#1A1A1A]">
-                No recommended influencers yet
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {addFundsModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30 px-4">
+          <div className="w-full max-w-[28rem] rounded-[1rem] bg-white p-6 shadow-xl flex flex-col gap-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[#1A1A1A] text-[1.125rem] font-semibold">
+                  Add funds
+                </div>
+                <div className="mt-1 text-[#969696] text-[0.875rem] leading-5">
+                  Enter the amount you want to add to your wallet.
+                </div>
+              </div>
+
+              <Button
+                variant="raised"
+                size="sm"
+                onClick={() => {
+                  if (topupLoading) return;
+                  setAddFundsModalOpen(false);
+                  setTopupAmount("");
+                }}
+                className="my-0 h-8 px-3 rounded-[0.75rem] border border-[#E6E6E6] bg-white text-[#969696] shadow-none"
+              >
+                <span className="font-medium">Close</span>
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="wallet-topup-amount"
+                className="text-[#1A1A1A] text-[0.875rem] font-medium"
+              >
+                Amount
+              </label>
+
+              <div className="flex items-center gap-3 rounded-[0.75rem] border border-[#E6E6E6] px-4 py-3">
+                <span className="text-[#1A1A1A] text-[0.95rem] font-semibold">
+                  {currency}
+                </span>
+                <input
+                  id="wallet-topup-amount"
+                  type="text"
+                  inputMode="decimal"
+                  value={topupAmount}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9.]/g, "");
+                    const parts = raw.split(".");
+                    const normalized =
+                      parts.length > 2
+                        ? `${parts[0]}.${parts.slice(1).join("")}`
+                        : raw;
+                    setTopupAmount(normalized);
+                  }}
+                  placeholder="Enter amount"
+                  className="w-full border-0 bg-transparent text-[1rem] font-medium text-[#1A1A1A] outline-none placeholder:text-[#B8B8B8]"
+                />
+              </div>
+
+              <div className="text-[#969696] text-[0.8125rem] leading-5">
+                Current usable balance: {currency}{" "}
+                {usableBudgetValue.toLocaleString("en-US")}
               </div>
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* ===== Delete dialog ===== */}
+            <div className="flex items-center justify-end gap-3">
+              <Button
+                variant="raised"
+                onClick={() => {
+                  if (topupLoading) return;
+                  setAddFundsModalOpen(false);
+                  setTopupAmount("");
+                }}
+                className="my-0 h-10 px-5 rounded-[0.75rem] border border-[#E6E6E6] bg-white text-[#1A1A1A] shadow-none"
+              >
+                <span className="font-semibold">Cancel</span>
+              </Button>
+
+              <Button
+                variant="raised"
+                onClick={handleAddFunds}
+                disabled={topupLoading}
+                className="my-0 h-10 px-5 rounded-[0.75rem] !bg-black !text-white border border-black shadow-none hover:!bg-black disabled:!bg-black disabled:!text-white disabled:opacity-60"
+              >
+                <span className="font-semibold text-white">
+                  {topupLoading ? "Redirecting..." : "Add funds"}
+                </span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleteDialogOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30">
           <div className="w-[26rem] h-[12rem] rounded-lg bg-white p-6 shadow-xl flex flex-col gap-4">

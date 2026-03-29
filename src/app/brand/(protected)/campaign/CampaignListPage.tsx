@@ -19,7 +19,11 @@ import {
   apiGetAllCategories,
 } from "@/app/brand/services/brandApi";
 
-import { scheduleOrExpiryText, statusLabel, statusToVariant } from "@/utils/campaignUi";
+import {
+  scheduleOrExpiryText,
+  statusLabel,
+  statusToVariant,
+} from "@/utils/campaignUi";
 import ListCardView, {
   MetricIcons,
   type ListCardViewItem,
@@ -31,7 +35,6 @@ import CampaignFilter, {
   type SelectOption,
 } from "./CampaignFilter";
 import CampaignCardMenu from "@/components/ui/brand/campaign-card-menu";
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Props = {
   title: string;
@@ -39,9 +42,12 @@ type Props = {
 };
 
 type ViewMode = "grid" | "list";
-type DateField = "createdAt" | "updatedAt" | "startAt" | "endAt" | "publishedAt";
-
-// ─── Utilities ────────────────────────────────────────────────────────────────
+type DateField =
+  | "createdAt"
+  | "updatedAt"
+  | "startAt"
+  | "endAt"
+  | "publishedAt";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -82,7 +88,15 @@ function firstImage(c: any): string | undefined {
   if (!Array.isArray(arr) || !arr[0]) return undefined;
   const v = arr[0];
   if (typeof v === "string") return v;
-  return v?.url ?? v?.src ?? v?.image ?? v?.dataUrl ?? v?.dataurl ?? v?.data?.url ?? undefined;
+  return (
+    v?.url ??
+    v?.src ??
+    v?.image ??
+    v?.dataUrl ??
+    v?.dataurl ??
+    v?.data?.url ??
+    undefined
+  );
 }
 
 function formatBudget(value: any): string {
@@ -95,11 +109,15 @@ function normalizeMongoId(id: any): string {
   if (id == null) return "";
   if (typeof id === "string" || typeof id === "number") return String(id);
   if (typeof id === "object") {
-    if (typeof (id as any).toHexString === "function") return (id as any).toHexString();
+    if (typeof (id as any).toHexString === "function") {
+      return (id as any).toHexString();
+    }
     if (typeof (id as any).$oid === "string") return (id as any).$oid;
     if (typeof (id as any).oid === "string") return (id as any).oid;
     if (typeof (id as any).id !== "undefined") return String((id as any).id);
-    if (typeof (id as any).value !== "undefined") return String((id as any).value);
+    if (typeof (id as any).value !== "undefined") {
+      return String((id as any).value);
+    }
     if ((id as any)._id != null) return normalizeMongoId((id as any)._id);
     if (typeof (id as any).toString === "function") {
       const s = (id as any).toString();
@@ -107,6 +125,37 @@ function normalizeMongoId(id: any): string {
     }
   }
   return "";
+}
+
+function isAdminCreated(c: any): boolean {
+  const role = String(c?.createdBy?.role ?? "").trim().toLowerCase();
+  const userModel = String(c?.createdBy?.userModel ?? "")
+    .trim()
+    .toLowerCase();
+
+  return (
+    role === "admin" ||
+    Boolean(c?.byAdmin) ||
+    Boolean(c?.isAdminCampaign) ||
+    Boolean(c?.createdBy?.isAdmin) ||
+    (role === "brand" &&
+      userModel === "brand" &&
+      (Boolean(c?.isFullyManaged) || Boolean(c?.fullyManaged)))
+  );
+}
+
+function isFullyManagedCampaign(c: any): boolean {
+  const managementType = String(c?.managementType ?? "")
+    .trim()
+    .toLowerCase();
+
+  return (
+    isAdminCreated(c) ||
+    Boolean(c?.isFullyManaged) ||
+    Boolean(c?.fullyManaged) ||
+    managementType === "fully_managed" ||
+    managementType === "fully managed"
+  );
 }
 
 /**
@@ -145,8 +194,15 @@ function resolveDateParams(df: DateFilterValue): {
     last_30: "last30days",
   };
 
-  if (df.allDatesOption && df.allDatesOption !== "all" && presetMap[df.allDatesOption]) {
-    return { dateField: "updatedAt", datePreset: presetMap[df.allDatesOption] };
+  if (
+    df.allDatesOption &&
+    df.allDatesOption !== "all" &&
+    presetMap[df.allDatesOption]
+  ) {
+    return {
+      dateField: "updatedAt",
+      datePreset: presetMap[df.allDatesOption],
+    };
   }
 
   if (df.startDate || df.endDate) {
@@ -176,8 +232,6 @@ function canShowEditCampaign(c: any): boolean {
     if (Number.isNaN(startAt.getTime())) return true;
 
     const now = new Date();
-
-    // Show edit only until start date is reached
     return startAt.getTime() > now.getTime();
   }
 
@@ -207,28 +261,20 @@ function campaignFooterText(c: any) {
     if (Number.isFinite(value)) {
       if (unit === "seconds") return `${value}s left`;
       if (unit === "minutes") return `${value}m left`;
-      if (unit === "hours") return value < 24 ? `${value}h left` : `${Math.ceil(value / 24)}d left`;
+      if (unit === "hours") {
+        return value < 24 ? `${value}h left` : `${Math.ceil(value / 24)}d left`;
+      }
       if (unit === "days") return `${value}d left`;
     }
   }
 
-  return scheduleOrExpiryText(
-    c?.status,
-    c?.startAt ?? null,
-    c?.endAt ?? null
-  );
+  return scheduleOrExpiryText(c?.status, c?.startAt ?? null, c?.endAt ?? null);
 }
-
-
-
-// ─── Layout constants ─────────────────────────────────────────────────────────
 
 const GRID_WRAP = "mx-auto w-full max-w-[100vw]";
 const CARD_GRID =
   "grid w-full min-w-0 gap-[clamp(12px,2vw,24px)] " +
   "[grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr))]";
-
-// ─── CampaignListPage ─────────────────────────────────────────────────────────
 
 export default function CampaignListPage({ title, fixedStatus }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -244,11 +290,11 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
     setBrandId(id);
   }, []);
 
-  // ── Filter state ──
   const [campaignType, setCampaignType] = useState<string>("");
   const [creatorStatus, setCreatorStatus] = useState<string>("");
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
-  const [dateFilter, setDateFilter] = useState<DateFilterValue>(DEFAULT_DATE_FILTER);
+  const [dateFilter, setDateFilter] =
+    useState<DateFilterValue>(DEFAULT_DATE_FILTER);
   const [aiCreated, setAiCreated] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -257,11 +303,9 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
   const showCreatorStatusFilter =
     normalizedFixedStatus !== "draft" && normalizedFixedStatus !== "scheduled";
 
-  // ── Category options ──
   const [categoryOptions, setCategoryOptions] = useState<SelectOption[]>([]);
   const [catLoading, setCatLoading] = useState(false);
 
-  // ── Pagination + data ──
   const [items, setItems] = useState<EnrichedCampaignDoc[]>([]);
   const [page, setPage] = useState(1);
   const limit = 20;
@@ -271,6 +315,7 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [errMsg, setErrMsg] = useState<string>("");
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
   const filteredItems = useMemo(() => {
     return items.filter((c: any) => {
       const applicantCount = Number(c.applicantCount ?? 0);
@@ -283,19 +328,21 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
     });
   }, [items, creatorStatus]);
 
-  // ── Debounce search ──
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
     return () => clearTimeout(t);
   }, [searchInput]);
 
   useEffect(() => {
-    if (!showCreatorStatusFilter && creatorStatus !== "all" && creatorStatus !== "") {
+    if (
+      !showCreatorStatusFilter &&
+      creatorStatus !== "all" &&
+      creatorStatus !== ""
+    ) {
       setCreatorStatus("all");
     }
   }, [showCreatorStatusFilter, creatorStatus]);
 
-  // ── Load categories ──
   useEffect(() => {
     let cancelled = false;
 
@@ -307,7 +354,8 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
 
         const opts = (cats ?? [])
           .map((c) => {
-            const rawId = (c as any)?._id ?? (c as any)?.id ?? (c as any)?.categoryId;
+            const rawId =
+              (c as any)?._id ?? (c as any)?.id ?? (c as any)?.categoryId;
             const value = normalizeMongoId(rawId);
             return { value, label: String((c as any)?.name ?? "") };
           })
@@ -342,7 +390,6 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
     };
   }, []);
 
-  // ── Reset pagination when filters change ──
   const dateFilterKey = [
     dateFilter.quickFilter,
     dateFilter.allDatesOption,
@@ -370,7 +417,6 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
 
   const dateParams = useMemo(() => resolveDateParams(dateFilter), [dateFilter]);
 
-  // ── Build API payload ──
   const payload = useMemo(() => {
     const base: any = {
       brandId,
@@ -386,8 +432,12 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
     if (dateParams.dateFrom) base.dateFrom = dateParams.dateFrom;
     if (dateParams.dateTo) base.dateTo = dateParams.dateTo;
 
-    if (campaignType && campaignType !== "all") base.campaignType = campaignType;
-    if (creatorStatus && creatorStatus !== "all") base.creatorStatus = creatorStatus;
+    if (campaignType && campaignType !== "all") {
+      base.campaignType = campaignType;
+    }
+    if (creatorStatus && creatorStatus !== "all") {
+      base.creatorStatus = creatorStatus;
+    }
     if (categoryIds.length === 1) base.categoryId = categoryIds[0];
     if (categoryIds.length > 1) base.categoryIds = categoryIds;
 
@@ -405,7 +455,6 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
     dateParams,
   ]);
 
-  // ── Fetch campaigns ──
   useEffect(() => {
     let cancelled = false;
 
@@ -446,7 +495,8 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
           return [
             ...prev,
             ...nextItems.filter(
-              (x: any) => !existing.has(normalizeMongoId(x.campaignId ?? x._id ?? x.id))
+              (x: any) =>
+                !existing.has(normalizeMongoId(x.campaignId ?? x._id ?? x.id))
             ),
           ];
         });
@@ -469,29 +519,34 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
     };
   }, [payload, brandId, page, limit]);
 
-  // ── Render helpers ──
-
   const renderGridCard = (c: any) => {
     const footerText = campaignFooterText(c);
 
     const campaignId = normalizeMongoId(c.campaignId ?? c._id ?? c.id);
     const campaignTitle = c.campaignTitle ?? "Untitled Campaign";
-    const viewHref = `/brand/campaign/${encodeURIComponent(campaignTitle)}?id=${encodeURIComponent(campaignId)}`;
+    const viewHref = `/brand/campaign/${encodeURIComponent(
+      campaignTitle
+    )}?id=${encodeURIComponent(campaignId)}`;
     const inviteHref = `/brand/browse-influencer`;
     const showEditButton = canShowEditCampaign(c);
     const applicantCount = c.applicantCount ?? 0;
     const acceptedCount = c.acceptedContracts ?? 0;
     const totalInfluencers = c.numberOfInfluencers ?? 0;
     const campaignBudget = c.campaignBudget ?? 0;
+
     const goToInfluencers = () => {
       if (typeof window !== "undefined") {
-        window.location.href = `/brand/influ/active?campaignId=${encodeURIComponent(campaignId)}`;
+        window.location.href = `/brand/influ/active?campaignId=${encodeURIComponent(
+          campaignId
+        )}`;
       }
     };
 
     const goToApplied = () => {
       if (typeof window !== "undefined") {
-        window.location.href = `/brand/influ/applied?campaignId=${encodeURIComponent(campaignId)}`;
+        window.location.href = `/brand/influ/applied?campaignId=${encodeURIComponent(
+          campaignId
+        )}`;
       }
     };
 
@@ -503,9 +558,30 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
 
     const handleEdit = () => {
       if (typeof window !== "undefined") {
-        window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(campaignId)}`;
+        window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(
+          campaignId
+        )}`;
       }
     };
+
+    const edgeBadges = [
+      ...(isAdminCreated(c)
+        ? [
+            {
+              label: "By Admin",
+              className: "border-[#D7E3FF] bg-[#EEF4FF] text-[#2F5BFF]",
+            },
+          ]
+        : []),
+      ...(isFullyManagedCampaign(c)
+        ? [
+            {
+              label: "Fully Managed",
+              className: "border-[#8F6B00] bg-[#B8860B] text-white",
+            },
+          ]
+        : []),
+    ];
 
     return (
       <BrandCampaignCard
@@ -518,15 +594,16 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         name={c.campaignTitle}
         statusLabel={statusLabel(c.status)}
         statusVariant={statusToVariant(c.status)}
+        edgeBadges={edgeBadges}
         headerRight={
-          <CampaignCardMenu
-            viewHref={viewHref}
-            inviteHref={inviteHref}
-          />
+          <CampaignCardMenu viewHref={viewHref} inviteHref={inviteHref} />
         }
         tags={[c.category?.name || "No Category"]}
         stats={[
-          { label: "Platform", value: ((c.platformSelection ?? []) as string[]).length },
+          {
+            label: "Platform",
+            value: ((c.platformSelection ?? []) as string[]).length,
+          },
           {
             label: "Budget",
             value: `$${formatBudget(campaignBudget)}`,
@@ -591,7 +668,9 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
       const platforms = (c.platformSelection ?? []) as string[];
       const campaignId = normalizeMongoId(c.campaignId ?? c._id ?? c.id);
       const campaignTitle = c.campaignTitle ?? "Untitled Campaign";
-      const viewHref = `/brand/campaign/${encodeURIComponent(campaignTitle)}?id=${encodeURIComponent(campaignId)}`;
+      const viewHref = `/brand/campaign/${encodeURIComponent(
+        campaignTitle
+      )}?id=${encodeURIComponent(campaignId)}`;
       const inviteHref = `/brand/browse-influencer`;
       const showEditButton = canShowEditCampaign(c);
       const applicantCount = c.applicantCount ?? 0;
@@ -607,7 +686,9 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
 
       const handleEdit = () => {
         if (typeof window !== "undefined") {
-          window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(campaignId)}`;
+          window.location.href = `/brand/create-campaign?campaignId=${encodeURIComponent(
+            campaignId
+          )}`;
         }
       };
 
@@ -616,12 +697,36 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
         logoSrc: firstImage(c),
         logoAlt: "Product image",
         name: c.campaignTitle,
-        categoryTag: c.category?.name || "No Category",
+        badges: [
+          c.category?.name || "No Category",
+          ...(isAdminCreated(c) ? ["By Admin"] : []),
+          ...(isFullyManagedCampaign(c) ? ["Fully Managed"] : []),
+        ],
         metrics: [
-          { id: "platform", label: "Platform", value: platforms.length, icon: MetricIcons.Platform },
-          { id: "applied", label: "Applied", value: applicantCount, icon: MetricIcons.Contract },
-          { id: "influencer", label: "Influencer", value: `${acceptedCount}/${totalInfluencers}`, icon: MetricIcons.Influencer },
-          { id: "budget", label: "Budget", value: formatBudget(campaignBudget), icon: MetricIcons.Email },
+          {
+            id: "platform",
+            label: "Platform",
+            value: platforms.length,
+            icon: MetricIcons.Platform,
+          },
+          {
+            id: "applied",
+            label: "Applied",
+            value: applicantCount,
+            icon: MetricIcons.Contract,
+          },
+          {
+            id: "influencer",
+            label: "Influencer",
+            value: `${acceptedCount}/${totalInfluencers}`,
+            icon: MetricIcons.Influencer,
+          },
+          {
+            id: "budget",
+            label: "Budget",
+            value: formatBudget(campaignBudget),
+            icon: MetricIcons.Email,
+          },
         ],
         statusLabel: statusLabel(c.status),
         statusVariant: (statusToVariant(c.status) as any) ?? "draft",
@@ -630,8 +735,8 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
           <Button
             variant="outline"
             className="min-w-0 w-full truncate whitespace-nowrap rounded-[0.5rem] border-border shadow-none
-       max-[520px]:h-9 max-[520px]:px-3 max-[520px]:text-[0.85rem]
-       min-[981px]:w-auto"
+max-[520px]:h-9 max-[520px]:px-3 max-[520px]:text-[0.85rem]
+min-[981px]:w-auto"
             onClick={handleView}
           >
             View Campaign
@@ -651,10 +756,7 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
               </Button>
             ) : null}
 
-            <CampaignCardMenu
-              viewHref={viewHref}
-              inviteHref={inviteHref}
-            />
+            <CampaignCardMenu viewHref={viewHref} inviteHref={inviteHref} />
           </div>
         ),
         showMoreButton: false,
@@ -664,10 +766,11 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
   }, [filteredItems]);
 
   const showInitialSkeleton = !hasLoadedOnce;
-  const showEmptyState = hasLoadedOnce && !loading && filteredItems.length === 0 && !errMsg;
+  const showEmptyState =
+    hasLoadedOnce && !loading && filteredItems.length === 0 && !errMsg;
 
   return (
-    <div className="w-full min-w-0 px-4 sm:px-6 md:px-10 lg:px-12 py-6">
+    <div className="w-full min-w-0 px-4 py-6 sm:px-6 md:px-10 lg:px-12">
       <CampaignFilter
         campaignType={campaignType}
         setCampaignType={setCampaignType}
@@ -709,7 +812,9 @@ export default function CampaignListPage({ title, fixedStatus }: Props) {
               <ListCardView items={listItems} />
             ) : (
               <div className={GRID_WRAP}>
-                <div className={CARD_GRID}>{filteredItems.map(renderGridCard)}</div>
+                <div className={CARD_GRID}>
+                  {filteredItems.map(renderGridCard)}
+                </div>
               </div>
             )}
           </>
