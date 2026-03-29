@@ -2,18 +2,23 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  BadgeCheck,
+  Clock3,
   Download,
   Mail,
   RefreshCw,
-  Settings2,
+  Search,
   Shield,
   UserCheck,
   UserX,
   Users,
-  Clock3,
-  BadgeCheck,
   X,
 } from "lucide-react";
+import {
+  ROLE_PERMISSION_SECTIONS,
+  canonicalizeModuleKey,
+  getAdminModule,
+} from "@/app/admin/components/admin-access";
 
 type AdminStatus = "pending" | "active" | "inactive" | "suspended";
 type PermissionLevel = "none" | "read" | "write";
@@ -26,10 +31,18 @@ type AdminAccess = {
   isManager?: boolean;
 };
 
-type AdminRow = { 
+type AdminMini = {
+  _id: string;
+  name?: string;
+  email?: string;
+  role?: string;
+};
+
+type AdminRow = {
   _id: string;
   email: string;
   name?: string;
+  proxyEmail?: string;
   role: string;
   status?: AdminStatus;
   invitedAt?: string;
@@ -37,41 +50,64 @@ type AdminRow = {
   createdAt?: string;
   updatedAt?: string;
   access?: AdminAccess[];
+  permissions?: AdminAccess[];
+  parentAdmin?: string | AdminMini | null;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+type MeResponse = {
+  _id: string;
+  email: string;
+  name?: string;
+  proxyEmail?: string;
+  role: string;
+  status?: AdminStatus;
+  permissions?: AdminAccess[];
+  access?: AdminAccess[];
+};
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/";
+
+const DEFAULT_ROLE_OPTIONS = [
+  "super_admin",
+  "revenue_head",
+  "ime",
+  "bme",
+];
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function normalizeKey(v: string) {
-  return String(v || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-");
+function toApiUrl(path: string) {
+  const base = API_BASE.endsWith("/") ? API_BASE : `${API_BASE}/`;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  return `${base}${cleanPath}`;
 }
 
-function humanizeKey(v?: string) {
-  return String(v || "")
-    .replace(/[-_]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (m) => m.toUpperCase());
+function getToken() {
+  return typeof window !== "undefined" ? localStorage.getItem("token") : null;
+}
+
+function getAuthHeaders() {
+  const token = getToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
 function formatDT(v?: string) {
-  if (!v) return "N/A";
+  if (!v) return "—";
   const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return "N/A";
+  if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString();
 }
 
 function formatRelativeTime(v?: string) {
-  if (!v) return "N/A";
+  if (!v) return "—";
 
   const date = new Date(v);
-  if (Number.isNaN(date.getTime())) return "N/A";
+  if (Number.isNaN(date.getTime())) return "—";
 
   const diffMs = Date.now() - date.getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -85,15 +121,13 @@ function formatRelativeTime(v?: string) {
   return `${days} day${days > 1 ? "s" : ""} ago`;
 }
 
-function getPermissionLevel(
-  access: AdminAccess[] = [],
-  moduleKey: string
-): PermissionLevel {
-  const found = access.find(
-    (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
-  );
-  if (!found) return "none";
-  return found.isEdit ? "write" : "read";
+function getRoleLabel(role?: string) {
+  const value = String(role || "").toLowerCase();
+  if (value === "super_admin") return "Super Admin";
+  if (value === "revenue_head") return "Revenue Head";
+  if (value === "ime") return "IME";
+  if (value === "bme") return "BME";
+  return role || "—";
 }
 
 function getInitials(name?: string, email?: string) {
@@ -111,68 +145,62 @@ function getStatusLabel(status?: AdminStatus) {
   const st = status || "pending";
   if (st === "active") return "Active";
   if (st === "pending") return "Pending";
-  return "Disabled";
+  if (st === "inactive") return "Inactive";
+  return "Suspended";
 }
 
 function statusTone(status?: AdminStatus) {
   const st = status || "pending";
+
   if (st === "active") return "bg-black text-white border-black";
   if (st === "pending") return "bg-black/[0.04] text-black/65 border-black/10";
+  if (st === "inactive") return "bg-black/[0.08] text-black border-black/10";
   return "bg-black/[0.08] text-black border-black/10";
 }
 
-const basePermissionSections = [
-  {
-    key: "brand-campaign",
-    title: "Brand & Campaign",
-    icon: Shield,
-    items: [
-      { key: "brands", label: "Brands" },
-      { key: "campaigns", label: "Campaigns" },
-      { key: "youtube-handle", label: "Youtube Handle" },
-      { key: "modash-data", label: "Modash Data" },
-    ],
-  },
-  {
-    key: "influencer-management",
-    title: "Influencer Management",
-    icon: Users,
-    items: [
-      { key: "influencers", label: "Influencers" },
-      { key: "invited-influencer", label: "Invited Influencer" },
-      { key: "influencer-email", label: "Influencer Email" },
-      { key: "missing-email", label: "Missing Email" },
-    ],
-  },
-  {
-    key: "finance-revenue",
-    title: "Finance & Revenue",
-    icon: UserCheck,
-    items: [
-      { key: "subscriptions", label: "Subscriptions" },
-      { key: "invoice-details", label: "Invoice Details" },
-      { key: "payment-notification", label: "Payment Notification" },
-    ],
-  },
-  {
-    key: "platform-administration",
-    title: "Platform Administration",
-    icon: Settings2,
-    items: [
-      { key: "notifications", label: "Notifications" },
-      { key: "disputes", label: "Disputes" },
-      { key: "emails", label: "E-Mails" },
-      { key: "employees", label: "Employees" },
-    ],
-  },
-];
+function canonicalizeAccessList(access: AdminAccess[] = []) {
+  const map = new Map<string, AdminAccess>();
+
+  for (const item of access) {
+    const module = getAdminModule(item.key);
+    const canonicalKey = module?.key || canonicalizeModuleKey(item.key);
+
+    if (!canonicalKey) continue;
+
+    const prev = map.get(canonicalKey);
+
+    map.set(canonicalKey, {
+      key: canonicalKey,
+      name: module?.label || item.name || canonicalKey,
+      isEdit: Boolean(prev?.isEdit || item.isEdit),
+      isDelete: Boolean(prev?.isDelete || item.isDelete),
+      isManager: Boolean(prev?.isManager || item.isManager),
+    });
+  }
+
+  return Array.from(map.values());
+}
+
+function getPermissionLevel(
+  access: AdminAccess[] = [],
+  moduleKey: string
+): PermissionLevel {
+  const found = access.find(
+    (item) => canonicalizeModuleKey(item.key) === canonicalizeModuleKey(moduleKey)
+  );
+
+  if (!found) return "none";
+  return found.isEdit ? "write" : "read";
+}
 
 function PermissionSwitch({
   value,
   onChange,
+  disabled,
 }: {
   value: PermissionLevel;
   onChange: (next: PermissionLevel) => void;
+  disabled?: boolean;
 }) {
   const options: PermissionLevel[] = ["none", "read", "write"];
 
@@ -180,16 +208,19 @@ function PermissionSwitch({
     <div className="inline-flex items-center rounded-full bg-black/5 p-1">
       {options.map((option) => {
         const active = value === option;
+
         return (
           <button
             key={option}
             type="button"
-            onClick={() => onChange(option)}
+            onClick={() => !disabled && onChange(option)}
+            disabled={disabled}
             className={cn(
               "min-w-[64px] rounded-full px-4 py-2 text-xs font-semibold capitalize transition",
               active
                 ? "bg-black text-white shadow-sm"
-                : "text-black/45 hover:text-black"
+                : "text-black/45 hover:text-black",
+              disabled && "cursor-not-allowed opacity-50"
             )}
           >
             {option}
@@ -237,7 +268,7 @@ function AccessBadges({
   access?: AdminAccess[];
   labelMap: Map<string, string>;
 }) {
-  const items = Array.isArray(access) ? access : [];
+  const items = canonicalizeAccessList(Array.isArray(access) ? access : []);
   const visible = items.slice(0, 2);
   const remaining = Math.max(0, items.length - visible.length);
 
@@ -253,9 +284,9 @@ function AccessBadges({
     <div className="flex flex-wrap items-center gap-2">
       {visible.map((item) => {
         const label =
-          labelMap.get(normalizeKey(item.key)) ||
+          labelMap.get(canonicalizeModuleKey(item.key)) ||
           item.name ||
-          humanizeKey(item.key);
+          item.key;
 
         return (
           <span
@@ -266,6 +297,7 @@ function AccessBadges({
           </span>
         );
       })}
+
       {remaining > 0 ? (
         <span className="text-xs font-semibold text-black/45">+{remaining}</span>
       ) : null}
@@ -275,7 +307,10 @@ function AccessBadges({
 
 export default function EmployeesPage() {
   const [rows, setRows] = useState<AdminRow[]>([]);
+  const [me, setMe] = useState<MeResponse | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [loadingMe, setLoadingMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rowMsg, setRowMsg] = useState<string | null>(null);
 
@@ -290,21 +325,101 @@ export default function EmployeesPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editErr, setEditErr] = useState<string | null>(null);
 
-  const [permissionCatalog, setPermissionCatalog] = useState<AdminAccess[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | AdminStatus>("all");
+  const [roleFilter, setRoleFilter] = useState("all");
 
-  function getToken() {
-    return typeof window !== "undefined"
-      ? localStorage.getItem("token")
-      : null;
-  }
+  const currentRole = String(me?.role || "").toLowerCase();
 
-  function getAuthHeaders() {
-    const token = getToken();
-    return {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }
+  const myAccess = useMemo(() => {
+    const raw = (me?.permissions ?? me?.access ?? []) as AdminAccess[];
+    return canonicalizeAccessList(raw);
+  }, [me]);
+
+  const employeesPermission = getPermissionLevel(myAccess, "employees");
+
+  const canViewEmployees =
+    currentRole === "super_admin" ||
+    currentRole === "revenue_head" ||
+    employeesPermission !== "none";
+
+  const canEditEmployees =
+    currentRole === "super_admin" ||
+    currentRole === "revenue_head" ||
+    employeesPermission === "write";
+
+  const permissionSections = useMemo(() => {
+    return ROLE_PERMISSION_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((itemKey) => Boolean(getAdminModule(itemKey))),
+    })).filter((section) => section.items.length > 0);
+  }, []);
+
+  const permissionLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+
+    permissionSections.forEach((section) => {
+      section.items.forEach((itemKey) => {
+        const module = getAdminModule(itemKey);
+        if (!module) return;
+        map.set(module.key, module.label);
+      });
+    });
+
+    return map;
+  }, [permissionSections]);
+
+  const roleOptions = useMemo(() => {
+    const fromRows = rows
+      .map((row) => String(row.role || "").toLowerCase().trim())
+      .filter(Boolean);
+
+    return Array.from(new Set([...DEFAULT_ROLE_OPTIONS, ...fromRows]));
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return rows.filter((row) => {
+      const rowStatus = (row.status || "pending") as AdminStatus;
+      const rowRole = String(row.role || "").toLowerCase().trim();
+
+      const matchesSearch =
+        !query ||
+        (row.name || "").toLowerCase().includes(query) ||
+        (row.email || "").toLowerCase().includes(query) ||
+        (row.proxyEmail || "").toLowerCase().includes(query) ||
+        rowRole.includes(query);
+
+      const matchesStatus =
+        statusFilter === "all" ? true : rowStatus === statusFilter;
+
+      const matchesRole = roleFilter === "all" ? true : rowRole === roleFilter;
+
+      return matchesSearch && matchesStatus && matchesRole;
+    });
+  }, [rows, search, statusFilter, roleFilter]);
+
+  const selectedEmployee = useMemo(
+    () => rows.find((r) => r._id === selectedId) || null,
+    [rows, selectedId]
+  );
+
+  const totalEmployees = filteredRows.length;
+  const activeStaff = filteredRows.filter(
+    (r) => (r.status || "pending") === "active"
+  ).length;
+  const pendingInvites = filteredRows.filter(
+    (r) => (r.status || "pending") === "pending"
+  ).length;
+  const disabledAccounts = filteredRows.filter((r) => {
+    const st = r.status || "pending";
+    return st === "inactive" || st === "suspended";
+  }).length;
+
+  const utilization = totalEmployees
+    ? `${((activeStaff / totalEmployees) * 100).toFixed(1)}% utilization`
+    : "0% utilization";
 
   function hydrateEditor(admin: AdminRow | null) {
     if (!admin) {
@@ -313,20 +428,61 @@ export default function EmployeesPage() {
       setEditRole("");
       setEditStatus("pending");
       setEditAccess([]);
+      setEditErr(null);
       return;
     }
 
+    const nextAccess = canonicalizeAccessList(
+      Array.isArray(admin.access)
+        ? admin.access
+        : Array.isArray(admin.permissions)
+          ? admin.permissions
+          : []
+    );
+
     setSelectedId(admin._id);
     setEditName(admin.name || "");
-    setEditRole(admin.role || "");
+    setEditRole(String(admin.role || "").toLowerCase());
     setEditStatus((admin.status || "pending") as AdminStatus);
-    setEditAccess(Array.isArray(admin.access) ? admin.access : []);
+    setEditAccess(nextAccess);
     setEditErr(null);
   }
 
-  async function fetchPermissionCatalog() {
+  function setModuleLevel(
+    moduleKey: string,
+    level: PermissionLevel
+  ) {
+    setEditAccess((prev) => {
+      const canonicalKey = canonicalizeModuleKey(moduleKey);
+      const next = canonicalizeAccessList(prev);
+      const index = next.findIndex((item) => item.key === canonicalKey);
+
+      if (level === "none") {
+        return next.filter((item) => item.key !== canonicalKey);
+      }
+
+      const module = getAdminModule(moduleKey);
+      const nextValue: AdminAccess = {
+        key: module?.key || canonicalKey,
+        name: module?.label || moduleKey,
+        isEdit: level === "write",
+        isDelete: false,
+        isManager: false,
+      };
+
+      if (index === -1) return canonicalizeAccessList([...next, nextValue]);
+
+      return canonicalizeAccessList(
+        next.map((item, i) => (i === index ? { ...item, ...nextValue } : item))
+      );
+    });
+  }
+
+  async function fetchMe() {
+    setLoadingMe(true);
+
     try {
-      const res = await fetch(`${API_BASE}admins/me`, {
+      const res = await fetch(toApiUrl("admins/me"), {
         method: "GET",
         credentials: "include",
         headers: getAuthHeaders(),
@@ -335,19 +491,15 @@ export default function EmployeesPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data?.message || "Failed to load permission catalog");
+        throw new Error(data?.message || "Failed to load current admin");
       }
 
-      const nextPermissions =
-        data?.permissions ||
-        data?.data?.permissions ||
-        data?.data?.admin?.permissions ||
-        data?.admin?.permissions ||
-        [];
-
-      setPermissionCatalog(Array.isArray(nextPermissions) ? nextPermissions : []);
-    } catch {
-      setPermissionCatalog([]);
+      setMe(data?.data || data);
+    } catch (e: any) {
+      setMe(null);
+      setError(e?.message || "Failed to load current admin");
+    } finally {
+      setLoadingMe(false);
     }
   }
 
@@ -356,7 +508,7 @@ export default function EmployeesPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}admins/list`, {
+      const res = await fetch(toApiUrl("admins/list"), {
         method: "GET",
         credentials: "include",
         headers: getAuthHeaders(),
@@ -368,7 +520,12 @@ export default function EmployeesPage() {
         throw new Error(data?.message || "Failed to load employees");
       }
 
-      const nextRows = data?.data || data || [];
+      const nextRows = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data)
+          ? data
+          : [];
+
       setRows(nextRows);
 
       if (nextRows.length && !selectedId) {
@@ -382,12 +539,18 @@ export default function EmployeesPage() {
     }
   }
 
+  async function refreshAll() {
+    await Promise.all([fetchMe(), fetchEmployees()]);
+  }
+
   async function updateStatus(adminId: string, status: AdminStatus) {
+    if (!canEditEmployees) return;
+
     setUpdatingId(adminId);
     setRowMsg(null);
 
     try {
-      const res = await fetch(`${API_BASE}admins/update-status`, {
+      const res = await fetch(toApiUrl("admins/update-status"), {
         method: "PUT",
         credentials: "include",
         headers: getAuthHeaders(),
@@ -424,7 +587,7 @@ export default function EmployeesPage() {
     setEditErr(null);
 
     try {
-      const res = await fetch(`${API_BASE}admins/update-status`, {
+      const res = await fetch(toApiUrl("admins/update-status"), {
         method: "PUT",
         credentials: "include",
         headers: getAuthHeaders(),
@@ -433,7 +596,7 @@ export default function EmployeesPage() {
           name: editName.trim() || undefined,
           role: editRole.trim(),
           status: editStatus,
-          access: editAccess,
+          access: canonicalizeAccessList(editAccess),
         }),
       });
 
@@ -454,90 +617,38 @@ export default function EmployeesPage() {
     }
   }
 
-  function setModuleLevel(
-    moduleKey: string,
-    label: string,
-    level: PermissionLevel
-  ) {
-    setEditAccess((prev) => {
-      const idx = prev.findIndex(
-        (a) => normalizeKey(a.key) === normalizeKey(moduleKey)
-      );
-
-      if (level === "none") {
-        return prev.filter(
-          (a) => normalizeKey(a.key) !== normalizeKey(moduleKey)
-        );
-      }
-
-      const nextValue: AdminAccess = {
-        key: moduleKey,
-        name: label,
-        isEdit: level === "write",
-        isDelete: false,
-        isManager: false,
-      };
-
-      if (idx === -1) return [...prev, nextValue];
-
-      return prev.map((a, i) => (i === idx ? { ...a, ...nextValue } : a));
-    });
-  }
-
-  const permissionLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-
-    permissionCatalog.forEach((item) => {
-      const key = normalizeKey(item.key);
-      if (!key) return;
-      map.set(key, item.name || humanizeKey(item.key));
-    });
-
-    return map;
-  }, [permissionCatalog]);
-
-  const permissionSections = useMemo(() => {
-    const allowedKeys = new Set(
-      permissionCatalog.map((item) => normalizeKey(item.key)).filter(Boolean)
-    );
-
-    const nextSections = basePermissionSections
-      .map((section) => ({
-        ...section,
-        items: section.items.filter((item) =>
-          allowedKeys.size ? allowedKeys.has(normalizeKey(item.key)) : true
-        ),
-      }))
-      .filter((section) => section.items.length > 0);
-
-    return nextSections.length ? nextSections : basePermissionSections;
-  }, [permissionCatalog]);
-
   function exportCsv() {
     const headers = [
       "Employee Name",
       "Employee Email",
+      "Proxy Email",
       "Role",
       "Status",
       "Last Login",
       "Modules",
     ];
 
-    const lines = rows.map((row) => [
-      `"${row.name || ""}"`,
-      `"${row.email || ""}"`,
-      `"${row.role || ""}"`,
-      `"${row.status || "pending"}"`,
-      `"${formatDT(row.lastLoginAt)}"`,
-      `"${(row.access || [])
-        .map(
-          (a) =>
-            permissionLabelMap.get(normalizeKey(a.key)) ||
-            a.name ||
-            humanizeKey(a.key)
-        )
-        .join(", ")}"`,
-    ]);
+    const lines = filteredRows.map((row) => {
+      const rowAccess = canonicalizeAccessList(
+        Array.isArray(row.access)
+          ? row.access
+          : Array.isArray(row.permissions)
+            ? row.permissions
+            : []
+      );
+
+      return [
+        `"${row.name || ""}"`,
+        `"${row.email || ""}"`,
+        `"${row.proxyEmail || ""}"`,
+        `"${row.role || ""}"`,
+        `"${row.status || "pending"}"`,
+        `"${formatDT(row.lastLoginAt)}"`,
+        `"${rowAccess
+          .map((a) => permissionLabelMap.get(a.key) || a.name || a.key)
+          .join(", ")}"`,
+      ];
+    });
 
     const csv = [headers.join(","), ...lines.map((l) => l.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -552,26 +663,30 @@ export default function EmployeesPage() {
   }
 
   useEffect(() => {
-    fetchEmployees();
-    fetchPermissionCatalog();
+    refreshAll();
   }, []);
 
-  const selectedEmployee = useMemo(
-    () => rows.find((r) => r._id === selectedId) || null,
-    [rows, selectedId]
-  );
+  useEffect(() => {
+    if (!filteredRows.length) {
+      hydrateEditor(null);
+      return;
+    }
 
-  const totalEmployees = rows.length;
-  const activeStaff = rows.filter((r) => (r.status || "pending") === "active").length;
-  const pendingInvites = rows.filter((r) => (r.status || "pending") === "pending").length;
-  const disabledAccounts = rows.filter((r) => {
-    const st = r.status || "pending";
-    return st === "inactive" || st === "suspended";
-  }).length;
+    const stillVisible = filteredRows.find((row) => row._id === selectedId);
+    if (!stillVisible) {
+      hydrateEditor(filteredRows[0]);
+    }
+  }, [filteredRows, selectedId]);
 
-  const utilization = totalEmployees
-    ? `${((activeStaff / totalEmployees) * 100).toFixed(1)}% utilization`
-    : "0% utilization";
+  if (!loadingMe && !canViewEmployees) {
+    return (
+      <div className="min-h-screen bg-white p-6">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+          You do not have permission to view this page.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white px-4 py-6 md:px-6 lg:px-8">
@@ -609,19 +724,26 @@ export default function EmployeesPage() {
               Manage Workforce
             </h1>
             <p className="mt-1 text-sm text-black/50">
-              Employee list powered by the same admin APIs already used in your current file.
+              Employees and permission modules are synced with shared admin access.
             </p>
+
+            {!loadingMe && me ? (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-black/5 px-3 py-1 text-xs font-medium text-black/70">
+                <Shield className="h-3.5 w-3.5" />
+                Logged in as {me.name || me.email} · {getRoleLabel(me.role)}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={fetchEmployees}
-              disabled={loading}
+              onClick={refreshAll}
+              disabled={loading || loadingMe}
               className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-black/[0.03] disabled:opacity-50"
             >
               <RefreshCw className="h-4 w-4" />
-              {loading ? "Refreshing..." : "Refresh"}
+              {loading || loadingMe ? "Refreshing..." : "Refresh"}
             </button>
 
             <button
@@ -632,18 +754,44 @@ export default function EmployeesPage() {
               <Download className="h-4 w-4" />
               Bulk Export
             </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setRowMsg("Connect your Permission Groups route or modal here.")
-              }
-              className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-black/[0.03]"
-            >
-              <Shield className="h-4 w-4" />
-              Permission Groups
-            </button>
           </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_180px_180px]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
+            <input
+              placeholder="Search by name, email, proxy email or role..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-black/10 bg-white pl-11 pr-4 text-sm outline-none focus:border-black/20"
+            />
+          </div>
+
+          <select
+            className="h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none focus:border-black/20"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+          >
+            <option value="all">All Roles</option>
+            {roleOptions.map((role) => (
+              <option key={role} value={role}>
+                {getRoleLabel(role)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none focus:border-black/20"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | AdminStatus)}
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="suspended">Suspended</option>
+          </select>
         </div>
 
         {error ? (
@@ -697,7 +845,7 @@ export default function EmployeesPage() {
                       Loading employees...
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : filteredRows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={7}
@@ -707,11 +855,17 @@ export default function EmployeesPage() {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => {
+                  filteredRows.map((row) => {
                     const st = (row.status || "pending") as AdminStatus;
                     const isActive = st === "active";
                     const isPending = st === "pending";
                     const isUpdating = updatingId === row._id;
+
+                    const rowAccess = Array.isArray(row.access)
+                      ? row.access
+                      : Array.isArray(row.permissions)
+                        ? row.permissions
+                        : [];
 
                     return (
                       <tr key={row._id} className="hover:bg-black/[0.015]">
@@ -733,19 +887,19 @@ export default function EmployeesPage() {
 
                         <td className="border-b border-black/10 px-5 py-5 align-middle">
                           <span className="inline-flex rounded-full border border-black/10 bg-black/[0.03] px-3 py-1 text-sm font-semibold text-black">
-                            {row.role || "No Role"}
+                            {getRoleLabel(row.role)}
                           </span>
                         </td>
 
                         <td className="border-b border-black/10 px-5 py-5 align-middle">
                           <div className="inline-flex rounded-xl border border-black/10 bg-black/[0.03] px-3 py-2 text-sm text-black/60">
-                            {row.email}
+                            {row.proxyEmail || "—"}
                           </div>
                         </td>
 
                         <td className="border-b border-black/10 px-5 py-5 align-middle">
                           <AccessBadges
-                            access={row.access}
+                            access={rowAccess}
                             labelMap={permissionLabelMap}
                           />
                         </td>
@@ -761,11 +915,11 @@ export default function EmployeesPage() {
                           {isActive ? (
                             <button
                               type="button"
-                              disabled={isUpdating}
+                              disabled={isUpdating || !canEditEmployees}
                               onClick={() => updateStatus(row._id, "inactive")}
                               className={cn(
                                 "relative inline-flex h-7 w-12 items-center rounded-full transition",
-                                isUpdating ? "opacity-50" : "",
+                                isUpdating || !canEditEmployees ? "opacity-50" : "",
                                 "bg-black"
                               )}
                             >
@@ -799,7 +953,7 @@ export default function EmployeesPage() {
                             {!isPending ? (
                               <button
                                 type="button"
-                                disabled={isUpdating}
+                                disabled={isUpdating || !canEditEmployees}
                                 onClick={() =>
                                   updateStatus(row._id, isActive ? "inactive" : "active")
                                 }
@@ -861,21 +1015,29 @@ export default function EmployeesPage() {
                   <input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20"
+                    disabled={!canEditEmployees}
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20 disabled:opacity-60"
                     placeholder="Employee name"
                   />
                 </div>
 
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-black/45">
-                    Role Name
+                    Role
                   </label>
-                  <input
+                  <select
                     value={editRole}
                     onChange={(e) => setEditRole(e.target.value)}
-                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none placeholder:text-black/30 focus:border-black/20"
-                    placeholder="Role"
-                  />
+                    disabled={!canEditEmployees}
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20 disabled:opacity-60"
+                  >
+                    <option value="">Select role</option>
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {getRoleLabel(role)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -883,8 +1045,9 @@ export default function EmployeesPage() {
                     Status
                   </label>
                   <select
-                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20"
+                    className="h-14 w-full rounded-2xl border border-black/10 bg-white px-5 text-base text-black outline-none focus:border-black/20 disabled:opacity-60"
                     value={editStatus}
+                    disabled={!canEditEmployees}
                     onChange={(e) => setEditStatus(e.target.value as AdminStatus)}
                   >
                     <option value="pending">Pending</option>
@@ -896,26 +1059,35 @@ export default function EmployeesPage() {
               </div>
 
               <div className="mt-5 rounded-[22px] border border-black/10 bg-white p-5">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div>
+                <div className="grid gap-4 grid-cols-2">
+                  <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Email
                     </div>
-                    <div className="mt-1 text-sm font-medium text-black">
+                    <div className="mt-1 text-sm font-medium text-black break-all">
                       {selectedEmployee.email}
                     </div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                      Proxy Email
+                    </div>
+                    <div className="mt-1 text-sm font-medium text-black break-all">
+                      {selectedEmployee.proxyEmail || "—"}
+                    </div>
+                  </div>
+
+                  <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Last Login
                     </div>
-                    <div className="mt-1 text-sm font-medium text-black">
+                    <div className="mt-1 text-sm font-medium text-black break-words">
                       {formatDT(selectedEmployee.lastLoginAt)}
                     </div>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">
                       Current ID
                     </div>
@@ -942,29 +1114,27 @@ export default function EmployeesPage() {
                         </span>
                       </div>
 
-                      {section.items.map((item) => (
-                        <div
-                          key={item.key}
-                          className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div className="text-base font-medium text-black">
-                            {permissionLabelMap.get(normalizeKey(item.key)) ||
-                              item.label}
-                          </div>
+                      {section.items.map((itemKey) => {
+                        const module = getAdminModule(itemKey);
+                        if (!module) return null;
 
-                          <PermissionSwitch
-                            value={getPermissionLevel(editAccess, item.key)}
-                            onChange={(next) =>
-                              setModuleLevel(
-                                item.key,
-                                permissionLabelMap.get(normalizeKey(item.key)) ||
-                                  item.label,
-                                next
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
+                        return (
+                          <div
+                            key={module.key}
+                            className="flex flex-col gap-4 px-4 py-5 md:flex-row md:items-center md:justify-between"
+                          >
+                            <div className="text-base font-medium text-black">
+                              {module.label}
+                            </div>
+
+                            <PermissionSwitch
+                              value={getPermissionLevel(editAccess, module.key)}
+                              disabled={!canEditEmployees}
+                              onChange={(next) => setModuleLevel(module.key, next)}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -986,7 +1156,7 @@ export default function EmployeesPage() {
               <button
                 type="button"
                 onClick={onSaveCurrent}
-                disabled={savingEdit || !editRole.trim()}
+                disabled={savingEdit || !editRole.trim() || !canEditEmployees}
                 className="inline-flex items-center gap-2 rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 <BadgeCheck className="h-4 w-4" />

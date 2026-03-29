@@ -222,6 +222,10 @@ function formatDate(value?: string) {
   });
 }
 
+function canManageCampaigns(brand: BrandRow) {
+  return brand.planName?.toLowerCase() === "fully_paid" || brand.planName?.toLowerCase() === "fully_managed";
+}
+
 function formatMoney(value: number) {
   if (!value) return "Free";
   return `$${value.toLocaleString()}`;
@@ -380,8 +384,8 @@ const StatusBadge = ({ status }: { status: BrandStatus }) => {
     status === "active"
       ? CheckCircle2
       : status === "archived"
-      ? XCircle
-      : Clock3;
+        ? XCircle
+        : Clock3;
 
   return (
     <span
@@ -706,6 +710,26 @@ const AdminBrandPage: NextPage = () => {
 
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+
+  const [canEditBrands, setcanEditBrands] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedAdmin = JSON.parse(localStorage.getItem("admin") || "{}");
+      const permissions = storedAdmin?.permissions ?? storedAdmin?.access ?? [];
+
+      const allowed = permissions.some(
+        (item: any) =>
+          String(item?.key || "").toLowerCase().replace(/[\s_-]+/g, "") === "brands" &&
+          item?.isEdit === true
+      );
+
+      setcanEditBrands(allowed);
+    } catch {
+      setcanEditBrands(false);
+    }
+  }, []);
+
   const fetchBrands = useCallback(async () => {
     try {
       setLoading(true);
@@ -867,15 +891,13 @@ const AdminBrandPage: NextPage = () => {
     align?: "left" | "center" | "right";
   }) => (
     <TableHead
-      className={`cursor-pointer py-4 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 ${
-        align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"
-      }`}
+      className={`cursor-pointer py-4 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"
+        }`}
       onClick={() => handleSort(field)}
     >
       <div
-        className={`flex items-center gap-1 ${
-          align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start"
-        }`}
+        className={`flex items-center gap-1 ${align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start"
+          }`}
       >
         {SORT_LABELS[field]}
         {sortBy === field ? (
@@ -1018,7 +1040,7 @@ const AdminBrandPage: NextPage = () => {
                 {!loading &&
                   brands.map((brand) => {
                     const isExpanded = expandedId === brand._id;
-                    const isFullyManaged = isFullyManagedSubscription(brand);
+                    const canManage = canManageCampaigns(brand);
 
                     const brandBmeOptions = getScopedExecOptions("BME", brand);
                     const brandImeOptions = getScopedExecOptions("IME", brand);
@@ -1026,9 +1048,8 @@ const AdminBrandPage: NextPage = () => {
                     return (
                       <React.Fragment key={brand._id}>
                         <TableRow
-                          className={`cursor-pointer border-slate-100 transition ${
-                            isExpanded ? "bg-slate-50" : "hover:bg-slate-50/70"
-                          }`}
+                          className={`cursor-pointer border-slate-100 transition ${isExpanded ? "bg-slate-50" : "hover:bg-slate-50/70"
+                            }`}
                           onClick={() => setExpandedId(isExpanded ? null : brand._id)}
                         >
                           <TableCell className="pl-4 pr-1">
@@ -1142,51 +1163,53 @@ const AdminBrandPage: NextPage = () => {
                                   </Link>
                                 </DropdownMenuItem>
 
-                                {isFullyManaged ? (
-                                  <>
-                                    <DropdownMenuItem asChild>
-                                      <Link
-                                        href={`/admin/brands/create-campaign?brandId=${brand._id}`}
-                                        className="flex items-center gap-2"
-                                      >
-                                        <HiOutlinePlus className="h-4 w-4" />
-                                        Create campaign
-                                      </Link>
-                                    </DropdownMenuItem>
+                                {canEditBrands ? (
+                                  canManage ? (
+                                    <>
+                                      <DropdownMenuItem asChild>
+                                        <Link
+                                          href={`/admin/brands/create-campaign?brandId=${brand._id}`}
+                                          className="flex items-center gap-2"
+                                        >
+                                          <HiOutlinePlus className="h-4 w-4" />
+                                          Create campaign
+                                        </Link>
+                                      </DropdownMenuItem>
 
-                                    <DropdownMenuItem asChild>
-                                      <Link
-                                        href={`/admin/brands/review-campaigns?brandId=${brand._id}`}
-                                        className="flex items-center gap-2"
+                                      <DropdownMenuItem asChild>
+                                        <Link
+                                          href={`/admin/brands/review-campaigns?brandId=${brand._id}`}
+                                          className="flex items-center gap-2"
+                                        >
+                                          <HiPencil className="h-4 w-4" />
+                                          Review campaigns
+                                        </Link>
+                                      </DropdownMenuItem>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <DropdownMenuItem
+                                        disabled
+                                        className="cursor-not-allowed opacity-50 focus:bg-transparent"
                                       >
-                                        <HiPencil className="h-4 w-4" />
-                                        Review campaigns
-                                      </Link>
-                                    </DropdownMenuItem>
-                                  </>
-                                ) : (
-                                  <>
-                                    <DropdownMenuItem
-                                      disabled
-                                      className="cursor-not-allowed opacity-50 focus:bg-transparent"
-                                    >
-                                      <span className="flex items-center gap-2">
-                                        <HiOutlinePlus className="h-4 w-4" />
-                                        Create campaign
-                                      </span>
-                                    </DropdownMenuItem>
+                                        <span className="flex items-center gap-2">
+                                          <HiOutlinePlus className="h-4 w-4" />
+                                          Create campaign
+                                        </span>
+                                      </DropdownMenuItem>
 
-                                    <DropdownMenuItem
-                                      disabled
-                                      className="cursor-not-allowed opacity-50 focus:bg-transparent"
-                                    >
-                                      <span className="flex items-center gap-2">
-                                        <HiPencil className="h-4 w-4" />
-                                        Review campaigns
-                                      </span>
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
+                                      <DropdownMenuItem
+                                        disabled
+                                        className="cursor-not-allowed opacity-50 focus:bg-transparent"
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          <HiPencil className="h-4 w-4" />
+                                          Review campaigns
+                                        </span>
+                                      </DropdownMenuItem>
+                                    </>
+                                  )
+                                ) : null}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>

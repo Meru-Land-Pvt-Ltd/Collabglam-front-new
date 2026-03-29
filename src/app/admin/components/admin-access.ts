@@ -23,6 +23,13 @@ export type AdminChildLink = {
   href: string;
 };
 
+export type AdminPermission = {
+  key?: string;
+  isEdit?: boolean;
+  isDelete?: boolean;
+  isManager?: boolean;
+};
+
 export type AdminModule = {
   key: string;
   label: string;
@@ -47,56 +54,42 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: LayoutDashboard,
     aliases: ["home", "admin-dashboard"],
   },
-
   {
     key: "brands",
     label: "Brands",
     href: "/admin/brands",
     icon: Home,
   },
-
   {
     key: "campaigns",
     label: "Campaigns",
     href: "/admin/campaigns",
     icon: List,
   },
-
   {
     key: "influencers",
     label: "Influencers",
     href: "/admin/influencers",
     icon: Users,
   },
-
-    {
+  {
     key: "brand-pipeline",
-    label: "Brands Pipeline",
+    label: "Brand Pipeline",
     href: "/admin/brand-pipeline",
     icon: GitBranch,
   },
-
   {
     key: "influencer-pipeline",
     label: "Influencer Pipeline",
     href: "/admin/influencer-pipeline",
     icon: GitBranch,
   },
-
-    {
-    key: "brand-pipeline",
-    label: "Brand Pipeline",
-    href: "/admin/brand-pipeline",
-    icon: GitBranch,
-  },
-
   {
     key: "influencer-data",
     label: "Influencer Data",
     href: "/admin/influencer-data",
     icon: Users,
   },
-
   {
     key: "influencerdetails",
     label: "Influencer Details",
@@ -104,7 +97,6 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: MailCheckIcon,
     aliases: ["influencer-email"],
   },
-
   {
     key: "invitedInfluencer",
     label: "Invited Influencer",
@@ -112,7 +104,6 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: Users,
     aliases: ["invited-influencer"],
   },
-
   {
     key: "modash",
     label: "Modash",
@@ -120,21 +111,18 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: FileText,
     aliases: ["modash-data"],
   },
-
   {
     key: "messages",
     label: "Messages",
     href: "/admin/messages",
     icon: MessageSquare,
   },
-
   {
     key: "inbound-emails",
     label: "Inbound Emails",
     href: "/admin/inbound-emails",
     icon: MailCheckIcon,
   },
-
   {
     key: "youtube",
     label: "YouTube",
@@ -142,14 +130,12 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: MailCheckIcon,
     aliases: ["youtube-handle"],
   },
-
   {
     key: "subscriptions",
     label: "Subscriptions",
     href: "/admin/subscriptions",
     icon: DollarSign,
   },
-
   {
     key: "invoiceDetails",
     label: "Invoice Details",
@@ -157,7 +143,6 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: DollarSign,
     aliases: ["invoice-details"],
   },
-
   {
     key: "payment",
     label: "Payment",
@@ -165,14 +150,12 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: Bell,
     aliases: ["payment-notification"],
   },
-
   {
     key: "disputes",
     label: "Disputes",
     href: "/admin/disputes",
     icon: FileText,
   },
-
   {
     key: "documents",
     label: "Documents",
@@ -212,21 +195,18 @@ export const ADMIN_MODULES: AdminModule[] = [
       },
     ],
   },
-
   {
     key: "employees",
     label: "Employees",
     href: "/admin/employees",
     icon: Users,
   },
-
   {
     key: "notifications",
     label: "Notifications",
     href: "/admin/notifications",
     icon: Bell,
   },
-
   {
     key: "role",
     label: "Role",
@@ -248,6 +228,7 @@ export const ROLE_PERMISSION_SECTIONS: AdminPermissionSection[] = [
     icon: DollarSign,
     items: [
       "brands",
+      "brand-pipeline",
       "campaigns",
       "subscriptions",
       "invoiceDetails",
@@ -309,7 +290,53 @@ export function getAdminModule(value?: string) {
   return ADMIN_MODULES.find((item) => item.key === canonicalKey);
 }
 
-export function hasModuleAccess(permissionKeys: string[] = [], moduleKey?: string) {
+export function hasModuleAccess(
+  permissionEntries: Array<string | AdminPermission> = [],
+  moduleKey?: string
+) {
   const wanted = canonicalizeModuleKey(moduleKey);
-  return permissionKeys.some((item) => canonicalizeModuleKey(item) === wanted);
+
+  return permissionEntries.some((entry) => {
+    if (typeof entry === "string") {
+      return canonicalizeModuleKey(entry) === wanted;
+    }
+
+    return canonicalizeModuleKey(entry?.key) === wanted;
+  });
+}
+
+export function canEditModule(
+  permissions: AdminPermission[] = [],
+  moduleKey?: string
+) {
+  const wanted = canonicalizeModuleKey(moduleKey);
+
+  return permissions.some(
+    (item) =>
+      canonicalizeModuleKey(item?.key) === wanted && item?.isEdit === true
+  );
+}
+
+export function canDeleteModule(
+  permissions: AdminPermission[] = [],
+  moduleKey?: string
+) {
+  const wanted = canonicalizeModuleKey(moduleKey);
+
+  return permissions.some(
+    (item) =>
+      canonicalizeModuleKey(item?.key) === wanted && item?.isDelete === true
+  );
+}
+
+export function canManageModule(
+  permissions: AdminPermission[] = [],
+  moduleKey?: string
+) {
+  const wanted = canonicalizeModuleKey(moduleKey);
+
+  return permissions.some(
+    (item) =>
+      canonicalizeModuleKey(item?.key) === wanted && item?.isManager === true
+  );
 }
