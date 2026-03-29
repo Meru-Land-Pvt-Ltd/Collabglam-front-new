@@ -1678,3 +1678,24 @@ export async function apipostSignatureUpload(payload: {
 export async function apiGetManageContractInfo(contractId:string) {
   return apiGet(`${CONTRACT_BASE}/manage/${contractId}`)
 }
+
+// Add these types and functions near the bottom of services/brandApi.t
+
+export type UpdateBrandProfilePayload = {
+  brandId: string;
+  brandName?: string;
+  companySize?: string;
+  brandType?: string;
+  platform?: "Instagram" | "Youtube" | "Tiktok";
+  profilePic?: string;
+};
+
+export type UpdateBrandProfileResponse = {
+  message: string;
+  brandId: string;
+};
+
+
+export async function apiUpdateBrandProfile(payload: UpdateBrandProfilePayload) {
+  return apiPost<UpdateBrandProfileResponse>(`${BRAND_BASE}/profile/update`, payload);
+}
