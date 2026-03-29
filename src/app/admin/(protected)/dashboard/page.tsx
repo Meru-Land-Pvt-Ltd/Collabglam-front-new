@@ -172,7 +172,7 @@ function formatMoney(value?: number) {
   if (value == null || Number.isNaN(value)) return "-";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "INR",
+    currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
 }
