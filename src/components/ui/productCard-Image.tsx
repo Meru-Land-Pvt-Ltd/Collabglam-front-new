@@ -10,12 +10,14 @@ function pickValidFiles(list: FileList | File[]) {
   return files.filter((f) => f.size <= MAX_BYTES);
 }
 
-// Duplicate key (simple + reliable for most cases)
 const fileKey = (f: File) => `${f.name}__${f.size}__${f.lastModified}`;
 
 export function ProductCardUpload({
   files,
+  existingImages = [],
+  existingImageKeys = [],
   onFilesChange,
+  onRemoveExistingImage,
   title = "Click to upload Images",
   helperPrefix = "or drag and drop",
   helperTypes = "SVG, PNG, JPG under (max 5mb)",
@@ -24,7 +26,10 @@ export function ProductCardUpload({
   errorText,
 }: {
   files: File[];
+  existingImages?: string[];
+  existingImageKeys?: string[];
   onFilesChange: (files: File[]) => void;
+  onRemoveExistingImage?: (url: string) => void;
   title?: string;
   helperPrefix?: string;
   helperTypes?: string;
@@ -34,10 +39,10 @@ export function ProductCardUpload({
 }) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
-
-  // ✅ Non-error message (for max-limit only)
   const [notice, setNotice] = React.useState<string | null>(null);
   const noticeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const totalCount = (files?.length ?? 0) + (existingImages?.length ?? 0);
 
   const showNotice = React.useCallback((msg: string) => {
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
@@ -51,16 +56,12 @@ export function ProductCardUpload({
     };
   }, []);
 
-  // ✅ Track which existing images to "flash" when duplicates are uploaded
   const [flashKeys, setFlashKeys] = React.useState<Set<string>>(new Set());
   const flashTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flashExisting = React.useCallback((keys: string[]) => {
+  const flashItems = React.useCallback((keys: string[]) => {
     if (!keys.length) return;
-
-    // New Set reference each time so repeated duplicates still re-trigger
     setFlashKeys(new Set(keys));
-
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     flashTimerRef.current = setTimeout(() => setFlashKeys(new Set()), 700);
   }, []);
@@ -71,12 +72,11 @@ export function ProductCardUpload({
     };
   }, []);
 
-  // ✅ Only parent "error" highlights the section in red now
   const mergedError = error;
   const mergedErrorText = errorText;
 
   const openPicker = () => {
-    if ((files?.length ?? 0) >= MAX_FILES) {
+    if (totalCount >= MAX_FILES) {
       showNotice(`Limit reached. Only ${MAX_FILES} images can be accepted.`);
       return;
     }
@@ -85,58 +85,58 @@ export function ProductCardUpload({
 
   const handleAddFiles = (incoming: FileList | File[]) => {
     const valid = pickValidFiles(incoming);
+    const existingLocalFiles = files ?? [];
 
-    const existing = files ?? [];
-    const existingKeys = new Set(existing.map(fileKey));
-
-    // track duplicates so we can flash the existing thumb
-    const duplicates: string[] = [];
-
-    // also avoid adding the same incoming file twice in one selection
+    const localKeys = new Set(existingLocalFiles.map(fileKey));
+    const remoteKeys = new Set(existingImageKeys.filter(Boolean));
     const seenIncoming = new Set<string>();
 
+    const duplicateKeysToFlash: string[] = [];
     const uniqueToAdd: File[] = [];
+
     for (const f of valid) {
       const k = fileKey(f);
 
-      if (existingKeys.has(k)) {
-        duplicates.push(k);
+      if (localKeys.has(k)) {
+        duplicateKeysToFlash.push(k);
         continue;
       }
+
+      if (remoteKeys.has(k)) {
+        duplicateKeysToFlash.push(k);
+        continue;
+      }
+
       if (seenIncoming.has(k)) continue;
 
       seenIncoming.add(k);
       uniqueToAdd.push(f);
     }
 
-    // ✅ flash any duplicates (instead of doing nothing)
-    if (duplicates.length) flashExisting(duplicates);
+    if (duplicateKeysToFlash.length) {
+      flashItems(duplicateKeysToFlash);
+    }
 
-    // ✅ enforce max 5 total (but only show notice, not error highlight)
-    const remaining = MAX_FILES - existing.length;
+    const remaining = MAX_FILES - ((existingLocalFiles.length ?? 0) + (existingImages?.length ?? 0));
     const kept = remaining > 0 ? uniqueToAdd.slice(0, remaining) : [];
 
     if (kept.length) {
-      onFilesChange([...existing, ...kept]);
+      onFilesChange([...existingLocalFiles, ...kept]);
     }
 
-    // show notice if some unique images were ignored due to max limit
-    if (uniqueToAdd.length > kept.length || existing.length >= MAX_FILES) {
+    if (uniqueToAdd.length > kept.length || totalCount >= MAX_FILES) {
       showNotice(`Limit reached. Only ${MAX_FILES} images can be accepted.`);
     }
   };
 
-  // ✅ preview urls for thumbnails
   const previewUrls = React.useMemo(() => {
     return (files ?? []).map((f) => ({
       file: f,
       key: fileKey(f),
       url: URL.createObjectURL(f),
-      isImage: /^image\//.test(f.type),
     }));
   }, [files]);
 
-  // ✅ cleanup urls
   React.useEffect(() => {
     return () => {
       previewUrls.forEach((p) => URL.revokeObjectURL(p.url));
@@ -150,16 +150,14 @@ export function ProductCardUpload({
 
   return (
     <div className="flex flex-col gap-2">
-      {/* local keyframes for duplicate highlight */}
       <style>{`
         @keyframes cgThumbFlash {
-          0%   { transform: scale(1);   box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+          0%   { transform: scale(1); box-shadow: 0 0 0 0 rgba(0,0,0,0); }
           40%  { transform: scale(1.06); box-shadow: 0 0 0 4px rgba(0,0,0,0.14); }
-          100% { transform: scale(1);   box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0,0,0,0); }
         }
       `}</style>
 
-      {/* Heading */}
       <div
         className={[
           "cg-description text-size-[14px]",
@@ -182,7 +180,6 @@ export function ProductCardUpload({
           "flex flex-col items-center justify-center text-center",
           "h-[188px] p-8 gap-6",
           "rounded-[12px] border",
-          // ✅ darker default border so white images / UI feel clearer
           mergedError
             ? "border-error-500"
             : "border-[color:var(--Neutrals-400,#B8B8B8)]",
@@ -216,7 +213,7 @@ export function ProductCardUpload({
           e.stopPropagation();
           setDragOver(false);
 
-          if ((files?.length ?? 0) >= MAX_FILES) {
+          if (totalCount >= MAX_FILES) {
             showNotice(`Limit reached. Only ${MAX_FILES} images can be accepted.`);
             return;
           }
@@ -224,12 +221,10 @@ export function ProductCardUpload({
           if (e.dataTransfer.files?.length) handleAddFiles(e.dataTransfer.files);
         }}
       >
-        {/* Icon */}
         <div className="flex h-[48px] w-[48px] items-center justify-center rounded-full bg-[#F2F2F2]">
           <CloudArrowUp size={24} weight="regular" className="text-[#969696]" />
         </div>
 
-        {/* Text */}
         <div className="flex flex-col items-center gap-1">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="text-[color:var(--Light-Text-Primary,#1A1A1A)] font-[600] underline">
@@ -241,11 +236,10 @@ export function ProductCardUpload({
           </div>
 
           <div className="text-[color:var(--Light-Text-Tertiary,#B8B8B8)] text-[12px] font-[400] leading-[16px]">
-            {helperTypes} • {files.length}/{MAX_FILES}
+            {helperTypes} • {totalCount}/{MAX_FILES}
           </div>
         </div>
 
-        {/* Hidden input */}
         <input
           ref={inputRef}
           type="file"
@@ -253,7 +247,7 @@ export function ProductCardUpload({
           accept={ACCEPT}
           className="hidden"
           onChange={(e) => {
-            if ((files?.length ?? 0) >= MAX_FILES) {
+            if (totalCount >= MAX_FILES) {
               showNotice(`Limit reached. Only ${MAX_FILES} images can be accepted.`);
               e.currentTarget.value = "";
               return;
@@ -265,9 +259,55 @@ export function ProductCardUpload({
         />
       </div>
 
-      {/* Thumbnails */}
-      {previewUrls.length > 0 ? (
+      {existingImages.length > 0 || previewUrls.length > 0 ? (
         <div className="mt-4 flex flex-wrap gap-2">
+          {existingImages.map((url, idx) => {
+            const flashKey = existingImageKeys[idx] || url;
+            const flashing = flashKeys.has(flashKey);
+
+            return (
+              <div
+                key={url}
+                className="relative"
+                style={{
+                  animation: flashing ? "cgThumbFlash 700ms ease-in-out" : undefined,
+                }}
+              >
+                <div
+                  className={[
+                    "overflow-hidden rounded-[0.5rem] border bg-white",
+                    flashing ? "border-neutral-900" : "border-neutral-400",
+                  ].join(" ")}
+                  style={{
+                    width: "4.5rem",
+                    height: "4.5rem",
+                    aspectRatio: "1 / 1",
+                    backgroundImage: `url(${url})`,
+                    backgroundPosition: "50% 50%",
+                    backgroundSize: "cover",
+                    backgroundRepeat: "no-repeat",
+                  }}
+                  title="Saved image"
+                />
+
+                {onRemoveExistingImage ? (
+                  <button
+                    type="button"
+                    aria-label="Remove saved image"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onRemoveExistingImage(url);
+                    }}
+                    className="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm border border-neutral-200"
+                  >
+                    <X size={12} className="text-neutral-700" />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+
           {previewUrls.map((p, idx) => {
             const flashing = flashKeys.has(p.key);
 
@@ -282,7 +322,6 @@ export function ProductCardUpload({
                 <div
                   className={[
                     "overflow-hidden rounded-[0.5rem] border bg-white",
-                    // ✅ darker border so white images don’t “disappear”
                     flashing ? "border-neutral-900" : "border-neutral-400",
                   ].join(" ")}
                   style={{
@@ -315,7 +354,6 @@ export function ProductCardUpload({
         </div>
       ) : null}
 
-      {/* Messages */}
       {mergedError && mergedErrorText ? (
         <p className="text-[14px] leading-[20px] text-error-500">{mergedErrorText}</p>
       ) : notice ? (

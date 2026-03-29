@@ -16,7 +16,7 @@ const __dtfCache = new Map<string, Intl.DateTimeFormat>();
 function getDTF(timeZone: string) {
   const key = `en-US|${timeZone}`;
   let dtf = __dtfCache.get(key);
-  if (!dtf) {
+  if (!dtf) { 
     dtf = new Intl.DateTimeFormat("en-US", {
       timeZone,
       hour12: false,

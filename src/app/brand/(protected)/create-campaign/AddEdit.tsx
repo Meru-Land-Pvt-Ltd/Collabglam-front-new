@@ -229,6 +229,15 @@ const EMPTY_FORM: CampaignForm = {
   files: [],
 };
 
+type SavedProductImage = {
+  dataUrl: string;
+  key?: string;
+  contentType?: string;
+  size?: number;
+  name?: string;
+};
+
+
 function useCampaignForm(initial?: Partial<CampaignForm>) {
   const [form, setForm] = useState<CampaignForm>({ ...EMPTY_FORM, ...(initial ?? {}) });
 
@@ -496,41 +505,45 @@ function buildCreateManualPayload(form: ManualForm, includeFiles: boolean) {
   })();
 }
 
-function buildEditDraftPayload(brandId: string, campaignId: string, form: ManualForm, status: CampaignStatus): EditDraftPayload {
+async function buildEditDraftPayload(
+  brandId: string,
+  campaignId: string,
+  form: ManualForm,
+  status: CampaignStatus,
+  savedProductImages: SavedProductImage[] = []
+): Promise<EditDraftPayload> {
+  const newImages = await filesToDataUrls(form.productFiles ?? []);
+
   return compact({
     brandId,
     campaignId,
     status,
-
     campaignTitle: form.title.trim(),
     description: form.description.trim(),
     campaignType: form.campaignType,
-
     categoryId: form.categoryId,
     subcategoryIds: form.subcategories,
-
     productLink: form.productLink.trim(),
+
+    productImages: [
+      ...savedProductImages,
+      ...newImages,
+    ],
 
     campaignGoals: form.goals,
     influencerTierIds: form.influencerTier,
     contentFormats: form.contentFormats,
     contentLanguageIds: form.contentLanguage,
-
     platformSelection: mapPlatforms(form.platforms),
-
     targetCountryIds: form.targetCountry,
     targetAgeRanges: form.targetAgeGroups,
     preferredHashtags: form.hashtags,
-
     numberOfInfluencers: Number(form.numberOfInfluencers || 0),
     ...(Number(form.minFollowers) > 0 ? { minFollowers: Number(form.minFollowers) } : {}),
     ...(Number(form.maxFollowers) > 0 ? { maxFollowers: Number(form.maxFollowers) } : {}),
-
     campaignBudget: Number(form.campaignBudget || 0),
     paymentType: form.paymentType,
-
     additionalNotes: form.additionalNotes || undefined,
-
     startAt: form.startDate || undefined,
     endAt: form.endDate || undefined,
   }) as EditDraftPayload;
@@ -1079,6 +1092,7 @@ function CreateManualScreen({
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewProductImages, setPreviewProductImages] = useState<string[]>([]);
+  const [savedProductImages, setSavedProductImages] = useState<any[]>([]);
   const previewForm = useMemo(
     () => ({
       ...form,
@@ -1088,18 +1102,20 @@ function CreateManualScreen({
   );
 
   useEffect(() => {
-    if (!form.productFiles?.length) {
-      setPreviewProductImages([]);
-      return;
-    }
+    const remoteUrls = savedProductImages
+      .map((img) => img?.dataUrl)
+      .filter(Boolean);
 
-    const urls = form.productFiles.map((file) => URL.createObjectURL(file));
-    setPreviewProductImages(urls);
+    const localUrls = (form.productFiles ?? []).map((file) =>
+      URL.createObjectURL(file)
+    );
+
+    setPreviewProductImages([...remoteUrls, ...localUrls]);
 
     return () => {
-      urls.forEach((url) => URL.revokeObjectURL(url));
+      localUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [form.productFiles]);
+  }, [form.productFiles, savedProductImages]);
 
   useEffect(() => {
     const prev = prevIsBelowLgRef.current;
@@ -1404,6 +1420,17 @@ function CreateManualScreen({
         hashtags: idsOf(doc?.preferredHashtags ?? doc?.hashtags),
       };
 
+      const normalizedSavedImages = (Array.isArray(doc?.productImages) ? doc.productImages : [])
+        .map((img: any) => {
+          if (typeof img === "string") return { dataUrl: img };
+          if (img?.dataUrl) return img;
+          if (img?.url) return { ...img, dataUrl: img.url };
+          return null;
+        })
+        .filter(Boolean);
+
+      setSavedProductImages(normalizedSavedImages);
+
       setForm(next);
 
       if (nextCategoryId) {
@@ -1657,7 +1684,7 @@ function CreateManualScreen({
 
     try {
       if (!campaignId) {
-        const createBase = await buildCreateManualPayload(form, false);
+        const createBase = await buildCreateManualPayload(form, true);
         const res = await apiCampaignCreate({ ...(createBase as CreateCampaignManualPayload), status: "draft" as CampaignStatus });
 
         const id = pickCampaignId(res);
@@ -1665,7 +1692,14 @@ function CreateManualScreen({
 
         toastSuccess(extractBackendSuccessMessage(res, "Draft saved"));
       } else {
-        const payload = buildEditDraftPayload(brandId, campaignId, form, "draft");
+        const payload = await buildEditDraftPayload(
+          brandId,
+          campaignId,
+          form,
+          "draft",
+          savedProductImages
+        );
+
         const res = await apiCampaignEditDraft(payload);
 
         toastSuccess(extractBackendSuccessMessage(res, "Draft updated"));
@@ -1957,18 +1991,24 @@ function CreateManualScreen({
                             />
                           </div>
 
-                          <ProductCardUpload
-                            files={form.productFiles}
-                            required
-                            error={Boolean(stateFor("productFiles"))}
-                            errorText={msgFor("productFiles")}
-                            onFilesChange={(next) => {
-                              const errs = validateFiles(next, "Product file");
-                              setProductFileErrors(errs);
-                              if (errs.length) return;
-                              setField("productFiles", next);
-                            }}
-                          />
+                        <ProductCardUpload
+                          files={form.productFiles}
+                          existingImages={savedProductImages.map((img) => img.dataUrl)}
+                          required
+                          error={Boolean(stateFor("productFiles"))}
+                          errorText={msgFor("productFiles")}
+                          onFilesChange={(next) => {
+                            const errs = validateFiles(next, "Product file");
+                            setProductFileErrors(errs);
+                            if (errs.length) return;
+                            setField("productFiles", next);
+                          }}
+                          onRemoveExistingImage={(url: string) => {
+                            setSavedProductImages((prev) =>
+                              prev.filter((img) => img.dataUrl !== url)
+                            );
+                          }}
+                        />
 
                           <FloatingInput
                             label="Product Link / Video references"

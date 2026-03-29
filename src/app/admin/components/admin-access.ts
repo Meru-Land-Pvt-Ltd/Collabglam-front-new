@@ -69,6 +69,13 @@ export const ADMIN_MODULES: AdminModule[] = [
     icon: Users,
   },
 
+    {
+    key: "brand-pipeline",
+    label: "Brands Pipeline",
+    href: "/admin/brand-pipeline",
+    icon: GitBranch,
+  },
+
   {
     key: "influencer-pipeline",
     label: "Influencer Pipeline",

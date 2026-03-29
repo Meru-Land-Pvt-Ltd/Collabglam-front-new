@@ -348,10 +348,10 @@ export default function Sidebar({
       // },
       {
         key: "messages",
-        label: "Inbox/Messages",
+        label: "Inbox",
         icon: ChatCenteredText,
         section: "main",
-        href: "/influencer/messages",
+        href: "/influencer/inbox",
         right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
       },
       {
