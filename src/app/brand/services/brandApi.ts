@@ -1805,3 +1805,27 @@ export async function apiGetAcceptedAdminCreatedInfluencersByCampaign(
     }
   );
 }
+
+export type GetMilestonesByInfluencerAndCampaignPayload = {
+  influencerId: string;
+  campaignId: string;
+  brandId?: string;
+};
+
+export type GetMilestonesByInfluencerAndCampaignResponse = {
+  message: string;
+  milestones: MilestoneRow[];
+};
+
+export async function apiGetMilestonesByInfluencerAndCampaign(
+  payload: GetMilestonesByInfluencerAndCampaignPayload
+) {
+  return apiPost<GetMilestonesByInfluencerAndCampaignResponse>(
+    `${MILESTONE_BASE}/getMilestome`,
+    {
+      influencerId: payload.influencerId,
+      campaignId: payload.campaignId,
+      brandId: payload.brandId,
+    }
+  );
+}
