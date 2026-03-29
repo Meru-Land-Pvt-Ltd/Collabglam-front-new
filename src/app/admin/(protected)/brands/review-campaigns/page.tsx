@@ -490,7 +490,6 @@ function TableView({
                 "Campaign Timeline",
                 "Shortlisted Influencers",
                 "Status",
-                "Actions",
               ].map((h) => (
                 <th
                   key={h}
@@ -599,7 +598,7 @@ function TableView({
                   </td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3 whitespace-nowrap align-top text-center">
+                  {/* <td className="px-4 py-3 whitespace-nowrap align-top text-center">
                     <div className="flex items-center justify-center gap-2 flex-wrap">
                       {isApproved ? (
                         <span className="inline-flex items-center border border-gray-300 bg-gray-50 text-gray-500 px-3 py-2 rounded-lg text-sm font-semibold cursor-not-allowed">
@@ -620,7 +619,7 @@ function TableView({
                         </Link>
                       )}
 
-                      {/* <button
+ <button
                         onClick={() => onApprove(c)}
                         disabled={isApproving || isApproved}
                         className={[
@@ -638,9 +637,9 @@ function TableView({
                           : isApproving
                           ? "Approving..."
                           : "Approve"}
-                      </button> */}
+                      </button>
                     </div>
-                  </td>
+                  </td> */}
                 </tr>
               );
             })}

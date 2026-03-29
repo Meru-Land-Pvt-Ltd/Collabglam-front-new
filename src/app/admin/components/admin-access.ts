@@ -23,6 +23,13 @@ export type AdminChildLink = {
   href: string;
 };
 
+export type AdminPermission = {
+  key?: string;
+  isEdit?: boolean;
+  isDelete?: boolean;
+  isManager?: boolean;
+};
+
 export type AdminModule = {
   key: string;
   label: string;
@@ -283,7 +290,53 @@ export function getAdminModule(value?: string) {
   return ADMIN_MODULES.find((item) => item.key === canonicalKey);
 }
 
-export function hasModuleAccess(permissionKeys: string[] = [], moduleKey?: string) {
+export function hasModuleAccess(
+  permissionEntries: Array<string | AdminPermission> = [],
+  moduleKey?: string
+) {
   const wanted = canonicalizeModuleKey(moduleKey);
-  return permissionKeys.some((item) => canonicalizeModuleKey(item) === wanted);
+
+  return permissionEntries.some((entry) => {
+    if (typeof entry === "string") {
+      return canonicalizeModuleKey(entry) === wanted;
+    }
+
+    return canonicalizeModuleKey(entry?.key) === wanted;
+  });
+}
+
+export function canEditModule(
+  permissions: AdminPermission[] = [],
+  moduleKey?: string
+) {
+  const wanted = canonicalizeModuleKey(moduleKey);
+
+  return permissions.some(
+    (item) =>
+      canonicalizeModuleKey(item?.key) === wanted && item?.isEdit === true
+  );
+}
+
+export function canDeleteModule(
+  permissions: AdminPermission[] = [],
+  moduleKey?: string
+) {
+  const wanted = canonicalizeModuleKey(moduleKey);
+
+  return permissions.some(
+    (item) =>
+      canonicalizeModuleKey(item?.key) === wanted && item?.isDelete === true
+  );
+}
+
+export function canManageModule(
+  permissions: AdminPermission[] = [],
+  moduleKey?: string
+) {
+  const wanted = canonicalizeModuleKey(moduleKey);
+
+  return permissions.some(
+    (item) =>
+      canonicalizeModuleKey(item?.key) === wanted && item?.isManager === true
+  );
 }

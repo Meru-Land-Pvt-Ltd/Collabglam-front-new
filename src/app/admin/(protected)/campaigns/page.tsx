@@ -259,6 +259,25 @@ export default function AdminCampaignsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortAsc, setSortAsc] = useState(true);
 
+  const [canEditCampaigns, setCanEditCampaigns] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedAdmin = JSON.parse(localStorage.getItem("admin") || "{}");
+      const permissions = storedAdmin?.permissions ?? storedAdmin?.access ?? [];
+
+      const allowed = permissions.some(
+        (item: any) =>
+          String(item?.key || "").toLowerCase().replace(/[\s_-]+/g, "") === "campaigns" &&
+          item?.isEdit === true
+      );
+
+      setCanEditCampaigns(allowed);
+    } catch {
+      setCanEditCampaigns(false);
+    }
+  }, []);
+
   const fetchCampaigns = async () => {
     setLoading(true);
 
@@ -608,19 +627,21 @@ export default function AdminCampaignsPage() {
                               </Link>
                             </Button>
 
-                            <Button
-                              asChild
-                              variant="ghost"
-                              size="icon"
-                              className="rounded-xl text-black hover:bg-black/[0.04]"
-                            >
-                              <Link
-                                href={`/admin/brands/create-campaign?brandId=${campaign.brandId}&id=${campaign.campaignId}`}
-                                aria-label="Edit Campaign"
+                            {canEditCampaigns ? (
+                              <Button
+                                asChild
+                                variant="ghost"
+                                size="icon"
+                                className="rounded-xl text-black hover:bg-black/[0.04]"
                               >
-                                <Pencil className="h-4.5 w-4.5" />
-                              </Link>
-                            </Button>
+                                <Link
+                                  href={`/admin/brands/create-campaign?brandId=${campaign.brandId}&id=${campaign.campaignId}`}
+                                  aria-label="Edit Campaign"
+                                >
+                                  <Pencil className="h-4.5 w-4.5" />
+                                </Link>
+                              </Button>
+                            ) : null}
 
                             <Button
                               asChild
@@ -650,31 +671,34 @@ export default function AdminCampaignsPage() {
                               </Link>
                             </Button>
 
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="More Actions"
-                                  className="rounded-xl text-black hover:bg-black/[0.04]"
-                                >
-                                  <MoreHorizontal className="h-4.5 w-4.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
+                            {campaign.createdByAdmin ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="More Actions"
+                                    className="rounded-xl text-black hover:bg-black/[0.04]"
+                                  >
+                                    <MoreHorizontal className="h-4.5 w-4.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
 
-                              <DropdownMenuContent align="end" className="w-48 bg-white">
-                                <DropdownMenuItem asChild>
-                                  <Link href={`/admin/youtube?id=${campaign.campaignId}`}>
-                                    Youtube Data
-                                  </Link>
-                                </DropdownMenuItem>
-                                {/* <DropdownMenuItem asChild>
-                                  <Link href={`/admin/modash?id=${campaign.campaignId}`}>
-                                    Modash Data
-                                  </Link>
-                                </DropdownMenuItem> */}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                <DropdownMenuContent align="end" className="w-48 bg-white">
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/admin/youtube?id=${campaign.campaignId}`}>
+                                      Youtube Data
+                                    </Link>
+                                  </DropdownMenuItem>
+
+                                  {/* <DropdownMenuItem asChild>
+                                    <Link href={`/admin/modash?id=${campaign.campaignId}`}>
+                                      Modash Data
+                                    </Link>
+                                  </DropdownMenuItem> */}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : null}
                           </div>
                         </td>
                       </tr>

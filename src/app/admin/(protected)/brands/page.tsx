@@ -710,6 +710,26 @@ const AdminBrandPage: NextPage = () => {
 
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+
+  const [canEditBrands, setcanEditBrands] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedAdmin = JSON.parse(localStorage.getItem("admin") || "{}");
+      const permissions = storedAdmin?.permissions ?? storedAdmin?.access ?? [];
+
+      const allowed = permissions.some(
+        (item: any) =>
+          String(item?.key || "").toLowerCase().replace(/[\s_-]+/g, "") === "brands" &&
+          item?.isEdit === true
+      );
+
+      setcanEditBrands(allowed);
+    } catch {
+      setcanEditBrands(false);
+    }
+  }, []);
+
   const fetchBrands = useCallback(async () => {
     try {
       setLoading(true);
@@ -1143,51 +1163,53 @@ const AdminBrandPage: NextPage = () => {
                                   </Link>
                                 </DropdownMenuItem>
 
-                                {canManage ? (
-                                  <>
-                                    <DropdownMenuItem asChild>
-                                      <Link
-                                        href={`/admin/brands/create-campaign?brandId=${brand._id}`}
-                                        className="flex items-center gap-2"
-                                      >
-                                        <HiOutlinePlus className="h-4 w-4" />
-                                        Create campaign
-                                      </Link>
-                                    </DropdownMenuItem>
+                                {canEditBrands ? (
+                                  canManage ? (
+                                    <>
+                                      <DropdownMenuItem asChild>
+                                        <Link
+                                          href={`/admin/brands/create-campaign?brandId=${brand._id}`}
+                                          className="flex items-center gap-2"
+                                        >
+                                          <HiOutlinePlus className="h-4 w-4" />
+                                          Create campaign
+                                        </Link>
+                                      </DropdownMenuItem>
 
-                                    <DropdownMenuItem asChild>
-                                      <Link
-                                        href={`/admin/brands/review-campaigns?brandId=${brand._id}`}
-                                        className="flex items-center gap-2"
+                                      <DropdownMenuItem asChild>
+                                        <Link
+                                          href={`/admin/brands/review-campaigns?brandId=${brand._id}`}
+                                          className="flex items-center gap-2"
+                                        >
+                                          <HiPencil className="h-4 w-4" />
+                                          Review campaigns
+                                        </Link>
+                                      </DropdownMenuItem>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <DropdownMenuItem
+                                        disabled
+                                        className="cursor-not-allowed opacity-50 focus:bg-transparent"
                                       >
-                                        <HiPencil className="h-4 w-4" />
-                                        Review campaigns
-                                      </Link>
-                                    </DropdownMenuItem>
-                                  </>
-                                ) : (
-                                  <>
-                                    <DropdownMenuItem
-                                      disabled
-                                      className="cursor-not-allowed opacity-50 focus:bg-transparent"
-                                    >
-                                      <span className="flex items-center gap-2">
-                                        <HiOutlinePlus className="h-4 w-4" />
-                                        Create campaign
-                                      </span>
-                                    </DropdownMenuItem>
+                                        <span className="flex items-center gap-2">
+                                          <HiOutlinePlus className="h-4 w-4" />
+                                          Create campaign
+                                        </span>
+                                      </DropdownMenuItem>
 
-                                    <DropdownMenuItem
-                                      disabled
-                                      className="cursor-not-allowed opacity-50 focus:bg-transparent"
-                                    >
-                                      <span className="flex items-center gap-2">
-                                        <HiPencil className="h-4 w-4" />
-                                        Review campaigns
-                                      </span>
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
+                                      <DropdownMenuItem
+                                        disabled
+                                        className="cursor-not-allowed opacity-50 focus:bg-transparent"
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          <HiPencil className="h-4 w-4" />
+                                          Review campaigns
+                                        </span>
+                                      </DropdownMenuItem>
+                                    </>
+                                  )
+                                ) : null}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>

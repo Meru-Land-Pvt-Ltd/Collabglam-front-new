@@ -17,6 +17,7 @@ import {
 import api from "@/lib/api";
 import {
   ADMIN_MODULES,
+  AdminPermission,
   canonicalizeModuleKey,
   hasModuleAccess,
 } from "@/app/admin/components/admin-access";
@@ -26,25 +27,21 @@ const outfit = Outfit({
   weight: ["400", "500", "600", "700", "800", "900"],
 });
 
-type Permission = {
-  key?: string;
-};
-
 type AdminUser = {
   _id?: string;
   email?: string;
   name?: string;
   role?: string;
   status?: string;
-  permissions?: Permission[];
-  access?: Permission[];
+  permissions?: AdminPermission[];
+  access?: AdminPermission[];
 };
 
 type MeResponse = {
   data?: AdminUser;
   role?: string;
-  permissions?: Permission[];
-  access?: Permission[];
+  permissions?: AdminPermission[];
+  access?: AdminPermission[];
   email?: string;
   name?: string;
   status?: string;
@@ -57,11 +54,6 @@ const ROLES = {
   BME: "bme",
 } as const;
 
-/**
- * Fallback module access per role.
- * Backend `access` / `permissions` still takes priority.
- * Dashboard added for all roles.
- */
 const DEFAULT_ROLE_MODULES: Record<string, string[]> = {
   [ROLES.SUPER_ADMIN]: ADMIN_MODULES.map((item) => item.key),
 
@@ -129,6 +121,32 @@ function isActivePath(pathname: string, href: string) {
     return pathname === "/admin";
   }
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function getPermissionKeys(permissions: AdminPermission[] = []) {
+  return permissions
+    .map((item) => canonicalizeModuleKey(item?.key))
+    .filter(Boolean);
+}
+
+function getStoredAdmin() {
+  if (typeof window === "undefined") return {};
+
+  try {
+    return JSON.parse(localStorage.getItem("admin") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function getStoredPermissions(admin: any): AdminPermission[] {
+  return admin?.permissions ?? admin?.access ?? [];
+}
+
+function dispatchAdminProfileUpdated() {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(new CustomEvent("admin-profile-updated"));
 }
 
 function BrandHeader({ compact = false }: { compact?: boolean }) {
@@ -249,100 +267,81 @@ export default function AdminSidebar() {
   useEffect(() => {
     let mounted = true;
 
-    const bootstrapAndFetch = async () => {
+    const hydrateFromStorage = () => {
+      if (typeof window === "undefined") {
+        if (mounted) setBootstrapped(true);
+        return;
+      }
+
+      const storedRole = normalizeRole(localStorage.getItem("adminRole") || "");
+      const storedName = String(localStorage.getItem("adminName") || "");
+      const storedEmail = String(localStorage.getItem("userEmail") || "");
+      const storedStatus = String(localStorage.getItem("adminStatus") || "");
+      const storedAdmin = getStoredAdmin();
+      const storedPermissions = getStoredPermissions(storedAdmin);
+      const storedPermissionKeys = getPermissionKeys(storedPermissions);
+
+      if (!mounted) return;
+
+      setCurrentRole(storedRole);
+      setPermissionKeys(storedPermissionKeys);
+      setAdminName(storedName);
+      setAdminEmail(storedEmail);
+      setAdminStatus(storedStatus);
+      setBootstrapped(true);
+    };
+
+    const syncFromApi = async () => {
       try {
-        if (typeof window !== "undefined") {
-          const storedRole = normalizeRole(localStorage.getItem("adminRole") || "");
-          const storedName = String(localStorage.getItem("adminName") || "");
-          const storedEmail = String(localStorage.getItem("userEmail") || "");
-          const storedStatus = String(localStorage.getItem("adminStatus") || "");
-
-          let storedPermissions: string[] = [];
-
-          try {
-            const storedAdmin = JSON.parse(localStorage.getItem("admin") || "{}");
-            const permissionObjects: Permission[] =
-              storedAdmin?.permissions ?? storedAdmin?.access ?? [];
-            storedPermissions = permissionObjects
-              .map((item) => canonicalizeModuleKey(item?.key))
-              .filter(Boolean);
-          } catch {
-            storedPermissions = [];
-          }
-
-          if (mounted) {
-            setCurrentRole(storedRole);
-            setPermissionKeys(storedPermissions);
-            setAdminName(storedName);
-            setAdminEmail(storedEmail);
-            setAdminStatus(storedStatus);
-            setBootstrapped(true);
-          }
-        } else if (mounted) {
-          setBootstrapped(true);
-        }
-
         const response = await api.get("/admins/me");
         const raw: MeResponse = response?.data || {};
         const me: AdminUser = raw?.data || raw || {};
 
         const roleFromApi = normalizeRole(me.role || raw.role || "");
-        const permissionObjects: Permission[] =
+        const permissionObjects: AdminPermission[] =
           me.permissions ?? me.access ?? raw.permissions ?? raw.access ?? [];
 
-        const normalizedPermissionKeys = permissionObjects
-          .map((item) => canonicalizeModuleKey(item?.key))
-          .filter(Boolean);
+        const normalizedPermissionKeys = getPermissionKeys(permissionObjects);
 
-        if (mounted) {
-          if (roleFromApi) {
-            setCurrentRole(roleFromApi);
-            if (typeof window !== "undefined") {
-              localStorage.setItem("adminRole", roleFromApi);
-            }
-          }
+        if (!mounted) return;
 
-          setPermissionKeys(normalizedPermissionKeys);
-          setAdminName(String(me.name || raw.name || ""));
-          setAdminEmail(String(me.email || raw.email || ""));
-          setAdminStatus(String(me.status || raw.status || ""));
+        if (roleFromApi) {
+          setCurrentRole(roleFromApi);
+        }
 
-          if (typeof window !== "undefined") {
-            if (me.name || raw.name) {
-              localStorage.setItem("adminName", String(me.name || raw.name || ""));
-            }
-            if (me.email || raw.email) {
-              localStorage.setItem("userEmail", String(me.email || raw.email || ""));
-            }
-            if (me.status || raw.status) {
-              localStorage.setItem("adminStatus", String(me.status || raw.status || ""));
-            }
+        setPermissionKeys(normalizedPermissionKeys);
+        setAdminName(String(me.name || raw.name || ""));
+        setAdminEmail(String(me.email || raw.email || ""));
+        setAdminStatus(String(me.status || raw.status || ""));
 
-            const existingAdmin = (() => {
-              try {
-                return JSON.parse(localStorage.getItem("admin") || "{}");
-              } catch {
-                return {};
-              }
-            })();
+        if (typeof window !== "undefined") {
+          const existingAdmin = getStoredAdmin();
 
-            localStorage.setItem(
-              "admin",
-              JSON.stringify({
-                ...existingAdmin,
-                ...me,
-                role: roleFromApi || existingAdmin?.role || "",
-                access: permissionObjects,
-              })
-            );
-          }
+          localStorage.setItem("adminRole", roleFromApi || "");
+          localStorage.setItem("adminName", String(me.name || raw.name || ""));
+          localStorage.setItem("userEmail", String(me.email || raw.email || ""));
+          localStorage.setItem("adminStatus", String(me.status || raw.status || ""));
+
+          localStorage.setItem(
+            "admin",
+            JSON.stringify({
+              ...existingAdmin,
+              ...me,
+              role: roleFromApi || existingAdmin?.role || "",
+              permissions: permissionObjects,
+              access: permissionObjects,
+            })
+          );
+
+          dispatchAdminProfileUpdated();
         }
       } catch (error) {
         console.error("Failed to fetch admin profile:", error);
       }
     };
 
-    bootstrapAndFetch();
+    hydrateFromStorage();
+    syncFromApi();
 
     return () => {
       mounted = false;
@@ -350,9 +349,6 @@ export default function AdminSidebar() {
   }, []);
 
   const isSuperAdmin = currentRole === ROLES.SUPER_ADMIN;
-  const isRevenueHead = currentRole === ROLES.REVENUE_HEAD;
-  const isIME = currentRole === ROLES.IME;
-  const isBME = currentRole === ROLES.BME;
 
   const allowedSidebarItems = useMemo(() => {
     if (isSuperAdmin) return ADMIN_MODULES;
@@ -380,6 +376,7 @@ export default function AdminSidebar() {
     try {
       if (typeof window !== "undefined") {
         localStorage.clear();
+        dispatchAdminProfileUpdated();
       }
     } catch {
       // ignore
