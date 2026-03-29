@@ -161,18 +161,17 @@ export const get = async <T = any>(url: string, params?: any): Promise<T> => {
 export const post = async <T = any>(
   url: string,
   data?: any,
-  opts?: { signal?: AbortSignal }
+  config: AxiosRequestConfig = {}
 ): Promise<T> => {
-  const baseConfig: AxiosRequestConfig = { signal: opts?.signal }
+  const finalConfig: AxiosRequestConfig = { ...config };
 
   if (isFormData(data)) {
-    // Do NOT set multipart content-type manually; let axios/browser add boundary.
-    baseConfig.headers = stripContentType(baseConfig.headers) as any
+    finalConfig.headers = stripContentType(finalConfig.headers) as any;
   }
 
-  const res = await api.post<T>(url, data, baseConfig)
-  return res.data
-}
+  const res = await api.post<T>(url, data, finalConfig);
+  return res.data;
+};
 
 /** Explicit helper for FormData (BASE_URL) */
 export const postFormData = async <T = any>(
