@@ -537,16 +537,16 @@ export default function AdminCampaignsPage() {
                           </div>
                         </td>
 
-<td className="border-t border-black/10 px-5 py-5">
-  <div className="min-w-[180px]">
-    <p className="text-sm font-semibold text-black">
-      {campaign.brandName || "—"}
-    </p>
-    <div className="mt-2 inline-flex rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-black/60">
-      {campaign.brandPlanName || "free"}
-    </div>
-  </div>
-</td>
+                        <td className="border-t border-black/10 px-5 py-5">
+                          <div className="min-w-[180px]">
+                            <p className="text-sm font-semibold text-black">
+                              {campaign.brandName || "—"}
+                            </p>
+                            <div className="mt-2 inline-flex rounded-full border border-black/10 bg-black/[0.03] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-black/60">
+                              {campaign.brandPlanName || "free"}
+                            </div>
+                          </div>
+                        </td>
 
                         <td className="border-t border-black/10 px-5 py-5">
                           <div className="min-w-[220px]">
@@ -668,11 +668,11 @@ export default function AdminCampaignsPage() {
                                     Youtube Data
                                   </Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
+                                {/* <DropdownMenuItem asChild>
                                   <Link href={`/admin/modash?id=${campaign.campaignId}`}>
                                     Modash Data
                                   </Link>
-                                </DropdownMenuItem>
+                                </DropdownMenuItem> */}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>

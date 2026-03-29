@@ -223,7 +223,7 @@ function formatDate(value?: string) {
 }
 
 function canManageCampaigns(brand: BrandRow) {
-  return brand.planName?.toLowerCase() === "fully_paid";
+  return brand.planName?.toLowerCase() === "fully_paid" || brand.planName?.toLowerCase() === "fully_managed";
 }
 
 function formatMoney(value: number) {
