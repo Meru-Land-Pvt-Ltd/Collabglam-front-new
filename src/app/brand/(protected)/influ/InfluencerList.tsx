@@ -1266,60 +1266,39 @@ export default function InfluencerList() {
     router.push(`/brand/influencers?id=${raw.contractId}`);
   }, [router]);
 
-  const handleMail = useCallback(
-    async (row: InfluencerRow) => {
-      const raw = (row as any)?.__raw ?? null;
-      const influencerId = raw?.influencerId || row.id;
-      const influencerName = raw?.name || row.profile?.name || "Influencer";
+const handleMail = useCallback(async (row: InfluencerRow) => {
+  const raw = (row as any)?.__raw ?? null;
+  const influencerId = raw?.influencerId || row.id;
 
-      if (!brandId) {
-        toast({
-          icon: "error",
-          title: "Brand not found",
-          text: "Please sign in again.",
-        });
-        return;
-      }
+  console.log("handleMail called", { brandId, influencerId });
 
-      if (!influencerId) {
-        toast({
-          icon: "error",
-          title: "Influencer not found",
-          text: "Could not identify the influencer for this thread.",
-        });
-        return;
-      }
+  try {
+    const res: any = await api.get(`/emails/threads/brand/${brandId}`);
+    
+    console.log("threads raw res", res);
+    
+    const threads: any[] = Array.isArray(res?.threads) ? res.threads :
+      Array.isArray(res?.data?.threads) ? res.data.threads : [];
 
-      try {
-        const res: any = await post("/emails/threads", {
-          brandId,
-          influencerId,
-          subject: campaignTitle || `Conversation with ${influencerName}`,
-        });
+    console.log("threads parsed", threads);
+    console.log("looking for influencerId", influencerId);
+    console.log("thread influencer ids", threads.map(t => t?.influencer?.influencerId));
 
-        const threadId = res?.threadId || res?.data?.threadId;
+    const matched = threads.find(
+      (t) => t?.influencer?.influencerId === influencerId
+    );
 
-        if (!threadId) {
-          throw new Error("Thread ID not returned from server.");
-        }
+    console.log("matched thread", matched);
 
-        router.push(`/brand/inbox/${threadId}`);
-        // or use this if you want compose mode immediately:
-        // router.push(`/brand/inbox/${threadId}?compose=true`);
-      } catch (e: any) {
-        toast({
-          icon: "error",
-          title: "Inbox open failed",
-          text:
-            e?.response?.data?.error ||
-            e?.response?.data?.message ||
-            e?.message ||
-            "Could not create/open the inbox thread.",
-        });
-      }
-    },
-    [brandId, router, campaignTitle]
-  );
+    if (matched?.threadId) {
+      router.push(`/brand/inbox/${matched.threadId}?compose=true`);
+    } else {
+      router.push(`/brand/inbox/?compose=true`);
+    }
+  } catch (e) {
+    console.error("handleMail error", e);
+  }
+}, [router, brandId]);
 
   // ── Milestone handlers ─────────────────────────────────────────────────────
   const handleOpenMilestoneModal = useCallback((row: InfluencerRow) => {
