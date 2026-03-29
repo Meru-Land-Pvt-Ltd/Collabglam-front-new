@@ -3,9 +3,17 @@
 import { Plus } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { useInfluencerCounts } from "./InfluencerCountsContext";
+import { apiCampaignViewByBrand, getApiErrorMessage } from "@/app/brand/services/brandApi";
 
-type TabKey = "all influencer" | "applied" | "active" | "shortlisted" | "undecided" | "rejected";
+type TabKey =
+  | "all influencer"
+  | "applied"
+  | "active"
+  | "shortlisted"
+  | "undecided"
+  | "rejected";
 
 export default function CampaignNavBar() {
   const pathname = usePathname();
@@ -14,6 +22,53 @@ export default function CampaignNavBar() {
   const { counts } = useInfluencerCounts();
 
   const campaignId = (searchParams.get("campaignId") || searchParams.get("id") || "").trim();
+
+  const [brandId, setBrandId] = useState("");
+  const [isAdminCreatedCampaign, setIsAdminCreatedCampaign] = useState(false);
+
+  useEffect(() => {
+    const id =
+      localStorage.getItem("brandId") ||
+      localStorage.getItem("brandID") ||
+      localStorage.getItem("brand_id") ||
+      "";
+
+    setBrandId(id);
+  }, []);
+
+  useEffect(() => {
+    if (!brandId || !campaignId) {
+      setIsAdminCreatedCampaign(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const res: any = await apiCampaignViewByBrand({ brandId, campaignId });
+        if (cancelled) return;
+
+        const campaign = ((res as any)?.data?.doc ?? (res as any)?.doc ?? res) as any;
+
+        const createdByRole = String(campaign?.createdBy?.role ?? "")
+          .trim()
+          .toLowerCase();
+
+        setIsAdminCreatedCampaign(createdByRole === "admin");
+      } catch (e) {
+        if (cancelled) return;
+        console.error(getApiErrorMessage(e, "Failed to load campaign creator role"));
+        setIsAdminCreatedCampaign(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, campaignId]);
 
   const withCampaignId = (href: string) => {
     if (!campaignId) return href;
@@ -29,6 +84,13 @@ export default function CampaignNavBar() {
     { key: "undecided", label: "Undecided", href: "/brand/influ/undecided" },
     { key: "rejected", label: "Rejected", href: "/brand/influ/rejected" },
   ];
+
+  const visibleTabs = useMemo(() => {
+    if (isAdminCreatedCampaign) {
+      return tabs.filter((tab) => tab.key === "active");
+    }
+    return tabs;
+  }, [isAdminCreatedCampaign]);
 
   const tabCounts: Record<TabKey, number> = {
     "all influencer": counts.all,
@@ -48,7 +110,7 @@ export default function CampaignNavBar() {
         className="scrollbar-none flex min-w-0 flex-1 items-center gap-xs overflow-x-auto whitespace-nowrap"
         aria-label="Influencer filters"
       >
-        {tabs.map((t) => {
+        {visibleTabs.map((t) => {
           const isActive = isActiveHref(t.href);
           const count = tabCounts[t.key];
 
@@ -94,30 +156,32 @@ export default function CampaignNavBar() {
         })}
       </nav>
 
-      <div className="ml-3 flex shrink-0 items-center">
-        <button
-          type="button"
-          onClick={() => router.push(withCampaignId("/brand/influencer/invite"))}
-          className={[
-            "inline-flex items-center justify-center",
-            "h-9 md:h-10",
-            "gap-xs",
-            "rounded-s border border-neutral-200 bg-white",
-            "px-3 md:px-4",
-            "text-xs sm:text-sm md:text-sm",
-            "font-medium text-neutral-900",
-            "shadow-none",
-            "transition-colors",
-            "hover:bg-neutral-50",
-            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-900/35 focus-visible:outline-offset-2",
-            "whitespace-nowrap",
-          ].join(" ")}
-        >
-          <Plus className="shrink-0" />
-          <span className="hidden sm:inline">Invite</span>
-          <span className="sm:hidden">Invite</span>
-        </button>
-      </div>
+      {!isAdminCreatedCampaign ? (
+        <div className="ml-3 flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => router.push(withCampaignId("/brand/influencer/invite"))}
+            className={[
+              "inline-flex items-center justify-center",
+              "h-9 md:h-10",
+              "gap-xs",
+              "rounded-s border border-neutral-200 bg-white",
+              "px-3 md:px-4",
+              "text-xs sm:text-sm md:text-sm",
+              "font-medium text-neutral-900",
+              "shadow-none",
+              "transition-colors",
+              "hover:bg-neutral-50",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-900/35 focus-visible:outline-offset-2",
+              "whitespace-nowrap",
+            ].join(" ")}
+          >
+            <Plus className="shrink-0" />
+            <span className="hidden sm:inline">Invite</span>
+            <span className="sm:hidden">Invite</span>
+          </button>
+        </div>
+      ) : null}
     </header>
   );
 }

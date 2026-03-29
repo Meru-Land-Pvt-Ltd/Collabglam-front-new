@@ -7,8 +7,7 @@ import ManageProfile from "./manageProfile";
 export default function appliedInfluencer() {
     return (
     <div>
-      <Suspense fallback={<div>Loading Media-Kit</div>}>
-        <MediaKitPage/>
+      <Suspense fallback={<div>Loading ..</div>}>
         <ManageProfile/>
       </Suspense>
     </div>

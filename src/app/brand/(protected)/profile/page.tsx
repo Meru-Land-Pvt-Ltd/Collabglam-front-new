@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
   Building2,
-  ChevronDown,
   Globe2,
   History,
   Mail,
@@ -20,6 +19,7 @@ import {
   getApiErrorMessage,
 } from "../../services/brandApi";
 import { toast, ToastStyles } from "@/components/ui/toast";
+import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 
 type QA = {
   question: string;
@@ -80,17 +80,61 @@ type WalletData = {
   }>;
 };
 
+type PlatformOption = "Instagram" | "Youtube" | "Tiktok";
+
 type FormState = {
   brandName: string;
   companySize: string;
   brandType: string;
-  platform: "Instagram" | "Youtube" | "Tiktok";
+  industry: string;
+  platform: PlatformOption;
 };
 
 const cardClass =
   "rounded-[24px] border border-[#ececec] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
 
-const platformOptions = ["Instagram", "Youtube", "Tiktok"] as const;
+const editableWrapClass =
+  "rounded-[20px] border border-dashed border-[#F4C542] bg-[#FFFDF2] p-3 transition-all";
+
+const editableInputClass =
+  "border-[#F4C542] bg-[#FFFBEA] ring-4 ring-[#F4C542]/15 shadow-[0_0_0_1px_rgba(244,197,66,0.28)]";
+
+const INDUSTRY_OPTIONS = [
+  "Beauty & Personal Care",
+  "Fashion & Apparel",
+  "Lifestyle & Home",
+  "Health & Fitness",
+  "Technology & SaaS",
+  "Food & Beverage",
+  "Travel & Hospitality",
+  "Education",
+  "Finance & Fintech",
+  "Gaming & Entertainment",
+  "Media & Publishing",
+  "Real Estate",
+  "Sustainability & Eco Brands",
+  "Other",
+] as const;
+
+const COMPANY_SIZE_OPTIONS = [
+  "Solo / Self-employed",
+  "2–10 employees",
+  "11–50 employees",
+  "51–200 employees",
+  "201–500 employees",
+  "500+ employees",
+] as const;
+
+const BRAND_TYPES = [
+  "D2C / Consumer Brand",
+  "Marketplace",
+  "Agency (managing clients)",
+  "Startup / Early-stage brand",
+  "Enterprise / Established brand",
+  "Creator-led / Personal brand",
+] as const;
+
+const PLATFORM_OPTIONS = ["Instagram", "Youtube", "Tiktok"] as const;
 
 function formatDate(input?: string | null) {
   if (!input) return "—";
@@ -120,16 +164,25 @@ function normalizePercent(value: number) {
   return value;
 }
 
-function getQaAnswer(items: QA[] | undefined, questionIncludes: string, fallback = "") {
+function getQaAnswer(
+  items: QA[] | undefined,
+  questionIncludes: string,
+  fallback = ""
+) {
   const found = (items || []).find((item) =>
-    String(item?.question || "").toLowerCase().includes(questionIncludes.toLowerCase())
+    String(item?.question || "")
+      .toLowerCase()
+      .includes(questionIncludes.toLowerCase())
   );
   return found?.answers?.[0] || fallback;
 }
 
-function getPlatformFromPage3(items?: QA[]) {
-  const answer = getQaAnswer(items, "preferred platform", "") || getQaAnswer(items, "platform", "");
+function getPlatformFromPage3(items?: QA[]): PlatformOption {
+  const answer =
+    getQaAnswer(items, "preferred platform", "") ||
+    getQaAnswer(items, "platform", "");
   const cleaned = answer.trim().toLowerCase();
+
   if (cleaned === "instagram") return "Instagram";
   if (cleaned === "tiktok") return "Tiktok";
   return "Youtube";
@@ -137,10 +190,18 @@ function getPlatformFromPage3(items?: QA[]) {
 
 function featureValueLabel(feature: BrandFeature) {
   if (feature?.limit === -1) return "Unlimited";
-  if (feature?.limit !== undefined && feature?.limit !== null && feature.limit > 0) {
+  if (
+    feature?.limit !== undefined &&
+    feature?.limit !== null &&
+    feature.limit > 0
+  ) {
     return String(feature.limit);
   }
-  if (feature?.value !== undefined && feature?.value !== null && feature.value !== "") {
+  if (
+    feature?.value !== undefined &&
+    feature?.value !== null &&
+    feature.value !== ""
+  ) {
     return String(feature.value);
   }
   return "Included";
@@ -161,11 +222,39 @@ function prettifyFeatureKey(value?: string | null) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function getBrandType(profile: BrandProfile | null) {
+  const value =
+    getQaAnswer(profile?.page1, "what type of brand", "") ||
+    getQaAnswer(profile?.page1, "brand type", "");
+
+  if (BRAND_TYPES.includes(value as (typeof BRAND_TYPES)[number])) return value;
+  return BRAND_TYPES[0];
+}
+
+function getIndustry(profile: BrandProfile | null) {
+  const value = profile?.industry || "";
+  if (INDUSTRY_OPTIONS.includes(value as (typeof INDUSTRY_OPTIONS)[number])) {
+    return value;
+  }
+  return "Other";
+}
+
+function getCompanySize(profile: BrandProfile | null) {
+  const value = profile?.companySize || "";
+  if (
+    COMPANY_SIZE_OPTIONS.includes(value as (typeof COMPANY_SIZE_OPTIONS)[number])
+  ) {
+    return value;
+  }
+  return COMPANY_SIZE_OPTIONS[0];
+}
+
 function getInitialForm(profile: BrandProfile | null): FormState {
   return {
     brandName: profile?.brandName || "",
-    companySize: profile?.companySize || "",
-    brandType: getQaAnswer(profile?.page1, "what type of brand", profile?.industry || ""),
+    companySize: getCompanySize(profile),
+    brandType: getBrandType(profile),
+    industry: getIndustry(profile),
     platform: getPlatformFromPage3(profile?.page3),
   };
 }
@@ -186,8 +275,9 @@ export default function BrandProfilePage() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [form, setForm] = useState<FormState>({
     brandName: "",
-    companySize: "",
-    brandType: "",
+    companySize: COMPANY_SIZE_OPTIONS[0],
+    brandType: BRAND_TYPES[0],
+    industry: "Other",
     platform: "Youtube",
   });
   const [loading, setLoading] = useState(true);
@@ -238,7 +328,10 @@ export default function BrandProfilePage() {
         toast({
           icon: "error",
           title: "Failed to load profile",
-          text: getApiErrorMessage(err, "Something went wrong while fetching brand profile."),
+          text: getApiErrorMessage(
+            err,
+            "Something went wrong while fetching brand profile."
+          ),
         });
       } finally {
         setLoading(false);
@@ -251,7 +344,9 @@ export default function BrandProfilePage() {
   const subscription = useMemo(() => brand?.subscription ?? null, [brand]);
 
   const metrics = useMemo(() => {
-    const features = Array.isArray(subscription?.features) ? subscription.features.slice(0, 6) : [];
+    const features = Array.isArray(subscription?.features)
+      ? subscription.features.slice(0, 6)
+      : [];
     return features.map((feature) => ({
       label: prettifyFeatureKey(feature?.key),
       usedText:
@@ -265,7 +360,7 @@ export default function BrandProfilePage() {
   const displayName = brand?.name || brand?.brandName || "Brand Admin";
   const logo = brand?.profilePic || "";
 
-  const onChange = (key: keyof FormState, value: string) => {
+  const onChange = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -325,14 +420,18 @@ export default function BrandProfilePage() {
               C
             </div>
             <div>
-              <p className="text-[18px] font-semibold text-[#111111]">Collabglam</p>
+              <p className="text-[18px] font-semibold text-[#111111]">
+                Collabglam
+              </p>
               <p className="text-sm text-[#666666]">Brand workspace</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 self-end md:self-auto">
             <div className="text-right">
-              <p className="text-sm font-medium text-[#111111]">{displayName}</p>
+              <p className="text-sm font-medium text-[#111111]">
+                {displayName}
+              </p>
               <p className="text-xs text-[#8b8b8b]">Brand Admin</p>
             </div>
             {logo ? (
@@ -390,6 +489,13 @@ export default function BrandProfilePage() {
             </div>
           </div>
 
+          {editing ? (
+            <div className="rounded-[20px] border border-[#F4C542] bg-[#FFFBEA] px-4 py-3 text-sm text-[#7A5B00]">
+              Highlighted fields are editable now. Brand Email, Email alias, and
+              Role At Brand stay read-only.
+            </div>
+          ) : null}
+
           {loading ? (
             <div className="grid gap-6">
               {Array.from({ length: 4 }).map((_, idx) => (
@@ -409,14 +515,20 @@ export default function BrandProfilePage() {
               <section className={`${cardClass} p-5 md:p-6`}>
                 <div className="mb-5 flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-[#111111]" />
-                  <h2 className="text-[18px] font-semibold text-[#111111]">Brand Identity</h2>
+                  <h2 className="text-[18px] font-semibold text-[#111111]">
+                    Brand Identity
+                  </h2>
                 </div>
 
                 <div className="grid gap-5 lg:grid-cols-[180px_minmax(0,1fr)]">
                   <div className="flex flex-col items-start gap-3">
                     <div className="relative h-[110px] w-[110px] overflow-hidden rounded-full border border-[#e8e8e8] bg-[#f2f4f7]">
                       {logo ? (
-                        <img src={logo} alt={displayName} className="h-full w-full object-cover" />
+                        <img
+                          src={logo}
+                          alt={displayName}
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-2xl font-semibold text-[#111111]">
                           {initialsFromName(displayName)}
@@ -426,24 +538,32 @@ export default function BrandProfilePage() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <EditableField
+                    <EditableInputField
                       label="Brand Name"
                       value={form.brandName}
                       editable={editing}
                       onChange={(value) => onChange("brandName", value)}
                     />
+
                     <ReadonlyField
                       label="Brand Email"
                       value={brand?.email || "—"}
                       icon={<Mail className="h-4 w-4 text-[#7a7a7a]" />}
                     />
-                    <ReadonlyField label="Email alias" value={brand?.proxyEmail || "—"} />
-                    <SelectField
+
+                    <ReadonlyField
+                      label="Email alias"
+                      value={brand?.proxyEmail || "—"}
+                    />
+
+                    <EditableSelectField
                       label="Platform"
                       value={form.platform}
                       editable={editing}
-                      options={[...platformOptions]}
-                      onChange={(value) => onChange("platform", value as FormState["platform"])}
+                      options={PLATFORM_OPTIONS}
+                      onChange={(value) =>
+                        onChange("platform", value as PlatformOption)
+                      }
                     />
                   </div>
                 </div>
@@ -453,42 +573,66 @@ export default function BrandProfilePage() {
                 <section className={`${cardClass} p-5 md:p-6`}>
                   <div className="mb-5 flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-[#111111]" />
-                    <h2 className="text-[18px] font-semibold text-[#111111]">Brand Information</h2>
+                    <h2 className="text-[18px] font-semibold text-[#111111]">
+                      Brand Information
+                    </h2>
                   </div>
 
                   <div className="space-y-4">
-                    <EditableField
+                    <EditableSelectField
                       label="Brand Type"
                       value={form.brandType}
                       editable={editing}
+                      options={BRAND_TYPES}
                       onChange={(value) => onChange("brandType", value)}
                     />
-                    <EditableField
+
+                    <EditableSelectField
+                      label="Industry"
+                      value={form.industry}
+                      editable={editing}
+                      options={INDUSTRY_OPTIONS}
+                      onChange={(value) => onChange("industry", value)}
+                    />
+
+                    <EditableSelectField
                       label="Company Size"
                       value={form.companySize}
                       editable={editing}
+                      options={COMPANY_SIZE_OPTIONS}
                       onChange={(value) => onChange("companySize", value)}
                     />
-                    <ReadonlyField label="Industry" value={brand?.industry || "—"} />
                   </div>
                 </section>
 
                 <section className={`${cardClass} p-5 md:p-6`}>
                   <div className="mb-5 flex items-center gap-2">
                     <Globe2 className="h-4 w-4 text-[#111111]" />
-                    <h2 className="text-[18px] font-semibold text-[#111111]">Platforms</h2>
+                    <h2 className="text-[18px] font-semibold text-[#111111]">
+                      Platforms
+                    </h2>
                   </div>
 
                   <div className="space-y-3">
-                    <ReadonlyField label="Brand Name" value={form.brandName || "—"} />
-                    <SelectField
+                    <ReadonlyField
+                      label="Brand Name"
+                      value={form.brandName || "—"}
+                    />
+
+                    <EditableSelectField
                       label="Preferred Platform"
                       value={form.platform}
                       editable={editing}
-                      options={[...platformOptions]}
-                      onChange={(value) => onChange("platform", value as FormState["platform"])}
+                      options={PLATFORM_OPTIONS}
+                      onChange={(value) =>
+                        onChange("platform", value as PlatformOption)
+                      }
                     />
-                    <ReadonlyField label="Role At Brand" value={getQaAnswer(brand?.page2, "role", "—") || "—"} />
+
+                    <ReadonlyField
+                      label="Role At Brand"
+                      value={getQaAnswer(brand?.page2, "role", "—") || "—"}
+                    />
                   </div>
                 </section>
               </div>
@@ -498,9 +642,13 @@ export default function BrandProfilePage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <BadgeCheck className="h-4 w-4 text-[#111111]" />
-                      <h2 className="text-[18px] font-semibold text-[#111111]">Subscription Plan</h2>
+                      <h2 className="text-[18px] font-semibold text-[#111111]">
+                        Subscription Plan
+                      </h2>
                     </div>
-                    <p className="mt-1 text-sm text-[#6b6b6b]">Current tier and monthly consumption</p>
+                    <p className="mt-1 text-sm text-[#6b6b6b]">
+                      Current tier and monthly consumption
+                    </p>
                   </div>
 
                   <button className="inline-flex h-11 items-center justify-center rounded-full border border-[#e9e9e9] bg-white px-5 text-sm font-medium text-[#111111] hover:bg-[#fafafa]">
@@ -510,21 +658,43 @@ export default function BrandProfilePage() {
 
                 <div className="space-y-6 px-5 py-6 md:px-6">
                   <div className="grid gap-5 md:grid-cols-4">
-                    <MetaBlock label="Plan Name" value={subscription?.planName || subscription?.name || "No Plan"} />
-                    <MetaBlock label="Status" value={subscription?.status || "Inactive"} pill />
-                    <MetaBlock label="Start Date" value={formatDate(subscription?.startedAt)} />
-                    <MetaBlock label="Expiry Date" value={formatDate(subscription?.expiresAt)} />
+                    <MetaBlock
+                      label="Plan Name"
+                      value={subscription?.planName || subscription?.name || "No Plan"}
+                    />
+                    <MetaBlock
+                      label="Status"
+                      value={subscription?.status || "Inactive"}
+                      pill
+                    />
+                    <MetaBlock
+                      label="Start Date"
+                      value={formatDate(subscription?.startedAt)}
+                    />
+                    <MetaBlock
+                      label="Expiry Date"
+                      value={formatDate(subscription?.expiresAt)}
+                    />
                   </div>
 
                   <div>
-                    <p className="mb-4 text-sm font-semibold text-[#111111]">Usage Metrics</p>
+                    <p className="mb-4 text-sm font-semibold text-[#111111]">
+                      Usage Metrics
+                    </p>
                     {metrics.length ? (
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         {metrics.map((item) => (
-                          <div key={item.label} className="space-y-2 rounded-2xl border border-[#efefef] p-4">
+                          <div
+                            key={item.label}
+                            className="space-y-2 rounded-2xl border border-[#efefef] p-4"
+                          >
                             <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-medium text-[#111111]">{item.label}</p>
-                              <p className="text-xs text-[#6b6b6b]">{item.usedText}</p>
+                              <p className="text-sm font-medium text-[#111111]">
+                                {item.label}
+                              </p>
+                              <p className="text-xs text-[#6b6b6b]">
+                                {item.usedText}
+                              </p>
                             </div>
                             <div className="h-2 overflow-hidden rounded-full bg-[#efefef]">
                               <div
@@ -562,8 +732,14 @@ export default function BrandProfilePage() {
                     </div>
                   </div>
 
-                  <WalletInfo label="Usable" value={formatMoney(wallet?.usableBalance)} />
-                  <WalletInfo label="Frozen" value={formatMoney(wallet?.frozenBalance)} />
+                  <WalletInfo
+                    label="Usable"
+                    value={formatMoney(wallet?.usableBalance)}
+                  />
+                  <WalletInfo
+                    label="Frozen"
+                    value={formatMoney(wallet?.frozenBalance)}
+                  />
 
                   <button className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#ececec] bg-white px-5 text-sm font-medium text-[#111111] hover:bg-[#fafafa]">
                     Add Funds
@@ -574,33 +750,34 @@ export default function BrandProfilePage() {
               <section className={`${cardClass} overflow-hidden`}>
                 <div className="flex items-center gap-2 border-b border-[#efefef] px-5 py-5 md:px-6">
                   <History className="h-4 w-4 text-[#111111]" />
-                  <h2 className="text-[18px] font-semibold text-[#111111]">Payment History</h2>
+                  <h2 className="text-[18px] font-semibold text-[#111111]">
+                    Payment History
+                  </h2>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="min-w-full">
                     <thead>
                       <tr className="border-b border-[#f0f0f0] bg-white text-left">
-                        {[
-                          "Item",
-                          "Details",
-                          "Amount",
-                          "Status",
-                          "Action",
-                        ].map((head) => (
-                          <th
-                            key={head}
-                            className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.08em] text-[#7a7a7a] md:px-6"
-                          >
-                            {head}
-                          </th>
-                        ))}
+                        {["Item", "Details", "Amount", "Status", "Action"].map(
+                          (head) => (
+                            <th
+                              key={head}
+                              className="px-5 py-4 text-xs font-semibold uppercase tracking-[0.08em] text-[#7a7a7a] md:px-6"
+                            >
+                              {head}
+                            </th>
+                          )
+                        )}
                       </tr>
                     </thead>
                     <tbody>
                       {(wallet?.freezes?.length || 0) > 0 ? (
                         wallet?.freezes.map((freeze, index) => (
-                          <tr key={`${freeze.campaignId}-${index}`} className="border-b border-[#f6f6f6]">
+                          <tr
+                            key={`${freeze.campaignId}-${index}`}
+                            className="border-b border-[#f6f6f6]"
+                          >
                             <td className="px-5 py-5 text-sm font-medium text-[#111111] md:px-6">
                               Freeze #{index + 1}
                             </td>
@@ -610,7 +787,9 @@ export default function BrandProfilePage() {
                             <td className="px-5 py-5 text-sm font-medium text-[#111111] md:px-6">
                               {formatMoney(freeze.freezeAmount)}
                             </td>
-                            <td className="px-5 py-5 text-sm text-[#4b5563] md:px-6">Frozen</td>
+                            <td className="px-5 py-5 text-sm text-[#4b5563] md:px-6">
+                              Frozen
+                            </td>
                             <td className="px-5 py-5 md:px-6">
                               <button className="inline-flex h-9 items-center rounded-full border border-[#ececec] bg-white px-4 text-xs font-medium text-[#111111] hover:bg-[#fafafa]">
                                 View
@@ -620,7 +799,10 @@ export default function BrandProfilePage() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-5 py-8 text-center text-sm text-[#6b6b6b] md:px-6">
+                          <td
+                            colSpan={5}
+                            className="px-5 py-8 text-center text-sm text-[#6b6b6b] md:px-6"
+                          >
                             No payment history available yet.
                           </td>
                         </tr>
@@ -648,7 +830,9 @@ function ReadonlyField({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-[13px] font-medium text-[#111111]">{label}</label>
+      <label className="mb-2 block text-[13px] font-medium text-[#111111]">
+        {label}
+      </label>
       <div className="flex min-h-[52px] items-center gap-2 rounded-2xl border border-[#e9e9e9] bg-white px-4 text-sm text-[#111111]">
         {icon}
         <span className="truncate">{value}</span>
@@ -657,7 +841,7 @@ function ReadonlyField({
   );
 }
 
-function EditableField({
+function EditableInputField({
   label,
   value,
   editable,
@@ -671,18 +855,26 @@ function EditableField({
   if (!editable) return <ReadonlyField label={label} value={value || "—"} />;
 
   return (
-    <div>
-      <label className="mb-2 block text-[13px] font-medium text-[#111111]">{label}</label>
+    <div className={editableWrapClass}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <label className="block text-[13px] font-medium text-[#111111]">
+          {label}
+        </label>
+        <span className="inline-flex rounded-full bg-[#F4C542] px-2.5 py-1 text-[11px] font-semibold text-[#111111]">
+          Editable
+        </span>
+      </div>
+
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="flex min-h-[52px] w-full items-center rounded-2xl border border-[#e9e9e9] bg-white px-4 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
+        className={`flex min-h-[52px] w-full items-center rounded-2xl border px-4 text-sm text-[#111111] outline-none transition ${editableInputClass} focus:border-[#D9A900] focus:ring-4 focus:ring-[#F4C542]/20`}
       />
     </div>
   );
 }
 
-function SelectField({
+function EditableSelectField({
   label,
   value,
   editable,
@@ -692,29 +884,38 @@ function SelectField({
   label: string;
   value: string;
   editable: boolean;
-  options: string[];
+  options: readonly string[];
   onChange: (value: string) => void;
 }) {
   if (!editable) {
-    return <ReadonlyField label={label} value={value || "—"} icon={<Globe2 className="h-4 w-4 text-[#7a7a7a]" />} />;
+    return (
+      <ReadonlyField
+        label={label}
+        value={value || "—"}
+        icon={<Globe2 className="h-4 w-4 text-[#7a7a7a]" />}
+      />
+    );
   }
 
   return (
-    <div>
-      <label className="mb-2 block text-[13px] font-medium text-[#111111]">{label}</label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="min-h-[52px] w-full appearance-none rounded-2xl border border-[#e9e9e9] bg-white px-4 pr-10 text-sm text-[#111111] outline-none transition focus:border-[#111111]"
-        >
+    <div className={editableWrapClass}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <label className="block text-[13px] font-medium text-[#111111]">
+          {label}
+        </label>
+        <span className="inline-flex rounded-full bg-[#F4C542] px-2.5 py-1 text-[11px] font-semibold text-[#111111]">
+          Editable
+        </span>
+      </div>
+
+      <div className={`rounded-2xl ${editableInputClass}`}>
+        <FloatingSelect label={label} value={value} onValueChange={onChange}>
           {options.map((option) => (
-            <option key={option} value={option}>
+            <SelectItem key={option} value={option}>
               {option}
-            </option>
+            </SelectItem>
           ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8b8b8b]" />
+        </FloatingSelect>
       </div>
     </div>
   );
@@ -731,13 +932,17 @@ function MetaBlock({
 }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#7a7a7a]">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#7a7a7a]">
+        {label}
+      </p>
       {pill ? (
         <span className="mt-3 inline-flex rounded-full border border-[#e8e8e8] bg-[#fafafa] px-3 py-1 text-sm font-medium text-[#111111]">
           {value}
         </span>
       ) : (
-        <p className="mt-3 text-[20px] font-semibold text-[#111111]">{value}</p>
+        <p className="mt-3 text-[20px] font-semibold text-[#111111]">
+          {value}
+        </p>
       )}
     </div>
   );
@@ -746,7 +951,9 @@ function MetaBlock({
 function WalletInfo({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#6b6b6b]">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#6b6b6b]">
+        {label}
+      </p>
       <p className="mt-1 text-lg font-semibold text-[#111111]">{value}</p>
     </div>
   );

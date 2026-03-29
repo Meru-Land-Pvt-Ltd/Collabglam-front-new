@@ -752,25 +752,53 @@ export async function apiGetBrandWallet(params: { brandId: string }) {
 
 export type BrandWalletTopupPayload = {
   brandId: string;
+  campaignId?: string;
   amount: number;
+  currency?: string;
+  successUrl: string;
+  cancelUrl: string;
 };
 
 export type BrandWalletTopupResponse = {
-  usableBalance: number | undefined;
-  frozenBalance: number | undefined;
-  walletBalance: number | undefined;
   message: string;
   brandId: string;
   amount: number;
-  publishableKey: string;
-  clientSecret: string;
-  paymentIntentId: string;
+  currency: string;
+  sessionId: string;
+  checkoutUrl?: string;
 };
 
 export async function apiBrandWalletTopup(payload: BrandWalletTopupPayload) {
   return apiPost<BrandWalletTopupResponse>(`${WALLET_BASE}/topup`, {
     brandId: payload.brandId,
+    campaignId: payload.campaignId,
     amount: payload.amount,
+    currency: payload.currency ?? "inr",
+    successUrl: payload.successUrl,
+    cancelUrl: payload.cancelUrl,
+  });
+}
+
+export type ConfirmBrandWalletTopupPayload = {
+  brandId: string;
+  sessionId: string;
+};
+
+export type ConfirmBrandWalletTopupResponse = {
+  message: string;
+  brandId: string;
+  addedAmount: number;
+  walletBalance: number;
+  frozenBalance: number;
+  usableBalance: number;
+};
+
+export async function apiConfirmBrandWalletTopup(
+  payload: ConfirmBrandWalletTopupPayload
+) {
+  return apiPost<ConfirmBrandWalletTopupResponse>(`${WALLET_BASE}/topup/confirm`, {
+    brandId: payload.brandId,
+    sessionId: payload.sessionId,
   });
 }
 
@@ -1675,7 +1703,7 @@ export async function apipostSignatureUpload(payload: {
   return apiPost(`${CONTRACT_BASE}/upload`, formData);
 }
 
-export async function apiGetManageContractInfo(contractId:string) {
+export async function apiGetManageContractInfo(contractId: string) {
   return apiGet(`${CONTRACT_BASE}/manage/${contractId}`)
 }
 
@@ -1698,4 +1726,82 @@ export type UpdateBrandProfileResponse = {
 
 export async function apiUpdateBrandProfile(payload: UpdateBrandProfilePayload) {
   return apiPost<UpdateBrandProfileResponse>(`${BRAND_BASE}/profile/update`, payload);
+}
+
+
+export type AcceptedAdminCreatedInfluencerRow = {
+  invitationId: string;
+  influencerId: string | null;
+  influencerName: string | null;
+  influencerEmail: string | null;
+  modashUserId: string | null;
+  handle: string | null;
+  platform: string | null;
+  status: string;
+  brandId: string | null;
+  brandName: string | null;
+  campaignId: string | null;
+  campaignTitle?: string | null;
+  description?: string | null;
+  campaignBudget?: number | null;
+  budget?: number | null;
+  influencerBudget?: number | null;
+  minFollowers?: number | null;
+  maxFollowers?: number | null;
+  targetCountry?: string | null;
+  paymentType?: string | null;
+  startAt?: string | null;
+  endAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetAcceptedAdminCreatedInfluencersByCampaignPayload = {
+  campaignId: string;
+  brandId?: string;
+  page?: number;
+  limit?: number;
+  includeCampaign?: 0 | 1 | boolean;
+  includeNames?: 0 | 1 | boolean;
+};
+
+export type GetAcceptedAdminCreatedInfluencersByCampaignResponse = {
+  status: "success" | "error";
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+  campaignId: string;
+  filters: {
+    status: "accepted";
+    createdByAdmin: true;
+    brandId?: string;
+  };
+  influencers: AcceptedAdminCreatedInfluencerRow[];
+};
+
+export async function apiGetAcceptedAdminCreatedInfluencersByCampaign(
+  params: GetAcceptedAdminCreatedInfluencersByCampaignPayload
+) {
+  return apiGet<GetAcceptedAdminCreatedInfluencersByCampaignResponse>(
+    `${CAMPAIGN_INVITATION_BASE}/accepted-admin-created-influencers`,
+    {
+      campaignId: params.campaignId,
+      brandId: params.brandId,
+      page: params.page ?? 1,
+      limit: params.limit ?? 25,
+      includeCampaign:
+        typeof params.includeCampaign === "boolean"
+          ? params.includeCampaign
+            ? 1
+            : 0
+          : (params.includeCampaign ?? 1),
+      includeNames:
+        typeof params.includeNames === "boolean"
+          ? params.includeNames
+            ? 1
+            : 0
+          : (params.includeNames ?? 1),
+    }
+  );
 }

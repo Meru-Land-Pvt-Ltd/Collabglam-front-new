@@ -36,6 +36,8 @@ import {
 import {
   apiGetListByCampaign,
   apiSetApplicantDecisionStatus,
+  apiGetAcceptedAdminCreatedInfluencersByCampaign,
+  apiCampaignViewByBrand,
   type ApplicantDecisionField,
   getApiErrorMessage,
 } from "@/app/brand/services/brandApi";
@@ -198,6 +200,44 @@ function buildAvailablePlatforms(a: any): InfluencerRow["platforms"] {
   }
 
   return result;
+}
+function mapAcceptedAdminCreatedInfluencerToRow(a: any): InfluencerRow {
+  const influencerId = String(a?.influencerId ?? "").trim();
+  const name = String(a?.influencerName ?? "Influencer").trim();
+  const createdAtRaw = a?.createdAt ? String(a.createdAt) : "";
+  const appliedDate = createdAtRaw ? createdAtRaw.slice(0, 10) : "—";
+
+  const platform = normalizePlatformType(a?.platform);
+  const platforms = platform
+    ? [
+      {
+        platform,
+        followers: Number(a?.maxFollowers ?? a?.minFollowers ?? 0) || 0,
+        engagement: 0,
+      },
+    ]
+    : [];
+
+  return {
+    id: influencerId,
+    profile: {
+      name,
+      handle: a?.handle ? toHandle(a.handle) : "—",
+      avatarUrl: undefined,
+    },
+    category: "—",
+    platforms,
+    followers: Number(a?.maxFollowers ?? 0) || 0,
+    engagement: 0,
+    appliedDate,
+    status: "Active",
+    budget:
+      Number(a?.influencerBudget ?? a?.campaignBudget ?? 0) > 0
+        ? String(a?.influencerBudget ?? a?.campaignBudget)
+        : "—",
+    __source: "adminAccepted",
+    __raw: a,
+  } as InfluencerRow;
 }
 
 function mapApplicantToRow(a: any): InfluencerRow {
@@ -421,6 +461,7 @@ function ActiveMilestoneActions({
   onAccept,
   showSign,
   onSign,
+  isAdminCreatedCampaign = false,
 }: {
   onAddMilestone: () => void;
   showViewMilestone: boolean;
@@ -432,19 +473,12 @@ function ActiveMilestoneActions({
   onAccept?: () => void;
   showSign?: boolean;
   onSign?: () => void;
+  isAdminCreatedCampaign?: boolean;
 }) {
   return (
     <div className="flex items-start gap-2">
       <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={onAddMilestone}
-          className="inline-flex h-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white px-3 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
-        >
-          Add Milestone
-        </button>
-
-        {showViewMilestone ? (
+        {isAdminCreatedCampaign ? (
           <button
             type="button"
             onClick={onViewMilestone}
@@ -452,7 +486,27 @@ function ActiveMilestoneActions({
           >
             View Milestone
           </button>
-        ) : null}
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onAddMilestone}
+              className="inline-flex h-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white px-3 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+            >
+              Add Milestone
+            </button>
+
+            {showViewMilestone ? (
+              <button
+                type="button"
+                onClick={onViewMilestone}
+                className="inline-flex h-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white px-3 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+              >
+                View Milestone
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
 
       {showAccept && onAccept ? (
@@ -477,13 +531,13 @@ function ActiveMilestoneActions({
         </button>
       ) : null}
 
-      <button
+      {/* <button
         type="button"
         onClick={onManage}
         className="inline-flex h-8 items-center justify-center rounded-[0.5rem] bg-[#1A1A1A] px-4 text-[12px] font-medium text-white hover:opacity-90"
       >
         Manage
-      </button>
+      </button> */}
 
       <button
         type="button"
@@ -726,6 +780,7 @@ export default function InfluencerList() {
   const [updatingDecisionId, setUpdatingDecisionId] = useState<string | null>(null);
 
   const [brandId, setBrandId] = useState<string | null>(null);
+  const [isAdminCreatedCampaign, setIsAdminCreatedCampaign] = useState(false);
   const [campaignTitle, setCampaignTitle] = useState("");
   const [campaignBudget, setCampaignBudget] = useState<number | null>(null);
   const [campaignTimeline, setCampaignTimeline] = useState<{ startDate?: string | Date; endDate?: string | Date } | null>(null);
@@ -795,6 +850,39 @@ export default function InfluencerList() {
       setCampaignPayoutType(normalized);
     }
   }, []);
+
+  useEffect(() => {
+    if (!brandId || !campaignId) {
+      setIsAdminCreatedCampaign(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const res: any = await apiCampaignViewByBrand({ brandId, campaignId });
+        if (cancelled) return;
+
+        const campaign = ((res as any)?.data?.doc ?? (res as any)?.doc ?? res) as any;
+        const createdByRole = String(campaign?.createdBy?.role ?? "")
+          .trim()
+          .toLowerCase();
+
+        setIsAdminCreatedCampaign(createdByRole === "admin");
+      } catch {
+        if (!cancelled) {
+          setIsAdminCreatedCampaign(false);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, campaignId]);
 
   // ── Reset pagination on tab / search change ────────────────────────────────
   useEffect(() => {
@@ -907,6 +995,51 @@ export default function InfluencerList() {
 
     try {
       const trimmedSearch = search.trim();
+
+      // Admin-created campaign + Active tab -> use new API
+      if (tab === "active" && isAdminCreatedCampaign) {
+        const res: any = await apiGetAcceptedAdminCreatedInfluencersByCampaign({
+          campaignId,
+          brandId: brandId || undefined,
+          page: 1,
+          limit: 100,
+          includeCampaign: 1,
+          includeNames: 1,
+        });
+
+        const influencers = Array.isArray(res?.influencers) ? res.influencers : [];
+        let mapped = influencers
+          .map(mapAcceptedAdminCreatedInfluencerToRow)
+          .filter((r: InfluencerRow) => String((r as any)?.id ?? "").trim());
+
+        if (trimmedSearch) {
+          const q = trimmedSearch.toLowerCase();
+          mapped = mapped.filter((row: InfluencerRow) => {
+            const raw = (row as any)?.__raw ?? {};
+            return [
+              row.profile?.name,
+              row.profile?.handle,
+              raw?.influencerEmail,
+              raw?.platform,
+              raw?.campaignTitle,
+            ].some((v) => String(v ?? "").toLowerCase().includes(q));
+          });
+        }
+
+        setCounts({
+          all: res?.total ?? influencers.length,
+          applied: 0,
+          active: res?.total ?? influencers.length,
+          shortlisted: 0,
+          undecided: 0,
+          rejected: 0,
+        });
+
+        setApplicantRows(mapped);
+        return;
+      }
+
+      // Existing flow for normal campaigns / other tabs
       const tabStatus = getFilterStatusFromTab(tab);
       const influencerTypeStatus = getFilterStatusFromInfluencerType(filters["Influencer Type"]);
       const effectiveFilterStatus = tab === "all" ? (influencerTypeStatus ?? "all") : tabStatus;
@@ -934,15 +1067,19 @@ export default function InfluencerList() {
       const influencers = Array.isArray(res?.influencers) ? res.influencers : [];
 
       const totalCount = res?.applicantCount ?? 0;
-      const appliedCount = res?.statusCounts?.applied ?? influencers.filter((inf: any) => {
-        const isAccepted = Number(inf?.isAccepted) === 1;
-        const isShortlisted = Number(inf?.isShortlisted) === 1;
-        const isUndicided = Number(inf?.isUndicided) === 1;
-        const isRejected = Number(inf?.isRejected) === 1;
-        return !isAccepted && !isShortlisted && !isUndicided && !isRejected;
-      }).length;
+      const appliedCount =
+        res?.statusCounts?.applied ??
+        influencers.filter((inf: any) => {
+          const isAccepted = Number(inf?.isAccepted) === 1;
+          const isShortlisted = Number(inf?.isShortlisted) === 1;
+          const isUndicided = Number(inf?.isUndicided) === 1;
+          const isRejected = Number(inf?.isRejected) === 1;
+          return !isAccepted && !isShortlisted && !isUndicided && !isRejected;
+        }).length;
 
-      const activeCount = res?.statusCounts?.active ?? influencers.filter((inf: any) => Number(inf?.isAccepted) === 1).length;
+      const activeCount =
+        res?.statusCounts?.active ??
+        influencers.filter((inf: any) => Number(inf?.isAccepted) === 1).length;
 
       setCounts({
         all: totalCount,
@@ -953,8 +1090,13 @@ export default function InfluencerList() {
         rejected: res?.statusCounts?.rejected ?? 0,
       });
 
-      let mapped = influencers.map(mapApplicantToRow).filter((r: InfluencerRow) => String((r as any)?.id ?? "").trim());
-      mapped = mapped.filter((row: InfluencerRow) => doesApplicantBelongToTab((row as any)?.__raw ?? {}, tab));
+      let mapped = influencers
+        .map(mapApplicantToRow)
+        .filter((r: InfluencerRow) => String((r as any)?.id ?? "").trim());
+
+      mapped = mapped.filter((row: InfluencerRow) =>
+        doesApplicantBelongToTab((row as any)?.__raw ?? {}, tab)
+      );
 
       const map = new Map<string, InfluencerRow>();
       mapped.forEach((r: InfluencerRow) => map.set(String((r as any).id), r));
@@ -964,7 +1106,7 @@ export default function InfluencerList() {
     } finally {
       setLoadingApplicants(false);
     }
-  }, [campaignId, search, tab, filters, sortValue, setCounts]);
+  }, [campaignId, search, tab, filters, sortValue, setCounts, brandId, isAdminCreatedCampaign]);
 
   useEffect(() => {
     fetchApplicants();
@@ -1260,45 +1402,105 @@ export default function InfluencerList() {
     [contractMetaMap]
   );
 
-  const handleManage = useCallback((row: InfluencerRow) => {
-    const raw = (row as any)?.__raw ?? null;
-    console.log("handleManage", raw)
-    router.push(`/brand/influencers?id=${raw.contractId}`);
-  }, [router]);
+  const handleManage = useCallback(
+    async (row: InfluencerRow) => {
+      const raw = (row as any)?.__raw ?? null;
 
-const handleMail = useCallback(async (row: InfluencerRow) => {
-  const raw = (row as any)?.__raw ?? null;
-  const influencerId = raw?.influencerId || row.id;
+      let contractId =
+        contractMetaMap[row.id]?.contractId ??
+        raw?.contractId ??
+        raw?._id ??
+        "";
 
-  console.log("handleMail called", { brandId, influencerId });
+      // Fallback: fetch latest contract if contract id is not ready yet
+      if (!contractId && raw?.influencerId && brandId && campaignId) {
+        try {
+          const meta = await getLatestContractForApplicant(raw);
+          if (meta) {
+            contractId = meta?.contractId ?? meta?._id ?? "";
+            setContractMetaMap((prev) => ({
+              ...prev,
+              [row.id]: meta,
+            }));
+          }
+        } catch (e) {
+          console.error("Failed to fetch contract before manage redirect", e);
+        }
+      }
 
-  try {
-    const res: any = await api.get(`/emails/threads/brand/${brandId}`);
-    
-    console.log("threads raw res", res);
-    
-    const threads: any[] = Array.isArray(res?.threads) ? res.threads :
-      Array.isArray(res?.data?.threads) ? res.data.threads : [];
+      if (!contractId) {
+        toast({
+          icon: "error",
+          title: "Contract not found",
+          text: "No contract is available for this influencer yet.",
+        });
+        return;
+      }
 
-    console.log("threads parsed", threads);
-    console.log("looking for influencerId", influencerId);
-    console.log("thread influencer ids", threads.map(t => t?.influencer?.influencerId));
+      const targetUrl = `/brand/influencers?id=${encodeURIComponent(contractId)}`;
 
-    const matched = threads.find(
-      (t) => t?.influencer?.influencerId === influencerId
-    );
+      if (typeof window !== "undefined") {
+        window.location.href = targetUrl;
+        return;
+      }
 
-    console.log("matched thread", matched);
+      router.push(targetUrl);
+    },
+    [router, contractMetaMap, brandId, campaignId, getLatestContractForApplicant]
+  );
 
-    if (matched?.threadId) {
-      router.push(`/brand/inbox/${matched.threadId}?compose=true`);
-    } else {
-      router.push(`/brand/inbox/?compose=true`);
-    }
-  } catch (e) {
-    console.error("handleMail error", e);
-  }
-}, [router, brandId]);
+  const handleMail = useCallback(
+    async (row: InfluencerRow) => {
+      const raw = (row as any)?.__raw ?? null;
+      const influencerId = raw?.influencerId || row.id;
+      const influencerName = raw?.name || row.profile?.name || "Influencer";
+
+      if (!brandId) {
+        toast({
+          icon: "error",
+          title: "Brand not found",
+          text: "Please sign in again.",
+        });
+        return;
+      }
+
+      if (!influencerId) {
+        toast({
+          icon: "error",
+          title: "Influencer not found",
+          text: "Could not identify the influencer for this thread.",
+        });
+        return;
+      }
+
+      try {
+        const res: any = await post("/emails/threads", {
+          brandId,
+          influencerId,
+          subject: campaignTitle || `Conversation with ${influencerName}`,
+        });
+
+        const threadId = res?.threadId || res?.data?.threadId;
+
+        if (!threadId) {
+          throw new Error("Thread ID not returned from server.");
+        }
+
+        router.push(`/brand/inbox/${threadId}`);
+      } catch (e: any) {
+        toast({
+          icon: "error",
+          title: "Inbox open failed",
+          text:
+            e?.response?.data?.error ||
+            e?.response?.data?.message ||
+            e?.message ||
+            "Could not create/open the inbox thread.",
+        });
+      }
+    },
+    [brandId, router, campaignTitle]
+  );
 
   // ── Milestone handlers ─────────────────────────────────────────────────────
   const handleOpenMilestoneModal = useCallback((row: InfluencerRow) => {
@@ -1319,20 +1521,50 @@ const handleMail = useCallback(async (row: InfluencerRow) => {
   const handleViewMilestone = useCallback(
     (row: InfluencerRow) => {
       if (!campaignId) {
-        toast({ icon: "error", title: "Campaign missing", text: "Campaign id not found in URL." });
+        toast({
+          icon: "error",
+          title: "Campaign missing",
+          text: "Campaign id not found in URL.",
+        });
         return;
       }
-      const meta = contractMetaMap[row.id] ?? null;
+
       const raw = (row as any)?.__raw ?? {};
-      if (!meta?.contractId) {
-        toast({ icon: "error", title: "Contract missing", text: "No contract found for this influencer." });
+      const influencerId = raw?.influencerId || row.id || "";
+
+      if (isAdminCreatedCampaign) {
+        router.push(
+          `/brand/milestone-history?campaignId=${encodeURIComponent(
+            campaignId
+          )}&influencerId=${encodeURIComponent(
+            influencerId
+          )}&brandId=${encodeURIComponent(brandId || "")}`
+        );
         return;
       }
+
+      const meta = contractMetaMap[row.id] ?? null;
+
+      if (!meta?.contractId) {
+        toast({
+          icon: "error",
+          title: "Contract missing",
+          text: "No contract found for this influencer.",
+        });
+        return;
+      }
+
       router.push(
-        `/brand/influ/view-milestone?contractId=${meta.contractId}&campaignId=${campaignId || ""}&influencerId=${raw.influencerId || row.id || ""}&brandId=${brandId || ""}`
+        `/brand/influ/view-milestone?contractId=${encodeURIComponent(
+          meta.contractId
+        )}&campaignId=${encodeURIComponent(
+          campaignId
+        )}&influencerId=${encodeURIComponent(
+          influencerId
+        )}&brandId=${encodeURIComponent(brandId || "")}`
       );
     },
-    [campaignId, brandId, contractMetaMap, router]
+    [campaignId, brandId, contractMetaMap, router, isAdminCreatedCampaign]
   );
 
   // ── Visible rows ───────────────────────────────────────────────────────────
@@ -1564,7 +1796,8 @@ const handleMail = useCallback(async (row: InfluencerRow) => {
                 const statusStr = String(meta?.status || "");
                 const showAccept = needsBrandAcceptance(statusStr);
                 const showSign = canSignNow(meta);
-                const showViewMilestone = milestoneCreatedMap[row.id] || hasMilestonesCreated(meta);
+                const showViewMilestone =
+                  isAdminCreatedCampaign || milestoneCreatedMap[row.id] || hasMilestonesCreated(meta);
 
                 return (
                   <ActiveMilestoneActions
@@ -1573,6 +1806,7 @@ const handleMail = useCallback(async (row: InfluencerRow) => {
                     onViewMilestone={() => handleViewMilestone(row)}
                     onManage={() => handleManage(row)}
                     onMail={() => handleMail(row)}
+                    isAdminCreatedCampaign={isAdminCreatedCampaign}
                     moreMenu={
                       <InfluencerContextMenu
                         type="active"
@@ -1581,14 +1815,16 @@ const handleMail = useCallback(async (row: InfluencerRow) => {
                         onAddMilestone={() => handleOpenMilestoneModal(row)}
                         onAssignDeliverables={() => console.log("assign deliverables", row.id)}
                         onSaveToHub={(hubId) => console.log("save to hub", row.id, hubId)}
-                        onMoveToWorkspace={(workspaceId) => console.log("move to workspace", row.id, workspaceId)}
+                        onMoveToWorkspace={(workspaceId) =>
+                          console.log("move to workspace", row.id, workspaceId)
+                        }
                         onRaiseDispute={() => console.log("raise dispute", row.id)}
                         onDelete={() => console.log("remove", row.id)}
                       />
                     }
-                    showAccept={showAccept}
+                    showAccept={isAdminCreatedCampaign ? false : showAccept}
                     onAccept={() => openContractSidebar(row)}
-                    showSign={showSign}
+                    showSign={isAdminCreatedCampaign ? false : showSign}
                     onSign={() => openSignModal(meta)}
                   />
                 );

@@ -35,6 +35,7 @@ export type ListCardProps = {
 
   name: string;
   categoryTag?: string;
+  badges?: string[];
 
   metrics?: ListCardMetric[];
 
@@ -209,6 +210,7 @@ export function ListCard({
   logoImages,
   name,
   categoryTag,
+  badges,
   metrics = [],
   statusLabel = "Active",
   statusVariant = "active",
@@ -271,6 +273,10 @@ export function ListCard({
 
   const editNode = menuSlot ? menuSlot : null;
   const dotsNode = showMoreButton ? <MoreDotsButton onClick={onMoreClick} /> : null;
+  const resolvedBadges = useMemo(() => {
+    if (badges?.length) return badges.filter(Boolean);
+    return categoryTag ? [categoryTag] : [];
+  }, [badges, categoryTag]);
 
   return (
     <div className={cx(WRAP_BASE, WRAP_GRID, className)}>
@@ -304,10 +310,10 @@ export function ListCard({
 
           <div className="min-w-0 flex-1">
             {/* keep same layout: title left, tag on right; wrap only if truly needed */}
-            <div className="flex min-w-0 items-start gap-2 max-[520px]:gap-1.5 max-[520px]:flex-wrap">
+            <div className="min-w-0 flex-1">
               <div
                 className={cx(
-                  "min-w-0 flex-1 line-clamp-2 break-words font-semibold text-tx-primary",
+                  "min-w-0 line-clamp-2 break-words font-semibold text-tx-primary",
                   "leading-snug",
                   "text-[clamp(0.95rem,0.9rem+0.25vw,1.12rem)]",
                   "max-[520px]:text-[clamp(0.86rem,0.82rem+0.22vw,1rem)]"
@@ -317,20 +323,29 @@ export function ListCard({
                 {name}
               </div>
 
-              {categoryTag ? (
-                <span
-                  title={categoryTag}
-                  className={cx(
-                    "inline-flex min-w-0 items-center justify-center truncate rounded-full bg-brand-50 px-2 text-neutral-750",
-                    // ✅ compact tag on small
-                    "h-6 text-[clamp(0.7rem,0.66rem+0.16vw,0.78rem)]",
-                    "max-[520px]:h-5 max-[520px]:px-2 max-[520px]:text-[0.68rem]",
-                    "min-[521px]:ml-auto",
-                    "max-[520px]:ml-0 max-[520px]:max-w-full"
-                  )}
-                >
-                  {categoryTag}
-                </span>
+              {resolvedBadges.length ? (
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 max-[520px]:gap-1.5">
+                  {resolvedBadges.map((badge) => {
+                    const isAdminBadge = badge.trim().toLowerCase() === "by admin";
+
+                    return (
+                      <span
+                        key={badge}
+                        title={badge}
+                        className={cx(
+                          "inline-flex min-w-0 items-center justify-center truncate rounded-full px-2",
+                          "h-6 text-[clamp(0.7rem,0.66rem+0.16vw,0.78rem)]",
+                          "max-[520px]:h-5 max-[520px]:px-2 max-[520px]:text-[0.68rem]",
+                          isAdminBadge
+                            ? "bg-[#EEF4FF] text-[#2F5BFF]"
+                            : "bg-brand-50 text-neutral-750"
+                        )}
+                      >
+                        {badge}
+                      </span>
+                    );
+                  })}
+                </div>
               ) : null}
             </div>
           </div>
