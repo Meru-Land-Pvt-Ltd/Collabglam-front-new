@@ -1409,7 +1409,7 @@ export default function ViewCampaignPage() {
         brandId,
         campaignId,
         amount,
-        currency: "inr",
+        currency: "usd",
         successUrl,
         cancelUrl,
       });

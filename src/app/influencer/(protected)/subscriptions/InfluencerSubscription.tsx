@@ -2,26 +2,22 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { get, post } from "@/lib/api";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle,
   XCircle,
   CreditCard,
   X,
-  Star,
   Loader2,
   Crown,
   AlertTriangle,
-  Heart,
-  Mail,
-  Plus,
   Info,
+  Plus,
+  Check,
 } from "lucide-react";
 import CheckoutAutoStart from "../../../../components/common/CheckoutAutoStart";
-
-/** =========================
- * Types
- * ========================= */
+import { Button } from "@/components/ui/buttonComp";
 
 type BillingCycle = "monthly" | "annual";
 type PaymentStatus = "idle" | "processing" | "success" | "failed";
@@ -54,21 +50,17 @@ interface Plan {
   planId: string;
   name: string;
   displayName?: string;
-
   monthlyCost: number;
-  annualCost?: number; // ✅ annual total (12 months)
+  annualCost?: number;
   annualBillingNote?: string;
-
   currency?: string;
   features: Feature[];
   label?: string;
   addons?: Addon[];
   overview?: string;
-
   autoRenew?: boolean;
   isCustomPricing?: boolean;
   isStartingAt?: boolean;
-
   status?: string;
   durationMins?: number;
   sortOrder?: number;
@@ -83,22 +75,18 @@ interface InfluencerLite {
   expiresAt?: string | null;
 }
 
-/** =========================
- * UI constants
- * ========================= */
-
-const ICON = { base: 20, hero: 32 } as const;
-const iconClass = "shrink-0";
-
-/** =========================
- * Helpers
- * ========================= */
-
 const STRIPE_HANDLED_KEY = "stripe_influencer_handled_session";
+
+const UPGRADE_REST =
+  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.30) 31%, rgba(255, 255, 255, 0.50) 100%)";
+
+const UPGRADE_HOVER =
+  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 8%, rgba(255, 191, 0, 0.40) 51%, rgba(255, 255, 255, 0.50) 100%)";
 
 const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 const prettifyKey = (key: string) => key.split("_").map(capitalize).join(" ");
 const currencySym = (c?: string) => (c === "INR" ? "₹" : c === "EUR" ? "€" : "$");
+const normalizePlanKey = (value?: string | null) => (value || "").trim().toLowerCase();
 
 const SUPPORT_PRETTY: Record<string, string> = {
   chat: "Chat support",
@@ -144,7 +132,6 @@ const FEATURE_LABELS: Record<string, string> = {
   media_kit_builder: "Media-kit builder",
 };
 
-/** Semantics */
 const BOOLEAN_KEYS = new Set<string>([
   "in_app_messaging",
   "contract_esign_basic",
@@ -153,8 +140,92 @@ const BOOLEAN_KEYS = new Set<string>([
   "media_kit_builder",
 ]);
 
-const ZERO_IS_UNLIMITED = new Set<string>(["apply_to_campaigns_quota", "active_collaborations_limit"]);
+const ZERO_IS_UNLIMITED = new Set<string>([
+  "apply_to_campaigns_quota",
+  "active_collaborations_limit",
+]);
+
 const TRUE_MEANS_UNLIMITED = new Set<string>(["in_app_messaging"]);
+
+const FEATURE_ORDER: string[] = [
+  "apply_to_campaigns_quota",
+  "active_collaborations_limit",
+  "media_kit",
+  "support_channels",
+  "team_manager_tools",
+  "team_manager_tools_managed_creators",
+  "dashboard_access",
+  "in_app_messaging",
+  "contract_esign_basic",
+  "contract_esign_download_pdf",
+  "dispute_channel",
+  "media_kit_sections",
+  "media_kit_builder",
+];
+
+const FEATURE_ORDER_SET = new Set(FEATURE_ORDER);
+
+const MARKETING_COPY: Record<
+  string,
+  {
+    eyebrow?: string;
+    title: string;
+    subtitle: string;
+    description: string;
+    cta: string;
+    priceNote?: string;
+    annualText?: string;
+    savingsText?: string;
+  }
+> = {
+  free: {
+    title: "FREE",
+    subtitle: "Start building your creator profile",
+    description:
+      "Perfect for creators getting started with CollabGlam. Explore campaigns, build your profile, and begin applying.",
+    cta: "Start Free",
+    priceNote: "Free forever",
+  },
+  creator_plus: {
+    eyebrow: "MOST POPULAR",
+    title: "CREATOR PLUS",
+    subtitle: "Unlock more applications and stronger profile tools",
+    description:
+      "Designed for active creators who want more opportunities, better visibility, and more ways to manage collaborations.",
+    cta: "Choose Creator Plus",
+  },
+  creator_pro: {
+    title: "CREATOR PRO",
+    subtitle: "Scale collaborations like a pro",
+    description:
+      "Built for creators handling higher campaign volume, repeat brand work, and a more advanced creator business setup.",
+    cta: "Choose Creator Pro",
+  },
+  agency: {
+    title: "AGENCY",
+    subtitle: "Manage creators and brand work at scale",
+    description:
+      "Best for talent teams and agencies managing multiple creators, more campaigns, and advanced workflows from one workspace.",
+    cta: "Choose Agency",
+  },
+};
+
+const getPlanTheme = (name: string) => {
+  const key = normalizePlanKey(name);
+  const popular =
+    key === "creator_plus" ||
+    key === "growth" ||
+    key === "popular" ||
+    key === "best_value";
+
+  return {
+    popular,
+    cardBorder: popular
+      ? "border-[#1a1a1a] shadow-[0_0_0_1px_rgba(26,26,26,0.16)]"
+      : "border-[#ece7f2]",
+    badge: "bg-[#1a1a1a] text-white shadow-lg",
+  };
+};
 
 const isUnlimited = (k: string, v: FeatureValue) =>
   v === Infinity ||
@@ -176,7 +247,12 @@ const formatValue = (key: string, value: FeatureValue): string => {
       : "—";
   }
 
-  if (key === "team_manager_tools_managed_creators" && value && typeof value === "object" && !Array.isArray(value)) {
+  if (
+    key === "team_manager_tools_managed_creators" &&
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  ) {
     const { min, max } = value as { min?: number; max?: number };
     if (min != null && max != null) return `${min.toLocaleString()}–${max.toLocaleString()} creators`;
     if (min != null) return `${min.toLocaleString()}+ creators`;
@@ -202,25 +278,6 @@ const isPositive = (key: string, v: FeatureValue) => {
   return Boolean(v);
 };
 
-/** Feature order */
-const FEATURE_ORDER: string[] = [
-  "apply_to_campaigns_quota",
-  "active_collaborations_limit",
-  "media_kit",
-  "support_channels",
-  "team_manager_tools",
-  "team_manager_tools_managed_creators",
-  "dashboard_access",
-  "in_app_messaging",
-  "contract_esign_basic",
-  "contract_esign_download_pdf",
-  "dispute_channel",
-  "media_kit_sections",
-  "media_kit_builder",
-];
-const FEATURE_ORDER_SET = new Set(FEATURE_ORDER);
-
-/** Annual helpers */
 const getAnnualTotal = (plan: Plan) => {
   if (typeof plan.annualCost === "number" && plan.annualCost > 0) return plan.annualCost;
   if (!plan.isCustomPricing && plan.monthlyCost > 0) return plan.monthlyCost * 12;
@@ -241,16 +298,24 @@ const calcSavings = (plan: Plan) => {
   return { amount, pct };
 };
 
-/** =========================
- * Component
- * ========================= */
+const resolveMarketingCopy = (plan: Plan) => {
+  const key = normalizePlanKey(plan.name);
+  return (
+    MARKETING_COPY[key] ?? {
+      title: plan.displayName || plan.name.toUpperCase(),
+      subtitle: plan.overview || "Built for creators ready to grow.",
+      description:
+        plan.overview || "Unlock more collaborations, stronger profile tools, and better campaign access.",
+      cta: plan.monthlyCost <= 0 ? "Start Free" : "Choose Plan",
+    }
+  );
+};
 
 export default function InfluencerSubscriptionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [billing, setBilling] = useState<BillingCycle>("monthly");
-
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -264,10 +329,8 @@ export default function InfluencerSubscriptionPage() {
   const [confirmText, setConfirmText] = useState("");
   const [confirming, setConfirming] = useState(false);
 
-  const currentPlanKey = (currentPlan ?? "").toLowerCase();
-  const planTitle = useCallback((p: Plan) => p.displayName || capitalize(p.name), []);
+  const currentPlanKey = normalizePlanKey(currentPlan);
 
-  /** Remove Stripe query params instantly (prevents reload/loop) */
   const stripStripeParamsFromUrl = useCallback(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -277,7 +340,6 @@ export default function InfluencerSubscriptionPage() {
     window.history.replaceState({}, "", url.toString());
   }, []);
 
-  /** ✅ Handle Stripe redirect back (success/cancel) */
   useEffect(() => {
     const stripeSuccess = searchParams.get("stripe_success");
     const stripeCancel = searchParams.get("stripe_cancel");
@@ -314,18 +376,26 @@ export default function InfluencerSubscriptionPage() {
             planName?: string;
           }>("/payment/verify", { sessionId });
 
-          if (!verifyResp?.success) throw new Error(verifyResp?.message || "Payment not verified.");
+          if (!verifyResp?.success) {
+            throw new Error(verifyResp?.message || "Payment not verified.");
+          }
 
           const influencerId = localStorage.getItem("influencerId");
           const planId = verifyResp.planId || localStorage.getItem("pendingInfluencerPlanId") || "";
-          const planName = verifyResp.planName || localStorage.getItem("pendingInfluencerPlanName") || "";
+          const planName =
+            verifyResp.planName || localStorage.getItem("pendingInfluencerPlanName") || "";
+          const pendingBilling =
+            (localStorage.getItem("pendingInfluencerBillingCycle") as BillingCycle | null) || "monthly";
 
-          if (!influencerId || !planId) throw new Error("Missing influencerId/planId for subscription assignment.");
+          if (!influencerId || !planId) {
+            throw new Error("Missing influencerId/planId for subscription assignment.");
+          }
 
           await post("/subscription/assign", {
             userType: "Influencer",
             userId: influencerId,
             planId,
+            billingCycle: pendingBilling,
           });
 
           setCurrentPlan(planName || null);
@@ -350,18 +420,19 @@ export default function InfluencerSubscriptionPage() {
         }
       })();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, stripStripeParamsFromUrl]);
+  }, [router, searchParams, stripStripeParamsFromUrl]);
 
-  /** Load plans + current influencer */
   useEffect(() => {
     (async () => {
       try {
-        const { plans: fetched } = await post<{ plans: Plan[] }>("/subscription/list", { role: "Influencer" });
+        const { plans: fetched } = await post<{ plans: Plan[] }>("/subscription/list", {
+          role: "Influencer",
+        });
 
-        // optional ranking for stability
         const rank = (n: string) =>
-          ({ free: 0, creator_plus: 2, creator_pro: 3, agency: 9 } as any)[n.toLowerCase()] ?? 5;
+          ({ free: 0, creator_plus: 2, creator_pro: 3, agency: 9 } as Record<string, number>)[
+            normalizePlanKey(n)
+          ] ?? 5;
 
         const sorted = (fetched || [])
           .slice()
@@ -391,7 +462,7 @@ export default function InfluencerSubscriptionPage() {
   }, []);
 
   const currentPlanObj = useMemo(
-    () => plans.find((p) => p.name.toLowerCase() === currentPlanKey),
+    () => plans.find((p) => normalizePlanKey(p.name) === currentPlanKey),
     [plans, currentPlanKey]
   );
 
@@ -402,7 +473,6 @@ export default function InfluencerSubscriptionPage() {
     return pcts.length ? Math.max(...pcts) : 0;
   }, [plans]);
 
-  /** Diff preview for downgrade */
   const featureLoss = useMemo(() => {
     if (!currentPlanObj || !selectedPlan) return [] as { key: string; from: any; to: any }[];
 
@@ -442,12 +512,10 @@ export default function InfluencerSubscriptionPage() {
     [billing]
   );
 
-  /** Stripe checkout (paid plans) + downgrade modal (free plan) */
   const handleSelect = useCallback(
     async (plan: Plan) => {
-      if (processing || plan.name.toLowerCase() === currentPlanKey) return;
+      if (processing || normalizePlanKey(plan.name) === currentPlanKey) return;
 
-      // Free / 0 amount => downgrade flow
       if (plan.monthlyCost <= 0) {
         setSelectedPlan(plan);
         setShowDowngradeModal(true);
@@ -458,7 +526,9 @@ export default function InfluencerSubscriptionPage() {
 
       setProcessing(plan.name);
       setPaymentStatus("processing");
-      setPaymentMessage(billing === "annual" ? "Redirecting to annual checkout…" : "Redirecting to secure checkout…");
+      setPaymentMessage(
+        billing === "annual" ? "Redirecting to annual checkout…" : "Redirecting to secure checkout…"
+      );
 
       try {
         const influencerId = localStorage.getItem("influencerId");
@@ -477,14 +547,17 @@ export default function InfluencerSubscriptionPage() {
           message?: string;
         }>("/payment/Order", {
           planId: plan.planId,
-          amount, // ✅ monthly or annual based on toggle
+          amount,
           currency: plan.currency || "USD",
           userId: influencerId,
           role: "Influencer",
-          billingCycle: billing, // ✅ backend can use or ignore
+          billingCycle: billing,
         });
 
-        if (!resp?.success || !resp?.url) throw new Error(resp?.message || "Failed to start checkout.");
+        if (!resp?.success || !resp?.url) {
+          throw new Error(resp?.message || "Failed to start checkout.");
+        }
+
         window.location.href = resp.url;
       } catch (err: any) {
         console.error("Stripe checkout start failed:", err);
@@ -493,7 +566,7 @@ export default function InfluencerSubscriptionPage() {
         setProcessing(null);
       }
     },
-    [processing, currentPlanKey, billing, getPayAmount]
+    [billing, currentPlanKey, getPayAmount, processing]
   );
 
   const handleConfirmDowngrade = useCallback(async () => {
@@ -510,6 +583,7 @@ export default function InfluencerSubscriptionPage() {
         userType: "Influencer",
         userId: influencerId,
         planId: selectedPlan.planId,
+        billingCycle: "monthly",
       });
 
       setCurrentPlan(selectedPlan.name);
@@ -519,7 +593,7 @@ export default function InfluencerSubscriptionPage() {
       localStorage.setItem("influencerPlanId", selectedPlan.planId);
 
       setPaymentStatus("success");
-      setPaymentMessage(`You've moved to the ${planTitle(selectedPlan)} plan.`);
+      setPaymentMessage(`You've moved to the ${selectedPlan.displayName || capitalize(selectedPlan.name)} plan.`);
       setShowDowngradeModal(false);
       setConfirmText("");
     } catch {
@@ -528,18 +602,13 @@ export default function InfluencerSubscriptionPage() {
     } finally {
       setConfirming(false);
     }
-  }, [selectedPlan, confirmText, planTitle]);
+  }, [confirmText, selectedPlan]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 mx-auto">
-            <Loader2 size={ICON.hero} className={`${iconClass} text-orange-500 animate-spin`} />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900">Loading your plans</h3>
-          <p className="text-gray-600">Please wait while we fetch your subscription options…</p>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fcf8ff] px-4">
+        <Loader2 className="h-12 w-12 animate-spin text-[#1a1a1a]" />
+        <p className="mt-4 text-sm text-slate-600">Loading pricing plans…</p>
       </div>
     );
   }
@@ -548,118 +617,110 @@ export default function InfluencerSubscriptionPage() {
     <>
       <CheckoutAutoStart role="Influencer" plans={plans} loading={loading} />
 
-      <div className="min-h-screen py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="text-center mb-10">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <Crown size={ICON.hero} className={`${iconClass} text-orange-500`} />
-              <h1 className="text-4xl lg:text-5xl font-bold text-gray-900">Influencer Subscription Plans</h1>
-            </div>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">
-              Unlock more campaign access and showcase a richer media-kit.
+      <section className="min-h-screen py-16 font-lexend text-slate-900">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="inline-flex items-center rounded-full border border-[#d1d1d1] bg-white px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#1a1a1a]">
+              CollabGlam Creator Plans
+            </span>
+            <h1 className="mt-5 text-4xl font-bold tracking-tight text-[#250054] sm:text-5xl">
+              Grow Your Creator Profile. Unlock More Campaigns.
+            </h1>
+            <p className="mt-4 text-lg leading-8 text-slate-600">
+              Apply to more campaigns, strengthen your media kit, and manage creator-brand collaborations with more control.
             </p>
-
-            {/* Billing toggle (NEW) */}
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <div className="inline-flex bg-gray-200 rounded-2xl p-1">
-                <button
-                  onClick={() => setBilling("monthly")}
-                  aria-pressed={billing === "monthly"}
-                  className={`px-6 py-2 rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400 ${billing === "monthly"
-                      ? "bg-white shadow text-gray-900"
-                      : "text-gray-600 hover:text-gray-900"
-                    }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setBilling("annual")}
-                  aria-pressed={billing === "annual"}
-                  className={`px-6 py-2 rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400 ${billing === "annual"
-                      ? "bg-white shadow text-gray-900"
-                      : "text-gray-600 hover:text-gray-900"
-                    }`}
-                >
-                  Annual
-                </button>
-              </div>
-
-              {maxSavingsPct > 0 && (
-                <span className="text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
-                  Save up to {maxSavingsPct}%
-                </span>
-              )}
-            </div>
+            <p className="mt-3 text-sm font-medium text-slate-500">
+              No setup fees • Cancel anytime • Creator-friendly billing
+            </p>
           </div>
 
-          {/* Current plan pill */}
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <div className="inline-flex rounded-lg border border-[#eadcf5] bg-white p-1 shadow-sm">
+              <button
+                onClick={() => setBilling("monthly")}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${
+                  billing === "monthly" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBilling("annual")}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${
+                  billing === "annual" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
+                }`}
+              >
+                Annual
+              </button>
+            </div>
+
+            {maxSavingsPct > 0 && (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Save up to {maxSavingsPct}% yearly
+              </span>
+            )}
+          </div>
+
           {currentPlan && (
-            <div className="max-w-2xl mx-auto mb-10">
-              <div className="bg-white rounded-2xl border border-gray-200 shadow p-6 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <CheckCircle size={ICON.base} className={`${iconClass} text-emerald-600`} />
-                  <span className="text-sm font-medium text-gray-600 uppercase tracking-wide">Current Plan</span>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900">
-                  {planTitle(currentPlanObj || ({ name: currentPlan } as Plan))}
-                </h3>
-                <p className="text-gray-600 mt-1">
-                  {expiresAt ? (
-                    <>
-                      Renews on{" "}
-                      <span className="font-semibold">
-                        {new Date(expiresAt).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </span>
-                    </>
-                  ) : (
-                    "No renewal date set"
-                  )}
-                </p>
+            <div className="mx-auto mt-8 max-w-2xl rounded-3xl border border-[#eadcf5] bg-white px-6 py-5 text-center shadow-sm">
+              <div className="flex items-center justify-center gap-2 text-sm font-semibold uppercase tracking-wide text-[#1a1a1a]">
+                <CheckCircle className="h-4 w-4" /> Current Plan
               </div>
+              <h2 className="mt-2 text-2xl font-bold text-[#250054]">
+                {currentPlanObj?.displayName || capitalize(currentPlan)}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {expiresAt
+                  ? `Renews on ${new Date(expiresAt).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}`
+                  : "No renewal date set"}
+              </p>
             </div>
           )}
 
-          {/* Status toast */}
           {paymentStatus !== "idle" && (
-            <div className="max-w-md mx-auto mb-8">
+            <div className="mx-auto mt-6 max-w-xl rounded-2xl border bg-white px-5 py-4 shadow-sm">
               <div
-                className={`p-4 rounded-2xl border flex items-center justify-center gap-3 ${paymentStatus === "success"
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                    : paymentStatus === "processing"
-                      ? "bg-orange-50 border-orange-200 text-orange-800"
-                      : "bg-red-50 border-red-200 text-red-800"
-                  }`}
+                className={`flex items-center justify-center gap-3 text-sm font-medium ${
+                  paymentStatus === "success"
+                    ? "text-emerald-700"
+                    : paymentStatus === "failed"
+                    ? "text-rose-700"
+                    : "text-amber-700"
+                }`}
               >
                 {paymentStatus === "success" ? (
-                  <CheckCircle size={ICON.base} className={iconClass} />
-                ) : paymentStatus === "processing" ? (
-                  <Loader2 size={ICON.base} className={`${iconClass} animate-spin`} />
+                  <CheckCircle className="h-5 w-5" />
+                ) : paymentStatus === "failed" ? (
+                  <XCircle className="h-5 w-5" />
                 ) : (
-                  <XCircle size={ICON.base} className={iconClass} />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                 )}
-                <p className="font-medium">
-                  {paymentMessage || (paymentStatus === "processing" ? "Working on it…" : null)}
-                </p>
+                <span>{paymentMessage}</span>
               </div>
             </div>
           )}
 
-          {/* Cards */}
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-12 grid gap-8 md:grid-cols-2 xl:grid-cols-4">
             {plans.map((plan) => {
-              const isActive = plan.name.toLowerCase() === currentPlanKey;
-              const isProcessing = processing === plan.name;
+              const key = normalizePlanKey(plan.name);
+              const copy = resolveMarketingCopy(plan);
+              const theme = getPlanTheme(key);
               const isFree = plan.monthlyCost <= 0;
-              const highlighted = ["best value", "popular"].includes((plan.label || "").toLowerCase());
-
-              const sym = currencySym(plan.currency);
+              const isActive = currentPlanKey === key;
+              const isProcessing = processing === plan.name;
+              const symbol = currencySym(plan.currency);
               const annualTotal = getAnnualTotal(plan);
               const savings = calcSavings(plan);
+
+              const displayedPrice = isFree
+                ? copy.priceNote ?? "Free forever"
+                : billing === "annual"
+                ? `${symbol}${annualTotal.toLocaleString()}/year`
+                : `${symbol}${plan.monthlyCost.toLocaleString()}/month`;
 
               const fmap = new Map(plan.features.map((f) => [f.key, f]));
               const ordered = FEATURE_ORDER.map((k) => fmap.get(k)).filter(Boolean) as Feature[];
@@ -667,158 +728,157 @@ export default function InfluencerSubscriptionPage() {
               const features = [...ordered, ...leftovers];
 
               return (
-                <div
+                <article
                   key={plan.planId}
-                  className={`relative bg-white rounded-3xl border shadow-sm hover:shadow-lg transition-all flex flex-col h-full
-                  ${highlighted ? "border-yellow-300" : "border-yellow-200"}
-                  ${isActive ? "ring-2 ring-yellow-400" : ""}`}
+                  className={`relative flex h-full flex-col overflow-hidden rounded-[28px] border bg-white ${theme.cardBorder}`}
                 >
-                  {highlighted && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="inline-flex items-center gap-1 text-xs font-bold text-white py-1.5 px-3 rounded-full shadow bg-gradient-to-r from-[#FFA135] to-[#FF7236]">
-                        <Star size={ICON.base} className={`${iconClass} fill-current`} /> {plan.label}
+                  {!!plan.label && (
+                    <div className="absolute top-4 right-4">
+                      <span className="inline-flex items-center rounded-full bg-[#1a1a1a] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
+                        {plan.label}
                       </span>
                     </div>
                   )}
 
-                  <div className="px-8 pt-8 pb-4 text-center">
-                    <h3 className="text-2xl font-bold text-gray-900 mb-2">{planTitle(plan)}</h3>
+                  <div className="flex min-h-[220px] flex-col px-8 pt-10 pb-8">
+                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-[#d1d1d1] bg-[#f5f5f5]">
+                      <Crown className="h-5 w-5 text-[#1a1a1a]" />
+                    </div>
 
-                    {plan.overview && (
-                      <p className="text-sm text-gray-600 max-w-md mx-auto mb-3">{plan.overview}</p>
-                    )}
+                    <h3 className="text-3xl font-bold text-[#250054]">{copy.title}</h3>
+                    <p className="mt-3 text-base font-medium text-slate-700">{copy.subtitle}</p>
+                    <p className="mt-3 text-[15px] leading-7 text-slate-600">{copy.description}</p>
+                  </div>
 
-                    {/* Price */}
-                    <div className="flex flex-col items-center justify-center">
-                      {isFree ? (
-                        <div className="flex items-baseline justify-center gap-2">
-                          <span className="text-5xl font-extrabold text-gray-900">Free</span>
-                          <span className="text-sm text-gray-600">(forever)</span>
-                        </div>
-                      ) : billing === "annual" ? (
-                        <>
-                          <div className="flex items-baseline justify-center gap-2">
-                            <span className="text-5xl font-extrabold text-gray-900">
-                              {sym}
-                              {(annualTotal > 0 ? annualTotal : plan.monthlyCost * 12).toLocaleString()}
-                            </span>
-                            <span className="text-lg text-gray-600">/year</span>
-                          </div>
-
-                          <p className="text-sm text-gray-600 mt-1">
-                            {sym}
-                            {Math.round((annualTotal > 0 ? annualTotal : plan.monthlyCost * 12) / 12).toLocaleString()}{" "}
-                            / month billed annually
-                            {plan.annualBillingNote ? ` • ${plan.annualBillingNote}` : ""}
-                          </p>
-
-                          {savings && (
-                            <p className="text-xs font-semibold text-emerald-700 mt-1">
-                              Save {savings.pct}% ({sym}
-                              {Math.round(savings.amount).toLocaleString()} / year)
-                            </p>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex items-baseline justify-center gap-2">
-                            <span className="text-5xl font-extrabold text-gray-900">
-                              {sym}
-                              {Number(plan.monthlyCost).toLocaleString()}
-                            </span>
-                            <span className="text-xl text-gray-600">/month</span>
-                          </div>
-
-                          {plan.annualCost != null && plan.annualCost > 0 && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              Annual: {sym}
-                              {Number(plan.annualCost).toLocaleString()} / year
-                              {plan.annualBillingNote ? ` • ${plan.annualBillingNote}` : ""}
-                            </p>
-                          )}
-                        </>
+                  <div
+                    className="border-t border-[#ece7f2] px-8 py-7 transition-all duration-200"
+                    style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
+                    onMouseEnter={(e) => {
+                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
+                    }}
+                  >
+                    <div className="flex items-end gap-2 text-[#250054]">
+                      <span className="text-4xl font-bold tracking-tight">
+                        {displayedPrice.replace(/\/(month|year)$/, "")}
+                      </span>
+                      {!isFree && (
+                        <span className="pb-1 text-base text-slate-500">
+                          /{billing === "annual" ? "year" : "month"}
+                        </span>
                       )}
                     </div>
-                  </div>
 
-                  <div className="px-8 pb-2">
-                    <button
-                      onClick={() => handleSelect(plan)}
-                      disabled={isActive || isProcessing}
-                      className={`w-full py-4 text-base font-semibold rounded-md flex items-center justify-center gap-2 transition-all cursor-pointer
-                      ${isActive
-                          ? "bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200"
-                          : isProcessing
-                            ? "bg-yellow-100 text-yellow-700 cursor-not-allowed border border-yellow-200"
-                            : "bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] hover:from-[#FFCF33] hover:to-[#FFE680] text-gray-900 shadow-lg hover:shadow-xl"
-                        }`}
-                    >
-                      {isActive ? (
-                        <>
-                          <CheckCircle size={ICON.base} className={iconClass} />
-                          <span>Current Plan</span>
-                        </>
-                      ) : isProcessing ? (
-                        <>
-                          <Loader2 size={ICON.base} className={`${iconClass} animate-spin`} />
-                          <span>Processing…</span>
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard size={ICON.base} className={iconClass} />
-                          <span>{isFree ? "Start Free" : "Choose Plan"}</span>
-                        </>
-                      )}
-                    </button>
+                    {isFree && <p className="mt-1 text-sm text-slate-500">Free forever</p>}
 
                     {!isFree && billing === "annual" && (
-                      <p className="text-[11px] text-gray-500 text-center mt-2">
-                        Quotas reset monthly • Billing is annual
+                      <>
+                        <p className="mt-2 text-sm text-slate-500">
+                          {symbol}
+                          {Math.round((annualTotal > 0 ? annualTotal : plan.monthlyCost * 12) / 12).toLocaleString()}{" "}
+                          / month billed annually
+                          {plan.annualBillingNote ? ` • ${plan.annualBillingNote}` : ""}
+                        </p>
+                        {savings && (
+                          <p className="mt-2 text-sm font-semibold text-emerald-700">
+                            Save {savings.pct}% ({symbol}
+                            {Math.round(savings.amount).toLocaleString()} / year)
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    {!isFree && billing === "monthly" && annualTotal > 0 && (
+                      <p className="mt-2 text-sm text-slate-500">
+                        or {symbol}
+                        {annualTotal.toLocaleString()} / year
+                        {plan.annualBillingNote ? ` • ${plan.annualBillingNote}` : ""}
                       </p>
                     )}
+
+                    <Button
+                      onClick={() => handleSelect(plan)}
+                      disabled={isActive || isProcessing}
+                      className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a] hover:text-[#1a1a1a]"
+                      style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
+                      onMouseEnter={(e) => {
+                        if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
+                      }}
+                      onMouseLeave={(e) => {
+                        if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
+                      }}
+                    >
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4" /> Current Plan
+                        </span>
+                      ) : isProcessing ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Processing…
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <CreditCard className="h-4 w-4" />
+                          {copy.cta}
+                        </span>
+                      )}
+                    </Button>
                   </div>
 
-                  <div className="px-8 pt-5 pb-6 flex-1">
-                    <ul className="space-y-4">
-                      {features.map((f) => {
-                        const label = FEATURE_LABELS[f.key] || prettifyKey(f.key);
-                        const val = formatValue(f.key, f.value);
-                        const ok = isPositive(f.key, f.value);
+                  <div className="flex-1 border-t border-[#ece7f2] px-8 py-8">
+                    <div className="space-y-7">
+                      <div>
+                        <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Included Features
+                        </h4>
+                        <ul className="space-y-3">
+                          {features.map((f) => {
+                            const label = FEATURE_LABELS[f.key] || prettifyKey(f.key);
+                            const val = formatValue(f.key, f.value);
+                            const ok = isPositive(f.key, f.value);
 
-                        return (
-                          <li key={f.key} className="flex items-start gap-3">
-                            {ok ? (
-                              <CheckCircle size={ICON.base} className={`${iconClass} text-emerald-600 mt-0.5`} />
-                            ) : (
-                              <XCircle size={ICON.base} className={`${iconClass} text-red-500 mt-0.5`} />
-                            )}
-                            <div className="text-gray-700">
-                              <span className="font-medium">{label}:</span>{" "}
-                              <span className="font-semibold">{val}</span>
-                              {f.note && (
-                                <span className="ml-2 inline-flex items-center text-xs text-gray-500">
-                                  <Info size={ICON.base} className={`${iconClass} mr-1`} /> {f.note}
-                                </span>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
+                            return (
+                              <li
+                                key={f.key}
+                                className="flex items-start gap-3 text-[15px] leading-6 text-slate-700"
+                              >
+                                {ok ? (
+                                  <Check className="mt-1 h-4 w-4 flex-shrink-0 text-[#1a1a1a]" />
+                                ) : (
+                                  <XCircle className="mt-1 h-4 w-4 flex-shrink-0 text-rose-500" />
+                                )}
+                                <div>
+                                  <span className="font-medium">{label}:</span>{" "}
+                                  <span>{val}</span>
+                                  {f.note && (
+                                    <span className="ml-2 inline-flex items-center text-xs text-slate-500">
+                                      <Info className="mr-1 h-3.5 w-3.5" />
+                                      {f.note}
+                                    </span>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
 
                       {plan.addons && plan.addons.length > 0 && (
-                        <li className="mt-2">
-                          <div className="rounded-2xl border border-orange-200 bg-orange-50/50 p-4">
-                            <div className="flex items-center mb-2 text-orange-900 font-semibold">
-                              <Plus size={ICON.base} className={`${iconClass} mr-2`} /> Available Add-ons
-                            </div>
+                        <div>
+                          <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            Available Add-ons
+                          </h4>
+                          <div className="rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
                             <ul className="space-y-2">
                               {plan.addons.map((a) => {
                                 const symb = currencySym(a.currency);
                                 return (
-                                  <li key={a.key} className="text-sm text-orange-800">
-                                    <span className="font-medium">{a.name}</span>{" "}
-                                    <span className="opacity-80">
-                                      — {symb}
+                                  <li key={a.key} className="flex items-start gap-2 text-sm text-orange-900">
+                                    <Plus className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                                    <span>
+                                      <span className="font-medium">{a.name}</span> — {symb}
                                       {Number(a.price).toLocaleString()}{" "}
                                       {a.type === "one_time" ? "one-time" : "/mo"}
                                     </span>
@@ -827,72 +887,98 @@ export default function InfluencerSubscriptionPage() {
                               })}
                             </ul>
                           </div>
-                        </li>
+                        </div>
                       )}
-                    </ul>
+                    </div>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
 
-          <div className="text-center mt-12">
-            <p className="text-gray-600">
-              Questions about our plans?{" "}
-              <a
-                href="mailto:support@collabglam.com"
-                className="text-orange-600 hover:text-orange-700 font-medium underline"
-              >
-                Contact our support team
-              </a>
-            </p>
-            <p className="text-sm text-gray-500 mt-2">All plans include a 14-day money-back guarantee</p>
+          <div className="mt-12 rounded-[28px] border border-[#eadcf5] bg-white px-8 py-8 shadow-sm">
+            <h3 className="text-center text-xl font-bold text-[#250054]">All paid plans include</h3>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                "More campaign visibility",
+                "Flexible billing",
+                "Secure payments",
+                "Creator profile tools",
+                "Dedicated support",
+              ].map((item) => (
+                <div
+                  key={item}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-[#f0e8f7] bg-[#fcf8ff] px-4 py-4 text-center text-sm font-medium text-slate-700"
+                >
+                  <CheckCircle className="h-4 w-4 text-[#1a1a1a]" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
           </div>
+
+          <p className="mt-8 text-center text-sm text-slate-500">
+            Need details before upgrading? Review our{" "}
+            <Link
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#1a1a1a] underline underline-offset-4"
+            >
+              Terms of Service
+            </Link>
+            .
+          </p>
         </div>
 
-        {/* Downgrade modal */}
         {showDowngradeModal && selectedPlan && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowDowngradeModal(false)} />
-            <div className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden">
-              <div className="bg-orange-50 px-8 py-6 border-b border-orange-100">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 rounded-full">
-                      <AlertTriangle size={ICON.base} className={`${iconClass} text-orange-600`} />
+            <div
+              className="absolute inset-0 bg-slate-950/60"
+              onClick={() => setShowDowngradeModal(false)}
+            />
+            <div className="relative w-full max-w-2xl overflow-hidden rounded-[28px] border border-[#eadcf5] bg-white shadow-2xl">
+              <div className="border-b border-[#ece7f2] bg-[#fff7ed] px-8 py-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-orange-100 p-2">
+                      <AlertTriangle className="h-5 w-5 text-orange-600" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-gray-900">Before you change your plan…</h3>
-                      <p className="text-gray-600 mt-1">Some features may be reduced 😢</p>
+                      <h3 className="text-2xl font-bold text-[#250054]">Before you change your plan</h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Some features may be reduced when you move plans.
+                      </p>
                     </div>
                   </div>
-                  <button onClick={() => setShowDowngradeModal(false)} className="p-2 rounded-full hover:bg-white/50">
-                    <X size={ICON.base} className={`${iconClass} text-gray-500`} />
+                  <button
+                    onClick={() => setShowDowngradeModal(false)}
+                    className="rounded-full p-2 hover:bg-white"
+                  >
+                    <X className="h-5 w-5 text-slate-500" />
                   </button>
                 </div>
               </div>
 
-              <div className="px-8 py-6 space-y-6">
-                <p className="text-gray-700">
-                  Moving to <span className="font-semibold text-gray-900">{planTitle(selectedPlan)}</span> will reduce or remove
-                  some features:
+              <div className="space-y-5 px-8 py-6">
+                <p className="text-sm leading-7 text-slate-700">
+                  You are moving to{" "}
+                  <span className="font-semibold text-[#250054]">
+                    {selectedPlan.displayName || capitalize(selectedPlan.name)}
+                  </span>
+                  .
                 </p>
 
                 {featureLoss.length > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <XCircle size={ICON.base} className={`${iconClass} text-red-500`} />
-                      <p className="font-semibold text-red-900">You’ll lose access or limits will be reduced on:</p>
-                    </div>
-                    <ul className="space-y-3">
-                      {featureLoss.map((d) => (
-                        <li key={d.key} className="flex items-center gap-3">
-                          <div className="w-2 h-2 bg-red-400 rounded-full" />
-                          <span className="text-red-800">
-                            <span className="font-medium">{FEATURE_LABELS[d.key] || prettifyKey(d.key)}:</span>
-                            <span className="ml-2 font-semibold">{formatValue(d.key, d.from)}</span>
-                            <span className="mx-2 text-red-600">→</span>
-                            <span className="font-semibold">{formatValue(d.key, d.to)}</span>
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-5">
+                    <p className="font-semibold text-rose-800">Reduced allowances</p>
+                    <ul className="mt-3 space-y-2 text-sm text-rose-700">
+                      {featureLoss.map((item) => (
+                        <li key={item.key} className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-rose-400" />
+                          <span>
+                            {(FEATURE_LABELS[item.key] || prettifyKey(item.key))}:{" "}
+                            {formatValue(item.key, item.from)} → {formatValue(item.key, item.to)}
                           </span>
                         </li>
                       ))}
@@ -900,69 +986,43 @@ export default function InfluencerSubscriptionPage() {
                   </div>
                 )}
 
-                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6">
-                  <div className="flex items-start gap-3">
-                    <Heart size={ICON.base} className={`${iconClass} text-orange-500 mt-0.5`} />
-                    <div>
-                      <p className="text-orange-900 font-medium mb-2">We’d love to keep you!</p>
-                      <p className="text-orange-800 text-sm">
-                        Need a custom plan, a pause, or a startup discount? Email{" "}
-                        <a
-                          className="inline-flex items-center gap-1 font-semibold underline hover:text-orange-900"
-                          href="mailto:support@collabglam.com?subject=Plan%20change%20help"
-                        >
-                          <Mail size={ICON.base} className={iconClass} />
-                          <span>support@collabglam.com</span>
-                        </a>
-                      </p>
-                    </div>
-                  </div>
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-5 text-sm text-orange-900">
+                  Need a better fit instead? Email{" "}
+                  <a href="mailto:support@collabglam.com" className="font-semibold underline">
+                    support@collabglam.com
+                  </a>
+                  .
                 </div>
 
-                <div>
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700 mb-2 block">
-                      Type <span className="font-bold text-gray-900">CANCEL</span> to confirm
-                    </span>
-                    <input
-                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none"
-                      placeholder="Type CANCEL here..."
-                      value={confirmText}
-                      onChange={(e) => setConfirmText(e.target.value)}
-                    />
-                  </label>
-                </div>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Type CANCEL to confirm</span>
+                  <input
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-[#1a1a1a]"
+                  />
+                </label>
               </div>
 
-              <div className="bg-gray-50 px-8 py-6 flex flex-col sm:flex-row gap-3 justify-end">
+              <div className="flex flex-col justify-end gap-3 border-t border-[#ece7f2] bg-slate-50 px-8 py-5 sm:flex-row">
                 <button
                   onClick={() => setShowDowngradeModal(false)}
-                  className="px-6 py-3 rounded-xl bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-800 font-semibold"
-                  disabled={confirming}
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700"
                 >
-                  Keep my current plan
+                  Keep Current Plan
                 </button>
                 <button
                   onClick={handleConfirmDowngrade}
                   disabled={confirmText.trim().toUpperCase() !== "CANCEL" || confirming}
-                  className={`px-6 py-3 rounded-xl font-semibold text-white transition-colors ${confirmText.trim().toUpperCase() === "CANCEL" && !confirming
-                      ? "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF7236] hover:to-[#FFA135] shadow-lg"
-                      : "bg-gray-400 cursor-not-allowed"
-                    }`}
+                  className="rounded-xl bg-gradient-to-r from-orange-500 via-pink-500 to-fuchsia-500 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {confirming ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 size={ICON.base} className={`${iconClass} animate-spin`} /> Applying…
-                    </span>
-                  ) : (
-                    "Confirm change"
-                  )}
+                  {confirming ? "Applying…" : "Confirm Change"}
                 </button>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </section>
     </>
   );
 }

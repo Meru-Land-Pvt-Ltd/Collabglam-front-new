@@ -773,7 +773,7 @@ export async function apiBrandWalletTopup(payload: BrandWalletTopupPayload) {
     brandId: payload.brandId,
     campaignId: payload.campaignId,
     amount: payload.amount,
-    currency: payload.currency ?? "inr",
+    currency: payload.currency ?? "usd",
     successUrl: payload.successUrl,
     cancelUrl: payload.cancelUrl,
   });
