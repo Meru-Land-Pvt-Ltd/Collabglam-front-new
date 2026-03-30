@@ -72,6 +72,12 @@ export const ADMIN_MODULES: AdminModule[] = [
     href: "/admin/influencers",
     icon: Users,
   },
+    {
+    key: "pitch-folders",
+    label: "Pitch Folders",
+    href: "/admin/pitch-folders",
+    icon: GitBranch,
+  },
   {
     key: "brand-pipeline",
     label: "Brand Pipeline",
@@ -243,6 +249,7 @@ export const ROLE_PERMISSION_SECTIONS: AdminPermissionSection[] = [
     items: [
       "influencers",
       "influencer-pipeline",
+      "pitch-folders",
       "influencer-data",
       "influencerdetails",
       "invitedInfluencer",
