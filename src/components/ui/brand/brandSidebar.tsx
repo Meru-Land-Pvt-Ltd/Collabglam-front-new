@@ -468,6 +468,10 @@ export default function BrandSidebar({
     [planName]
   );
 
+  const isFullyManagedPlan = useMemo(() => {
+  return normalizedPlanName === "fully_managed";
+}, [normalizedPlanName]);
+
   const isPaidPlan = useMemo(() => {
     if (!normalizedPlanName) return false;
     return !["free", "basic", "trial"].includes(normalizedPlanName);
@@ -541,10 +545,17 @@ export default function BrandSidebar({
     []
   );
 
-  const dashboardItems = useMemo(
-    () => items.filter((i) => i.section === "dashboard"),
-    [items]
-  );
+const dashboardItems = useMemo(() => {
+  return items.filter((i) => {
+    if (i.section !== "dashboard") return false;
+
+    if (isFullyManagedPlan && (i.key === "browse" || i.key === "inbox")) {
+      return false;
+    }
+
+    return true;
+  });
+}, [items, isFullyManagedPlan]);
 
   const manageItems = useMemo(
     () => items.filter((i) => i.section === "manage"),
