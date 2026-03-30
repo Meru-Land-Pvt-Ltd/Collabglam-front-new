@@ -1563,3 +1563,28 @@ export async function apiDeletePaymentDetails(
     }
   );
 }
+
+export type LiteInfluencerResponse = {
+  influencerId: string;
+  name: string;
+  email: string;
+};
+
+export async function apiGetLiteInfluencerById(
+  influencerId: string,
+  token?: string
+) {
+  if (!influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<LiteInfluencerResponse>(
+    `${INFLUENCER_BASE}/lite`,
+    { influencerId },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}

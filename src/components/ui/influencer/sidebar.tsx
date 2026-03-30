@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AnimatePresence,
   LazyMotion,
@@ -15,12 +15,14 @@ import { cn } from "@/lib/utils";
 
 import {
   CardsThree,
+  DotsThree,
   EnvelopeSimpleIcon,
   Gear,
   ImageIcon,
   PaperPlaneTilt,
   Question,
   RocketLaunchIcon,
+  SignOut,
   SuitcaseIcon,
   UserIcon,
   WalletIcon,
@@ -90,6 +92,12 @@ type PayoutSummary = {
   totalInitiated: number;
 };
 
+type InfluencerProfile = {
+  name?: string;
+  email?: string;
+  profileImage?: string;
+};
+
 export type InfluencerSidebarProps = {
   drawerOpen?: boolean;
   setDrawerOpen?: (open: boolean) => void;
@@ -98,11 +106,10 @@ export type InfluencerSidebarProps = {
   messagesBadge?: React.ReactNode;
   influencerId?: string;
   token?: string;
+  onLogout?: () => void;
 };
 
 /* ------------------------------ api helper ------------------------------ */
-/* Replace this import with your real api import if already available */
-// import { apiGetInfluencerPayoutSummary } from "@/lib/api/your-file";
 
 async function apiGetInfluencerPayoutSummary(
   influencerId: string,
@@ -119,6 +126,26 @@ async function apiGetInfluencerPayoutSummary(
 
   if (!res.ok) {
     throw new Error("Failed to fetch influencer payout summary");
+  }
+
+  return res.json();
+}
+
+async function apiGetInfluencerProfile(
+  influencerId: string,
+  token?: string
+): Promise<InfluencerProfile> {
+  const res = await fetch("/api/get-influencer-profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ influencerId }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch influencer profile");
   }
 
   return res.json();
@@ -320,6 +347,50 @@ function WalletSummary({
   );
 }
 
+function ProfileMenu({
+  open,
+  onClose,
+  onProfile,
+  onLogout,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onProfile: () => void;
+  onLogout: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="absolute bottom-[68px] right-0 z-[120] w-[200px] rounded-[18px] border border-neutral-200 bg-white p-3 shadow-[0_12px_30px_rgba(0,0,0,0.08)]">
+      <button
+        type="button"
+        onClick={() => {
+          onProfile();
+          onClose();
+        }}
+        className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-[#222] transition hover:bg-neutral-50"
+      >
+        <UserIcon size={20} weight="regular" />
+        <span className="text-[14px] font-medium">Profile</span>
+      </button>
+
+      <div className="my-2.5 h-px w-full bg-neutral-200" />
+
+      <button
+        type="button"
+        onClick={() => {
+          onLogout();
+          onClose();
+        }}
+        className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-[#F04E3E] transition hover:bg-red-50"
+      >
+        <SignOut size={20} weight="regular" />
+        <span className="text-[14px] font-medium">Logout</span>
+      </button>
+    </div>
+  );
+}
+
 /* -------------------------------- sidebar -------------------------------- */
 
 export default function Sidebar({
@@ -330,28 +401,34 @@ export default function Sidebar({
   messagesBadge,
   influencerId,
   token,
+  onLogout,
 }: InfluencerSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
 
-  // breakpoints
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const isXl = useMediaQuery("(min-width: 1280px)");
   const isShort = useMediaQuery("(max-height: 800px)");
   const vw = useViewportWidth();
 
-  // wallet state
   const [payoutSummary, setPayoutSummary] = useState<PayoutSummary | null>(null);
+  const [profileData, setProfileData] = useState<InfluencerProfile | null>(null);
 
-  // sidebar state
   const [active, setActive] = useState<string>("");
   const [collapsed, setCollapsed] = useState(true);
   const [widthCollapsed, setWidthCollapsed] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
   const [drawerOpenInternal, setDrawerOpenInternal] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const drawerOpen = drawerOpenProp ?? drawerOpenInternal;
+
+  const profileName = profileData?.name || "Profile";
+  const profileEmail = profileData?.email || "";
+  const profileImage = profileData?.profileImage || "";
 
   const setDrawerOpen = useCallback(
     (open: boolean) => {
@@ -360,6 +437,23 @@ export default function Sidebar({
     },
     [setDrawerOpenProp]
   );
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!profileMenuRef.current) return;
+      if (!profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+
+    if (profileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [profileMenuOpen]);
 
   useEffect(() => {
     const loadPayoutSummary = async () => {
@@ -373,6 +467,20 @@ export default function Sidebar({
     };
 
     loadPayoutSummary();
+  }, [influencerId, token]);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        if (!influencerId?.trim()) return;
+        const res = await apiGetInfluencerProfile(influencerId, token);
+        setProfileData(res);
+      } catch (error) {
+        console.error("Failed to load influencer profile:", error);
+      }
+    };
+
+    loadProfile();
   }, [influencerId, token]);
 
   const items = useMemo<Item[]>(
@@ -434,33 +542,19 @@ export default function Sidebar({
         section: "main",
         href: "/influencer/media-kit",
       },
-      {
-        key: "profile",
-        label: "Profile",
-        icon: UserIcon,
-        section: "main",
-        href: "/influencer/profile",
-      },
       // {
-      //   key: "boost-profile",
-      //   label: "Boost Profile",
-      //   icon: RocketLaunchIcon,
+      //   key: "profile",
+      //   label: "Profile",
+      //   icon: UserIcon,
       //   section: "main",
-      //   href: "/influencer/boost-profile",
-      // },
-      // {
-      //   key: "settings",
-      //   label: "Settings",
-      //   icon: Gear,
-      //   section: "footer",
-      //   href: "/influencer/settings",
+      //   href: "/influencer/profile",
       // },
       {
         key: "support",
         label: "Help",
         icon: Question,
         section: "footer",
-        href: "/influencer/support-centre",
+        href: "/influencer/support-center",
       },
     ],
     [campaignBadge, appliedBadge, messagesBadge]
@@ -544,7 +638,20 @@ export default function Sidebar({
   const beginCloseDesktop = useCallback(() => {
     setIsClosing(true);
     setWidthCollapsed(true);
+    setProfileMenuOpen(false);
   }, []);
+
+  const handleLogout = useCallback(() => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userId");
+    router.push("/influencer/login");
+  }, [onLogout, router]);
 
   const collapsedW = isXl ? 92 : 84;
   const expandedW = isXl ? 320 : 280;
@@ -605,15 +712,111 @@ export default function Sidebar({
         />
       );
     },
-    [
-      active,
-      collapsed,
-      handleSetActive,
-      isClosing,
-      isDesktop,
-      tight,
-      payoutSummary,
-    ]
+    [active, collapsed, handleSetActive, isClosing, isDesktop, tight]
+  );
+
+  const BottomProfileSection = (
+    <div className="relative mt-auto pt-4" ref={profileMenuRef}>
+      <div className="mb-3 h-px w-full bg-neutral-200" />
+
+      {isDesktop && collapsed ? (
+        <div className="flex flex-col items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/influencer/profile")}
+            className={cn(
+              "grid h-12 w-12 place-items-center rounded-full border border-neutral-200 bg-white transition hover:bg-neutral-50",
+              FOCUS_RING
+            )}
+            title="Profile"
+            aria-label="Profile"
+          >
+            {profileImage ? (
+              <img
+                src={profileImage}
+                alt={profileName}
+                className="h-12 w-12 rounded-full object-cover"
+              />
+            ) : (
+              <UserIcon size={22} weight="regular" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setProfileMenuOpen((prev) => !prev)}
+            className={cn(
+              "grid h-12 w-12 place-items-center rounded-full bg-neutral-100 transition hover:bg-neutral-200",
+              FOCUS_RING
+            )}
+            title="Open profile menu"
+            aria-label="Open profile menu"
+          >
+            <DotsThree size={22} weight="bold" />
+          </button>
+
+          <ProfileMenu
+            open={profileMenuOpen}
+            onClose={() => setProfileMenuOpen(false)}
+            onProfile={() => router.push("/influencer/profile")}
+            onLogout={handleLogout}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-3 rounded-2xl px-2 py-2">
+            <button
+              type="button"
+              onClick={() => router.push("/influencer/profile")}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            >
+              <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-neutral-100">
+                {profileImage ? (
+                  <img
+                    src={profileImage}
+                    alt={profileName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="grid h-full w-full place-items-center">
+                    <UserIcon size={22} weight="regular" />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[18px] font-semibold text-[#1a1a1a]">
+                  {profileName}
+                </div>
+                <div className="truncate text-[14px] text-neutral-400">
+                  {profileEmail}
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((prev) => !prev)}
+              className={cn(
+                "grid h-12 w-12 flex-shrink-0 place-items-center rounded-full bg-neutral-100 transition hover:bg-neutral-200",
+                FOCUS_RING
+              )}
+              title="Open profile menu"
+              aria-label="Open profile menu"
+            >
+              <DotsThree size={22} weight="bold" />
+            </button>
+          </div>
+
+          <ProfileMenu
+            open={profileMenuOpen}
+            onClose={() => setProfileMenuOpen(false)}
+            onProfile={() => router.push("/influencer/profile")}
+            onLogout={handleLogout}
+          />
+        </>
+      )}
+    </div>
   );
 
   const SidebarBody = (
@@ -741,6 +944,8 @@ export default function Sidebar({
             {footerItems.map((i) => renderItem(i))}
           </div>
         </div>
+
+        {BottomProfileSection}
       </div>
     </div>
   );
