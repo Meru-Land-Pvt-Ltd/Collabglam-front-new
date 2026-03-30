@@ -15,15 +15,9 @@ import { cn } from "@/lib/utils";
 
 import {
   CardsThree,
-  ChatCenteredText,
-  DotsThree,
   EnvelopeSimpleIcon,
   Gear,
-  HandshakeIcon,
   ImageIcon,
-  Lightning,
-  Money,
-  PackageIcon,
   PaperPlaneTilt,
   Question,
   RocketLaunchIcon,
@@ -89,36 +83,46 @@ type Item = {
   right?: React.ReactNode;
 };
 
+type PayoutSummary = {
+  influencerId: string;
+  totalPaid: number;
+  totalUpcoming: number;
+  totalInitiated: number;
+};
+
 export type InfluencerSidebarProps = {
   drawerOpen?: boolean;
   setDrawerOpen?: (open: boolean) => void;
   campaignBadge?: React.ReactNode;
   appliedBadge?: React.ReactNode;
   messagesBadge?: React.ReactNode;
+  influencerId?: string;
+  token?: string;
 };
 
-/* ------------------------------ constants ------------------------------ */
+/* ------------------------------ api helper ------------------------------ */
+/* Replace this import with your real api import if already available */
+// import { apiGetInfluencerPayoutSummary } from "@/lib/api/your-file";
 
-const UPGRADE_REST =
-  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.30) 31%, rgba(255, 255, 255, 0.50) 100%)";
+async function apiGetInfluencerPayoutSummary(
+  influencerId: string,
+  token?: string
+): Promise<PayoutSummary> {
+  const res = await fetch("/api/influencer-payout-summary", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ influencerId }),
+  });
 
-const UPGRADE_HOVER =
-  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 8%, rgba(255, 191, 0, 0.40) 51%, rgba(255, 255, 255, 0.50) 100%)";
+  if (!res.ok) {
+    throw new Error("Failed to fetch influencer payout summary");
+  }
 
-const UPGRADE_COLLAPSED =
-  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.40) 31%, rgba(255, 255, 255, 0.50) 80%)";
-
-const upgradeSpring: Transition = {
-  type: "spring",
-  mass: 1,
-  stiffness: 100,
-  damping: 15,
-};
-
-const upgradeShellStyle: React.CSSProperties = {
-  borderRadius: "var(--Spacing-8, 8px)",
-  border: "1.5px solid var(--Neutrals-75, #F5F5F5)",
-};
+  return res.json();
+}
 
 /* ------------------------------ small components ------------------------------ */
 
@@ -239,7 +243,9 @@ const RowButton = React.memo(function RowButton({
         className={cn(
           tight ? "text-[13px]" : "text-[14px]",
           "leading-5 whitespace-nowrap text-current",
-          hideLabel ? "opacity-0 w-0 overflow-hidden pointer-events-none" : "opacity-100"
+          hideLabel
+            ? "opacity-0 w-0 overflow-hidden pointer-events-none"
+            : "opacity-100"
         )}
         style={{ transition: "opacity 180ms ease, width 180ms ease" }}
       >
@@ -250,7 +256,9 @@ const RowButton = React.memo(function RowButton({
         <span
           className={cn(
             "ml-auto inline-flex items-center whitespace-nowrap text-current",
-            hideLabel ? "opacity-0 w-0 overflow-hidden pointer-events-none" : "opacity-100"
+            hideLabel
+              ? "opacity-0 w-0 overflow-hidden pointer-events-none"
+              : "opacity-100"
           )}
           style={{ transition: "opacity 180ms ease, width 180ms ease" }}
         >
@@ -269,6 +277,49 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
+function WalletSummary({
+  summary,
+  hideLabel,
+}: {
+  summary: PayoutSummary | null;
+  hideLabel?: boolean;
+}) {
+  if (!summary || hideLabel) return null;
+
+  const balance =
+    Number(summary.totalPaid || 0) +
+    Number(summary.totalUpcoming || 0) +
+    Number(summary.totalInitiated || 0);
+
+  return (
+    <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3">
+      <div className="mb-3">
+        <p className="text-[12px] text-neutral-500">Balance</p>
+        <p className="text-[20px] font-semibold text-[#1a1a1a]">₹{balance}</p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-neutral-600">Paid</span>
+          <span className="font-medium text-[#1a1a1a]">₹{summary.totalPaid}</span>
+        </div>
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-neutral-600">Upcoming</span>
+          <span className="font-medium text-[#1a1a1a]">
+            ₹{summary.totalUpcoming}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-neutral-600">Initiated</span>
+          <span className="font-medium text-[#1a1a1a]">
+            ₹{summary.totalInitiated}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------- sidebar -------------------------------- */
 
 export default function Sidebar({
@@ -277,6 +328,8 @@ export default function Sidebar({
   campaignBadge,
   appliedBadge,
   messagesBadge,
+  influencerId,
+  token,
 }: InfluencerSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -288,7 +341,10 @@ export default function Sidebar({
   const isShort = useMediaQuery("(max-height: 800px)");
   const vw = useViewportWidth();
 
-  // state
+  // wallet state
+  const [payoutSummary, setPayoutSummary] = useState<PayoutSummary | null>(null);
+
+  // sidebar state
   const [active, setActive] = useState<string>("");
   const [collapsed, setCollapsed] = useState(true);
   const [widthCollapsed, setWidthCollapsed] = useState(true);
@@ -305,7 +361,20 @@ export default function Sidebar({
     [setDrawerOpenProp]
   );
 
-  // ── 1. items declared FIRST so everything below can reference it ──
+  useEffect(() => {
+    const loadPayoutSummary = async () => {
+      try {
+        if (!influencerId?.trim()) return;
+        const res = await apiGetInfluencerPayoutSummary(influencerId, token);
+        setPayoutSummary(res);
+      } catch (error) {
+        console.error("Failed to load payout summary:", error);
+      }
+    };
+
+    loadPayoutSummary();
+  }, [influencerId, token]);
+
   const items = useMemo<Item[]>(
     () => [
       {
@@ -321,7 +390,8 @@ export default function Sidebar({
         icon: Megaphone,
         section: "main",
         href: "/influencer/discover-campaigns",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+        right:
+          campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
       },
       {
         key: "invitations",
@@ -329,7 +399,8 @@ export default function Sidebar({
         icon: EnvelopeSimpleIcon,
         section: "main",
         href: "/influencer/invitations",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+        right:
+          campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
       },
       {
         key: "my-campaigns",
@@ -337,22 +408,17 @@ export default function Sidebar({
         icon: SuitcaseIcon,
         section: "main",
         href: "/influencer/my-campaigns",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+        right:
+          appliedBadge != null ? <Badge>{appliedBadge}</Badge> : undefined,
       },
-      // {
-      //   key: "earnings",
-      //   label: "Earnings",
-      //   icon: Money,
-      //   section: "main",
-      //   href: "/influencer/earnings",
-      // },
       {
         key: "messages",
         label: "Inbox",
         icon: PaperPlaneTilt,
         section: "main",
         href: "/influencer/inbox",
-        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
+        right:
+          messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
       },
       {
         key: "wallet-payments",
@@ -370,28 +436,28 @@ export default function Sidebar({
       },
       {
         key: "profile",
-        label: "Profile & Rate card",
+        label: "Profile",
         icon: UserIcon,
         section: "main",
         href: "/influencer/profile",
       },
-      {
-        key: "boost-profile",
-        label: "Boost Profile",
-        icon: RocketLaunchIcon,
-        section: "main",
-        href: "/influencer/boost-profile",
-      },
-      {
-        key: "settings",
-        label: "Settings",
-        icon: Gear,
-        section: "footer",
-        href: "/influencer/settings",
-      },
+      // {
+      //   key: "boost-profile",
+      //   label: "Boost Profile",
+      //   icon: RocketLaunchIcon,
+      //   section: "main",
+      //   href: "/influencer/boost-profile",
+      // },
+      // {
+      //   key: "settings",
+      //   label: "Settings",
+      //   icon: Gear,
+      //   section: "footer",
+      //   href: "/influencer/settings",
+      // },
       {
         key: "support",
-        label: "Support",
+        label: "Help",
         icon: Question,
         section: "footer",
         href: "/influencer/support-center",
@@ -400,11 +466,15 @@ export default function Sidebar({
     [campaignBadge, appliedBadge, messagesBadge]
   );
 
-  // ── 2. derived from items ──
-  const mainItems = useMemo(() => items.filter((i) => i.section === "main"), [items]);
-  const footerItems = useMemo(() => items.filter((i) => i.section === "footer"), [items]);
+  const mainItems = useMemo(
+    () => items.filter((i) => i.section === "main"),
+    [items]
+  );
+  const footerItems = useMemo(
+    () => items.filter((i) => i.section === "footer"),
+    [items]
+  );
 
-  // ── 3. useEffect that uses items ──
   useEffect(() => {
     const p = pathname || "";
     const matched = items.find(
@@ -413,7 +483,6 @@ export default function Sidebar({
     setActive(matched?.key ?? "dashboard");
   }, [pathname, items]);
 
-  // ── 4. desktop/mobile layout effect ──
   useEffect(() => {
     if (isDesktop) {
       setDrawerOpen(false);
@@ -429,7 +498,6 @@ export default function Sidebar({
 
   const compactUI = isDesktop ? collapsed || isClosing : false;
   const tight = isShort;
-  const showCollapsedFooter = isDesktop && (collapsed || isClosing || widthCollapsed);
 
   const motionTransitions = useMemo(() => {
     const content: Transition = reduceMotion
@@ -456,7 +524,6 @@ export default function Sidebar({
     []
   );
 
-  // ── 5. callbacks that use items ──
   const handleSetActive = useCallback(
     (key: string) => {
       const item = items.find((x) => x.key === key);
@@ -479,7 +546,6 @@ export default function Sidebar({
     setWidthCollapsed(true);
   }, []);
 
-  // widths
   const collapsedW = isXl ? 92 : 84;
   const expandedW = isXl ? 320 : 280;
 
@@ -493,6 +559,7 @@ export default function Sidebar({
     (i: Item) => {
       const Icon = i.icon;
       const isActiveItem = active === i.key;
+      const isWalletItem = i.key === "wallet-payments";
 
       if (isDesktop && collapsed) {
         return (
@@ -509,6 +576,22 @@ export default function Sidebar({
         );
       }
 
+      if (isWalletItem) {
+        return (
+          <div key={i.key} className="w-full">
+            <RowButton
+              icon={i.icon}
+              label={i.label}
+              right={i.right}
+              active={isActiveItem}
+              hideLabel={isDesktop ? isClosing : false}
+              tight={tight}
+              onClick={() => handleSetActive(i.key)}
+            />
+          </div>
+        );
+      }
+
       return (
         <RowButton
           key={i.key}
@@ -522,12 +605,19 @@ export default function Sidebar({
         />
       );
     },
-    [active, collapsed, handleSetActive, isClosing, isDesktop, tight]
+    [
+      active,
+      collapsed,
+      handleSetActive,
+      isClosing,
+      isDesktop,
+      tight,
+      payoutSummary,
+    ]
   );
 
   const SidebarBody = (
     <div className="flex h-full flex-col">
-      {/* TOP */}
       <div className={cn("flex flex-col", tight ? "gap-3" : "gap-4")}>
         <div
           className={cn(
@@ -535,13 +625,12 @@ export default function Sidebar({
             isDesktop && (collapsed || isClosing) ? "flex-col gap-3" : "gap-3"
           )}
         >
-          {/* Logo */}
           <button
             type="button"
             onClick={() => {
               if (isDesktop) {
                 if (collapsed || isClosing) beginOpenDesktop();
-                else router.push("/influencer/dashboard");
+                else router.push("/influencer/dashboards");
               } else {
                 setDrawerOpen(true);
               }
@@ -561,7 +650,6 @@ export default function Sidebar({
             />
           </button>
 
-          {/* Brand text */}
           <AnimatePresence initial={false}>
             {!compactUI && (
               <m.div
@@ -588,7 +676,6 @@ export default function Sidebar({
             )}
           </AnimatePresence>
 
-          {/* Collapse (desktop) / Close (mobile) */}
           {isDesktop ? (
             <button
               type="button"
@@ -605,7 +692,11 @@ export default function Sidebar({
                 collapsed || isClosing ? "" : "ml-auto"
               )}
             >
-              {collapsed ? <PanelCaretGlyph dir="right" /> : <PanelCaretGlyph dir="left" />}
+              {collapsed ? (
+                <PanelCaretGlyph dir="right" />
+              ) : (
+                <PanelCaretGlyph dir="left" />
+              )}
             </button>
           ) : (
             <button
@@ -625,7 +716,6 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* NAV */}
       <div className={cn("mt-6 flex min-h-0 flex-1 flex-col", tight ? "mt-4" : "")}>
         <div
           className={cn(
@@ -646,6 +736,7 @@ export default function Sidebar({
               tight ? "my-4" : ""
             )}
           />
+
           <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "gap-2 w-full")}>
             {footerItems.map((i) => renderItem(i))}
           </div>
@@ -658,9 +749,7 @@ export default function Sidebar({
     <m.aside
       data-cg-sidebar
       id="cg-sidebar"
-      className={cn(
-        "inline-flex flex-col border border-neutral-200 bg-white select-none h-dvh"
-      )}
+      className="inline-flex h-dvh flex-col border border-neutral-200 bg-white select-none"
       style={{
         padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",
         fontFamily: "var(--Font-Family-Inter, Inter)",
@@ -684,7 +773,6 @@ export default function Sidebar({
     <AnimatePresence>
       {drawerOpen ? (
         <>
-          {/* Backdrop */}
           <m.button
             type="button"
             aria-label="Close menu"
@@ -696,14 +784,10 @@ export default function Sidebar({
             onClick={() => setDrawerOpen(false)}
           />
 
-          {/* Drawer */}
           <m.aside
             data-cg-sidebar
             id="cg-sidebar"
-            className={cn(
-              "fixed left-0 top-0 bottom-0 z-[100]",
-              "border-r border-neutral-200 bg-white select-none"
-            )}
+            className="fixed left-0 top-0 bottom-0 z-[100] border-r border-neutral-200 bg-white select-none"
             style={{
               width: mobileW,
               padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",
