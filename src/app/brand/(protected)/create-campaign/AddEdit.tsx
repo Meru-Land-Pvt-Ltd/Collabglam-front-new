@@ -457,8 +457,22 @@ async function buildCreateAIPayload(form: CampaignForm, opts?: { saveDraft?: boo
     saveDraft: opts?.saveDraft ?? false,
   };
 }
+/* ============================================================================
+   ✅ Helpers
+============================================================================ */
+async function mergeProductImages(
+  newFiles: File[] = [],
+  savedImages: SavedProductImage[] = []
+) {
+  const newImages = await filesToDataUrls(newFiles);
+  return [...savedImages, ...newImages];
+}
 
-function buildCreateManualPayload(form: ManualForm, includeFiles: boolean) {
+function buildCreateManualPayload(
+  form: ManualForm,
+  includeFiles: boolean,
+  savedProductImages: SavedProductImage[] = []
+) {
   const brandId = getBrandId();
 
   const base: CreateCampaignManualPayload = {
@@ -500,7 +514,7 @@ function buildCreateManualPayload(form: ManualForm, includeFiles: boolean) {
   if (!includeFiles) return base;
 
   return (async () => {
-    const productImages = await filesToDataUrls(form.productFiles ?? []);
+    const productImages = await mergeProductImages(form.productFiles ?? [], savedProductImages);
     return { ...base, productImages };
   })();
 }
@@ -525,10 +539,7 @@ async function buildEditDraftPayload(
     subcategoryIds: form.subcategories,
     productLink: form.productLink.trim(),
 
-    productImages: [
-      ...savedProductImages,
-      ...newImages,
-    ],
+    productImages: newImages.length || savedProductImages.length ? [...savedProductImages, ...newImages] : undefined,
 
     campaignGoals: form.goals,
     influencerTierIds: form.influencerTier,
@@ -552,8 +563,13 @@ async function buildEditDraftPayload(
 /* ============================================================================
    ✅ Validation
 ============================================================================ */
-function validateManualForm(args: { form: ManualForm; dateOk: boolean; blockingFileErrors: string[] }) {
-  const { form, dateOk, blockingFileErrors } = args;
+function validateManualForm(args: {
+  form: ManualForm;
+  dateOk: boolean;
+  blockingFileErrors: string[];
+  savedProductImageCount?: number;
+}) {
+  const { form, dateOk, blockingFileErrors, savedProductImageCount = 0 } = args;
   const e: Record<string, string> = {};
 
   if (!form.title.trim()) e.title = "Campaign title is required.";
@@ -566,7 +582,8 @@ function validateManualForm(args: { form: ManualForm; dateOk: boolean; blockingF
   if (!form.targetCountry?.length) e.targetCountry = "Select at least 1 country.";
   if (!form.targetAgeGroups?.length) e.targetAgeGroups = "Select at least 1 age group.";
 
-  if (!form.productFiles?.length) e.productFiles = "Upload at least 1 product image/file.";
+  const totalProductImages = (form.productFiles?.length ?? 0) + savedProductImageCount;
+  if (!totalProductImages) e.productFiles = "Upload at least 1 product image/file.";
   if (blockingFileErrors?.length) e.productFiles = blockingFileErrors[0];
 
   if (!form.paymentType.trim()) e.paymentType = "Payment type is required.";
@@ -759,40 +776,41 @@ function CreateByAIScreen({
     try {
       const payload = await buildCreateAIPayload(form, { saveDraft: false });
       const res: any = await apiCampaignPrefillAI(payload);
+
       const pseudoDoc = {
-        ...res.prefill,
-        details: res.prefillDetails,
+        ...(res?.prefill ?? {}),
+        details: res?.prefillDetails ?? res?.details ?? null,
         byAi: 1,
         status: "draft",
       };
 
-      onCreated(pseudoDoc as any);
-      toastSuccess("AI prefilled", "We filled the manual form. Review and publish.");
+      return pseudoDoc as EnrichedCampaignDoc;
     } catch (e) {
       pushAiError("Failed to create draft", e);
-      return false;
+      return null;
     } finally {
       setSubmitting(false);
     }
-  }, [form, onCreated, pushAiError]);
+  }, [form, pushAiError]);
 
   const handleContinue = useCallback(async () => {
     setSubmitAttempted(true);
     if (!canContinueAI || submitting) return;
 
-    onSwitchToManual();
     setShowSparkle(true);
 
     try {
-      const res = await submitAI();
-      if (res === false) throw new Error("submitAI failed");
-      setShowSparkle(false);
+      const doc = await submitAI();
+      if (!doc) throw new Error("submitAI failed");
+
+      onCreated(doc);
+      toastSuccess("AI prefilled", "We filled the manual form. Review and publish.");
     } catch (err) {
       console.error("submitAI error:", err);
+    } finally {
       setShowSparkle(false);
-      onBack();
     }
-  }, [canContinueAI, submitting, submitAI, onSwitchToManual, onBack, setShowSparkle]);
+  }, [canContinueAI, submitting, submitAI, onCreated, setShowSparkle]);
 
   const bottomBarMaxW = maxWidth + 140;
 
@@ -1434,7 +1452,11 @@ function CreateManualScreen({
       setForm(next);
 
       if (nextCategoryId) {
-        categoryPicker.hydrateSelectedCategory({ id: nextCategoryId, name: nextCategoryName || "Selected category" });
+        categoryPicker.selectCategoryId(nextCategoryId);
+        categoryPicker.hydrateSelectedCategory({
+          id: nextCategoryId,
+          name: nextCategoryName || "Selected category",
+        });
       }
 
       setApiError("");
@@ -1604,6 +1626,8 @@ function CreateManualScreen({
   const datesFilled = !!form.startDate && !!form.endDate;
 
   const progress = useMemo(() => {
+    const totalProductImages = (form.productFiles?.length ?? 0) + savedProductImages.length;
+
     const checks = [
       form.title.trim().length > 0,
       form.description.trim().length > 49,
@@ -1621,10 +1645,11 @@ function CreateManualScreen({
       form.endDate.trim().length > 0,
       Number(form.campaignBudget || 0) > 0,
       datesFilled && dateOk,
-      (form.productFiles?.length || 0) > 0 && productFileErrors.length === 0,
+      totalProductImages > 0 && productFileErrors.length === 0,
     ];
+
     return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [form, dateOk, datesFilled, productFileErrors.length]);
+  }, [form, dateOk, datesFilled, productFileErrors.length, savedProductImages.length]);
 
   const effectivePreviewWidth = useResponsivePreviewWidth({
     desiredPx: previewWidth,
@@ -1684,8 +1709,11 @@ function CreateManualScreen({
 
     try {
       if (!campaignId) {
-        const createBase = await buildCreateManualPayload(form, true);
-        const res = await apiCampaignCreate({ ...(createBase as CreateCampaignManualPayload), status: "draft" as CampaignStatus });
+        const createBase = await buildCreateManualPayload(form, true, savedProductImages);
+        const res = await apiCampaignCreate({
+          ...(createBase as CreateCampaignManualPayload),
+          status: "draft" as CampaignStatus,
+        });
 
         const id = pickCampaignId(res);
         if (id) setCampaignId(id);
@@ -1722,7 +1750,16 @@ function CreateManualScreen({
     };
   }, []);
 
-  const manualErrors = useMemo(() => validateManualForm({ form, dateOk, blockingFileErrors: productFileErrors }), [form, dateOk, productFileErrors]);
+  const manualErrors = useMemo(
+    () =>
+      validateManualForm({
+        form,
+        dateOk,
+        blockingFileErrors: productFileErrors,
+        savedProductImageCount: savedProductImages.length,
+      }),
+    [form, dateOk, productFileErrors, savedProductImages.length]
+  );
 
   const combinedErrors = useMemo(() => {
     return { ...manualErrors, ...(serverFieldErrors || {}) };
@@ -1737,7 +1774,12 @@ function CreateManualScreen({
       setServerFieldErrors({});
       setApiError("");
 
-      const errs = validateManualForm({ form, dateOk, blockingFileErrors: productFileErrors });
+      const errs = validateManualForm({
+        form,
+        dateOk,
+        blockingFileErrors: productFileErrors,
+        savedProductImageCount: savedProductImages.length,
+      });
       if (Object.values(errs).some(Boolean)) return;
 
       const brandId = getBrandId();
@@ -1795,7 +1837,7 @@ function CreateManualScreen({
             )
           );
         } else {
-          const payload = await buildCreateManualPayload(form, true);
+          const payload = await buildCreateManualPayload(form, true, savedProductImages);
           const created: any = await apiCampaignCreate({
             ...(payload as CreateCampaignManualPayload),
             status,

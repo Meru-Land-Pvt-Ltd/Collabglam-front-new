@@ -134,7 +134,7 @@ const Header: React.FC = () => {
             ))}
             <div className="pt-4 space-y-3">
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/brand/login')}
                 className="w-full py-3 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white font-medium rounded-lg hover:bg-[#c21f4f] transition"
               >
                 Get Started

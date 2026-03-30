@@ -712,8 +712,30 @@ export default function ViewCampaignPage() {
     .map((img: any) => img?.url || img?.src || img?.path || "")
     .filter(Boolean);
 
-  const carouselImages = backendImageUrls.length ? backendImageUrls : [];
+  const carouselImages = productImages
+    .map((img: any, idx: number) => {
+      if (typeof img === "string") {
+        return {
+          src: img,
+          alt: `Campaign image ${idx + 1}`,
+        };
+      }
 
+      const src =
+        img?.dataUrl ||
+        img?.url ||
+        img?.src ||
+        img?.path ||
+        "";
+
+      if (!src) return null;
+
+      return {
+        src,
+        alt: String(img?.name || `Campaign image ${idx + 1}`),
+      };
+    })
+    .filter(Boolean) as { src: string; alt: string }[];
   const scrollToSlide = (idx: number) => {
     const el = carouselRef.current;
     if (!el || !carouselImages.length) return;
@@ -858,12 +880,19 @@ export default function ViewCampaignPage() {
                   onScroll={onCarouselScroll}
                   className="flex w-full items-center gap-5 py-5 overflow-x-auto scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
                 >
-                  {carouselImages.map((src, idx) => (
+                  {carouselImages.map((img, idx) => (
                     <div
-                      key={`${src}-${idx}`}
-                      className="flex-none w-[13.8125rem] h-[11.5rem] rounded-[1.1875rem] bg-cover bg-center"
-                      style={{ backgroundImage: `url(${src})` }}
-                    />
+                      key={`${img.src}-${idx}`}
+                      className="relative flex-none w-[13.8125rem] h-[11.5rem] overflow-hidden rounded-[1.1875rem] bg-[#F9F9F9]"
+                    >
+                      <Image
+                        src={img.src}
+                        alt={img.alt}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
                   ))}
                 </div>
 
@@ -983,7 +1012,7 @@ export default function ViewCampaignPage() {
         </div>
 
         <div className="w-full mt-6 flex flex-col sm:flex-row gap-6">
-          <div className="w-full sm:w-1/2 flex flex-col gap-3">
+          <div className="w-full flex flex-col gap-3">
             <div className="flex h-[4.5rem] p-3 flex-col justify-between items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
               <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
                 Target Platform
@@ -1094,7 +1123,7 @@ export default function ViewCampaignPage() {
             </div>
           </div>
 
-          <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-auto">
+          {/* <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-auto">
             <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem] self-stretch">
               Video Reference
             </div>
@@ -1126,7 +1155,7 @@ export default function ViewCampaignPage() {
                 —
               </div>
             )}
-          </div>
+          </div> */}
         </div>
       </div>
 

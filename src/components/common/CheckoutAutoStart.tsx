@@ -48,7 +48,7 @@ export default function CheckoutAutoStart({
     const token = localStorage.getItem("token");
     if (!token) {
       const next = `${pathname}?${params.toString()}`;
-      router.replace(`/login?next=${encodeURIComponent(next)}`);
+      router.replace(`/brand/login?next=${encodeURIComponent(next)}`);
       return;
     }
 
@@ -57,7 +57,7 @@ export default function CheckoutAutoStart({
 
     if (!userId) {
       const next = `${pathname}?${params.toString()}`;
-      router.replace(`/login?next=${encodeURIComponent(next)}`);
+      router.replace(`/brand/login?next=${encodeURIComponent(next)}`);
       return;
     }
 

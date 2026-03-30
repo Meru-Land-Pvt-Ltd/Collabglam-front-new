@@ -50,7 +50,7 @@ const Hero = () => {
         hover:scale-105 hover:shadow-lg
         cursor-pointer
       "
-              onClick={() => router.push('/login')}
+              onClick={() => router.push('/brand/login')}
             >
               <PlayCircle className="h-8 w-8 text-white mr-4 group-hover:animate-pulse" />
               <div className="flex flex-col">
@@ -78,7 +78,7 @@ const Hero = () => {
     hover:shadow-lg hover:scale-105
     cursor-pointer
   "
-              onClick={() => router.push('/login')}
+              onClick={() => router.push('/brand/login')}
             >
               Sign Up
               <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />

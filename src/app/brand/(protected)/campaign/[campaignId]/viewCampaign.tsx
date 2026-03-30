@@ -2159,7 +2159,7 @@ export default function ViewCampaignPage() {
 
         {audiencePlatformsOpen ? (
           <div className="w-full mt-6 flex flex-col sm:flex-row gap-6">
-            <div className="w-full sm:w-1/2 flex flex-col gap-3">
+            <div className="w-full  flex flex-col gap-3">
               <div className="flex h-[4.5rem] p-3 flex-col justify-between items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white">
                 <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
                   Target Platform
@@ -2261,7 +2261,7 @@ export default function ViewCampaignPage() {
               </div>
             </div>
 
-            <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[15.9375rem]">
+            {/* <div className="w-full sm:w-1/2 flex flex-col items-start gap-[1.3125rem] rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[15.9375rem]">
               <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem] self-stretch">
                 Video Reference
               </div>
@@ -2297,7 +2297,7 @@ export default function ViewCampaignPage() {
               ) : (
                 <div className="text-[#969696] text-[0.875rem] font-normal leading-[1.25rem]">—</div>
               )}
-            </div>
+            </div> */}
           </div>
         ) : null}
       </div>

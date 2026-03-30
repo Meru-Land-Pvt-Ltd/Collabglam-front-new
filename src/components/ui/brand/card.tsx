@@ -51,7 +51,7 @@ export interface BrandCampaignCardProps {
 
   edgeBadges?: EdgeBadge[];
 
-  headerRight?: React.ReactNode;
+  headerRight?: React.ReactNode | null | false;
   footer?: React.ReactNode;
 }
 
@@ -61,17 +61,20 @@ const cx = (...c: Array<string | undefined | null | false>) =>
 function getDefaultIcon(label: string) {
   const key = label.trim().toLowerCase();
 
-  if (key === "platform" || key === "youtube")
+  if (key === "platform" || key === "youtube") {
     return <YoutubeLogo weight="regular" />;
+  }
   if (key === "instagram") return <InstagramLogo weight="regular" />;
-  if (key === "tiktok" || key === "tik tok")
+  if (key === "tiktok" || key === "tik tok") {
     return <TiktokLogo weight="regular" />;
+  }
 
   if (key === "wallet balance" || key === "wallet" || key === "budget") {
     return <Wallet weight="regular" />;
   }
-  if (key === "applied" || key === "applicants")
+  if (key === "applied" || key === "applicants") {
     return <FileMinus weight="regular" />;
+  }
   if (key === "influencer") return <Users weight="regular" />;
   if (key === "email") return <PaperPlaneTilt weight="regular" />;
 
@@ -79,9 +82,7 @@ function getDefaultIcon(label: string) {
 }
 
 function normalizeStatusVariant(variant: string): StatusVariant {
-  const v = String(variant || "")
-    .trim()
-    .toLowerCase();
+  const v = String(variant || "").trim().toLowerCase();
 
   if (v === "active") return "active";
   if (v === "paused") return "paused";
@@ -206,7 +207,12 @@ export function BrandCampaignCardSkeleton({
       )}
     >
       <div className={s.topWrap}>
-        <div className={cx("flex w-full items-center", "gap-[clamp(10px,2vw,16px)]")}>
+        <div
+          className={cx(
+            "flex w-full items-center",
+            "gap-[clamp(10px,2vw,16px)]"
+          )}
+        >
           <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[0.5rem] bg-neutral-900">
             <div className="h-full w-full animate-pulse bg-muted" />
           </div>
@@ -243,7 +249,7 @@ export function BrandCampaignCardSkeleton({
         className={cx(
           s.footerWrap,
           "bg-card",
-          "before:absolute before:left-4 before:right-4 before:top-6 before:h-px before:bg-border"
+          "before:absolute before:left-[1px] before:right-[1px] before:top-6 before:h-px before:bg-border"
         )}
       >
         <div className="flex w-full items-center gap-2">
@@ -334,18 +340,14 @@ export default function BrandCampaignCard({
   return (
     <div
       data-emc-brand-card
-      className={cx(
-        "relative flex w-full max-w-[403px] min-w-0 flex-col overflow-visible rounded-[1rem] border border-bd-primary bg-card text-card-foreground",
-        "min-h-[19.375rem]",
-        className
-      )}
+      className={cx("relative w-full max-w-[513px] min-w-0", className)}
     >
       {fullyManagedBadge ? (
         <div className="pointer-events-none absolute right-[10px] top-[-12px] z-30">
           <span
             title={fullyManagedBadge.label}
             className={cx(
-              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.73rem] font-medium leading-none ",
+              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.73rem] font-medium leading-none",
               "border-[#8F6B00] bg-[#B8860B] text-white"
             )}
           >
@@ -372,160 +374,172 @@ export default function BrandCampaignCard({
         </div>
       ) : null}
 
-      <div className={s.topWrap}>
-        <div className={cx("flex w-full items-center", "gap-[clamp(10px,2vw,16px)]")}>
+      <div
+        className={cx(
+          "relative flex w-full min-w-0 flex-col overflow-hidden rounded-[1rem] border border-bd-primary bg-card text-card-foreground",
+          "min-h-[19.375rem]"
+        )}
+      >
+        <div className={s.topWrap}>
           <div
-            className="h-12 w-12 shrink-0 overflow-hidden rounded-[0.5rem] bg-neutral-900 outline-none"
-            role="img"
-            aria-label={logoAriaLabel}
-            tabIndex={0}
-            onMouseEnter={onEnter}
-            onMouseLeave={onLeave}
-            onFocus={onEnter}
-            onBlur={onLeave}
+            className={cx(
+              "flex w-full items-center",
+              "gap-[clamp(10px,2vw,16px)]"
+            )}
           >
-            {activeSrc ? (
-              <img
-                className="h-full w-full object-cover object-center transition-opacity duration-300"
-                src={activeSrc}
-                alt={logoAriaLabel}
-                referrerPolicy="no-referrer"
-                loading="lazy"
-                draggable={false}
-              />
-            ) : null}
-          </div>
+            <div
+              className="h-12 w-12 shrink-0 overflow-hidden rounded-[0.5rem] bg-neutral-900 outline-none"
+              role="img"
+              aria-label={logoAriaLabel}
+              tabIndex={0}
+              onMouseEnter={onEnter}
+              onMouseLeave={onLeave}
+              onFocus={onEnter}
+              onBlur={onLeave}
+            >
+              {activeSrc ? (
+                <img
+                  className="h-full w-full object-cover object-center transition-opacity duration-300"
+                  src={activeSrc}
+                  alt={logoAriaLabel}
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  draggable={false}
+                />
+              ) : null}
+            </div>
 
-          <div className="grid min-w-0 flex-1 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="min-w-0">
+            <div className="grid min-w-0 flex-1 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <div className="min-w-0">
+                <div
+                  className="line-clamp-2 break-words text-[1rem] font-semibold leading-6 text-tx-primary"
+                  title={name}
+                >
+                  {name}
+                </div>
+              </div>
+
               <div
-                className="line-clamp-2 break-words text-[1rem] font-semibold leading-6 text-tx-primary"
-                title={name}
+                className={cx(
+                  "inline-flex items-center gap-1",
+                  "justify-self-start sm:justify-self-end",
+                  "w-full sm:w-auto",
+                  "max-w-full sm:max-w-[11.5rem]"
+                )}
               >
-                {name}
+                <span
+                  className={cx(
+                    "inline-flex items-center rounded-full p-0.5",
+                    statusPillBg(statusVariant)
+                  )}
+                >
+                  <span
+                    className={cx("h-2 w-2 rounded-full", statusDotBg(statusVariant))}
+                  />
+                </span>
+
+                <span
+                  className={cx(
+                    "min-w-0 truncate text-[1rem] font-medium leading-6 text-muted-foreground",
+                    "w-full sm:w-auto",
+                    "max-w-full sm:max-w-[8.5rem]"
+                  )}
+                  title={statusLabel}
+                >
+                  {statusLabel}
+                </span>
               </div>
             </div>
 
-            <div
-              className={cx(
-                "inline-flex items-center gap-1",
-                "justify-self-start sm:justify-self-end",
-                "w-full sm:w-auto",
-                "max-w-full sm:max-w-[11.5rem]"
+            <div className="shrink-0">
+              {headerRight !== undefined ? (
+                headerRight
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-5 items-center justify-center rounded-[0.5rem] text-muted-foreground hover:text-tx-secondary"
+                  aria-label="More options"
+                >
+                  <DotsThree weight="bold" size={18} />
+                </button>
               )}
-            >
-              <span
-                className={cx(
-                  "inline-flex items-center rounded-full p-0.5",
-                  statusPillBg(statusVariant)
-                )}
-              >
-                <span
-                  className={cx("h-2 w-2 rounded-full", statusDotBg(statusVariant))}
-                />
-              </span>
-
-              <span
-                className={cx(
-                  "min-w-0 truncate text-[1rem] font-medium leading-6 text-muted-foreground",
-                  "w-full sm:w-auto",
-                  "max-w-full sm:max-w-[8.5rem]"
-                )}
-                title={statusLabel}
-              >
-                {statusLabel}
-              </span>
             </div>
           </div>
 
-          <div className="shrink-0">
-            {headerRight ? (
-              headerRight
-            ) : (
-              <button
-                type="button"
-                className="inline-flex h-9 w-5 items-center justify-center rounded-[0.5rem] text-muted-foreground hover:text-tx-secondary"
-                aria-label="More options"
-              >
-                <DotsThree weight="bold" size={18} />
-              </button>
-            )}
-          </div>
+          {(tags && tags.length > 0) || byAdminBadge ? (
+            <div className="flex w-full items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {(tags ?? []).map((t) => (
+                  <span
+                    key={t}
+                    title={t}
+                    className="inline-flex h-6 max-w-[12rem] items-center justify-center truncate rounded-full bg-brand-50 px-2 text-[0.75rem] font-normal leading-4 text-neutral-750"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+
+              {byAdminBadge ? (
+                <span
+                  title={byAdminBadge.label}
+                  className={cx(
+                    "shrink-0 inline-flex h-7 items-center rounded-full border px-3 text-[0.72rem] font-semibold leading-none shadow-sm",
+                    "border-[#D7E3FF] bg-[#EEF4FF] text-[#2F5BFF]",
+                    byAdminBadge.className
+                  )}
+                >
+                  {byAdminBadge.label}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {stats && stats.length > 0 ? (
+            <div className="flex w-full items-center justify-between gap-2">
+              {stats.map((st, i) => {
+                const iconNode = st.icon ?? getDefaultIcon(st.label);
+                return (
+                  <div
+                    key={`${st.label}-${i}`}
+                    className="flex flex-1 min-w-0 flex-col items-center gap-2 text-center"
+                  >
+                    <div
+                      className="w-full truncate text-[0.875rem] font-normal leading-5 text-muted-foreground sm:text-[1rem] sm:leading-6"
+                      title={st.label}
+                    >
+                      {st.label}
+                    </div>
+
+                    <div className="flex min-w-0 items-center justify-center gap-1">
+                      {iconNode ? (
+                        <span className="inline-flex rounded-full p-1 text-muted-foreground">
+                          {iconNode}
+                        </span>
+                      ) : null}
+                      <span className="truncate text-[0.875rem] font-medium leading-5 text-tx-primary sm:text-[1rem] sm:leading-6">
+                        {st.value}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
-        {(tags && tags.length > 0) || byAdminBadge ? (
-          <div className="flex w-full items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              {(tags ?? []).map((t) => (
-                <span
-                  key={t}
-                  title={t}
-                  className="inline-flex h-6 max-w-[12rem] items-center justify-center truncate rounded-full bg-brand-50 px-2 text-[0.75rem] font-normal leading-4 text-neutral-750"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-
-            {byAdminBadge ? (
-              <span
-                title={byAdminBadge.label}
-                className={cx(
-                  "shrink-0 inline-flex h-7 items-center rounded-full border px-3 text-[0.72rem] font-semibold leading-none shadow-sm",
-                  "border-[#D7E3FF] bg-[#EEF4FF] text-[#2F5BFF]",
-                  byAdminBadge.className
-                )}
-              >
-                {byAdminBadge.label}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-
-        {stats && stats.length > 0 ? (
-          <div className="flex w-full items-center justify-between gap-2">
-            {stats.map((st, i) => {
-              const iconNode = st.icon ?? getDefaultIcon(st.label);
-              return (
-                <div
-                  key={`${st.label}-${i}`}
-                  className="flex flex-1 min-w-0 flex-col items-center gap-2 text-center"
-                >
-                  <div
-                    className="w-full truncate text-[0.875rem] font-normal leading-5 text-muted-foreground sm:text-[1rem] sm:leading-6"
-                    title={st.label}
-                  >
-                    {st.label}
-                  </div>
-
-                  <div className="flex min-w-0 items-center justify-center gap-1">
-                    {iconNode ? (
-                      <span className="inline-flex rounded-full p-1 text-muted-foreground">
-                        {iconNode}
-                      </span>
-                    ) : null}
-                    <span className="truncate text-[0.875rem] font-medium leading-5 text-tx-primary sm:text-[1rem] sm:leading-6">
-                      {st.value}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+        {footer ? (
+          <div
+            className={cx(
+              s.footerWrap,
+              "bg-card",
+              "before:absolute before:left-[1px] before:right-[1px] before:top-6 before:h-px before:bg-border"
+            )}
+          >
+            {footer}
           </div>
         ) : null}
       </div>
-
-      {footer ? (
-        <div
-          className={cx(
-            s.footerWrap,
-            "bg-card",
-            "before:absolute before:left-4 before:right-4 before:top-6 before:h-px before:bg-border"
-          )}
-        >
-          {footer}
-        </div>
-      ) : null}
     </div>
   );
 }

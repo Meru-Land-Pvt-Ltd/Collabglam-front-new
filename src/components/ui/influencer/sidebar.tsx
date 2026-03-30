@@ -325,7 +325,7 @@ export default function Sidebar({
       },
       {
         key: "invitations",
-        label: "Invitations",
+        label: "Direct Invitations",
         icon: EnvelopeSimpleIcon,
         section: "main",
         href: "/influencer/invitations",
@@ -349,7 +349,7 @@ export default function Sidebar({
       {
         key: "messages",
         label: "Inbox",
-        icon: ChatCenteredText,
+        icon: PaperPlaneTilt,
         section: "main",
         href: "/influencer/inbox",
         right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
@@ -582,7 +582,7 @@ export default function Sidebar({
                   CollabGlam
                 </div>
                 <div className="truncate text-[12px] text-neutral-500">
-                  Influencer Portal
+                  Creator
                 </div>
               </m.div>
             )}

@@ -637,7 +637,7 @@ const Pricing: React.FC = () => {
       return;
     }
 
-    router.push(`/login?role=${plan.role}&next=${encodeURIComponent(next)}`);
+    router.push(`/brand/login?role=${plan.role}&next=${encodeURIComponent(next)}`);
   };
 
   const isInfluencerTheme = activeRole === "Influencer";
