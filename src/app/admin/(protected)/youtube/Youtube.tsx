@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ChevronDown,
   ExternalLink,
@@ -15,8 +15,21 @@ import {
   X,
 } from 'lucide-react';
 import swal from 'sweetalert';
-import { post } from '@/lib/api';
+import { get, post } from '@/lib/api';
 import { Checkbox } from '@/components/animate-ui/components/radix/checkbox';
+
+type FolderOption = {
+  _id: string;
+  title: string;
+  slug?: string;
+  description?: string;
+  itemCount?: number;
+};
+
+type FolderListResponse = {
+  success: boolean;
+  data: FolderOption[];
+};
 
 type VideoItem = {
   _id?: string;
@@ -443,10 +456,10 @@ function ytChannelUrlFromHandleOrId(handle?: string | null, channelId?: string |
 function getThumbUrl(
   thumbnails?:
     | {
-        default?: { url?: string };
-        medium?: { url?: string };
-        high?: { url?: string };
-      }
+      default?: { url?: string };
+      medium?: { url?: string };
+      high?: { url?: string };
+    }
     | null,
 ) {
   return thumbnails?.high?.url || thumbnails?.medium?.url || thumbnails?.default?.url || '';
@@ -604,70 +617,70 @@ function MultiCountrySelect({
   const overlay =
     open && pos && typeof document !== 'undefined'
       ? createPortal(
-          <div className="fixed inset-0 z-[9999]">
-            <div className="absolute inset-0 bg-black/10" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 z-[9999]">
+          <div className="absolute inset-0 bg-black/10" onClick={() => setOpen(false)} />
 
-            <div
-              className="fixed overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
-              style={{
-                left: pos.left,
-                top: pos.top,
-                width: pos.width,
-                maxHeight: 'min(70vh, 520px)',
-              }}
-            >
-              <div className="border-b border-slate-200 p-3">
-                <input
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search country"
-                  autoFocus
-                />
-                <div className="mt-2 flex items-center justify-between">
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-slate-700 hover:underline"
-                    onClick={() => onChange([])}
-                  >
-                    Clear
-                  </button>
-                  <span className="text-xs text-slate-500">{value.length} selected</span>
-                </div>
-              </div>
-
-              <div className="max-h-[420px] overflow-auto p-2">
-                {filtered.map((c) => {
-                  const checked = value.includes(c.code);
-                  return (
-                    <label
-                      key={c.code}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50"
-                    >
-                      <Checkbox checked={checked} onCheckedChange={() => toggle(c.code)} />
-                      <span className="text-sm text-slate-800">{countryLabel(c.code)}</span>
-                    </label>
-                  );
-                })}
-
-                {!filtered.length ? (
-                  <div className="px-2 py-6 text-center text-sm text-slate-500">No countries found</div>
-                ) : null}
-              </div>
-
-              <div className="border-t border-slate-200 bg-slate-50 p-3">
+          <div
+            className="fixed overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+            style={{
+              left: pos.left,
+              top: pos.top,
+              width: pos.width,
+              maxHeight: 'min(70vh, 520px)',
+            }}
+          >
+            <div className="border-b border-slate-200 p-3">
+              <input
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search country"
+                autoFocus
+              />
+              <div className="mt-2 flex items-center justify-between">
                 <button
                   type="button"
-                  className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  onClick={() => setOpen(false)}
+                  className="text-xs font-semibold text-slate-700 hover:underline"
+                  onClick={() => onChange([])}
                 >
-                  Done
+                  Clear
                 </button>
+                <span className="text-xs text-slate-500">{value.length} selected</span>
               </div>
             </div>
-          </div>,
-          document.body,
-        )
+
+            <div className="max-h-[420px] overflow-auto p-2">
+              {filtered.map((c) => {
+                const checked = value.includes(c.code);
+                return (
+                  <label
+                    key={c.code}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50"
+                  >
+                    <Checkbox checked={checked} onCheckedChange={() => toggle(c.code)} />
+                    <span className="text-sm text-slate-800">{countryLabel(c.code)}</span>
+                  </label>
+                );
+              })}
+
+              {!filtered.length ? (
+                <div className="px-2 py-6 text-center text-sm text-slate-500">No countries found</div>
+              ) : null}
+            </div>
+
+            <div className="border-t border-slate-200 bg-slate-50 p-3">
+              <button
+                type="button"
+                className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                onClick={() => setOpen(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
       : null;
 
   return (
@@ -685,6 +698,173 @@ function MultiCountrySelect({
         }}
       >
         <span className="truncate text-sm text-slate-800">{summary}</span>
+        <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {overlay}
+    </>
+  );
+}
+
+function FolderSelect({
+  folders,
+  value,
+  onChange,
+}: {
+  folders: FolderOption[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  const selectedFolder = folders.find((f) => f._id === value);
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return folders;
+
+    return folders.filter((f) =>
+      [f.title, f.slug, f.description]
+        .filter(Boolean)
+        .some((x) => String(x).toLowerCase().includes(s))
+    );
+  }, [q, folders]);
+
+  function updatePos() {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      left: r.left,
+      top: r.bottom + 8,
+      width: r.width,
+    });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    updatePos();
+
+    const onReflow = () => updatePos();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+
+    window.addEventListener('scroll', onReflow, true);
+    window.addEventListener('resize', onReflow);
+    window.addEventListener('keydown', onKey);
+
+    return () => {
+      window.removeEventListener('scroll', onReflow, true);
+      window.removeEventListener('resize', onReflow);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const overlay =
+    open && pos && typeof document !== 'undefined'
+      ? createPortal(
+        <div className="fixed inset-0 z-[9999]">
+          <div className="absolute inset-0 bg-black/10" onClick={() => setOpen(false)} />
+
+          <div
+            className="fixed overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+            style={{
+              left: pos.left,
+              top: pos.top,
+              width: pos.width,
+              maxHeight: 'min(70vh, 520px)',
+            }}
+          >
+            <div className="border-b border-slate-200 p-3">
+              <input
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search folder"
+                autoFocus
+              />
+
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-slate-700 hover:underline"
+                  onClick={() => onChange('')}
+                >
+                  Clear
+                </button>
+                <span className="text-xs text-slate-500">
+                  {value ? '1 selected' : 'No folder selected'}
+                </span>
+              </div>
+            </div>
+
+            <div className="max-h-[420px] overflow-auto p-2">
+              {filtered.map((folder) => {
+                const checked = value === folder._id;
+
+                return (
+                  <button
+                    key={folder._id}
+                    type="button"
+                    onClick={() => {
+                      onChange(folder._id);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-3 text-left hover:bg-slate-50 ${checked ? 'bg-blue-50' : ''
+                      }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-slate-900">
+                        {folder.title}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {folder.itemCount || 0} influencers
+                      </div>
+                    </div>
+
+                    {checked ? (
+                      <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] text-white">
+                        Selected
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+
+              {!filtered.length ? (
+                <div className="px-2 py-6 text-center text-sm text-slate-500">
+                  No folders found
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+      : null;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className="flex min-w-[260px] items-center justify-between gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left hover:bg-slate-50"
+        onClick={() => {
+          setOpen((v) => {
+            const next = !v;
+            if (!v && next) updatePos();
+            return next;
+          });
+        }}
+      >
+        <span className="truncate text-sm text-slate-800">
+          {selectedFolder ? selectedFolder.title : 'Select folder'}
+        </span>
         <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -868,9 +1048,8 @@ function GlobalSearchCard({
                   href={url || '#'}
                   target={url ? '_blank' : undefined}
                   rel={url ? 'noreferrer' : undefined}
-                  className={`block rounded-2xl border border-slate-200 bg-white p-4 transition-all ${
-                    url ? 'hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md' : ''
-                  }`}
+                  className={`block rounded-2xl border border-slate-200 bg-white p-4 transition-all ${url ? 'hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md' : ''
+                    }`}
                 >
                   <div className="flex gap-4">
                     <div className="h-20 w-36 shrink-0 overflow-hidden rounded-xl bg-slate-200">
@@ -1086,9 +1265,8 @@ function PreviewSidebar({
                             href={videoUrl || '#'}
                             target={videoUrl ? '_blank' : undefined}
                             rel={videoUrl ? 'noreferrer' : undefined}
-                            className={`block rounded-2xl border border-slate-200 bg-white p-4 transition-all ${
-                              videoUrl ? 'hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md' : ''
-                            }`}
+                            className={`block rounded-2xl border border-slate-200 bg-white p-4 transition-all ${videoUrl ? 'hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md' : ''
+                              }`}
                           >
                             <div className="flex gap-4">
                               <div className="h-24 w-40 shrink-0 overflow-hidden rounded-xl bg-slate-200">
@@ -1186,6 +1364,8 @@ function PreviewSidebar({
 }
 
 export default function Page() {
+  const router = useRouter();
+
   const [profiles, setProfiles] = useState<InfluencerProfileDoc[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saveEmailModalOpen, setSaveEmailModalOpen] = useState(false);
@@ -1237,6 +1417,11 @@ export default function Page() {
 
   const searchParams = useSearchParams();
   const campaignId = (searchParams.get('campaignId') || searchParams.get('id') || '').trim();
+  const folderId = (searchParams.get('folderId') || '').trim();
+
+  const [folders, setFolders] = useState<FolderOption[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
+  const [selectedFolderId, setSelectedFolderId] = useState('');
 
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 
@@ -1326,6 +1511,30 @@ export default function Page() {
   }
 
   useEffect(() => {
+    if (folderId) {
+      setSelectedFolderId(folderId);
+    }
+  }, [folderId]);
+
+  useEffect(() => {
+    if (!folderId) {
+      loadFolders();
+    }
+  }, [folderId]);
+
+  async function loadFolders() {
+    setFoldersLoading(true);
+    try {
+      const resp = await get<FolderListResponse>('/pitch-folders/list');
+      setFolders(Array.isArray(resp?.data) ? resp.data : []);
+    } catch (e: any) {
+      await showErr(e?.message || 'Failed to load folders.');
+    } finally {
+      setFoldersLoading(false);
+    }
+  }
+
+  useEffect(() => {
     filtersActiveRef.current = filtersActive;
   }, [filtersActive]);
 
@@ -1367,6 +1576,57 @@ export default function Page() {
     if (f.lastUploadDays) out.lastUploadDays = Number(f.lastUploadDays);
 
     return out;
+  }
+
+  function buildSelectedYoutubeUsers() {
+    const selectedSaved = profiles.filter((p) => selectedIds[savedRowKey(p)]);
+    const selectedLive = visibleLiveRecommendations.filter((item) => selectedIds[liveRowKey(item)]);
+
+    const rawUsersFromSaved = selectedSaved.map((x) => ({
+      sourceRefId: x.handleId || x.channelId || x.handle,
+      platform: 'youtube',
+      fullname: x.title,
+      username: String(x.handle || '').replace(/^@/, ''),
+      handle: x.handle,
+      userId: x.channelId,
+      followers: x.subscriberCount,
+      url: ytChannelUrl(x),
+      picture: getThumbUrl(x.thumbnails),
+      categories: getTopicNames(x),
+      bio: x.description,
+      country: x.country,
+      state: null,
+      city: null,
+      language: x.defaultLanguage,
+      engagementRate: x.engagementRateLast15,
+    }));
+
+    const rawUsersFromLive = selectedLive.map((x) => ({
+      sourceRefId: x.channelId || x.handle,
+      platform: 'youtube',
+      fullname: x.title,
+      username: String(x.handle || '').replace(/^@/, ''),
+      handle: x.handle,
+      userId: x.channelId,
+      followers: x.subscriberCount,
+      url: x.channelUrl || ytChannelUrlFromHandleOrId(x.handle, x.channelId),
+      picture: getThumbUrl(x.thumbnails),
+      categories: asList<string>(x.topicLabels).filter(Boolean),
+      bio: x.description,
+      country: x.country,
+      state: null,
+      city: null,
+      language: x.defaultLanguage,
+      engagementRate: x.engagementRateLast15,
+    }));
+
+    return Array.from(
+      new Map(
+        [...rawUsersFromSaved, ...rawUsersFromLive]
+          .filter((x) => x.sourceRefId)
+          .map((x) => [String(x.sourceRefId), x]),
+      ).values(),
+    );
   }
 
   async function loadSaved(
@@ -1565,84 +1825,93 @@ export default function Page() {
     }
   }
 
-  async function addOutreach() {
+  async function handlePrimaryAddAction() {
     try {
-      if (!campaignId) {
-        await showErr('Campaign id missing.');
-        return;
-      }
+      const rawUsers = buildSelectedYoutubeUsers();
 
-      const selectedSaved = profiles.filter((p) => selectedIds[savedRowKey(p)]);
-      const selectedLive = visibleLiveRecommendations.filter((item) => selectedIds[liveRowKey(item)]);
-
-      if (!selectedSaved.length && !selectedLive.length) {
+      if (!rawUsers.length) {
         await showErr('Select at least 1 creator.');
         return;
       }
 
-      const rawUsersFromSaved = selectedSaved.map((x) => ({
-        sourceRefId: x.handleId || x.channelId || x.handle,
-        platform: 'youtube',
-        fullname: x.title,
-        username: String(x.handle || '').replace(/^@/, ''),
-        handle: x.handle,
-        userId: x.channelId,
-        followers: x.subscriberCount,
-        url: ytChannelUrl(x),
-        picture: getThumbUrl(x.thumbnails),
-        categories: getTopicNames(x),
-        bio: x.description,
-        country: x.country,
-        state: null,
-        city: null,
-        language: x.defaultLanguage,
-        engagementRate: x.engagementRateLast15,
-      }));
+      // Case 1: folderId is present in URL
+      if (folderId) {
+        await post(`/pitch-folders/${folderId}/import-youtube`, {
+          rawUsers,
+        });
 
-      const rawUsersFromLive = selectedLive.map((x) => ({
-        sourceRefId: x.channelId || x.handle,
-        platform: 'youtube',
-        fullname: x.title,
-        username: String(x.handle || '').replace(/^@/, ''),
-        handle: x.handle,
-        userId: x.channelId,
-        followers: x.subscriberCount,
-        url: x.channelUrl || ytChannelUrlFromHandleOrId(x.handle, x.channelId),
-        picture: getThumbUrl(x.thumbnails),
-        categories: asList<string>(x.topicLabels).filter(Boolean),
-        bio: x.description,
-        country: x.country,
-        state: null,
-        city: null,
-        language: x.defaultLanguage,
-        engagementRate: x.engagementRateLast15,
-      }));
+        const activeFolder = folders.find((f) => f._id === folderId);
 
-      const rawUsers = Array.from(
-        new Map(
-          [...rawUsersFromSaved, ...rawUsersFromLive]
-            .filter((x) => x.sourceRefId)
-            .map((x) => [String(x.sourceRefId), x]),
-        ).values(),
-      );
+        swal({
+          title: 'Done',
+          text: `Added to ${activeFolder?.title || 'folder'}.`,
+          icon: 'success',
+        });
 
-      await post('/pipeline/bulk-add', {
-        campaignId,
-        modashIds: [],
-        rawUsers,
-      });
+        clearSelection();
+        return;
+      }
 
-      swal({
-        title: 'Done',
-        text: 'Added to outreach pipeline.',
-        icon: 'success',
-      });
+      // Case 2: no folderId in URL, but user selected a folder from dropdown
+      if (selectedFolderId) {
+        await post(`/pitch-folders/${selectedFolderId}/import-youtube`, {
+          rawUsers,
+        });
 
-      clearSelection();
+        const activeFolder = folders.find((f) => f._id === selectedFolderId);
+
+        swal({
+          title: 'Done',
+          text: `Added to ${activeFolder?.title || 'folder'}.`,
+          icon: 'success',
+        });
+
+        clearSelection();
+        return;
+      }
+
+      // Case 3: fallback to campaign outreach
+      if (campaignId) {
+        await post('/pipeline/bulk-add', {
+          campaignId,
+          modashIds: [],
+          rawUsers,
+        });
+
+        swal({
+          title: 'Done',
+          text: 'Added to outreach pipeline.',
+          icon: 'success',
+        });
+
+        clearSelection();
+        return;
+      }
+
+      await showErr('No folder or campaign selected.');
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to add to outreach.');
+      await showErr(e?.message || 'Failed to add creators.');
     }
   }
+
+  const activeFolderName = useMemo(() => {
+    if (folderId) {
+      return folders.find((f) => f._id === folderId)?.title || 'Folder';
+    }
+
+    if (selectedFolderId) {
+      return folders.find((f) => f._id === selectedFolderId)?.title || 'Folder';
+    }
+
+    return '';
+  }, [folderId, selectedFolderId, folders]);
+
+  const primaryActionLabel = useMemo(() => {
+    if (folderId) return `Add on ${activeFolderName || 'Folder'}`;
+    if (selectedFolderId) return `Add on ${activeFolderName || 'Folder'}`;
+    if (campaignId) return 'Add to Outreach';
+    return 'Apply';
+  }, [folderId, selectedFolderId, campaignId, activeFolderName]);
 
   useEffect(() => {
     loadSaved(1, filtersActive, '');
@@ -1967,14 +2236,25 @@ export default function Page() {
                   </button>
                 ) : null}
 
-                {selectedCount && campaignId ? (
-                  <button
-                    type="button"
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                    onClick={addOutreach}
-                  >
-                    Add to Outreach
-                  </button>
+                {selectedCount ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!folderId ? (
+                      <FolderSelect
+                        folders={folders}
+                        value={selectedFolderId}
+                        onChange={setSelectedFolderId}
+                      />
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                      onClick={handlePrimaryAddAction}
+                      disabled={foldersLoading || (!folderId && !selectedFolderId && !campaignId)}
+                    >
+                      {primaryActionLabel}
+                    </button>
+                  </div>
                 ) : null}
 
                 <button
@@ -2080,14 +2360,25 @@ export default function Page() {
                 </button>
               ) : null}
 
-              {selectedCount && campaignId ? (
-                <button
-                  type="button"
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  onClick={addOutreach}
-                >
-                  Add to Outreach
-                </button>
+              {selectedCount ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {!folderId ? (
+                    <FolderSelect
+                      folders={folders}
+                      value={selectedFolderId}
+                      onChange={setSelectedFolderId}
+                    />
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                    onClick={handlePrimaryAddAction}
+                    disabled={foldersLoading || (!folderId && !selectedFolderId && !campaignId)}
+                  >
+                    {primaryActionLabel}
+                  </button>
+                </div>
               ) : null}
             </div>
           </div>
@@ -2199,9 +2490,8 @@ export default function Page() {
                             <Link
                               href={`/mediakit/${encodeURIComponent(p.channelId)}?platform=${encodeURIComponent(
                                 String(p.platform || 'youtube').toLowerCase(),
-                              )}&handle=${encodeURIComponent(String(p.handle || ''))}${
-                                campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ''
-                              }`}
+                              )}&handle=${encodeURIComponent(String(p.handle || ''))}${campaignId ? `&campaignId=${encodeURIComponent(campaignId)}` : ''
+                                }`}
                               className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-100"
                             >
                               <Info className="h-4 w-4" />
