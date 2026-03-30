@@ -30,10 +30,20 @@ import {
   apiGetMyCampaigns,
   apiUploadInfluencerSignature,
 } from "../../services/influencerApi";
-import MinimalPdfPreview from "@/components/ui/MinimalPdfPreview";
 import { ArrowSquareInIcon, DownloadSimpleIcon, InfoIcon, Signature } from "@phosphor-icons/react";
 // import { useSidebarWidth } from "./useSidebarWidth";
-import InfluencerSidebarShell from "./InfluencerSidebarShell";
+import dynamic from "next/dynamic";
+
+const MinimalPdfPreview = dynamic(
+  () => import("@/components/ui/MinimalPdfPreview"),
+  { ssr: false }
+);
+
+const InfluencerSidebarShell = dynamic(
+  () => import("./InfluencerSidebarShell"),
+  { ssr: false }
+);
+
 import { Dialog, DialogContent, DialogOverlay } from "@/components/ui/dialog";
 import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 
@@ -272,7 +282,7 @@ const emptyLocal: LocalInfluencer = {
   zip: "",
   country: "",
   whatsApp: "",
-  ftcAcknowledgement: "",
+  ftcAcknowledgement: "Both Parties must comply with applicable endorsement, advertising, and platform requirements. Influencer may not publish false, misleading, unsafe, or unsubstantiated claims",
 
   shipToName: "",
   shipToAddress: "",
@@ -1335,7 +1345,9 @@ const extractSignatureUrl = (res: any) => {
     ""
   );
 };
-
+const extractSignatureId = (res: any): string => {
+  return res?.data?._id || "";
+};
 function InfluencerContractModal({
 
   open,
@@ -1361,6 +1373,7 @@ function InfluencerContractModal({
   const [liteLoaded, setLiteLoaded] = useState(false);
   const [effectiveContractId, setEffectiveContractId] =
     useState<string>(contractId);
+  const [savedSignatureId, setSavedSignatureId] = useState("");
   const [meta, setMeta] = useState<ContractMeta | null>(null);
   const [showSignModal, setShowSignModal] = useState(false);
   const [showAcceptSignatureModal, setShowAcceptSignatureModal] = useState(false);
@@ -1384,7 +1397,7 @@ function InfluencerContractModal({
     (campaign as any).paymentType ??
     (campaign as any).laneType ??
     "fixed";
-
+  const router = useRouter();
   const isGifting = campaignType === "gifting";
 
   const canEdit = useMemo(() => {
@@ -1433,30 +1446,21 @@ function InfluencerContractModal({
   const openAcceptSignatureFlow = async () => {
     const influencerId = getInfluencerId();
     if (!influencerId) {
-      toast({
-        icon: "error",
-        title: "Missing influencer",
-        text: "Influencer ID not found.",
-      });
+      toast({ icon: "error", title: "Missing influencer", text: "Influencer ID not found." });
       return;
     }
 
     setSignatureLoading(true);
     setSignatureChecked(false);
     setSignatureFile(null);
-    setSavedSignatureUrl("");
+    setSavedSignatureId("");
 
     try {
       const res = await apiGetInfluencerSignature(influencerId);
-      const existingUrl = extractSignatureUrl(res);
-
-      if (existingUrl) {
-        setSavedSignatureUrl(existingUrl);
-      }
-
+      const existingId = res?._id || "";
+      if (existingId) setSavedSignatureId(existingId);
       setShowAcceptSignatureModal(true);
     } catch (e) {
-      // if signature is not found, still open modal and allow upload
       setShowAcceptSignatureModal(true);
     } finally {
       setSignatureLoading(false);
@@ -1550,7 +1554,7 @@ function InfluencerContractModal({
 
       payoutMethod: "",
       payoutAccount: "",
-      notes:""
+      notes: ""
     };
   }, []);
 
@@ -1754,41 +1758,50 @@ function InfluencerContractModal({
   const handleAcceptWithSignature = async () => {
     if (!signatureChecked) {
       toast({
-        icon: "error",
-        title: "Confirmation required",
-        text: "Please confirm that you agree to all terms before signing.",
+        icon: "error", title: "Confirmation required",
+        text: "Please confirm that you agree to all terms before signing."
       });
       return;
     }
 
+    // Prevent double-clicks
+    if (isWorking) return;
     setIsWorking(true);
 
     try {
       const payload = toContractInfluencerPayload(sanitizeLocal(local));
-      let signatureDataUrl = "";
+      let signatureInfluencerId = savedSignatureId; // use cached _id if already uploaded
 
-      if (signatureFile) {
-        // best path: use local file directly
-        signatureDataUrl = await fileToDataUrl(signatureFile);
-
+      if (signatureFile && !signatureInfluencerId) {  // ← only upload if no _id yet
         const influencerId = getInfluencerId();
         const formData = new FormData();
         formData.append("influencerId", influencerId);
         formData.append("signature", signatureFile);
 
         const uploadRes = await apiUploadInfluencerSignature(formData);
-        const uploadedUrl = extractSignatureUrl(uploadRes);
-        if (uploadedUrl) {
-          setSavedSignatureUrl(uploadedUrl);
+
+        const uploadedId =
+          uploadRes?._id ||
+          uploadRes?.signature?._id ||
+          "";
+
+        if (!uploadedId) {
+          toast({
+            icon: "error", title: "Upload failed",
+            text: "Signature uploaded but no ID returned. Please try again."
+          });
+          return;
         }
-      } else if (savedSignatureUrl) {
-        // fallback only when using an already-saved signature
-        signatureDataUrl = await urlToDataUrl(savedSignatureUrl);
-      } else {
+
+        setSavedSignatureId(uploadedId);      // ← cache it, next click won't re-upload
+        setSignatureFile(null);               // ← clear file, _id is the source of truth now
+        signatureInfluencerId = uploadedId;
+      }
+
+      if (!signatureInfluencerId) {
         toast({
-          icon: "error",
-          title: "Signature required",
-          text: "Please upload a signature before continuing.",
+          icon: "error", title: "Signature required",
+          text: "Please upload a signature before continuing."
         });
         return;
       }
@@ -1796,20 +1809,12 @@ function InfluencerContractModal({
       await post("/contract/influencer/confirm", {
         contractId: effectiveContractId,
         influencer: payload,
+        signatureInfluencer: signatureInfluencerId,
       });
 
-      // await post("/contract/sign", {
-      //   contractId: effectiveContractId,
-      //   role: "influencer",
-      //   name: local.legalName || local.contactName,
-      //   email: local.contactEmail,
-      //   signatureImageDataUrl: signatureDataUrl,
-      // });
-
       toast({
-        icon: "success",
-        title: "Accepted & Signed",
-        text: "Contract accepted successfully.",
+        icon: "success", title: "Accepted & Signed",
+        text: "Contract accepted successfully."
       });
 
       setShowAcceptSignatureModal(false);
@@ -1819,15 +1824,13 @@ function InfluencerContractModal({
       onClose();
     } catch (e: any) {
       toast({
-        icon: "error",
-        title: "Error",
-        text: apiMessage(e, "Failed to accept and sign."),
+        icon: "error", title: "Error",
+        text: apiMessage(e, "Failed to accept and sign.")
       });
     } finally {
       setIsWorking(false);
     }
   };
-
   const acceptOrSave = async () => {
     if (!hasAcceptedCurrent(meta, "influencer")) {
       await openAcceptSignatureFlow();
@@ -1939,43 +1942,18 @@ function InfluencerContractModal({
       <InfluencerSidebarShell
         isOpen={open && !showAcceptSignatureModal}
         onClose={onClose}
-        title={influencerAccepted ? "UPDATE CONTRACT" : "ACCEPT CONTRACT"}
+        title={influencerAccepted ? "VIEW CONTRACT" : "ACCEPT CONTRACT"}
         subtitle={`${campaign?.productOrServiceName || "Agreement"} • ${campaign?.brandName || ""}`}
         previewUrl={previewUrl}
         previewBlob={previewBlob}
+        pdfOnly={influencerAccepted}
         sidebarOffset={sidebarOffset}
         footer={
-          <>
-            <div className="mr-auto min-w-0 flex-1 text-xs">
-              {locked ? (
-                <span className="text-emerald-600">
-                  Locked — all required signatures have been captured.
-                </span>
-              ) : influencerAccepted ? (
-                <span className="text-emerald-600">
-                  Accepted — you can update and sign.
-                </span>
-              ) : (
-                <span className="text-amber-600">
-                  Fill details to accept the contract.
-                </span>
-              )}
-            </div>
-
-            <Button
-              variant="outline"
-              className="shrink-0"
-              onClick={() =>
-                previewUrl ? window.open(previewUrl, "_blank") : generatePreview()
-              }
-            >
-              <Eye className="mr-2 h-5 w-5" />
-              Preview
-            </Button>
-
+          influencerAccepted ? (
+            // pdfOnly mode — just the download button
             <Button
               variant="secondary"
-              className="shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
+              className="ml-auto shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
               onClick={() => {
                 if (previewUrl) {
                   const a = document.createElement("a");
@@ -1990,39 +1968,93 @@ function InfluencerContractModal({
               <DownloadSimpleIcon />
               <span>Download</span>
             </Button>
+          ) : (
+            <>
+              <div className="mr-auto min-w-0 flex-1 text-xs">
+                {locked ? (
+                  <span className="text-emerald-600">
+                    Locked — all required signatures have been captured.
+                  </span>
+                ) : (
+                  <span className="text-amber-600">
+                    Fill details to accept the contract.
+                  </span>
+                )}
+              </div>
 
-            {!locked && (
               <Button
-                onClick={acceptOrSave}
-                disabled={isWorking || !liteLoaded}
-                className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
+                variant="secondary"
+                className="shrink-0"
+                onClick={() =>
+                  previewUrl ? window.open(previewUrl, "_blank") : generatePreview()
+                }
               >
-                {influencerAccepted ? "Save Changes" : "Accept & Save"}
+                <Eye className="mr-2 h-5 w-5" />
+                Preview
               </Button>
-            )}
+              <Button
+                variant="secondary"
+                className="shrink-0"
+                // disabled={isWorking}
+                onClick={async () => {
+                  try {
+                    setIsWorking(true);
+                    const influencerId = getInfluencerId();
+                    const res = await post("/emails/threads", {
+                      influencerId,
+                      brandId: campaign.brandId,
+                      subject: campaign.title,
+                    });
+                    const threadId = res?.data?.threadId || res?.threadId || (res as any)?._id;
+                    if (!threadId) throw new Error("No thread ID returned.");
+                    router.push(`/influencer/inbox/${threadId}`);
+                  } catch (e: any) {
+                    toast({
+                      icon: "error",
+                      title: "Error",
+                      text: apiMessage(e, "Failed to open inbox thread."),
+                    });
+                  } finally {
+                    setIsWorking(false);
+                  }
+                }}
+              >
+                Request Change
+              </Button>
+              <Button
+                variant="secondary"
+                className="shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
+                onClick={() => {
+                  if (previewUrl) {
+                    const a = document.createElement("a");
+                    a.href = previewUrl;
+                    a.download = `${campaign?.productOrServiceName || "contract"}.pdf`;
+                    a.click();
+                  } else {
+                    generatePreview();
+                  }
+                }}
+              >
+                <DownloadSimpleIcon />
+                <span>Download</span>
+              </Button>
 
-            {!locked &&
-              readyToSign &&
-              influencerAccepted &&
-              brandAccepted &&
-              !influencerSigned && (
+              {!locked && (
                 <Button
-                  className="shrink-0 bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] text-gray-900"
-                  onClick={openSignature}
-                  disabled={isWorking}
+                  onClick={acceptOrSave}
+                  disabled={isWorking || !liteLoaded}
+                  className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
                 >
-                  <PenLine className="mr-2 h-4 w-4" />
-                  Sign as Influencer
+                  Accept & Save
                 </Button>
               )}
-          </>
+            </>
+          )
         }
       >
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        {!influencerAccepted && (<div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4 border-b border-gray-100 pb-3 text-xl font-semibold text-gray-800">
-            {influencerAccepted
-              ? "Edit Your Contract Details"
-              : "Fill Your Details to Accept"}
+            Fill Your Details to Accept
           </div>
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -2119,13 +2151,13 @@ function InfluencerContractModal({
             />
 
 
-            <FloatingTextarea
+            {/* <FloatingTextarea
               id="notes"
               label="Notes (optional)"
               value={local.notes}
               onChange={(v) => setLocal((p) => ({ ...p, notes: v }))}
               rows={3}
-            />
+            /> */}
 
           </div>
 
@@ -2153,7 +2185,7 @@ function InfluencerContractModal({
                 setLocal((p) => ({ ...p, ftcAcknowledgement: v }))
               }
               rows={4}
-            //disabled={!canEdit}
+              disabled
             />
           </div>
 
@@ -2208,7 +2240,7 @@ function InfluencerContractModal({
               </div>
             </div>
           )}
-        </div>
+        </div>)}
       </InfluencerSidebarShell>
 
       <Dialog
@@ -2235,20 +2267,29 @@ function InfluencerContractModal({
               onClick={() => fileInputRef.current?.click()}
             >
               <div className="flex min-h-[140px] items-center justify-center rounded-2xl bg-white p-4">
-                {selectedSignaturePreview || savedSignatureUrl ? (
-                  <img
-                    src={selectedSignaturePreview || savedSignatureUrl}
-                    alt="Signature"
-                    className="max-h-24 w-auto object-contain"
-                  />
+                {selectedSignaturePreview ? (
+                  <img src={selectedSignaturePreview} alt="Signature"
+                    className="max-h-24 w-auto object-contain" />
+                ) : savedSignatureId ? (
+                  // already has a saved signature on file — show a placeholder
+                  <div className="flex flex-col items-center gap-2 text-gray-600">
+                    <Signature className="h-16 w-16" />
+                    <span className="text-sm font-medium">Signature on file</span>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-gray-400">
                     <Signature className="h-32 w-32 text-black" />
-                    <span className="text-sm text-gray-500">
-                      Click to upload signature
-                    </span>
+                    <span className="text-sm text-gray-500">Click to upload signature</span>
                   </div>
                 )}
+
+                {/* <span>
+                  {selectedSignaturePreview
+                    ? "New signature selected"
+                    : savedSignatureId
+                      ? "Using signature on file"
+                      : "Click the signature area to upload"}
+                </span> */}
               </div>
 
               <div className="mt-4 flex items-center justify-between">
@@ -2419,36 +2460,71 @@ export default function MyCampaignsPage() {
             : undefined;
 
         let res: any;
+        let rawCampaigns: any[] = [];
 
         if (tab === "applied") {
           res = await apiGetAppliedCampaigns(id, token);
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.items)
+                ? res.items
+                : Array.isArray(res?.data)
+                  ? res.data
+                  : [];
         } else if (tab === "active") {
           res = await apiGetMyCampaigns(
-            {
-              influencerId: id,
-              page: 1,
-              limit: 10,
-              search: searchInput || "",
-            },
+            { influencerId: id, page: 1, limit: 10, search: searchInput || "" },
             token
           );
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.items)
+                ? res.items
+                : Array.isArray(res?.data)
+                  ? res.data
+                  : [];
         } else if (tab === "Contracted") {
           res = await apiGetContractedCampaigns(id, token);
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.contracts)
+                ? res.contracts
+                : Array.isArray(res?.data)
+                  ? res.data
+                  : [];
+        } else if (tab === "Rejected") {
+          res = await api.get(`/campaign/rejected/${id}`);
+          // API returns { success, count, data: [ { _id, campaignId, status, campaignData: {...} } ] }
+          const items: any[] = Array.isArray(res?.data?.data)
+            ? res.data.data
+            : Array.isArray(res?.data)
+              ? res.data
+              : [];
+
+          rawCampaigns = items.map((item: any) => ({
+            ...(item.campaignData || item),
+            _id: item.campaignId || item.campaignData?._id || item._id,
+            status: item.status,
+            campaignStatus: item.status,
+          }));
         } else {
           res = await apiGetAllCampaigns(id);
-        }
-
-        const rawCampaigns = Array.isArray(res)
-          ? res
-          : Array.isArray((res as any)?.campaigns)
-            ? (res as any).campaigns
-            : Array.isArray((res as any)?.items)
-              ? (res as any).items
-              : Array.isArray((res as any)?.data)
-                ? (res as any).data
-                : Array.isArray((res as any)?.contracts)
-                  ? (res as any).contracts
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.items)
+                ? res.items
+                : Array.isArray(res?.data)
+                  ? res.data
                   : [];
+        }
 
         const mapped = rawCampaigns.map(mapApiCampaign);
         setCampaigns(mapped);
@@ -2644,7 +2720,11 @@ export default function MyCampaignsPage() {
         if (activeTab === "active") return true;
         if (activeTab === "Contracted") return campaign.isContracted === 1;
         if (activeTab === "Rejected")
-          return contractStatus === CONTRACT_STATUS.REJECTED;
+          return (
+            contractStatus === CONTRACT_STATUS.REJECTED ||
+            normStatus(campaign.status) === CONTRACT_STATUS.REJECTED ||
+            normStatus(campaign.campaignStatus) === CONTRACT_STATUS.REJECTED
+          );
         return true;
       })();
 

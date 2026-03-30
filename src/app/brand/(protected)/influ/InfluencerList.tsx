@@ -131,7 +131,9 @@ function toHandle(v: unknown) {
 }
 
 function getApplicantDisplayStatus(a: any) {
-  if (Number(a?.isAccepted) === 1) return "Active";
+  const lifecycleRaw = String(a?.lifecycleStatusRaw || "").toUpperCase();
+  const isLifecycleActive = lifecycleRaw === "READY_TO_SIGN" || lifecycleRaw === "INFLUENCER_ACCEPTED";
+  if (Number(a?.isAccepted) === 1 || isLifecycleActive) return "Active";
   if (Number(a?.isRejected) === 1) return "Rejected";
   if (Number(a?.isShortlisted) === 1) return "Shortlisted";
   if (Number(a?.isUndicided) === 1) return "Undecided";
@@ -140,11 +142,12 @@ function getApplicantDisplayStatus(a: any) {
 }
 
 function doesApplicantBelongToTab(raw: any, tab: Tab) {
-  const isAccepted = Number(raw?.isAccepted) === 1;
-  const isShortlisted = Boolean(raw?.isShortlisted);
+  const lifecycleRaw = String(raw?.lifecycleStatusRaw || "").toUpperCase();
+  const isLifecycleActive = lifecycleRaw === "READY_TO_SIGN" || lifecycleRaw === "INFLUENCER_ACCEPTED";
+  const isAccepted = Number(raw?.isAccepted) === 1 || isLifecycleActive;
+  const isShortlisted = Boolean(raw?.isShortlisted) && !isLifecycleActive;
   const isUndicided = Boolean(raw?.isUndicided);
   const isRejected = Boolean(raw?.isRejected);
-  const isActive = Boolean(raw?.isAccepted);
   const isApplied = !isAccepted && !isShortlisted && !isUndicided && !isRejected;
 
   if (tab === "all") return true;
@@ -400,7 +403,7 @@ function ActionButtons({
         {primaryLabel}
       </button>
 
-      {showAccept && onAccept ? (
+      {/* {showAccept && onAccept ? (
         <button
           type="button"
           onClick={onAccept}
@@ -409,7 +412,7 @@ function ActionButtons({
           <SealCheck size={14} weight="fill" className="text-emerald-600" />
           Accept
         </button>
-      ) : null}
+      ) : null} */}
 
       {showSign && onSign ? (
         <button
@@ -509,16 +512,16 @@ function ActiveMilestoneActions({
         )}
       </div>
 
-      {showAccept && onAccept ? (
+      {/* {showAccept && onAccept ? (
         <button
           type="button"
           onClick={onAccept}
           className="inline-flex h-8 items-center gap-2 justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white px-3 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
         >
-          <span>Edit</span>
+          <span>Final Edit</span>
           <PencilSimpleIcon size={16} />
         </button>
-      ) : null}
+      ) : null} */}
 
       {showSign && onSign ? (
         <button
@@ -1040,7 +1043,7 @@ export default function InfluencerList() {
       }
 
       // Existing flow for normal campaigns / other tabs
-      const tabStatus = getFilterStatusFromTab(tab);
+      const tabStatus = getFilterStatusFromTab(tab);  // "applied" | "active" | "shortlisted" | "undecided" | "rejected" | "all"
       const influencerTypeStatus = getFilterStatusFromInfluencerType(filters["Influencer Type"]);
       const effectiveFilterStatus = tab === "all" ? (influencerTypeStatus ?? "all") : tabStatus;
       const selectedCategoryIds = (filters.Category || []).filter((v) => v && v !== "All");

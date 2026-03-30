@@ -40,7 +40,7 @@ export default function MinimalPdfPreview({ file }: MinimalPdfPreviewProps) {
     <div className="h-full w-full overflow-auto bg-[#FFF9E6] p-6">
       <div
         ref={containerRef}
-        className="w-full overflow-auto rounded-xl border border-neutral-200"
+        className="max-w-7xl w-full overflow-auto mx-auto rounded-xl border border-neutral-200"
       >
         <Document
           file={file}
@@ -63,11 +63,11 @@ export default function MinimalPdfPreview({ file }: MinimalPdfPreviewProps) {
             </div>
           }
         >
-          <div className="mx-auto flex flex-col items-center ">
+          <div className="w-full flex flex-col items-center">
             {Array.from({ length: numPages }, (_, index) => (
               <div
                 key={index}
-                className="overflow-hidden rounded-sm bg-white shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
+                className="w-full overflow-hidden rounded-sm bg-white shadow-[0_8px_30px_rgba(0,0,0,0.08)]"
               >
                 <Page
                   pageNumber={index + 1}

@@ -1158,16 +1158,48 @@ export async function apiGetAcceptedAdminCreatedCampaigns(
   );
 }
 
-export async function apiUploadInfluencerSignature(payload: FormData) {
-  return apiPost(`${CONTRACT_BASE}/upload-influencer`, payload, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+export type UploadInfluencerSignatureResponse = {
+  _id?: string;
+  signatureUrl?: string;
+  url?: string;
+  signature?: {
+    _id?: string;
+    url?: string;
+    signatureUrl?: string;
+  };
+  message?: string;
+};
+
+export async function apiUploadInfluencerSignature(
+  payload: FormData
+): Promise<UploadInfluencerSignatureResponse> {
+  return apiPost<UploadInfluencerSignatureResponse>(
+    `${CONTRACT_BASE}/upload-influencer`,
+    payload,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
 }
 
-export async function apiGetInfluencerSignature(influencerId: string) {
-  return apiGet(`${CONTRACT_BASE}/signature-influencer/${influencerId}`);
+export type InfluencerSignatureResponse = {
+  _id?: string;
+  signatureUrl?: string;
+  url?: string;
+  signature?: {
+    url?: string;
+    signatureUrl?: string;
+  };
+};
+
+export async function apiGetInfluencerSignature(
+  influencerId: string
+): Promise<InfluencerSignatureResponse> {
+  return apiGet<InfluencerSignatureResponse>(
+    `${CONTRACT_BASE}/signature-influencer/${influencerId}`
+  );
 }
 
 export type CampaignInvitationStatusSummary = {

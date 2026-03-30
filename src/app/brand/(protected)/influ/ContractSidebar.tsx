@@ -124,6 +124,7 @@ type ContractFormState = {
       paymentProcessorFeesNotes: string;
       laneAMarketplaceFeeNote: string;
       milestones: ContractMilestone[];
+      influencerBudget: number;
     };
     rawFiles: {
       rawSourceFileDelivery: string;
@@ -351,6 +352,7 @@ const SIDEBAR_TOOLTIPS = {
   minimumLivePeriod: "Minimum time the content must stay live.",
 
   totalCampaignFee: "Total compensation for the influencer.",
+  influencerBudget: "Total budget for influencer",
   currency: "Currency in which compensation is denominated.",
   paymentStructure: "How payment is split across milestones or stages.",
   customSplit: "Custom breakdown of the payment structure.",
@@ -602,6 +604,7 @@ function createDefaultContractForm(): ContractFormState {
         laneAMarketplaceFeeNote:
           "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
         milestones: [createDefaultCommercialMilestone()],
+        influencerBudget: 0
       },
       rawFiles: {
         rawSourceFileDelivery: "",
@@ -1264,6 +1267,7 @@ export default function ContractSidebarExtracted({
             paymentType === PAYMENT_TYPE.GIFTING
               ? 0
               : Number(content.scheduleA.commercial.totalCampaignFee || "0") || 0,
+
           milestones:
             paymentType === PAYMENT_TYPE.MILESTONE
               ? content.scheduleA.commercial.milestones.map((row) => ({
@@ -2440,19 +2444,19 @@ export default function ContractSidebarExtracted({
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <FloatingInput
                     id="total-campaign-fee"
-                    label="Infleuncer fees"
-                    info={SIDEBAR_TOOLTIPS.totalCampaignFee}
+                    label="Influencer fees"
+                    info={SIDEBAR_TOOLTIPS.influencerBudget}
                     type="number"
-                    value={getAtPath(contractForm, "scheduleA.commercial.totalCampaignFee")}
+                    value={getAtPath(contractForm, "scheduleA.commercial.influencerBudget")}
                     onValueChange={(value: string) =>
-                      setContractField("scheduleA.commercial.totalCampaignFee", value)
+                      setContractField("scheduleA.commercial.influencerBudget", value)
                     }
                     state={
-                      formErrors["scheduleA.commercial.totalCampaignFee"]
+                      formErrors["scheduleA.commercial.influencerBudget"]
                         ? "error"
                         : undefined
                     }
-                    errorText={formErrors["scheduleA.commercial.totalCampaignFee"] || ""}
+                    errorText={formErrors["scheduleA.commercial.influencerBudget"] || ""}
                     required
                   />
 
