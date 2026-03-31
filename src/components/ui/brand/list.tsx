@@ -52,6 +52,10 @@ export type ListCardProps = {
 
   secondaryText?: string;
   className?: string;
+
+  disabled?: boolean;
+  disabledTitle?: string;
+  overlayLabel?: string;
 };
 
 export type ListCardViewItem = ListCardProps & { key: React.Key };
@@ -222,6 +226,9 @@ export function ListCard({
   onMoreClick,
   secondaryText,
   className,
+  disabled = false,
+  disabledTitle,
+  overlayLabel,
 }: ListCardProps) {
   const StatusTag = (onStatusClick ? "button" : "div") as "button" | "div";
 
@@ -279,72 +286,170 @@ export function ListCard({
   }, [badges, categoryTag]);
 
   return (
-    <div className={cx(WRAP_BASE, WRAP_GRID, className)}>
-      {/* LEFT */}
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-3 max-[520px]:gap-2.5">
+    <div
+      className={cx("relative", disabled ? "cursor-pointer" : "")}
+      title={disabled ? disabledTitle : undefined}
+      aria-disabled={disabled || undefined}
+    >
+      <div
+        className={cx(
+          WRAP_BASE,
+          WRAP_GRID,
+          className,
+          disabled && "pointer-events-none select-none blur-[3px] opacity-60"
+        )}
+      >
+        {/* LEFT */}
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-3 max-[520px]:gap-2.5">
+            <div
+              className={cx(
+                "shrink-0 overflow-hidden rounded-[0.75rem] bg-neutral-900",
+                "h-[5rem] w-[5.25rem]",
+                "max-[520px]:h-[4.25rem] max-[520px]:w-[4.25rem]"
+              )}
+              aria-label={logoAlt}
+              onMouseEnter={onEnter}
+              onMouseLeave={onLeave}
+            >
+              {activeSrc ? (
+                <img
+                  className="h-full w-full object-cover transition-opacity duration-300"
+                  src={activeSrc}
+                  alt={logoAlt}
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-[0.75rem] text-white/85">
+                  Logo
+                </span>
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1">
+                <div
+                  className={cx(
+                    "min-w-0 line-clamp-2 break-words font-semibold text-tx-primary",
+                    "leading-snug",
+                    "text-[clamp(0.95rem,0.9rem+0.25vw,1.12rem)]",
+                    "max-[520px]:text-[clamp(0.86rem,0.82rem+0.22vw,1rem)]"
+                  )}
+                  title={name}
+                >
+                  {name}
+                </div>
+
+                {resolvedBadges.length ? (
+                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 max-[520px]:gap-1.5">
+                    {resolvedBadges.map((badge) => {
+                      const isAdminBadge = badge.trim().toLowerCase() === "by admin";
+                      const isManagedBadge =
+                        badge.trim().toLowerCase() === "fully managed";
+
+                      return (
+                        <span
+                          key={badge}
+                          title={badge}
+                          className={cx(
+                            "inline-flex min-w-0 items-center justify-center truncate rounded-full px-2",
+                            "h-6 text-[clamp(0.7rem,0.66rem+0.16vw,0.78rem)]",
+                            "max-[520px]:h-5 max-[520px]:px-2 max-[520px]:text-[0.68rem]",
+                            isManagedBadge
+                              ? "border border-[#8F6B00] bg-[#B8860B] text-white"
+                              : isAdminBadge
+                                ? "bg-[#EEF4FF] text-[#2F5BFF]"
+                                : "bg-brand-50 text-neutral-750"
+                          )}
+                        >
+                          {badge}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CENTER */}
+        <div className="w-full min-[900px]:flex min-[900px]:justify-center">
           <div
             className={cx(
-              "shrink-0 overflow-hidden rounded-[0.75rem] bg-neutral-900",
-              "h-[5rem] w-[5.25rem]",
-              "max-[520px]:h-[4.25rem] max-[520px]:w-[4.25rem]"
+              "w-full rounded-[0.8125rem] border border-border",
+              "px-4 py-3 max-[520px]:px-3 max-[520px]:py-2.5",
+              "grid grid-cols-4",
+              "gap-3 max-[520px]:gap-2",
+              "max-[380px]:grid-cols-2",
+              "max-w-[32rem]"
             )}
-            aria-label={logoAlt}
-            onMouseEnter={onEnter}
-            onMouseLeave={onLeave}
+            role="list"
+            aria-label="Campaign stats"
           >
-            {activeSrc ? (
-              <img
-                className="h-full w-full object-cover transition-opacity duration-300"
-                src={activeSrc}
-                alt={logoAlt}
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center text-[0.75rem] text-white/85">
-                Logo
-              </span>
-            )}
+            {metrics.map((m) => (
+              <MetricItem key={m.id} {...m} />
+            ))}
           </div>
+        </div>
 
-          <div className="min-w-0 flex-1">
-            {/* keep same layout: title left, tag on right; wrap only if truly needed */}
-            <div className="min-w-0 flex-1">
-              <div
+        {/* RIGHT */}
+        <div className="min-w-0 min-[900px]:justify-self-end">
+          <div className="flex min-w-0 items-center justify-between gap-4 min-[900px]:justify-end max-[980px]:flex-col max-[980px]:items-end">
+            <StatusTag
+              className={cx(
+                "inline-flex items-center gap-2",
+                onStatusClick ? "cursor-pointer border-0 bg-transparent p-0" : ""
+              )}
+              onClick={onStatusClick}
+              type={onStatusClick ? "button" : undefined}
+              aria-label="Status"
+            >
+              <span
                 className={cx(
-                  "min-w-0 line-clamp-2 break-words font-semibold text-tx-primary",
-                  "leading-snug",
-                  "text-[clamp(0.95rem,0.9rem+0.25vw,1.12rem)]",
-                  "max-[520px]:text-[clamp(0.86rem,0.82rem+0.22vw,1rem)]"
+                  "inline-flex items-center rounded-full p-0.5",
+                  statusPillBg(statusVariant)
                 )}
-                title={name}
               >
-                {name}
+                <span className={cx("h-2 w-2 rounded-full", statusDotBg(statusVariant))} />
+              </span>
+
+              <span
+                className={cx(
+                  "min-w-0 truncate font-medium text-muted-foreground",
+                  "leading-6",
+                  "text-[clamp(0.86rem,0.82rem+0.16vw,0.96rem)]",
+                  "max-[520px]:leading-5 max-[520px]:text-[0.8rem]"
+                )}
+                title={statusLabel}
+              >
+                {statusLabel}
+              </span>
+            </StatusTag>
+
+            <div className="flex min-w-0 flex-col gap-2 max-[520px]:gap-1.5">
+              <div className="flex min-w-0 items-center gap-2 max-[520px]:gap-1.5">
+                <div className="min-w-0 flex-1">{actionSlot}</div>
+
+                <div className="flex shrink-0 items-center gap-2 max-[520px]:gap-1.5">
+                  {editNode ? <div className="shrink-0">{editNode}</div> : null}
+                  {dotsNode ? <div className="shrink-0">{dotsNode}</div> : null}
+                </div>
               </div>
 
-              {resolvedBadges.length ? (
-                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 max-[520px]:gap-1.5">
-                  {resolvedBadges.map((badge) => {
-                    const isAdminBadge = badge.trim().toLowerCase() === "by admin";
-
-                    return (
-                      <span
-                        key={badge}
-                        title={badge}
-                        className={cx(
-                          "inline-flex min-w-0 items-center justify-center truncate rounded-full px-2",
-                          "h-6 text-[clamp(0.7rem,0.66rem+0.16vw,0.78rem)]",
-                          "max-[520px]:h-5 max-[520px]:px-2 max-[520px]:text-[0.68rem]",
-                          isAdminBadge
-                            ? "bg-[#EEF4FF] text-[#2F5BFF]"
-                            : "bg-brand-50 text-neutral-750"
-                        )}
-                      >
-                        {badge}
-                      </span>
-                    );
-                  })}
+              {secondaryText ? (
+                <div
+                  className={cx(
+                    "text-muted-foreground truncate",
+                    "leading-4",
+                    "text-[clamp(0.7rem,0.66rem+0.14vw,0.82rem)]",
+                    "max-[520px]:text-[0.7rem]",
+                    "min-[900px]:text-right"
+                  )}
+                  title={secondaryText}
+                >
+                  {secondaryText}
                 </div>
               ) : null}
             </div>
@@ -352,94 +457,13 @@ export function ListCard({
         </div>
       </div>
 
-      {/* CENTER */}
-      <div className="w-full min-[900px]:flex min-[900px]:justify-center">
-        <div
-          className={cx(
-            "w-full rounded-[0.8125rem] border border-border",
-            // ✅ compact padding
-            "px-4 py-3 max-[520px]:px-3 max-[520px]:py-2.5",
-            // ✅ keep 4 points in a row as long as possible
-            "grid grid-cols-4",
-            // ✅ tighter gaps on compact widths
-            "gap-3 max-[520px]:gap-2",
-            // ✅ only at VERY small widths, switch to 2 cols (prevents hiding)
-            "max-[380px]:grid-cols-2",
-            // ✅ keep the box from getting too tiny in constrained cards
-            "max-w-[32rem]"
-          )}
-          role="list"
-          aria-label="Campaign stats"
-        >
-          {metrics.map((m) => (
-            <MetricItem key={m.id} {...m} />
-          ))}
-        </div>
-      </div>
-
-      {/* RIGHT */}
-      <div className="min-w-0 min-[900px]:justify-self-end">
-        <div className="flex min-w-0 items-center justify-between gap-4 min-[900px]:justify-end max-[980px]:flex-col max-[980px]:items-end">
-          {/* status */}
-          <StatusTag
-            className={cx(
-              "inline-flex items-center gap-2",
-              onStatusClick ? "cursor-pointer border-0 bg-transparent p-0" : ""
-            )}
-            onClick={onStatusClick}
-            type={onStatusClick ? "button" : undefined}
-            aria-label="Status"
-          >
-            <span
-              className={cx(
-                "inline-flex items-center rounded-full p-0.5",
-                statusPillBg(statusVariant)
-              )}
-            >
-              <span className={cx("h-2 w-2 rounded-full", statusDotBg(statusVariant))} />
-            </span>
-
-            <span
-              className={cx(
-                "min-w-0 truncate font-medium text-muted-foreground",
-                "leading-6",
-                "text-[clamp(0.86rem,0.82rem+0.16vw,0.96rem)]",
-                "max-[520px]:leading-5 max-[520px]:text-[0.8rem]"
-              )}
-              title={statusLabel}
-            >
-              {statusLabel}
-            </span>
-          </StatusTag>
-
-          {/* actions */}
-          <div className="flex min-w-0 flex-col gap-2 max-[520px]:gap-1.5">
-            <div className="flex min-w-0 items-center gap-2 max-[520px]:gap-1.5">
-              <div className="min-w-0 flex-1">{actionSlot}</div>
-
-              <div className="flex shrink-0 items-center gap-2 max-[520px]:gap-1.5">
-                {editNode ? <div className="shrink-0">{editNode}</div> : null}
-                {dotsNode ? <div className="shrink-0">{dotsNode}</div> : null}
-              </div>
-            </div>
-
-            {secondaryText ? (
-              <div
-                className={cx(
-                  "text-muted-foreground truncate",
-                  "leading-4",
-                  "text-[clamp(0.7rem,0.66rem+0.14vw,0.82rem)]",
-                  "max-[520px]:text-[0.7rem]",
-                  "min-[900px]:text-right"
-                )}
-                title={secondaryText}
-              >
-                {secondaryText}
-              </div>
-            ) : null}
+      {disabled ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.5rem] bg-black/15 backdrop-blur-[2px]">
+          <div className="rounded-full border border-white/20 bg-black/80 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow">
+            {overlayLabel ?? "Locked"}
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

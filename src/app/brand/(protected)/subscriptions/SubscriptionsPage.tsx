@@ -7,47 +7,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle,
   XCircle,
-  CreditCard,
   Check,
   X,
-  Star,
   Loader2,
   Crown,
   AlertTriangle,
-  Heart,
-  Mail,
-  Plus,
 } from "lucide-react";
 import CheckoutAutoStart from "@/components/common/CheckoutAutoStart";
-
-/** =========================
- * Types
- * ========================= */
+import { Button } from "@/components/ui/buttonComp";
 
 type BillingCycle = "monthly" | "annual";
-
-type FeatureValue =
-  | number
-  | boolean
-  | string
-  | string[]
-  | Record<string, any>
-  | null
-  | undefined;
+type PaymentStatus = "idle" | "processing" | "success" | "failed";
 
 interface Feature {
   key: string;
-  value: FeatureValue;
+  value: number | boolean | string | string[] | null | undefined | { unlimited?: boolean };
   note?: string;
-}
-
-interface Addon {
-  key: string;
-  name: string;
-  type: "one_time" | "recurring";
-  price: number;
-  currency?: string;
-  payload?: any;
 }
 
 interface Plan {
@@ -58,191 +33,219 @@ interface Plan {
   displayName?: string;
   label?: string;
   overview?: string;
-
   monthlyCost: number;
-  annualCost?: number; // annual total (12 months)
+  annualCost?: number;
   currency?: string;
-
   isCustomPricing?: boolean;
   isStartingAt?: boolean;
   annualBillingNote?: string;
-
   sortOrder?: number;
   features: Feature[];
-  addons?: Addon[];
-  _ordered?: Feature[];
 }
 
-interface BrandData {
-  name: string;
+interface BrandSubscription {
+  planName: string;
+  expiresAt: string | null;
+}
+
+interface BrandProfile {
+  name?: string;
+  brandName?: string;
   email: string;
-  subscription: { planName: string; expiresAt: string | null } | null;
+  subscription: BrandSubscription | null;
 }
 
-type PaymentStatus = "idle" | "processing" | "success" | "failed";
-
-/** =========================
- * Helpers
- * ========================= */
+interface BrandResponse {
+  success: boolean;
+  data: BrandProfile;
+}
 
 const STRIPE_HANDLED_KEY = "stripe_subscription_handled_session";
 
-const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
-const nice = (s: string) => s.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 const currencySymbol = (c?: string) => (c === "INR" ? "₹" : c === "EUR" ? "€" : "$");
+const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
-const LABELS: Record<string, string> = {
-  // Brand (legacy + your older keys)
-  searches_per_month: "Searches / month",
-  profile_views_per_month: "Profile views / month",
-  invites_per_month: "Influencer Invites",
-  active_campaigns_limit: "Active campaigns",
-  message_templates_basic_limit: "Basic message templates",
-  custom_messaging: "Custom messaging",
-  advanced_filters: "Advanced filters",
-  dedicated_account_manager: "Dedicated account manager",
-  dedicated_manager: "Dedicated manager",
-  dispute_assistance: "Dispute assistance",
-  support_channels: "Support",
-  public_quotas_visible: "What brands see (Public Quotas)",
-  setup_assistance: "Setup assistance",
-  priority_verification_queue: "Priority verification queue",
-  strategy_calls: "Strategy calls",
-  sla_support: "SLA support",
-  flexible_billing: "Flexible billing",
-  contact_admin_flow: "Contact admin flow",
+const UPGRADE_REST =
+  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.30) 31%, rgba(255, 255, 255, 0.50) 100%)";
 
-  // Legacy / extra
-  monthly_credits: "Monthly credits",
-  live_campaigns_limit: "Live campaigns",
-  search_cached_only: "Search mode (cached)",
-  search_fresh_uses_credits: "Fresh search uses credits",
-  view_full_profiles_uses_credits: "Full profile uses credits",
-  milestones_access: "Milestones",
-  contracts_access: "Contracts",
-  dispute_support: "Dispute support",
-  profile_preview_only: "Profile preview only",
+const UPGRADE_HOVER =
+  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 8%, rgba(255, 191, 0, 0.40) 51%, rgba(255, 255, 255, 0.50) 100%)";
 
-  // If you later reuse new plan keys here, it still works (fallback = nice(key))
-};
-
-const ORDER_BY_ROLE_BRAND: string[] = [
-  "searches_per_month",
-  "profile_views_per_month",
-  "invites_per_month",
-  "active_campaigns_limit",
-  "custom_messaging",
-  "advanced_filters",
-  "support_channels",
-  "dedicated_account_manager",
-  "dedicated_manager",
-  "dispute_assistance",
-  "priority_verification_queue",
-  "setup_assistance",
-  "strategy_calls",
-  "sla_support",
-  "flexible_billing",
-  "public_quotas_visible",
-  "message_templates_basic_limit",
-  // legacy
-  "monthly_credits",
-  "live_campaigns_limit",
-  "search_cached_only",
-  "search_fresh_uses_credits",
-  "view_full_profiles_uses_credits",
-  "milestones_access",
-  "contracts_access",
-  "dispute_support",
-  "profile_preview_only",
-];
-
-const ZERO_IS_UNLIMITED = new Set<string>([
-  "apply_to_campaigns_quota",
-  "live_campaigns_limit",
-  "active_campaigns_limit",
-]);
-
-const BOOLEAN_KEYS = new Set<string>([
-  "custom_messaging",
-  "advanced_filters",
-  "dedicated_account_manager",
-  "dedicated_manager",
-  "dispute_assistance",
-  "public_quotas_visible",
-  "setup_assistance",
-  "priority_verification_queue",
-  "strategy_calls",
-  "sla_support",
-  "flexible_billing",
-  "contact_admin_flow",
-  // legacy
-  "search_cached_only",
-  "search_fresh_uses_credits",
-  "view_full_profiles_uses_credits",
-  "in_app_messaging",
-  "milestones_access",
-  "contracts_access",
-  "dispute_support",
-  "profile_preview_only",
-]);
-
-const SUPPORT_PRETTY: Record<string, string> = {
-  chat: "Chat support",
-  email: "Email support",
-  phone: "Phone support",
-};
-
-const isUnlimited = (k: string, v: FeatureValue) =>
-  v === Infinity || (typeof v === "number" && v === 0 && ZERO_IS_UNLIMITED.has(k));
-
-const formatValue = (key: string, v: FeatureValue): string => {
-  if (isUnlimited(key, v)) return "Unlimited";
-
-  if (key === "support_channels" && Array.isArray(v)) {
-    return v
-      .map((s) => SUPPORT_PRETTY[String(s).toLowerCase()] ?? String(s))
-      .join(" + ");
+const MARKETING_COPY: Record<
+  string,
+  {
+    eyebrow?: string;
+    title: string;
+    subtitle: string;
+    description: string;
+    cta: string;
+    priceNote?: string;
+    annualText?: string;
+    savingsText?: string;
+    sections: { title?: string; items: string[] }[];
   }
-
-  if (Array.isArray(v)) return v.length ? v.join(", ") : "None";
-  if (BOOLEAN_KEYS.has(key)) return Boolean(v) ? "Yes" : "No";
-  if (v == null || v === "") return "—";
-  if (typeof v === "number") return v.toLocaleString();
-  return String(v);
+> = {
+  free: {
+    title: "FREE",
+    subtitle: "Get Started — No Risk, No Cost",
+    description:
+      "Perfect for brands exploring influencer marketing for the first time. Start building relationships and test campaigns before upgrading.",
+    cta: "Start Free",
+    priceNote: "Free forever",
+    sections: [
+      {
+        title: "What You Can Do",
+        items: [
+          "Invite up to 20 influencers per month",
+          "Run up to 5 active campaigns",
+          "Search for 20 influencers monthly",
+          "View 3 influencer profiles each month",
+          "Access creators on Instagram, TikTok, and YouTube",
+          "Send direct invites to influencers",
+          "Manage milestones and payouts",
+          "Use basic message templates",
+          "Create and manage campaigns yourself",
+          "Standard support included",
+          "Shortlist delivery included",
+          "Negotiation and follow-ups handled by you",
+        ],
+      },
+    ],
+  },
+  growth: {
+    eyebrow: "MOST POPULAR",
+    title: "GROWTH",
+    subtitle: "Scale Your Influencer Marketing With Confidence",
+    description:
+      "Designed for brands ready to run consistent campaigns and grow their reach faster. This plan gives you the right balance of flexibility, performance, and support.",
+    cta: "Start Growing",
+    annualText: "$948 per year",
+    savingsText: "Save 20% ($240 per year)",
+    sections: [
+      {
+        title: "What You Get",
+        items: [
+          "Invite up to 150 influencers every month",
+          "Run up to 10 active campaigns simultaneously",
+          "Search 150 influencers per month",
+          "View 50 influencer profiles monthly",
+          "Use advanced filters to find the right creators faster",
+          "Get help resolving disputes when needed",
+          "Access creators across Instagram, TikTok, and YouTube",
+          "Send unlimited outreach emails",
+          "Manage campaign milestones and payouts",
+          "Create custom message templates",
+          "Receive email support from our team",
+          "Shortlist delivery included",
+          "Negotiation and follow-ups handled by you",
+        ],
+      },
+      {
+        title: "Why Brands Choose This Plan",
+        items: [
+          "Run multiple campaigns at the same time",
+          "Reach more influencers faster",
+          "Improve campaign efficiency",
+          "Scale marketing without hiring an agency",
+        ],
+      },
+    ],
+  },
+  pro: {
+    title: "PRO",
+    subtitle: "Run Large-Scale Campaigns Without Limits",
+    description:
+      "Built for brands managing high-volume collaborations and multiple campaigns. This plan gives you the capacity, speed, and support needed to scale influencer marketing operations.",
+    cta: "Scale Campaigns",
+    annualText: "$2,988 per year",
+    savingsText: "Save 17% ($600 per year)",
+    sections: [
+      {
+        title: "What You Get",
+        items: [
+          "Invite up to 750 influencers per month",
+          "Run up to 30 active campaigns",
+          "Search 750 influencers monthly",
+          "View 150 influencer profiles each month",
+          "Advanced filters for precise targeting",
+          "Priority dispute assistance",
+          "Access creators on Instagram, TikTok, and YouTube",
+          "Send direct outreach messages",
+          "Manage payouts and campaign milestones",
+          "Use custom and saved message templates",
+          "Receive phone and email support",
+          "Shortlist delivery included",
+          "Negotiation and follow-ups handled by you",
+        ],
+      },
+      {
+        title: "Why Brands Upgrade to Pro",
+        items: [
+          "Manage large campaigns efficiently",
+          "Work with hundreds of influencers",
+          "Increase campaign reach",
+          "Save time on campaign management",
+        ],
+      },
+    ],
+  },
+  fully_managed: {
+    title: "FULLY MANAGED",
+    subtitle: "Let Our Experts Run Your Campaigns",
+    description:
+      "The easiest way to scale influencer marketing without building an internal team. Our specialists handle everything from sourcing creators to managing campaigns and negotiations.",
+    cta: "Contact Sales",
+    priceNote: "$2999/month starting",
+    sections: [
+      {
+        title: "What We Handle For You",
+        items: [
+          "Unlimited influencer outreach managed by our team",
+          "Unlimited influencer search and profile access",
+          "Campaign execution handled end-to-end",
+          "Priority dispute assistance",
+          "Dedicated campaign manager",
+          "Managed email inbox",
+          "We create and send outreach messages",
+          "We manage milestones and payouts",
+          "We negotiate with creators on your behalf",
+          "We deliver a curated shortlist of influencers",
+          "Shortlist delivered within 48 hours",
+          "Campaign capacity scales as needed",
+          "Creator payments handled separately — you control the budget",
+        ],
+      },
+      {
+        title: "Why Brands Choose Fully Managed",
+        items: [
+          "No hiring required",
+          "No manual outreach",
+          "Faster campaign execution",
+          "Expert campaign management",
+          "Predictable results",
+        ],
+      },
+    ],
+  },
 };
 
-const isPositive = (key: string, v: FeatureValue) => {
-  if (isUnlimited(key, v)) return true;
-  if (BOOLEAN_KEYS.has(key)) return Boolean(v);
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") return v > 0;
-  if (Array.isArray(v)) return v.length > 0;
-  if (typeof v === "object" && v) return true;
-  return Boolean(v);
+const getPlanTheme = (name: string) => {
+  const key = name.toLowerCase();
+  const popular = key === "growth";
+
+  return {
+    popular,
+    cardBorder: popular
+      ? "border-[#1a1a1a] shadow-[0_0_0_1px_rgba(26,26,26,0.16)]"
+      : "border-[#ece7f2]",
+    badge: "bg-[#1a1a1a] text-white shadow-lg",
+  };
 };
 
-const isEnterpriseBrand = (p: Plan) => p.role === "Brand" && p.name?.toLowerCase() === "enterprise";
-const computedLabel = (plan: Plan) => plan.label || (plan.name === "growth" ? "Popular" : undefined);
-
-/** Annual helpers */
 const getAnnualTotal = (plan: Plan) => {
   if (typeof plan.annualCost === "number" && plan.annualCost > 0) return plan.annualCost;
   if (!plan.isCustomPricing && plan.monthlyCost > 0) return plan.monthlyCost * 12;
   return 0;
-};
-
-const calcSavings = (plan: Plan) => {
-  if (plan.isCustomPricing) return null;
-  if (!(plan.monthlyCost > 0)) return null;
-
-  const annualTotal = getAnnualTotal(plan);
-  const monthlyTotal = plan.monthlyCost * 12;
-
-  if (!(annualTotal > 0) || !(annualTotal < monthlyTotal)) return null;
-
-  const amount = monthlyTotal - annualTotal;
-  const pct = Math.round((amount / monthlyTotal) * 100);
-  return { amount, pct };
 };
 
 const stripStripeParamsFromUrl = () => {
@@ -254,38 +257,50 @@ const stripStripeParamsFromUrl = () => {
   window.history.replaceState({}, "", url.toString());
 };
 
-/** =========================
- * Component
- * ========================= */
+const resolveMarketingCopy = (plan: Plan) => {
+  const key = plan.name.toLowerCase();
+  return (
+    MARKETING_COPY[key] ?? {
+      title: plan.displayName || plan.name.toUpperCase(),
+      subtitle: plan.overview || "Built for growing brands.",
+      description: plan.overview || "Flexible creator collaboration tools for your brand.",
+      cta: plan.monthlyCost <= 0 ? "Start Free" : "Choose Plan",
+      sections: [
+        {
+          items: ["Instagram creator access", "TikTok creator access", "YouTube creator access"],
+        },
+      ],
+    }
+  );
+};
 
 export default function BrandSubscriptionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [billing, setBilling] = useState<BillingCycle>("monthly");
-
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
-  const [paymentMessage, setPaymentMessage] = useState<string>("");
+  const [paymentMessage, setPaymentMessage] = useState("");
 
-  // downgrade modal
   const [showDowngradeModal, setShowDowngradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [submittingDowngrade, setSubmittingDowngrade] = useState(false);
 
-  // contact-us modal
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactToast, setContactToast] = useState<{
     type: "idle" | "success" | "failed";
     message: string;
-  }>({ type: "idle", message: "" });
+  }>({
+    type: "idle",
+    message: "",
+  });
 
   const [contactForm, setContactForm] = useState({
     name: "",
@@ -294,7 +309,6 @@ export default function BrandSubscriptionPage() {
     message: "",
   });
 
-  /** Stripe redirect handler */
   useEffect(() => {
     const stripeSuccess = searchParams.get("stripe_success");
     const stripeCancel = searchParams.get("stripe_cancel");
@@ -331,7 +345,9 @@ export default function BrandSubscriptionPage() {
             planName?: string;
           }>("/payment/verify", { sessionId });
 
-          if (!verifyResp?.success) throw new Error(verifyResp?.message || "Payment not verified.");
+          if (!verifyResp?.success) {
+            throw new Error(verifyResp?.message || "Payment not verified.");
+          }
 
           const brandId = localStorage.getItem("brandId");
           const planId = verifyResp.planId || localStorage.getItem("pendingPlanId") || "";
@@ -344,11 +360,7 @@ export default function BrandSubscriptionPage() {
 
           const assignResp = await post<{
             message: string;
-            subscription?: {
-              planId?: string;
-              planName?: string;
-              expiresAt?: string | null;
-            };
+            subscription?: { planId?: string; planName?: string; expiresAt?: string | null };
           }>("/subscription/assign", {
             userType: "Brand",
             userId: brandId,
@@ -356,10 +368,11 @@ export default function BrandSubscriptionPage() {
             billingCycle,
           });
 
-          const planName = assignResp?.subscription?.planName
-            || verifyResp.planName
-            || localStorage.getItem("pendingPlanName")
-            || "";
+          const planName =
+            assignResp?.subscription?.planName ||
+            verifyResp.planName ||
+            localStorage.getItem("pendingPlanName") ||
+            "";
 
           setCurrentPlan(planName || null);
           setExpiresAt(assignResp?.subscription?.expiresAt ?? null);
@@ -375,16 +388,13 @@ export default function BrandSubscriptionPage() {
           setPaymentMessage("Subscription updated successfully!");
           router.refresh?.();
         } catch (e: any) {
-          console.error(e);
           setPaymentStatus("failed");
           setPaymentMessage(e?.message || "Payment verification failed. Please contact support.");
         }
       })();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [router, searchParams]);
 
-  /** Load plans + current brand subscription */
   useEffect(() => {
     (async () => {
       try {
@@ -393,40 +403,35 @@ export default function BrandSubscriptionPage() {
           { role: "Brand" }
         );
 
+        console.log("fetched plans:", fetched);
+
         const sorted = (fetched || [])
           .slice()
           .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
 
-        const ORDER = ORDER_BY_ROLE_BRAND;
-        const withOrdered = sorted.map((p) => {
-          const known = ORDER.map((k) => p.features.find((f) => f.key === k)).filter(
-            (f): f is Feature => Boolean(f)
-          );
-          const remaining = p.features.filter((f) => !ORDER.includes(f.key));
-          return { ...p, _ordered: [...known, ...remaining] };
-        });
-
-        setPlans(withOrdered);
+        setPlans(sorted);
 
         const id = localStorage.getItem("brandId");
+        console.log("brandId:", id);
+
         if (id) {
-          const brand = await get<BrandData>(`/brand/${id}`);
+          const brandResp = await get<BrandResponse>(`/brand/${id}`);
+          const brand = brandResp?.data;
 
-          setCurrentPlan(brand.subscription?.planName || null);
-          setExpiresAt(brand.subscription?.expiresAt ?? null);
+          console.log("brand response:", brandResp);
+          console.log("brand data:", brand);
+          console.log("current subscription plan:", brand?.subscription?.planName);
 
-          setContactForm((p) => ({
-            ...p,
-            name: brand.name || "",
-            email: brand.email || "",
+          setCurrentPlan(brand?.subscription?.planName || null);
+          setExpiresAt(brand?.subscription?.expiresAt ?? null);
+          setContactForm((prev) => ({
+            ...prev,
+            name: brand?.name || brand?.brandName || "",
+            email: brand?.email || "",
           }));
-
-          if (brand.subscription?.planName) {
-            localStorage.setItem("brandPlanName", brand.subscription.planName);
-          }
         }
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error("subscription load error:", error);
         setPaymentStatus("failed");
         setPaymentMessage("Unable to load subscription info. Please try again.");
       } finally {
@@ -438,6 +443,24 @@ export default function BrandSubscriptionPage() {
   const currentPlanObj = useMemo(
     () => plans.find((p) => p.name.toLowerCase() === currentPlan?.toLowerCase()),
     [plans, currentPlan]
+  );
+
+  const fullyManagedPlan = useMemo(
+    () =>
+      plans.find((p) => {
+        const key = p.name.toLowerCase();
+        return key === "fully_managed" || key === "enterprise" || !!p.isCustomPricing;
+      }) ?? null,
+    [plans]
+  );
+
+  const standardPlans = useMemo(
+    () =>
+      plans.filter((p) => {
+        const key = p.name.toLowerCase();
+        return !(key === "fully_managed" || key === "enterprise" || !!p.isCustomPricing);
+      }),
+    [plans]
   );
 
   const featureLoss = useMemo(() => {
@@ -457,12 +480,9 @@ export default function BrandSubscriptionPage() {
         const to = mapNew.get(k);
 
         const loss = (() => {
-          if (isUnlimited(k, from) && !isUnlimited(k, to)) return true;
-          if (BOOLEAN_KEYS.has(k)) return Boolean(from) && !Boolean(to);
           if (typeof from === "number" && typeof to === "number") return to < from;
           if (typeof from === "boolean" && typeof to === "boolean") return from && !to;
           if (Array.isArray(from) && Array.isArray(to)) return to.length < from.length;
-          if ((from == null) !== (to == null)) return from != null && to == null;
           return false;
         })();
 
@@ -471,22 +491,23 @@ export default function BrandSubscriptionPage() {
       .filter(Boolean) as { key: string; from: any; to: any }[];
   }, [currentPlanObj, selectedPlan]);
 
-  const maxSavingsPct = useMemo(() => {
-    const pcts = plans
-      .map((p) => calcSavings(p)?.pct)
-      .filter((v): v is number => typeof v === "number" && v > 0);
-    return pcts.length ? Math.max(...pcts) : 0;
-  }, [plans]);
+  const openContactModal = () => {
+    setContactToast({ type: "idle", message: "" });
+    setContactForm((prev) => ({
+      ...prev,
+      subject: prev.subject || "Fully Managed plan enquiry",
+      message:
+        prev.message ||
+        "Hi CollabGlam team, we want help running our campaigns with a managed plan. Please share next steps.",
+    }));
+    setShowContactModal(true);
+  };
 
   const handleSendContact = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    const { name, email, subject, message } = contactForm;
 
-    const name = contactForm.name.trim();
-    const email = contactForm.email.trim();
-    const subject = contactForm.subject.trim();
-    const message = contactForm.message.trim();
-
-    if (!name || !email || !subject || !message) {
+    if (!name.trim() || !email.trim() || !subject.trim() || !message.trim()) {
       setContactToast({ type: "failed", message: "All fields are required." });
       return;
     }
@@ -496,27 +517,13 @@ export default function BrandSubscriptionPage() {
 
     try {
       await post("/contact/send", { name, email, subject, message });
-
       setContactToast({ type: "success", message: "Message sent successfully!" });
       setShowContactModal(false);
-      setContactForm({ name: "", email: "", subject: "", message: "" });
-    } catch (err) {
-      console.error(err);
+    } catch {
       setContactToast({ type: "failed", message: "Could not send message. Please try again." });
     } finally {
       setContactSubmitting(false);
     }
-  };
-
-  const openContactModal = () => {
-    setContactToast({ type: "idle", message: "" });
-    setContactForm((p) => ({
-      ...p,
-      subject: p.subject || "Enterprise plan enquiry",
-      message:
-        p.message || "Hi CollabGlam team, we want a custom plan for our brand. Please share details.",
-    }));
-    setShowContactModal(true);
   };
 
   const getPayAmount = (plan: Plan) => {
@@ -527,13 +534,14 @@ export default function BrandSubscriptionPage() {
   const handleSelect = async (plan: Plan) => {
     if (processing || plan.name.toLowerCase() === currentPlan?.toLowerCase()) return;
 
-    // Enterprise → Contact modal
-    if (isEnterpriseBrand(plan) || plan.isCustomPricing) {
+    const key = plan.name.toLowerCase();
+    const isManagedPlan = key === "fully_managed" || key === "enterprise" || !!plan.isCustomPricing;
+
+    if (isManagedPlan) {
       openContactModal();
       return;
     }
 
-    // Free/downgrade → downgrade modal
     if (plan.monthlyCost <= 0) {
       setSelectedPlan(plan);
       setShowDowngradeModal(true);
@@ -550,31 +558,28 @@ export default function BrandSubscriptionPage() {
       const brandId = localStorage.getItem("brandId");
       if (!brandId) throw new Error("Missing brandId.");
 
-      // pending info for after redirect
       localStorage.setItem("pendingPlanId", plan.planId);
       localStorage.setItem("pendingPlanName", plan.name);
       localStorage.setItem("pendingBillingCycle", billing);
 
-      const amount = getPayAmount(plan);
+      const resp = await post<{ success: boolean; url?: string; message?: string }>(
+        "/payment/Order",
+        {
+          planId: plan.planId,
+          amount: getPayAmount(plan),
+          currency: plan.currency || "USD",
+          userId: brandId,
+          role: "Brand",
+          billingCycle: billing,
+        }
+      );
 
-      const resp = await post<{
-        success: boolean;
-        url?: string;
-        sessionId?: string;
-        message?: string;
-      }>("/payment/Order", {
-        planId: plan.planId,
-        amount, // ✅ monthly or annual depending on toggle
-        currency: plan.currency || "USD",
-        userId: brandId,
-        role: "Brand",
-        billingCycle: billing, // ✅ pass through (backend can ignore safely)
-      });
+      if (!resp?.success || !resp?.url) {
+        throw new Error(resp?.message || "Failed to start checkout.");
+      }
 
-      if (!resp?.success || !resp?.url) throw new Error(resp?.message || "Failed to start checkout.");
       window.location.href = resp.url;
     } catch (e: any) {
-      console.error(e);
       setPaymentStatus("failed");
       setPaymentMessage(e?.message || "Failed to initiate payment. Try again later.");
       setProcessing(null);
@@ -582,13 +587,9 @@ export default function BrandSubscriptionPage() {
   };
 
   const handleConfirmDowngrade = async () => {
-    if (!selectedPlan) return;
-    if (confirmText.trim().toUpperCase() !== "CANCEL") return;
+    if (!selectedPlan || confirmText.trim().toUpperCase() !== "CANCEL") return;
 
     setSubmittingDowngrade(true);
-    setPaymentStatus("processing");
-    setPaymentMessage("");
-
     try {
       const brandId = localStorage.getItem("brandId");
       await post("/subscription/assign", {
@@ -600,10 +601,8 @@ export default function BrandSubscriptionPage() {
 
       setCurrentPlan(selectedPlan.name);
       setExpiresAt(null);
-
       localStorage.setItem("brandPlanName", selectedPlan.name);
       localStorage.setItem("brandPlanId", selectedPlan.planId);
-
       setPaymentStatus("success");
       setPaymentMessage(`You've moved to the ${capitalize(selectedPlan.name)} plan.`);
       setShowDowngradeModal(false);
@@ -618,9 +617,9 @@ export default function BrandSubscriptionPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-gray-50">
-        <Loader2 className="w-16 h-16 text-orange-500 animate-spin" />
-        <p className="mt-4 text-gray-700">Loading your subscription…</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fcf8ff] px-4">
+        <Loader2 className="h-12 w-12 animate-spin text-[#1a1a1a]" />
+        <p className="mt-4 text-sm text-slate-600">Loading pricing plans…</p>
       </div>
     );
   }
@@ -628,516 +627,437 @@ export default function BrandSubscriptionPage() {
   return (
     <>
       <CheckoutAutoStart role="Brand" plans={plans} loading={loading} />
-      <section id="brand-subscription" className="relative py-20 font-lexend min-h-screen">
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <Crown className="w-8 h-8 text-orange-500" />
-              <h2 className="text-4xl lg:text-5xl font-bold text-gray-900">Brand Subscription</h2>
-            </div>
-            <p className="text-lg text-gray-600 mt-2">
-              Simple, transparent pricing. Start free, upgrade as you grow.
+
+      <section className="min-h-screen py-16 font-lexend text-slate-900">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <span className="inline-flex items-center rounded-full border border-[#d1d1d1] bg-white px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#1a1a1a]">
+              CollabGlam Pricing Plans
+            </span>
+            <h1 className="mt-5 text-4xl font-bold tracking-tight text-[#250054] sm:text-5xl">
+              Find Influencers. Launch Campaigns. Grow Faster.
+            </h1>
+            <p className="mt-4 text-lg leading-8 text-slate-600">
+              Start collaborating with verified creators across Instagram, TikTok, and YouTube —
+              all from one platform.
             </p>
-
-            {/* Billing toggle (NEW) */}
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <div className="inline-flex bg-gray-200 rounded-2xl p-1">
-                <button
-                  onClick={() => setBilling("monthly")}
-                  aria-pressed={billing === "monthly"}
-                  className={`px-6 py-2 rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400 ${billing === "monthly"
-                    ? "bg-white shadow text-gray-900"
-                    : "text-gray-600 hover:text-gray-900"
-                    }`}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setBilling("annual")}
-                  aria-pressed={billing === "annual"}
-                  className={`px-6 py-2 rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400 ${billing === "annual"
-                    ? "bg-white shadow text-gray-900"
-                    : "text-gray-600 hover:text-gray-900"
-                    }`}
-                >
-                  Annual
-                </button>
-              </div>
-
-              {maxSavingsPct > 0 && (
-                <span className="text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm">
-                  Save up to {maxSavingsPct}%
-                </span>
-              )}
-            </div>
+            <p className="mt-3 text-sm font-medium text-slate-500">
+              No setup fees • Cancel anytime • 7-day Money-Back Guarantee
+            </p>
           </div>
 
-          {/* Current plan */}
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <div className="inline-flex rounded-lg border border-[#eadcf5] bg-white p-1 shadow-sm">
+              <button
+                onClick={() => setBilling("monthly")}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${billing === "monthly" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
+                  }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBilling("annual")}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${billing === "annual" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
+                  }`}
+              >
+                Annual
+              </button>
+            </div>
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+              Save more yearly
+            </span>
+          </div>
+
           {currentPlan && (
-            <div className="max-w-2xl mx-auto mb-8">
-              <div className="bg-white rounded-2xl border border-gray-200 shadow p-6 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <CheckCircle className="w-5 h-5 text-emerald-600" />
-                  <span className="text-sm font-medium text-gray-600 uppercase tracking-wide">
-                    Current Plan
-                  </span>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900">
-                  {currentPlanObj?.displayName || capitalize(currentPlan)}
-                </h3>
-                <p className="text-gray-600 mt-1">
-                  {expiresAt ? (
-                    <>
-                      Renews on{" "}
-                      <span className="font-semibold">
-                        {new Date(expiresAt).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </span>
-                    </>
-                  ) : (
-                    "No renewal date set"
-                  )}
-                </p>
+            <div className="mx-auto mt-8 max-w-2xl rounded-3xl border border-[#eadcf5] bg-white px-6 py-5 text-center shadow-sm">
+              <div className="flex items-center justify-center gap-2 text-sm font-semibold uppercase tracking-wide text-[#1a1a1a]">
+                <CheckCircle className="h-4 w-4" /> Current Plan
               </div>
+              <h2 className="mt-2 text-2xl font-bold text-[#250054]">
+                {currentPlanObj?.displayName || capitalize(currentPlan)}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {expiresAt
+                  ? `Renews on ${new Date(expiresAt).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}`
+                  : "No renewal date set"}
+              </p>
             </div>
           )}
 
-          {/* Payment status toast */}
           {paymentStatus !== "idle" && (
-            <div className="max-w-md mx-auto mb-8">
+            <div className="mx-auto mt-6 max-w-xl rounded-2xl border bg-white px-5 py-4 shadow-sm">
               <div
-                className={`p-4 rounded-2xl border flex items-center justify-center gap-3 ${paymentStatus === "success"
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : paymentStatus === "processing"
-                    ? "bg-orange-50 border-orange-200 text-orange-800"
-                    : "bg-red-50 border-red-200 text-red-800"
+                className={`flex items-center justify-center gap-3 text-sm font-medium ${paymentStatus === "success"
+                  ? "text-emerald-700"
+                  : paymentStatus === "failed"
+                    ? "text-rose-700"
+                    : "text-amber-700"
                   }`}
               >
                 {paymentStatus === "success" ? (
-                  <CheckCircle className="w-6 h-6" />
-                ) : paymentStatus === "processing" ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <CheckCircle className="h-5 w-5" />
+                ) : paymentStatus === "failed" ? (
+                  <XCircle className="h-5 w-5" />
                 ) : (
-                  <XCircle className="w-6 h-6" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                 )}
-                <p className="font-medium">
-                  {paymentMessage || (paymentStatus === "processing" ? "Working on it…" : null)}
-                </p>
+                <span>{paymentMessage}</span>
               </div>
             </div>
           )}
 
-          {/* Plans grid */}
-          <div className="grid gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-            {plans.map((plan) => {
-              const id = plan._id || plan.planId;
-              const isEnterprise = isEnterpriseBrand(plan) || !!plan.isCustomPricing;
-              const badge = computedLabel(plan);
-              const isFree = plan.monthlyCost <= 0 && !plan.isCustomPricing;
-              const sym = currencySymbol(plan.currency);
-
-              const isActive = !!currentPlan && plan.name.toLowerCase() === currentPlan.toLowerCase();
+          <div className="mt-12 grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+            {standardPlans.map((plan) => {
+              const key = plan.name.toLowerCase();
+              const copy = resolveMarketingCopy(plan);
+              const theme = getPlanTheme(key);
+              const isFree = plan.monthlyCost <= 0;
+              const isActive = !!currentPlan && currentPlan.toLowerCase() === key;
               const isProcessing = processing === plan.name;
-
-              const badgeClasses = "bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white";
-              const baseButtonClasses =
-                "mt-4 w-full py-3 text-sm font-semibold rounded-md shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400";
-
-              const borderClasses = badge ? "border-orange-300" : "border-gray-200";
-              const activeClasses = isActive ? "border-orange-400 ring-2 ring-orange-300" : "";
-
+              const symbol = currencySymbol(plan.currency);
               const annualTotal = getAnnualTotal(plan);
-              const savings = calcSavings(plan);
-              const showAnnual = billing === "annual" && !isFree && !isEnterprise;
 
-              /** ENTERPRISE layout */
-              if (isEnterprise) {
-                return (
-                  <div
-                    key={id}
-                    className={`group relative col-span-1 md:col-span-2 lg:col-span-3 xl:col-span-4 rounded-3xl bg-white shadow-sm border ${borderClasses} ${activeClasses} lg:flex lg:items-stretch`}
-                  >
-                    {badge && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span
-                          className={`inline-flex items-center gap-1 text-xs font-bold py-1.5 px-3 rounded-full shadow ${badgeClasses}`}
-                        >
-                          <Star className="w-3 h-3 fill-current" /> {badge}
-                        </span>
-                      </div>
-                    )}
+              const displayedPrice = isFree
+                ? copy.priceNote ?? "Free forever"
+                : billing === "annual"
+                  ? `${symbol}${annualTotal.toLocaleString()}/year`
+                  : `${symbol}${plan.monthlyCost.toLocaleString()}/month`;
 
-                    <div className="w-full lg:w-5/12 px-8 py-10 flex flex-col justify-center gap-4">
-                      <h3 className="text-3xl lg:text-4xl font-bold text-gray-900">
-                        {plan.displayName || nice(plan.name)}
-                      </h3>
-                      <p className="text-base lg:text-lg text-gray-600">
-                        {plan.overview ||
-                          "The best way to run CollabGlam at scale with custom quotas, security, and billing."}
-                      </p>
-
-                      <div className="mt-4 flex items-center gap-4">
-                        <button
-                          onClick={() => handleSelect(plan)}
-                          disabled={isActive || isProcessing}
-                          className={`inline-flex items-center justify-center px-6 py-3 text-sm font-semibold rounded-md shadow bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF8C1A] hover:to-[#FF5C1E] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-400 ${isActive || isProcessing ? "opacity-70 cursor-not-allowed" : ""
-                            }`}
-                        >
-                          {isActive ? (
-                            <>
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Current Plan
-                            </>
-                          ) : isProcessing ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Processing…
-                            </>
-                          ) : (
-                            <>
-                              <CreditCard className="w-4 h-4 mr-2" />
-                              Contact Us
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="w-full lg:w-7/12 px-8 py-10 border-t lg:border-t-0 lg:border-l border-gray-200">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
-                        {plan._ordered
-                          ?.filter(({ key, value }) => isPositive(key, value))
-                          .map(({ key, value, note }) => {
-                            const display = formatValue(key, value);
-                            const label = LABELS[key] || nice(key);
-
-                            return (
-                              <div key={key} className="flex items-start gap-2 text-sm text-gray-800">
-                                <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
-                                <span className="leading-6">
-                                  {label}
-                                  {display && display !== "Yes" && display !== "Unlimited" && display !== "—" ? (
-                                    <>
-                                      : <strong>{display}</strong>
-                                    </>
-                                  ) : display === "Unlimited" ? (
-                                    <>
-                                      {" "}
-                                      — <strong>Unlimited</strong>
-                                    </>
-                                  ) : null}
-                                  {note && (
-                                    <span className="ml-1 text-[11px] text-gray-500">({note})</span>
-                                  )}
-                                </span>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              /** NORMAL plans */
               return (
-                <div
-                  key={id}
-                  className={`group relative flex flex-col h-full rounded-3xl bg-white shadow-sm transition-all hover:shadow-xl border ${borderClasses} ${activeClasses}`}
+                <article
+                  key={plan._id || plan.planId}
+                  className={`relative flex h-full flex-col overflow-hidden rounded-[28px] border bg-white ${theme.cardBorder}`}
                 >
-                  {badge && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span
-                        className={`inline-flex items-center gap-1 text-xs font-bold py-1.5 px-3 rounded-full shadow ${badgeClasses}`}
-                      >
-                        <Star className="w-3 h-3 fill-current" /> {badge}
-                      </span>
+                  <div className="flex min-h-[240px] flex-col px-8 pt-10 pb-8">
+                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-[#d1d1d1] bg-[#f5f5f5]">
+                      <Crown className="h-5 w-5 text-[#1a1a1a]" />
                     </div>
-                  )}
 
-                  <div className="px-8 pt-8 pb-6 min-h-[170px] flex flex-col">
-                    <h3 className="text-2xl font-bold text-gray-900">
-                      {plan.displayName || nice(plan.name)}
-                    </h3>
-                    <p className="text-gray-600 mt-2">
-                      {plan.overview ||
-                        (isFree
-                          ? "Essential tools to get started with CollabGlam."
-                          : "For brands growing collaborations with more credits & campaigns.")}
-                    </p>
+                    <h3 className="text-3xl font-bold text-[#250054]">{copy.title}</h3>
+                    <p className="mt-3 text-base font-medium text-slate-700">{copy.subtitle}</p>
+                    <p className="mt-3 text-[15px] leading-7 text-slate-600">{copy.description}</p>
                   </div>
 
-                  <div className="border-t border-gray-200" />
-
-                  <div className="px-8 py-6 text-center min-h-[155px] flex flex-col items-center justify-center">
-                    {isFree ? (
-                      <span className="text-4xl font-extrabold tracking-tight text-gray-900">Free</span>
-                    ) : billing === "annual" ? (
-                      <>
-                        <div className="flex items-baseline justify-center gap-2">
-                          <span className="text-4xl font-extrabold tracking-tight text-gray-900">
-                            {sym}
-                            {(annualTotal > 0 ? annualTotal : plan.monthlyCost * 12).toLocaleString()}
-                          </span>
-                          <span className="text-sm text-gray-500">/year</span>
-                        </div>
-
-                        <div className="mt-1 text-xs text-gray-500">
-                          {sym}
-                          {Math.round((annualTotal > 0 ? annualTotal : plan.monthlyCost * 12) / 12).toLocaleString()}{" "}
-                          / month billed annually
-                          {plan.annualBillingNote ? ` • ${plan.annualBillingNote}` : ""}
-                        </div>
-
-                        {savings && (
-                          <div className="mt-1 text-xs font-semibold text-emerald-700">
-                            Save {savings.pct}% ({sym}
-                            {Math.round(savings.amount).toLocaleString()} / year)
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-baseline justify-center gap-2">
-                          <span className="text-4xl font-extrabold tracking-tight text-gray-900">
-                            {sym}
-                            {plan.monthlyCost.toLocaleString()}
-                          </span>
-                          <span className="text-sm text-gray-500">/month</span>
-                        </div>
-
-                        {plan.annualCost != null && plan.annualCost > 0 && (
-                          <div className="mt-1 text-xs text-gray-500">
-                            Annual: {sym}
-                            {Number(plan.annualCost).toLocaleString()} / year
-                            {plan.annualBillingNote ? ` • ${plan.annualBillingNote}` : ""}
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    <button
-                      onClick={() => handleSelect(plan)}
-                      disabled={isActive || isProcessing}
-                      className={`${baseButtonClasses} ${isActive || isProcessing
-                        ? "bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200"
-                        : "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF8C1A] hover:to-[#FF5C1E] text-white"
-                        }`}
-                    >
-                      {isActive ? (
-                        <span className="inline-flex items-center justify-center gap-2">
-                          <CheckCircle className="w-4 h-4" />
-                          Current Plan
-                        </span>
-                      ) : isProcessing ? (
-                        <span className="inline-flex items-center justify-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Processing…
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center justify-center gap-2">
-                          <CreditCard className="w-4 h-4" />
-                          {isFree ? "Choose Free" : "Choose Plan"}
+                  <div
+                    className="border-t border-[#ece7f2] px-8 py-7 transition-all duration-200"
+                    style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
+                    onMouseEnter={(e) => {
+                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
+                    }}
+                  >
+                    <div className="flex items-end gap-2 text-[#250054]">
+                      <span className="text-4xl font-bold tracking-tight">
+                        {displayedPrice.replace(/\/(month|year)$/, "")}
+                      </span>
+                      {!isFree && (
+                        <span className="pb-1 text-base text-slate-500">
+                          /{billing === "annual" ? "year" : "month"}
                         </span>
                       )}
-                    </button>
+                    </div>
+
+                    {isFree && <p className="mt-1 text-sm text-slate-500">Free forever</p>}
+
+                    {!isFree && billing === "annual" && copy.savingsText && (
+                      <p className="mt-2 text-sm font-semibold text-emerald-700">
+                        {copy.savingsText}
+                      </p>
+                    )}
+
+                    {!isFree && billing === "monthly" && copy.annualText && (
+                      <p className="mt-2 text-sm text-slate-500">or {copy.annualText}</p>
+                    )}
+
+                    <Button
+                      onClick={() => handleSelect(plan)}
+                      disabled={isActive || isProcessing}
+                      className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a] hover:text-[#1a1a1a]"
+                      style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
+                      onMouseEnter={(e) => {
+                        if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
+                      }}
+                      onMouseLeave={(e) => {
+                        if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
+                      }}
+                    >
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4" /> Current Plan
+                        </span>
+                      ) : isProcessing ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Processing…
+                        </span>
+                      ) : (
+                        copy.cta
+                      )}
+                    </Button>
                   </div>
 
-                  <ul className="px-8 pb-8 space-y-3 mb-auto">
-                    {plan._ordered?.map(({ key, value, note }) => {
-                      const display = formatValue(key, value);
-                      const ok = isPositive(key, value);
-                      const label = LABELS[key] || nice(key);
-
-                      return (
-                        <li
-                          key={key}
-                          className={`flex items-start gap-3 ${ok ? "text-gray-800" : "text-gray-400"}`}
-                        >
-                          <span
-                            className={`mt-0.5 inline-flex items-center justify-center rounded-sm ring-1 h-5 w-5 flex-shrink-0 ${ok
-                              ? "bg-green-50 text-green-600 ring-green-200"
-                              : "bg-gray-100 text-gray-400 ring-gray-200"
-                              }`}
-                          >
-                            {ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-                          </span>
-                          <span className="text-[15px] leading-6">
-                            {label}
-                            {display && display !== "Yes" && display !== "Unlimited" && display !== "—" ? (
-                              <>
-                                : <strong>{display}</strong>
-                              </>
-                            ) : display === "Unlimited" ? (
-                              <>
-                                {" "}
-                                — <strong>Unlimited</strong>
-                              </>
-                            ) : null}
-                            {note && <span className="ml-1 text-xs text-gray-500">({note})</span>}
-                          </span>
-                        </li>
-                      );
-                    })}
-
-                    {plan.addons && plan.addons.length > 0 && (
-                      <li className="mt-2">
-                        <div className="rounded-2xl border border-orange-200 bg-orange-50/50 p-4">
-                          <div className="flex items-center mb-2 text-orange-900 font-semibold">
-                            <Plus className="w-4 h-4 mr-2" /> Available Add-ons
-                          </div>
-                          <ul className="space-y-2">
-                            {plan.addons.map((a) => {
-                              const symAddon = currencySymbol(a.currency);
-                              return (
-                                <li key={a.key} className="text-sm text-orange-800">
-                                  <span className="font-medium">{a.name}</span>{" "}
-                                  <span className="opacity-80">
-                                    — {symAddon}
-                                    {a.price} {a.type === "one_time" ? "one-time" : "/mo"}
-                                  </span>
-                                </li>
-                              );
-                            })}
+                  <div className="flex-1 border-t border-[#ece7f2] px-8 py-8">
+                    <div className="space-y-7">
+                      {copy.sections.map((section) => (
+                        <div key={section.title || section.items.join("|")}>
+                          {section.title && (
+                            <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+                              {section.title}
+                            </h4>
+                          )}
+                          <ul className="space-y-3">
+                            {section.items.map((item) => (
+                              <li
+                                key={item}
+                                className="flex items-start gap-3 text-[15px] leading-6 text-slate-700"
+                              >
+                                <Check className="mt-1 h-4 w-4 flex-shrink-0 text-[#1a1a1a]" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
                           </ul>
                         </div>
-                      </li>
-                    )}
-                  </ul>
-
-                  {showAnnual && (
-                    <div className="px-8 pb-6 -mt-2 text-[11px] text-gray-500 text-center">
-                      Quotas reset monthly • Billing is annual
+                      ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                </article>
               );
             })}
           </div>
 
-          <p className="text-center text-gray-500 text-sm mt-12">
-            All paid plans include a 7-day Money-Back Guarantee • No setup fees • Cancel any time •{" "}
+          {fullyManagedPlan && (() => {
+            const plan = fullyManagedPlan;
+            const key = plan.name.toLowerCase();
+            const copy = resolveMarketingCopy(plan);
+            const theme = getPlanTheme(key);
+            const isActive = !!currentPlan && currentPlan.toLowerCase() === key;
+            const isProcessing = processing === plan.name;
+
+            return (
+              <div className="mt-8 w-full">
+                <article
+                  className={`relative flex w-full flex-col overflow-hidden rounded-[28px] border bg-white ${theme.cardBorder} lg:flex-row`}
+                >
+                  <div
+                    className="flex w-full flex-col px-8 pt-10 pb-8 lg:w-[38%]"
+                    style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
+                    onMouseEnter={(e) => {
+                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
+                    }}
+                  >
+                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-[#d1d1d1] bg-[#f5f5f5]">
+                      <Crown className="h-5 w-5 text-[#1a1a1a]" />
+                    </div>
+
+                    <h3 className="text-3xl font-bold text-[#250054]">{copy.title}</h3>
+                    <p className="mt-3 text-base font-medium text-slate-700">{copy.subtitle}</p>
+                    <p className="mt-3 text-[15px] leading-7 text-slate-600">{copy.description}</p>
+
+                    <div className="mt-8 border-t border-[#ece7f2] pt-7">
+                      <div className="flex items-end gap-2 text-[#250054]">
+                        <span className="text-4xl font-bold tracking-tight">
+                          {copy.priceNote ?? "$2999/month starting"}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-sm text-slate-500">
+                        Custom execution with expert campaign support
+                      </p>
+
+                      <Button
+                        onClick={() => handleSelect(plan)}
+                        disabled={isActive || isProcessing}
+                        className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a] hover:text-[#1a1a1a]"
+                        style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
+                        onMouseEnter={(e) => {
+                          if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
+                        }}
+                        onMouseLeave={(e) => {
+                          if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
+                        }}
+                      >
+                        {isActive ? (
+                          <span className="inline-flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4" /> Current Plan
+                          </span>
+                        ) : isProcessing ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Processing…
+                          </span>
+                        ) : (
+                          copy.cta
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 border-t border-[#ece7f2] px-8 py-8 lg:border-t-0 lg:border-l">
+                    <div className="space-y-7">
+                      {copy.sections.map((section) => (
+                        <div key={section.title || section.items.join("|")}>
+                          {section.title && (
+                            <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+                              {section.title}
+                            </h4>
+                          )}
+                          <ul className="grid gap-3 md:grid-cols-2">
+                            {section.items.map((item) => (
+                              <li
+                                key={item}
+                                className="flex items-start gap-3 text-[15px] leading-6 text-slate-700"
+                              >
+                                <Check className="mt-1 h-4 w-4 flex-shrink-0 text-[#1a1a1a]" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              </div>
+            );
+          })()}
+
+          <div className="mt-12 rounded-[28px] border border-[#eadcf5] bg-white px-8 py-8 shadow-sm">
+            <h3 className="text-center text-xl font-bold text-[#250054]">All paid plans include</h3>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                "7-day Money-Back Guarantee",
+                "No setup fees",
+                "Cancel anytime",
+                "Secure payments",
+                "Dedicated support",
+              ].map((item) => (
+                <div
+                  key={item}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-[#f0e8f7] bg-[#fcf8ff] px-4 py-4 text-center text-sm font-medium text-slate-700"
+                >
+                  <CheckCircle className="h-4 w-4 text-[#1a1a1a]" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="mt-8 text-center text-sm text-slate-500">
+            Need details before upgrading? Review our{" "}
             <Link
               href="/terms"
-              className="underline underline-offset-2 hover:text-gray-700"
               target="_blank"
               rel="noopener noreferrer"
+              className="font-medium text-[#1a1a1a] underline underline-offset-4"
             >
               Terms of Service
             </Link>
+            .
           </p>
         </div>
 
-        {/* CONTACT MODAL */}
         {showContactModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowContactModal(false)} />
             <div
-              className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="bg-orange-50 px-8 py-6 border-b border-orange-100">
-                <div className="flex items-start justify-between">
+              className="absolute inset-0 bg-slate-950/60"
+              onClick={() => setShowContactModal(false)}
+            />
+            <div className="relative w-full max-w-2xl overflow-hidden rounded-[28px] border border-[#eadcf5] bg-white shadow-2xl">
+              <div className="border-b border-[#ece7f2] bg-[#fcf8ff] px-8 py-6">
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">Contact Us</h3>
-                    <p className="text-gray-600 mt-1">Send your details — we’ll reach out ASAP.</p>
+                    <h3 className="text-2xl font-bold text-[#250054]">Contact Sales</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Tell us what you need and our team will reach out.
+                    </p>
                   </div>
-
-                  <button onClick={() => setShowContactModal(false)} className="p-2 rounded-full hover:bg-white/50">
-                    <X className="w-6 h-6 text-gray-500" />
+                  <button
+                    onClick={() => setShowContactModal(false)}
+                    className="rounded-full p-2 hover:bg-white"
+                  >
+                    <X className="h-5 w-5 text-slate-500" />
                   </button>
                 </div>
               </div>
 
-              <form onSubmit={handleSendContact} className="px-8 py-6 space-y-4">
+              <form onSubmit={handleSendContact} className="space-y-4 px-8 py-6">
                 {contactToast.type !== "idle" && (
                   <div
-                    className={`p-4 rounded-2xl border text-sm ${contactToast.type === "success"
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                      : "bg-red-50 border-red-200 text-red-800"
+                    className={`rounded-2xl border px-4 py-3 text-sm ${contactToast.type === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-rose-200 bg-rose-50 text-rose-700"
                       }`}
                   >
                     {contactToast.message}
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <label className="block">
-                    <span className="text-sm font-medium text-gray-700">Name</span>
+                    <span className="text-sm font-medium text-slate-700">Name</span>
                     <input
-                      disabled
                       readOnly
-                      className="mt-2 w-full rounded-xl px-4 py-3 border-2 text-gray-300 border-gray-200 cursor-not-allowed"
+                      disabled
                       value={contactForm.name}
-                      placeholder="Your name"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-400"
                     />
                   </label>
-
                   <label className="block">
-                    <span className="text-sm font-medium text-gray-700">Email</span>
+                    <span className="text-sm font-medium text-slate-700">Email</span>
                     <input
-                      disabled
                       readOnly
-                      type="email"
-                      className="mt-2 w-full rounded-xl px-4 py-3 border-2 border-gray-200 text-gray-300 cursor-not-allowed"
+                      disabled
                       value={contactForm.email}
-                      placeholder="you@company.com"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-400"
                     />
                   </label>
                 </div>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-gray-700">Subject</span>
+                  <span className="text-sm font-medium text-slate-700">Subject</span>
                   <input
-                    className="mt-2 w-full border-1 border-gray-200 rounded-xl px-4 py-3 focus:ring focus:ring-orange-400 focus:border-orange-400 outline-none"
                     value={contactForm.subject}
-                    onChange={(e) => setContactForm((p) => ({ ...p, subject: e.target.value }))}
-                    placeholder="Enterprise plan enquiry"
+                    onChange={(e) =>
+                      setContactForm((prev) => ({ ...prev, subject: e.target.value }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-[#1a1a1a]"
                     required
                   />
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-gray-700">Message</span>
+                  <span className="text-sm font-medium text-slate-700">Message</span>
                   <textarea
-                    className="mt-2 w-full border-1 border-gray-200 rounded-xl px-4 py-3 focus:ring focus:ring-orange-400 focus:border-orange-400 outline-none min-h-[140px]"
                     value={contactForm.message}
-                    onChange={(e) => setContactForm((p) => ({ ...p, message: e.target.value }))}
-                    placeholder="Write your message..."
+                    onChange={(e) =>
+                      setContactForm((prev) => ({ ...prev, message: e.target.value }))
+                    }
+                    className="mt-2 min-h-[140px] w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-[#1a1a1a]"
                     required
                   />
                 </label>
 
-                <div className="bg-gray-50 px-8 py-6 -mx-8 -mb-6 flex flex-col sm:flex-row gap-3 justify-end">
+                <div className="flex flex-col justify-end gap-3 border-t border-[#ece7f2] pt-5 sm:flex-row">
                   <button
                     type="button"
                     onClick={() => setShowContactModal(false)}
-                    className="w-48 px-6 py-3 rounded-xl bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-800 font-semibold"
-                    disabled={contactSubmitting}
+                    className="rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700"
                   >
                     Cancel
                   </button>
-
                   <button
                     type="submit"
                     disabled={contactSubmitting}
-                    className={`w-48 px-6 py-3 rounded-xl font-semibold text-white transition-colors ${contactSubmitting
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF7236] hover:to-[#FFA135] shadow-lg"
-                      }`}
+                    className="rounded-xl bg-gradient-to-r from-orange-500 via-pink-500 to-fuchsia-500 px-5 py-3 font-semibold text-white"
                   >
-                    {contactSubmitting ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Sending…
-                      </span>
-                    ) : (
-                      "Send message"
-                    )}
+                    {contactSubmitting ? "Sending…" : "Send Message"}
                   </button>
                 </div>
               </form>
@@ -1145,52 +1065,55 @@ export default function BrandSubscriptionPage() {
           </div>
         )}
 
-        {/* DOWNGRADE MODAL */}
         {showDowngradeModal && selectedPlan && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowDowngradeModal(false)} />
-            <div className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden">
-              <div className="bg-orange-50 px-8 py-6 border-b border-orange-100">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 rounded-full">
-                      <AlertTriangle className="w-6 h-6 text-orange-600" />
+            <div
+              className="absolute inset-0 bg-slate-950/60"
+              onClick={() => setShowDowngradeModal(false)}
+            />
+            <div className="relative w-full max-w-2xl overflow-hidden rounded-[28px] border border-[#eadcf5] bg-white shadow-2xl">
+              <div className="border-b border-[#ece7f2] bg-[#fff7ed] px-8 py-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-orange-100 p-2">
+                      <AlertTriangle className="h-5 w-5 text-orange-600" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-gray-900">Before you change your plan…</h3>
-                      <p className="text-gray-600 mt-1">We’d hate to see you lose superpowers 😢</p>
+                      <h3 className="text-2xl font-bold text-[#250054]">
+                        Before you change your plan
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-600">
+                        Some limits may be reduced when you move plans.
+                      </p>
                     </div>
                   </div>
-                  <button onClick={() => setShowDowngradeModal(false)} className="p-2 rounded-full hover:bg-white/50">
-                    <X className="w-6 h-6 text-gray-500" />
+                  <button
+                    onClick={() => setShowDowngradeModal(false)}
+                    className="rounded-full p-2 hover:bg-white"
+                  >
+                    <X className="h-5 w-5 text-slate-500" />
                   </button>
                 </div>
               </div>
 
-              <div className="px-8 py-6 space-y-6">
-                <p className="text-gray-700">
-                  Moving to{" "}
-                  <span className="font-semibold text-gray-900">{capitalize(selectedPlan.name)}</span>{" "}
-                  will reduce or remove some features:
+              <div className="space-y-5 px-8 py-6">
+                <p className="text-sm leading-7 text-slate-700">
+                  You are moving to{" "}
+                  <span className="font-semibold text-[#250054]">
+                    {capitalize(selectedPlan.name)}
+                  </span>
+                  .
                 </p>
 
                 {featureLoss.length > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <XCircle className="w-5 h-5 text-red-500" />
-                      <p className="font-semibold text-red-900">
-                        You’ll lose access or limits will be reduced on:
-                      </p>
-                    </div>
-                    <ul className="space-y-3">
-                      {featureLoss.map((d) => (
-                        <li key={d.key} className="flex items-center gap-3">
-                          <div className="w-2 h-2 bg-red-400 rounded-full" />
-                          <span className="text-red-800">
-                            <span className="font-medium">{LABELS[d.key] || nice(d.key)}:</span>
-                            <span className="ml-2 font-semibold">{formatValue(d.key, d.from)}</span>
-                            <span className="mx-2 text-red-600">→</span>
-                            <span className="font-semibold">{formatValue(d.key, d.to)}</span>
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-5">
+                    <p className="font-semibold text-rose-800">Reduced allowances</p>
+                    <ul className="mt-3 space-y-2 text-sm text-rose-700">
+                      {featureLoss.map((item) => (
+                        <li key={item.key} className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-rose-400" />
+                          <span>
+                            {item.key}: {String(item.from)} → {String(item.to)}
                           </span>
                         </li>
                       ))}
@@ -1198,64 +1121,39 @@ export default function BrandSubscriptionPage() {
                   </div>
                 )}
 
-                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6">
-                  <div className="flex items-start gap-3">
-                    <Heart className="w-6 h-6 text-orange-500 mt-0.5" />
-                    <div>
-                      <p className="text-orange-900 font-medium mb-2">We’d love to keep you!</p>
-                      <p className="text-orange-800 text-sm">
-                        Need a custom plan, a pause, or a startup discount? Email{" "}
-                        <a
-                          className="inline-flex items-center gap-1 font-semibold underline hover:text-orange-900"
-                          href="mailto:support@collabglam.com?subject=Plan%20change%20help"
-                        >
-                          <Mail className="w-4 h-4" />
-                          <span>support@collabglam.com</span>
-                        </a>
-                      </p>
-                    </div>
-                  </div>
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-5 text-sm text-orange-900">
+                  Need a better fit instead? Email{" "}
+                  <a href="mailto:support@collabglam.com" className="font-semibold underline">
+                    support@collabglam.com
+                  </a>
+                  .
                 </div>
 
-                <div>
-                  <label className="block">
-                    <span className="text-sm font-medium text-gray-700 mb-2 block">
-                      Type <span className="font-bold text-gray-900">CANCEL</span> to confirm
-                    </span>
-                    <input
-                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none"
-                      placeholder="Type CANCEL here..."
-                      value={confirmText}
-                      onChange={(e) => setConfirmText(e.target.value)}
-                    />
-                  </label>
-                </div>
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">
+                    Type CANCEL to confirm
+                  </span>
+                  <input
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-fuchsia-400"
+                  />
+                </label>
               </div>
 
-              <div className="bg-gray-50 px-8 py-6 flex flex-col sm:flex-row gap-3 justify-end">
+              <div className="flex flex-col justify-end gap-3 border-t border-[#ece7f2] bg-slate-50 px-8 py-5 sm:flex-row">
                 <button
                   onClick={() => setShowDowngradeModal(false)}
-                  className="px-6 py-3 rounded-xl bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-800 font-semibold"
-                  disabled={submittingDowngrade}
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700"
                 >
-                  Keep my current plan
+                  Keep Current Plan
                 </button>
                 <button
                   onClick={handleConfirmDowngrade}
                   disabled={confirmText.trim().toUpperCase() !== "CANCEL" || submittingDowngrade}
-                  className={`px-6 py-3 rounded-xl font-semibold text-white transition-colors ${confirmText.trim().toUpperCase() === "CANCEL" && !submittingDowngrade
-                    ? "bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:from-[#FF7236] hover:to-[#FFA135] shadow-lg"
-                    : "bg-gray-400 cursor-not-allowed"
-                    }`}
+                  className="rounded-xl bg-gradient-to-r from-orange-500 via-pink-500 to-fuchsia-500 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {submittingDowngrade ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Applying…
-                    </span>
-                  ) : (
-                    "Confirm change"
-                  )}
+                  {submittingDowngrade ? "Applying…" : "Confirm Change"}
                 </button>
               </div>
             </div>

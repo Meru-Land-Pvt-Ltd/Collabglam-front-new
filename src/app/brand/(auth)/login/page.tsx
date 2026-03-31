@@ -296,7 +296,7 @@ export default function BrandLoginPage() {
                 Enter your registered details to access your dashboard and ongoing work.
               </p>
 
-              <div className="mt-2xl">
+              {/* <div className="mt-2xl">
                 <Button
                   variant="outline"
                   size="lg"
@@ -308,14 +308,13 @@ export default function BrandLoginPage() {
                 </Button>
               </div>
 
-              {/* OR Divider */}
               <div className="mt-2xl flex h-[1.5rem] w-full items-center justify-center">
                 <div className="h-0 w-[12rem] border-t border-bd-subtle opacity-100" />
                 <span className="mx-[0.5rem] flex h-[1.5rem] items-center justify-center cg-ts text-tx-tertiary">
                   or
                 </span>
                 <div className="h-0 w-[12rem] border-t border-bd-subtle opacity-100" />
-              </div>
+              </div> */}
 
               <form onSubmit={onSubmit} className="space-y-m mt-2xl">
                 <FloatingInput

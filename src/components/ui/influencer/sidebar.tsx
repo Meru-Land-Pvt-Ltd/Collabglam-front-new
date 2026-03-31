@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AnimatePresence,
   LazyMotion,
@@ -15,18 +15,14 @@ import { cn } from "@/lib/utils";
 
 import {
   CardsThree,
-  ChatCenteredText,
   DotsThree,
   EnvelopeSimpleIcon,
   Gear,
-  HandshakeIcon,
   ImageIcon,
-  Lightning,
-  Money,
-  PackageIcon,
   PaperPlaneTilt,
   Question,
   RocketLaunchIcon,
+  SignOut,
   SuitcaseIcon,
   UserIcon,
   WalletIcon,
@@ -89,36 +85,71 @@ type Item = {
   right?: React.ReactNode;
 };
 
+type PayoutSummary = {
+  influencerId: string;
+  totalPaid: number;
+  totalUpcoming: number;
+  totalInitiated: number;
+};
+
+type InfluencerProfile = {
+  name?: string;
+  email?: string;
+  profileImage?: string;
+};
+
 export type InfluencerSidebarProps = {
   drawerOpen?: boolean;
   setDrawerOpen?: (open: boolean) => void;
   campaignBadge?: React.ReactNode;
   appliedBadge?: React.ReactNode;
   messagesBadge?: React.ReactNode;
+  influencerId?: string;
+  token?: string;
+  onLogout?: () => void;
 };
 
-/* ------------------------------ constants ------------------------------ */
+/* ------------------------------ api helper ------------------------------ */
 
-const UPGRADE_REST =
-  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.30) 31%, rgba(255, 255, 255, 0.50) 100%)";
+async function apiGetInfluencerPayoutSummary(
+  influencerId: string,
+  token?: string
+): Promise<PayoutSummary> {
+  const res = await fetch("/api/influencer-payout-summary", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ influencerId }),
+  });
 
-const UPGRADE_HOVER =
-  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 8%, rgba(255, 191, 0, 0.40) 51%, rgba(255, 255, 255, 0.50) 100%)";
+  if (!res.ok) {
+    throw new Error("Failed to fetch influencer payout summary");
+  }
 
-const UPGRADE_COLLAPSED =
-  "radial-gradient(140% 140% at 0% 20%, rgba(255, 140, 1, 0.80) 5%, rgba(255, 191, 0, 0.40) 31%, rgba(255, 255, 255, 0.50) 80%)";
+  return res.json();
+}
 
-const upgradeSpring: Transition = {
-  type: "spring",
-  mass: 1,
-  stiffness: 100,
-  damping: 15,
-};
+async function apiGetInfluencerProfile(
+  influencerId: string,
+  token?: string
+): Promise<InfluencerProfile> {
+  const res = await fetch("/api/get-influencer-profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ influencerId }),
+  });
 
-const upgradeShellStyle: React.CSSProperties = {
-  borderRadius: "var(--Spacing-8, 8px)",
-  border: "1.5px solid var(--Neutrals-75, #F5F5F5)",
-};
+  if (!res.ok) {
+    throw new Error("Failed to fetch influencer profile");
+  }
+
+  return res.json();
+}
 
 /* ------------------------------ small components ------------------------------ */
 
@@ -239,7 +270,9 @@ const RowButton = React.memo(function RowButton({
         className={cn(
           tight ? "text-[13px]" : "text-[14px]",
           "leading-5 whitespace-nowrap text-current",
-          hideLabel ? "opacity-0 w-0 overflow-hidden pointer-events-none" : "opacity-100"
+          hideLabel
+            ? "opacity-0 w-0 overflow-hidden pointer-events-none"
+            : "opacity-100"
         )}
         style={{ transition: "opacity 180ms ease, width 180ms ease" }}
       >
@@ -250,7 +283,9 @@ const RowButton = React.memo(function RowButton({
         <span
           className={cn(
             "ml-auto inline-flex items-center whitespace-nowrap text-current",
-            hideLabel ? "opacity-0 w-0 overflow-hidden pointer-events-none" : "opacity-100"
+            hideLabel
+              ? "opacity-0 w-0 overflow-hidden pointer-events-none"
+              : "opacity-100"
           )}
           style={{ transition: "opacity 180ms ease, width 180ms ease" }}
         >
@@ -269,6 +304,93 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
+function WalletSummary({
+  summary,
+  hideLabel,
+}: {
+  summary: PayoutSummary | null;
+  hideLabel?: boolean;
+}) {
+  if (!summary || hideLabel) return null;
+
+  const balance =
+    Number(summary.totalPaid || 0) +
+    Number(summary.totalUpcoming || 0) +
+    Number(summary.totalInitiated || 0);
+
+  return (
+    <div className="mt-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3">
+      <div className="mb-3">
+        <p className="text-[12px] text-neutral-500">Balance</p>
+        <p className="text-[20px] font-semibold text-[#1a1a1a]">₹{balance}</p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-neutral-600">Paid</span>
+          <span className="font-medium text-[#1a1a1a]">₹{summary.totalPaid}</span>
+        </div>
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-neutral-600">Upcoming</span>
+          <span className="font-medium text-[#1a1a1a]">
+            ₹{summary.totalUpcoming}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-[13px]">
+          <span className="text-neutral-600">Initiated</span>
+          <span className="font-medium text-[#1a1a1a]">
+            ₹{summary.totalInitiated}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileMenu({
+  open,
+  onClose,
+  onProfile,
+  onLogout,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onProfile: () => void;
+  onLogout: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="absolute bottom-[68px] right-0 z-[120] w-[200px] rounded-[18px] border border-neutral-200 bg-white p-3 shadow-[0_12px_30px_rgba(0,0,0,0.08)]">
+      <button
+        type="button"
+        onClick={() => {
+          onProfile();
+          onClose();
+        }}
+        className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-[#222] transition hover:bg-neutral-50"
+      >
+        <UserIcon size={20} weight="regular" />
+        <span className="text-[14px] font-medium">Profile</span>
+      </button>
+
+      <div className="my-2.5 h-px w-full bg-neutral-200" />
+
+      <button
+        type="button"
+        onClick={() => {
+          onLogout();
+          onClose();
+        }}
+        className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-[#F04E3E] transition hover:bg-red-50"
+      >
+        <SignOut size={20} weight="regular" />
+        <span className="text-[14px] font-medium">Logout</span>
+      </button>
+    </div>
+  );
+}
+
 /* -------------------------------- sidebar -------------------------------- */
 
 export default function Sidebar({
@@ -277,25 +399,36 @@ export default function Sidebar({
   campaignBadge,
   appliedBadge,
   messagesBadge,
+  influencerId,
+  token,
+  onLogout,
 }: InfluencerSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
 
-  // breakpoints
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const isXl = useMediaQuery("(min-width: 1280px)");
   const isShort = useMediaQuery("(max-height: 800px)");
   const vw = useViewportWidth();
 
-  // state
+  const [payoutSummary, setPayoutSummary] = useState<PayoutSummary | null>(null);
+  const [profileData, setProfileData] = useState<InfluencerProfile | null>(null);
+
   const [active, setActive] = useState<string>("");
   const [collapsed, setCollapsed] = useState(true);
   const [widthCollapsed, setWidthCollapsed] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
   const [drawerOpenInternal, setDrawerOpenInternal] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const drawerOpen = drawerOpenProp ?? drawerOpenInternal;
+
+  const profileName = profileData?.name || "Profile";
+  const profileEmail = profileData?.email || "";
+  const profileImage = profileData?.profileImage || "";
 
   const setDrawerOpen = useCallback(
     (open: boolean) => {
@@ -305,7 +438,51 @@ export default function Sidebar({
     [setDrawerOpenProp]
   );
 
-  // ── 1. items declared FIRST so everything below can reference it ──
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!profileMenuRef.current) return;
+      if (!profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+
+    if (profileMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [profileMenuOpen]);
+
+  useEffect(() => {
+    const loadPayoutSummary = async () => {
+      try {
+        if (!influencerId?.trim()) return;
+        const res = await apiGetInfluencerPayoutSummary(influencerId, token);
+        setPayoutSummary(res);
+      } catch (error) {
+        console.error("Failed to load payout summary:", error);
+      }
+    };
+
+    loadPayoutSummary();
+  }, [influencerId, token]);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        if (!influencerId?.trim()) return;
+        const res = await apiGetInfluencerProfile(influencerId, token);
+        setProfileData(res);
+      } catch (error) {
+        console.error("Failed to load influencer profile:", error);
+      }
+    };
+
+    loadProfile();
+  }, [influencerId, token]);
+
   const items = useMemo<Item[]>(
     () => [
       {
@@ -321,15 +498,17 @@ export default function Sidebar({
         icon: Megaphone,
         section: "main",
         href: "/influencer/discover-campaigns",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+        right:
+          campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
       },
       {
         key: "invitations",
-        label: "Invitations",
+        label: "Direct Invitations",
         icon: EnvelopeSimpleIcon,
         section: "main",
         href: "/influencer/invitations",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+        right:
+          campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
       },
       {
         key: "my-campaigns",
@@ -337,22 +516,17 @@ export default function Sidebar({
         icon: SuitcaseIcon,
         section: "main",
         href: "/influencer/my-campaigns",
-        right: campaignBadge != null ? <Badge>{campaignBadge}</Badge> : undefined,
+        right:
+          appliedBadge != null ? <Badge>{appliedBadge}</Badge> : undefined,
       },
-      // {
-      //   key: "earnings",
-      //   label: "Earnings",
-      //   icon: Money,
-      //   section: "main",
-      //   href: "/influencer/earnings",
-      // },
       {
         key: "messages",
         label: "Inbox",
-        icon: ChatCenteredText,
+        icon: PaperPlaneTilt,
         section: "main",
         href: "/influencer/inbox",
-        right: messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
+        right:
+          messagesBadge != null ? <Badge>{messagesBadge}</Badge> : undefined,
       },
       {
         key: "wallet-payments",
@@ -368,30 +542,16 @@ export default function Sidebar({
         section: "main",
         href: "/influencer/media-kit",
       },
-      {
-        key: "profile",
-        label: "Profile & Rate card",
-        icon: UserIcon,
-        section: "main",
-        href: "/influencer/profile",
-      },
-      {
-        key: "boost-profile",
-        label: "Boost Profile",
-        icon: RocketLaunchIcon,
-        section: "main",
-        href: "/influencer/boost-profile",
-      },
-      {
-        key: "settings",
-        label: "Settings",
-        icon: Gear,
-        section: "footer",
-        href: "/influencer/settings",
-      },
+      // {
+      //   key: "profile",
+      //   label: "Profile",
+      //   icon: UserIcon,
+      //   section: "main",
+      //   href: "/influencer/profile",
+      // },
       {
         key: "support",
-        label: "Support",
+        label: "Help",
         icon: Question,
         section: "footer",
         href: "/influencer/support-center",
@@ -400,11 +560,15 @@ export default function Sidebar({
     [campaignBadge, appliedBadge, messagesBadge]
   );
 
-  // ── 2. derived from items ──
-  const mainItems = useMemo(() => items.filter((i) => i.section === "main"), [items]);
-  const footerItems = useMemo(() => items.filter((i) => i.section === "footer"), [items]);
+  const mainItems = useMemo(
+    () => items.filter((i) => i.section === "main"),
+    [items]
+  );
+  const footerItems = useMemo(
+    () => items.filter((i) => i.section === "footer"),
+    [items]
+  );
 
-  // ── 3. useEffect that uses items ──
   useEffect(() => {
     const p = pathname || "";
     const matched = items.find(
@@ -413,7 +577,6 @@ export default function Sidebar({
     setActive(matched?.key ?? "dashboard");
   }, [pathname, items]);
 
-  // ── 4. desktop/mobile layout effect ──
   useEffect(() => {
     if (isDesktop) {
       setDrawerOpen(false);
@@ -429,7 +592,6 @@ export default function Sidebar({
 
   const compactUI = isDesktop ? collapsed || isClosing : false;
   const tight = isShort;
-  const showCollapsedFooter = isDesktop && (collapsed || isClosing || widthCollapsed);
 
   const motionTransitions = useMemo(() => {
     const content: Transition = reduceMotion
@@ -456,7 +618,6 @@ export default function Sidebar({
     []
   );
 
-  // ── 5. callbacks that use items ──
   const handleSetActive = useCallback(
     (key: string) => {
       const item = items.find((x) => x.key === key);
@@ -477,9 +638,21 @@ export default function Sidebar({
   const beginCloseDesktop = useCallback(() => {
     setIsClosing(true);
     setWidthCollapsed(true);
+    setProfileMenuOpen(false);
   }, []);
 
-  // widths
+  const handleLogout = useCallback(() => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userId");
+    router.push("/influencer/login");
+  }, [onLogout, router]);
+
   const collapsedW = isXl ? 92 : 84;
   const expandedW = isXl ? 320 : 280;
 
@@ -493,6 +666,7 @@ export default function Sidebar({
     (i: Item) => {
       const Icon = i.icon;
       const isActiveItem = active === i.key;
+      const isWalletItem = i.key === "wallet-payments";
 
       if (isDesktop && collapsed) {
         return (
@@ -506,6 +680,22 @@ export default function Sidebar({
           >
             <Icon size={20} weight="regular" className="text-current" />
           </RailIconButton>
+        );
+      }
+
+      if (isWalletItem) {
+        return (
+          <div key={i.key} className="w-full">
+            <RowButton
+              icon={i.icon}
+              label={i.label}
+              right={i.right}
+              active={isActiveItem}
+              hideLabel={isDesktop ? isClosing : false}
+              tight={tight}
+              onClick={() => handleSetActive(i.key)}
+            />
+          </div>
         );
       }
 
@@ -525,9 +715,112 @@ export default function Sidebar({
     [active, collapsed, handleSetActive, isClosing, isDesktop, tight]
   );
 
+  const BottomProfileSection = (
+    <div className="relative mt-auto pt-4" ref={profileMenuRef}>
+      <div className="mb-3 h-px w-full bg-neutral-200" />
+
+      {isDesktop && collapsed ? (
+        <div className="flex flex-col items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/influencer/profile")}
+            className={cn(
+              "grid h-12 w-12 place-items-center rounded-full border border-neutral-200 bg-white transition hover:bg-neutral-50",
+              FOCUS_RING
+            )}
+            title="Profile"
+            aria-label="Profile"
+          >
+            {profileImage ? (
+              <img
+                src={profileImage}
+                alt={profileName}
+                className="h-12 w-12 rounded-full object-cover"
+              />
+            ) : (
+              <UserIcon size={22} weight="regular" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setProfileMenuOpen((prev) => !prev)}
+            className={cn(
+              "grid h-12 w-12 place-items-center rounded-full bg-neutral-100 transition hover:bg-neutral-200",
+              FOCUS_RING
+            )}
+            title="Open profile menu"
+            aria-label="Open profile menu"
+          >
+            <DotsThree size={22} weight="bold" />
+          </button>
+
+          <ProfileMenu
+            open={profileMenuOpen}
+            onClose={() => setProfileMenuOpen(false)}
+            onProfile={() => router.push("/influencer/profile")}
+            onLogout={handleLogout}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-3 rounded-2xl px-2 py-2">
+            <button
+              type="button"
+              onClick={() => router.push("/influencer/profile")}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            >
+              <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-neutral-100">
+                {profileImage ? (
+                  <img
+                    src={profileImage}
+                    alt={profileName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="grid h-full w-full place-items-center">
+                    <UserIcon size={22} weight="regular" />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[18px] font-semibold text-[#1a1a1a]">
+                  {profileName}
+                </div>
+                <div className="truncate text-[14px] text-neutral-400">
+                  {profileEmail}
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((prev) => !prev)}
+              className={cn(
+                "grid h-12 w-12 flex-shrink-0 place-items-center rounded-full bg-neutral-100 transition hover:bg-neutral-200",
+                FOCUS_RING
+              )}
+              title="Open profile menu"
+              aria-label="Open profile menu"
+            >
+              <DotsThree size={22} weight="bold" />
+            </button>
+          </div>
+
+          <ProfileMenu
+            open={profileMenuOpen}
+            onClose={() => setProfileMenuOpen(false)}
+            onProfile={() => router.push("/influencer/profile")}
+            onLogout={handleLogout}
+          />
+        </>
+      )}
+    </div>
+  );
+
   const SidebarBody = (
     <div className="flex h-full flex-col">
-      {/* TOP */}
       <div className={cn("flex flex-col", tight ? "gap-3" : "gap-4")}>
         <div
           className={cn(
@@ -535,13 +828,12 @@ export default function Sidebar({
             isDesktop && (collapsed || isClosing) ? "flex-col gap-3" : "gap-3"
           )}
         >
-          {/* Logo */}
           <button
             type="button"
             onClick={() => {
               if (isDesktop) {
                 if (collapsed || isClosing) beginOpenDesktop();
-                else router.push("/influencer/dashboard");
+                else router.push("/influencer/dashboards");
               } else {
                 setDrawerOpen(true);
               }
@@ -561,7 +853,6 @@ export default function Sidebar({
             />
           </button>
 
-          {/* Brand text */}
           <AnimatePresence initial={false}>
             {!compactUI && (
               <m.div
@@ -582,13 +873,12 @@ export default function Sidebar({
                   CollabGlam
                 </div>
                 <div className="truncate text-[12px] text-neutral-500">
-                  Influencer Portal
+                  Creator
                 </div>
               </m.div>
             )}
           </AnimatePresence>
 
-          {/* Collapse (desktop) / Close (mobile) */}
           {isDesktop ? (
             <button
               type="button"
@@ -605,7 +895,11 @@ export default function Sidebar({
                 collapsed || isClosing ? "" : "ml-auto"
               )}
             >
-              {collapsed ? <PanelCaretGlyph dir="right" /> : <PanelCaretGlyph dir="left" />}
+              {collapsed ? (
+                <PanelCaretGlyph dir="right" />
+              ) : (
+                <PanelCaretGlyph dir="left" />
+              )}
             </button>
           ) : (
             <button
@@ -625,7 +919,6 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* NAV */}
       <div className={cn("mt-6 flex min-h-0 flex-1 flex-col", tight ? "mt-4" : "")}>
         <div
           className={cn(
@@ -646,10 +939,13 @@ export default function Sidebar({
               tight ? "my-4" : ""
             )}
           />
+
           <div className={cn("flex flex-col", isDesktop && collapsed ? "gap-3" : "gap-2 w-full")}>
             {footerItems.map((i) => renderItem(i))}
           </div>
         </div>
+
+        {BottomProfileSection}
       </div>
     </div>
   );
@@ -658,9 +954,7 @@ export default function Sidebar({
     <m.aside
       data-cg-sidebar
       id="cg-sidebar"
-      className={cn(
-        "inline-flex flex-col border border-neutral-200 bg-white select-none h-dvh"
-      )}
+      className="inline-flex h-dvh flex-col border border-neutral-200 bg-white select-none"
       style={{
         padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",
         fontFamily: "var(--Font-Family-Inter, Inter)",
@@ -684,7 +978,6 @@ export default function Sidebar({
     <AnimatePresence>
       {drawerOpen ? (
         <>
-          {/* Backdrop */}
           <m.button
             type="button"
             aria-label="Close menu"
@@ -696,14 +989,10 @@ export default function Sidebar({
             onClick={() => setDrawerOpen(false)}
           />
 
-          {/* Drawer */}
           <m.aside
             data-cg-sidebar
             id="cg-sidebar"
-            className={cn(
-              "fixed left-0 top-0 bottom-0 z-[100]",
-              "border-r border-neutral-200 bg-white select-none"
-            )}
+            className="fixed left-0 top-0 bottom-0 z-[100] border-r border-neutral-200 bg-white select-none"
             style={{
               width: mobileW,
               padding: tight ? "12px 16px 16px 16px" : "16px 20px 20px 20px",

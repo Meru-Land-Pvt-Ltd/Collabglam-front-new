@@ -219,7 +219,7 @@ function CampaignDetailsModal({
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
                                 <span className="text-gray-500 w-32 shrink-0 text-xs font-medium uppercase tracking-wide">
-                                    Budget
+                                    Campaign Budget
                                 </span>
                                 <span className="font-semibold text-gray-900">
                                     ₹{invite.budgetMin.toLocaleString()} – ₹{invite.budgetMax.toLocaleString()}
@@ -622,7 +622,7 @@ export default function InvitesPage() {
                                                 Campaign Title
                                             </th>
                                             <th className="px-6 py-4 text-left font-semibold text-gray-700">
-                                                Budget
+                                                Campaign Budget
                                             </th>
                                             <th className="px-6 py-4 text-left font-semibold text-gray-700">
                                                 Status
@@ -697,7 +697,7 @@ export default function InvitesPage() {
                                                             className="inline-flex items-center gap-2 rounded-[1.75rem] bg-[#1A1A1A] px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition"
                                                         >
                                                             <Eye className="h-4 w-4" />
-                                                            View
+                                                            View Campaign
                                                         </Button>
 
                                                         {inv.status === "accepted" && (
@@ -713,7 +713,7 @@ export default function InvitesPage() {
                                                         )}
                                                     </div>
                                                 </td>
-                            
+
                                             </tr>
                                         ))}
                                     </tbody>

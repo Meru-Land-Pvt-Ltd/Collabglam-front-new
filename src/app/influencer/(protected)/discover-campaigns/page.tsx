@@ -318,8 +318,13 @@ export default function DiscoverCampaigns() {
             : [];
 
         const mapped = items
+          .filter((campaign: any) => {
+            const role = campaign?.createdBy?.role;
+            const adminRole = campaign?.createdBy?.adminRole;
+            return role !== "admin" && adminRole !== "super_admin";
+          })
           .map(mapApiCampaignToUi)
-          .filter((item: { id: any; }) => Boolean(item.id));
+          .filter((item: { id: any }) => Boolean(item.id));
 
         setCampaigns(mapped);
         setServerTotal(

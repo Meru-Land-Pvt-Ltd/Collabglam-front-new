@@ -30,10 +30,20 @@ import {
   apiGetMyCampaigns,
   apiUploadInfluencerSignature,
 } from "../../services/influencerApi";
-import MinimalPdfPreview from "@/components/ui/MinimalPdfPreview";
 import { ArrowSquareInIcon, DownloadSimpleIcon, InfoIcon, Signature } from "@phosphor-icons/react";
 // import { useSidebarWidth } from "./useSidebarWidth";
-import InfluencerSidebarShell from "./InfluencerSidebarShell";
+import dynamic from "next/dynamic";
+
+const MinimalPdfPreview = dynamic(
+  () => import("@/components/ui/MinimalPdfPreview"),
+  { ssr: false }
+);
+
+const InfluencerSidebarShell = dynamic(
+  () => import("./InfluencerSidebarShell"),
+  { ssr: false }
+);
+
 import { Dialog, DialogContent, DialogOverlay } from "@/components/ui/dialog";
 import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 
@@ -1444,6 +1454,7 @@ function InfluencerContractModal({
     setSignatureChecked(false);
     setSignatureFile(null);
     setSavedSignatureId("");
+    setSavedSignatureId("");
 
     try {
       const res = await apiGetInfluencerSignature(influencerId);
@@ -1750,10 +1761,14 @@ function InfluencerContractModal({
       toast({
         icon: "error", title: "Confirmation required",
         text: "Please confirm that you agree to all terms before signing."
+        icon: "error", title: "Confirmation required",
+        text: "Please confirm that you agree to all terms before signing."
       });
       return;
     }
 
+    // Prevent double-clicks
+    if (isWorking) return;
     // Prevent double-clicks
     if (isWorking) return;
     setIsWorking(true);
@@ -1761,7 +1776,9 @@ function InfluencerContractModal({
     try {
       const payload = toContractInfluencerPayload(sanitizeLocal(local));
       let signatureInfluencerId = savedSignatureId; // use cached _id if already uploaded
+      let signatureInfluencerId = savedSignatureId; // use cached _id if already uploaded
 
+      if (signatureFile && !signatureInfluencerId) {  // ← only upload if no _id yet
       if (signatureFile && !signatureInfluencerId) {  // ← only upload if no _id yet
         const influencerId = getInfluencerId();
         const formData = new FormData();
@@ -1790,6 +1807,8 @@ function InfluencerContractModal({
         toast({
           icon: "error", title: "Signature required",
           text: "Please upload a signature before continuing."
+          icon: "error", title: "Signature required",
+          text: "Please upload a signature before continuing."
         });
         return;
       }
@@ -1799,8 +1818,12 @@ function InfluencerContractModal({
         influencer: payload,
         signatureInfluencer: signatureInfluencerId,
       });
+        signatureInfluencer: signatureInfluencerId,
+      });
 
       toast({
+        icon: "success", title: "Accepted & Signed",
+        text: "Contract accepted successfully."
         icon: "success", title: "Accepted & Signed",
         text: "Contract accepted successfully."
       });
@@ -1812,6 +1835,8 @@ function InfluencerContractModal({
       onClose();
     } catch (e: any) {
       toast({
+        icon: "error", title: "Error",
+        text: apiMessage(e, "Failed to accept and sign.")
         icon: "error", title: "Error",
         text: apiMessage(e, "Failed to accept and sign.")
       });
@@ -1931,12 +1956,46 @@ function InfluencerContractModal({
         isOpen={open && !showAcceptSignatureModal}
         onClose={onClose}
         title={influencerAccepted ? "VIEW CONTRACT" : "ACCEPT CONTRACT"}
+        title={influencerAccepted ? "VIEW CONTRACT" : "ACCEPT CONTRACT"}
         subtitle={`${campaign?.productOrServiceName || "Agreement"} • ${campaign?.brandName || ""}`}
         previewUrl={previewUrl}
         previewBlob={previewBlob}
         pdfOnly={influencerAccepted}
+        pdfOnly={influencerAccepted}
         sidebarOffset={sidebarOffset}
         footer={
+          influencerAccepted ? (
+            // pdfOnly mode — just the download button
+            <Button
+              variant="secondary"
+              className="ml-auto shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
+              onClick={() => {
+                if (previewUrl) {
+                  const a = document.createElement("a");
+                  a.href = previewUrl;
+                  a.download = `${campaign?.productOrServiceName || "contract"}.pdf`;
+                  a.click();
+                } else {
+                  generatePreview();
+                }
+              }}
+            >
+              <DownloadSimpleIcon />
+              <span>Download</span>
+            </Button>
+          ) : (
+            <>
+              <div className="mr-auto min-w-0 flex-1 text-xs">
+                {locked ? (
+                  <span className="text-emerald-600">
+                    Locked — all required signatures have been captured.
+                  </span>
+                ) : (
+                  <span className="text-amber-600">
+                    Fill details to accept the contract.
+                  </span>
+                )}
+              </div>
           influencerAccepted ? (
             // pdfOnly mode — just the download button
             <Button
@@ -2026,7 +2085,70 @@ function InfluencerContractModal({
                 <DownloadSimpleIcon />
                 <span>Download</span>
               </Button>
+              <Button
+                variant="secondary"
+                className="shrink-0"
+                onClick={() =>
+                  previewUrl ? window.open(previewUrl, "_blank") : generatePreview()
+                }
+              >
+                <Eye className="mr-2 h-5 w-5" />
+                Preview
+              </Button>
+              <Button
+                variant="secondary"
+                className="shrink-0"
+                // disabled={isWorking}
+                onClick={async () => {
+                  try {
+                    setIsWorking(true);
+                    const influencerId = getInfluencerId();
+                    const res = await post("/emails/threads", {
+                      influencerId,
+                      brandId: campaign.brandId,
+                      subject: campaign.title,
+                    });
+                    const threadId = res?.data?.threadId || res?.threadId || (res as any)?._id;
+                    if (!threadId) throw new Error("No thread ID returned.");
+                    router.push(`/influencer/inbox/${threadId}`);
+                  } catch (e: any) {
+                    toast({
+                      icon: "error",
+                      title: "Error",
+                      text: apiMessage(e, "Failed to open inbox thread."),
+                    });
+                  } finally {
+                    setIsWorking(false);
+                  }
+                }}
+              >
+                Request Change
+              </Button>
+              <Button
+                variant="secondary"
+                className="shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
+                onClick={() => {
+                  if (previewUrl) {
+                    const a = document.createElement("a");
+                    a.href = previewUrl;
+                    a.download = `${campaign?.productOrServiceName || "contract"}.pdf`;
+                    a.click();
+                  } else {
+                    generatePreview();
+                  }
+                }}
+              >
+                <DownloadSimpleIcon />
+                <span>Download</span>
+              </Button>
 
+              {!locked && (
+                <Button
+                  onClick={acceptOrSave}
+                  disabled={isWorking || !liteLoaded}
+                  className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  Accept & Save
               {!locked && (
                 <Button
                   onClick={acceptOrSave}
@@ -2038,10 +2160,14 @@ function InfluencerContractModal({
               )}
             </>
           )
+            </>
+          )
         }
       >
         {!influencerAccepted && (<div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        {!influencerAccepted && (<div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="mb-4 border-b border-gray-100 pb-3 text-xl font-semibold text-gray-800">
+            Fill Your Details to Accept
             Fill Your Details to Accept
           </div>
 
@@ -2140,11 +2266,13 @@ function InfluencerContractModal({
 
 
             {/* <FloatingTextarea
+            {/* <FloatingTextarea
               id="notes"
               label="Notes (optional)"
               value={local.notes}
               onChange={(v) => setLocal((p) => ({ ...p, notes: v }))}
               rows={3}
+            /> */}
             /> */}
 
           </div>
@@ -2173,6 +2301,7 @@ function InfluencerContractModal({
                 setLocal((p) => ({ ...p, ftcAcknowledgement: v }))
               }
               rows={4}
+              disabled
               disabled
             />
           </div>
@@ -2264,12 +2393,30 @@ function InfluencerContractModal({
                     <Signature className="h-16 w-16" />
                     <span className="text-sm font-medium">Signature on file</span>
                   </div>
+                {selectedSignaturePreview ? (
+                  <img src={selectedSignaturePreview} alt="Signature"
+                    className="max-h-24 w-auto object-contain" />
+                ) : savedSignatureId ? (
+                  // already has a saved signature on file — show a placeholder
+                  <div className="flex flex-col items-center gap-2 text-gray-600">
+                    <Signature className="h-16 w-16" />
+                    <span className="text-sm font-medium">Signature on file</span>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-gray-400">
                     <Signature className="h-32 w-32 text-black" />
                     <span className="text-sm text-gray-500">Click to upload signature</span>
+                    <span className="text-sm text-gray-500">Click to upload signature</span>
                   </div>
                 )}
+
+                {/* <span>
+                  {selectedSignaturePreview
+                    ? "New signature selected"
+                    : savedSignatureId
+                      ? "Using signature on file"
+                      : "Click the signature area to upload"}
+                </span> */}
 
                 {/* <span>
                   {selectedSignaturePreview
@@ -2449,6 +2596,7 @@ export default function MyCampaignsPage() {
 
         let res: any;
         let rawCampaigns: any[] = [];
+        let rawCampaigns: any[] = [];
 
         if (tab === "applied") {
           res = await apiGetAppliedCampaigns(id, token);
@@ -2461,11 +2609,30 @@ export default function MyCampaignsPage() {
                 : Array.isArray(res?.data)
                   ? res.data
                   : [];
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.items)
+                ? res.items
+                : Array.isArray(res?.data)
+                  ? res.data
+                  : [];
         } else if (tab === "active") {
           res = await apiGetMyCampaigns(
             { influencerId: id, page: 1, limit: 10, search: searchInput || "" },
+            { influencerId: id, page: 1, limit: 10, search: searchInput || "" },
             token
           );
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.items)
+                ? res.items
+                : Array.isArray(res?.data)
+                  ? res.data
+                  : [];
           rawCampaigns = Array.isArray(res)
             ? res
             : Array.isArray(res?.campaigns)
@@ -2501,8 +2668,42 @@ export default function MyCampaignsPage() {
             status: item.status,
             campaignStatus: item.status,
           }));
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.contracts)
+                ? res.contracts
+                : Array.isArray(res?.data)
+                  ? res.data
+                  : [];
+        } else if (tab === "Rejected") {
+          res = await api.get(`/campaign/rejected/${id}`);
+          // API returns { success, count, data: [ { _id, campaignId, status, campaignData: {...} } ] }
+          const items: any[] = Array.isArray(res?.data?.data)
+            ? res.data.data
+            : Array.isArray(res?.data)
+              ? res.data
+              : [];
+
+          rawCampaigns = items.map((item: any) => ({
+            ...(item.campaignData || item),
+            _id: item.campaignId || item.campaignData?._id || item._id,
+            status: item.status,
+            campaignStatus: item.status,
+          }));
         } else {
           res = await apiGetAllCampaigns(id);
+          rawCampaigns = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.campaigns)
+              ? res.campaigns
+              : Array.isArray(res?.items)
+                ? res.items
+                : Array.isArray(res?.data)
+                  ? res.data
+                  : [];
+        }
           rawCampaigns = Array.isArray(res)
             ? res
             : Array.isArray(res?.campaigns)
@@ -2708,6 +2909,11 @@ export default function MyCampaignsPage() {
         if (activeTab === "active") return true;
         if (activeTab === "Contracted") return campaign.isContracted === 1;
         if (activeTab === "Rejected")
+          return (
+            contractStatus === CONTRACT_STATUS.REJECTED ||
+            normStatus(campaign.status) === CONTRACT_STATUS.REJECTED ||
+            normStatus(campaign.campaignStatus) === CONTRACT_STATUS.REJECTED
+          );
           return (
             contractStatus === CONTRACT_STATUS.REJECTED ||
             normStatus(campaign.status) === CONTRACT_STATUS.REJECTED ||

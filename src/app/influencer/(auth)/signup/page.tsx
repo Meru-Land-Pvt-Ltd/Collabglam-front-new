@@ -683,7 +683,7 @@ export default function InfluencerSignupPage() {
                             Terms of Service
                           </Link>{" "}
                           and{" "}
-                          <Link href="/privacy" className="font-semibold hover:underline text-current">
+                          <Link href="/privacy-policy" className="font-semibold hover:underline text-current">
                             Privacy Policy
                           </Link>
                         </span>

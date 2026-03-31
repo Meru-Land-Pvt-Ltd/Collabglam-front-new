@@ -13,6 +13,7 @@ const MILESTONE_BASE = "/milestone";
 const DELEVERABLE_BASE = "/deliverable";
 const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 const CONTRACT_BASE = "/contract"
+const PAYMENT_BASE = "/payment-details";
 
 /** -------------------------
  *  ✅ Response Unwrap Helpers
@@ -460,8 +461,70 @@ export async function apiResolveModashProfile(
   );
 }
 
-export async function apiGetAllCampaigns(influencerId: string) {
-  return apiPost<any[]>(`/influencer/get-campaign`, { influencerId });
+export type InfluencerCampaignItem = {
+  id?: string;
+  campaignId?: string;
+  campaignName?: string;
+  name?: string;
+  campaignTitle?: string;
+  brandName?: string;
+  influencerId?: string;
+  influencerName?: string;
+  description?: string;
+  campaignType?: string;
+  campaignCategory?: string;
+  campaignSubcategory?: string;
+  campaignBudget?: number;
+  budget?: number;
+  paymentType?: string;
+  platformSelection?: string[];
+  startAt?: string;
+  endAt?: string;
+  publishedAt?: string;
+  timeline?: {
+    startDate?: string;
+    endDate?: string;
+  };
+  status?: string;
+  applicationStatus?: string;
+  publishStatus?: string;
+  isActive?: number;
+  isDraft?: number;
+  applicantCount?: number;
+  hasApplied?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type GetAllCampaignsResponse = {
+  total: number;
+  page: number;
+  pages: number;
+  influencer?: {
+    influencerId?: string;
+    name?: string;
+    email?: string;
+  };
+  campaigns: InfluencerCampaignItem[];
+};
+
+export async function apiGetAllCampaigns(
+  influencerId: string,
+  token?: string
+) {
+  if (!influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<GetAllCampaignsResponse>(
+    `${INFLUENCER_BASE}/get-campaign`,
+    { influencerId },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
 }
 
 export const apiGetAppliedCampaigns = (influencerId: string, token?: string) => {
@@ -565,6 +628,12 @@ export type MyCampaignsBody = {
 };
 
 export type MyCampaignItem = {
+  [x: string]: any;
+  campaignId: any;
+  timeline: any;
+  brandName: string;
+  name: string | undefined;
+  campaignName: string | undefined;
   _id?: string;
   campaignTitle?: string;
   description?: string;
@@ -629,7 +698,7 @@ export type GoalRow = { _id?: string; goal?: string };
 export type AgeRow = { _id?: string; range?: string };
 export type FormatRow = { _id?: string; format?: string };
 export type LangRow = {
-  id: string | undefined; _id?: string; code?: string; name?: string 
+  id: string | undefined; _id?: string; code?: string; name?: string
 };
 
 export async function apiListCountries(params: ListQuery = {}) {
@@ -962,6 +1031,8 @@ export async function apiGetInvitationsByInfluencer(
 }
 
 export type GetAllInvitationsByInfluencerResponse = {
+  items: CampaignInvitationItem[];
+  data: CampaignInvitationItem[];
   status: "success" | "error";
   total: number;
   influencerId: string;
@@ -1087,16 +1158,48 @@ export async function apiGetAcceptedAdminCreatedCampaigns(
   );
 }
 
-export async function apiUploadInfluencerSignature(payload: FormData) {
-  return apiPost(`${CONTRACT_BASE}/upload-influencer`, payload, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+export type UploadInfluencerSignatureResponse = {
+  _id?: string;
+  signatureUrl?: string;
+  url?: string;
+  signature?: {
+    _id?: string;
+    url?: string;
+    signatureUrl?: string;
+  };
+  message?: string;
+};
+
+export async function apiUploadInfluencerSignature(
+  payload: FormData
+): Promise<UploadInfluencerSignatureResponse> {
+  return apiPost<UploadInfluencerSignatureResponse>(
+    `${CONTRACT_BASE}/upload-influencer`,
+    payload,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
 }
 
-export async function apiGetInfluencerSignature(influencerId: string) {
-  return apiGet(`${CONTRACT_BASE}/signature-influencer/${influencerId}`);
+export type InfluencerSignatureResponse = {
+  _id?: string;
+  signatureUrl?: string;
+  url?: string;
+  signature?: {
+    url?: string;
+    signatureUrl?: string;
+  };
+};
+
+export async function apiGetInfluencerSignature(
+  influencerId: string
+): Promise<InfluencerSignatureResponse> {
+  return apiGet<InfluencerSignatureResponse>(
+    `${CONTRACT_BASE}/signature-influencer/${influencerId}`
+  );
 }
 
 export type CampaignInvitationStatusSummary = {
@@ -1299,6 +1402,217 @@ export async function apiGetDeliverableStatusByInfluencerId(
       page: input.page ?? 1,
       limit: input.limit ?? 20,
     },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+export type InfluencerPayoutSummaryResponse = {
+  influencerId: string;
+  totalPaid: number;
+  totalUpcoming: number;
+  totalInitiated: number;
+};
+
+export async function apiGetInfluencerPayoutSummary(
+  influencerId: string,
+  token?: string
+) {
+  if (!influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<InfluencerPayoutSummaryResponse>(
+    `${MILESTONE_BASE}/influencer-payout`,
+    { influencerId },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+export type InfluencerCampaignPayoutItem = {
+  campaignId: string;
+  campaignTitle: string;
+  amount: number;
+  payoutStatus: "pending" | "initiated" | "paid" | string;
+  createdAt?: string;
+};
+
+export type GetPayoutDetailsByInfluencerResponse = {
+  message: string;
+  influencerId: string;
+  payouts: InfluencerCampaignPayoutItem[];
+};
+
+export async function apiGetPayoutDetailsByInfluencer(
+  influencerId: string,
+  token?: string
+) {
+  if (!influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<GetPayoutDetailsByInfluencerResponse>(
+    `${MILESTONE_BASE}/getPayoutDetailsByInfluencer`,
+    { influencerId },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+/** -------------------------
+ *  PAYMENT DETAILS
+ *  Base: /payment
+ *  ------------------------*/
+
+export type PaymentType = 0 | 1; // 0 = PayPal, 1 = Bank
+
+export type BankDetails = {
+  accountHolder?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  swift?: string;
+  bankName?: string;
+  branch?: string;
+  countryId?: string;
+  countryName?: string;
+};
+
+export type PaypalDetails = {
+  email?: string;
+  username?: string;
+};
+
+export type PaymentDetailsPayload = {
+  influencerId: string;
+  type: PaymentType;
+  bank?: BankDetails;
+  paypal?: PaypalDetails;
+  isDefault?: boolean;
+};
+
+export type PaymentDetailsResponse = {
+  type: number;
+  bank(bank: any): import("../(protected)/wallets-payments/paymentOverlayCard").BankInfo | undefined;
+  paypal(paypal: any): import("../(protected)/wallets-payments/paymentOverlayCard").PaypalInfo | undefined;
+  isDefault(isDefault: any): boolean;
+  _id: string;
+  success?: boolean;
+  message?: string;
+  data?: {
+    _id?: string;
+    influencerId: string;
+    type: PaymentType;
+    bank?: BankDetails;
+    paypal?: PaypalDetails;
+    isDefault?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+};
+
+/** Add payment details */
+export async function apiAddPaymentDetails(
+  body: PaymentDetailsPayload,
+  token?: string
+) {
+  return apiPost<PaymentDetailsResponse>(
+    `${PAYMENT_BASE}/add-payment-details`,
+    body,
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+/** Get payment details */
+export async function apiGetPaymentDetails(
+  influencerId: string,
+  token?: string
+) {
+  if (!influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<PaymentDetailsResponse>(
+    `${PAYMENT_BASE}/get-payment-details`,
+    { influencerId },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+/** Edit payment details */
+export async function apiEditPaymentDetails(
+  body: Partial<PaymentDetailsPayload> & { influencerId: string },
+  token?: string
+) {
+  if (!body?.influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<PaymentDetailsResponse>(
+    `${PAYMENT_BASE}/edit-payment-details`,
+    body,
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+/** Delete payment details */
+export async function apiDeletePaymentDetails(
+  influencerId: string,
+  token?: string
+) {
+  if (!influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<{ success?: boolean; message?: string }>(
+    `${PAYMENT_BASE}/delete-payment-details`,
+    { influencerId },
+    {
+      headers: {
+        ...authHeader(token),
+      },
+    }
+  );
+}
+
+export type LiteInfluencerResponse = {
+  influencerId: string;
+  name: string;
+  email: string;
+};
+
+export async function apiGetLiteInfluencerById(
+  influencerId: string,
+  token?: string
+) {
+  if (!influencerId?.trim()) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPost<LiteInfluencerResponse>(
+    `${INFLUENCER_BASE}/lite`,
+    { influencerId },
     {
       headers: {
         ...authHeader(token),

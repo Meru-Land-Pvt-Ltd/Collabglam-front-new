@@ -136,7 +136,7 @@ export default function Topbar() {
 
         {/* Right: Login button (desktop) */}
         <div className="ml-auto hidden lg:flex">
-          <Button onClick={() => router.push("/login")}>Login</Button>
+          <Button onClick={() => router.push("/brand/login")}>Login</Button>
         </div>
 
         {/* Mobile Hamburger */}
@@ -215,7 +215,7 @@ export default function Topbar() {
               <Button
                 onClick={() => {
                   setMenuOpen(false);
-                  router.push("/login");
+                  router.push("/brand/login");
                 }}
                 className="block w-full"
               >

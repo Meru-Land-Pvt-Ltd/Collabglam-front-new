@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { get } from "@/lib/api";
+import { get, post } from "@/lib/api";
 import {
   ChevronLeft,
   Mail,
@@ -236,6 +236,56 @@ interface InfluencerDoc {
   updatedAt?: string;
 }
 
+interface PaypalDetails {
+  email?: string;
+  username?: string;
+}
+
+interface BankDetails {
+  accountHolder?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  swift?: string;
+  bankName?: string;
+  branch?: string;
+  countryId?: string;
+  countryName?: string;
+}
+
+interface PaypalDetails {
+  email?: string;
+  username?: string;
+}
+
+interface BankDetails {
+  accountHolder?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  swift?: string;
+  bankName?: string;
+  branch?: string;
+  countryId?: string;
+  countryName?: string;
+}
+
+interface PaymentDetailItem {
+  _id?: string;
+  influencerId?: string;
+  label?: string;
+  type?: number; // 0 = paypal, 1 = bank
+  isDefault?: boolean;
+  paypal?: PaypalDetails;
+  bank?: BankDetails;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface PaymentDetailsResponse {
+  success?: boolean;
+  count?: number;
+  data?: PaymentDetailItem[];
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                UI Utilities                                */
 /* -------------------------------------------------------------------------- */
@@ -243,10 +293,10 @@ interface InfluencerDoc {
 const fmtDate = (iso?: string | null) =>
   iso
     ? new Date(iso).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
     : "—";
 
 const fmtDateTime = (iso?: string | null) =>
@@ -489,11 +539,16 @@ export default function AdminInfluencerView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetailItem[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
   useEffect(() => {
     const fetcher = async () => {
       if (!id) return;
 
       setLoading(true);
+      setPaymentLoading(true);
+
       try {
         const resp: InfluencerResponse | InfluencerDoc = await get(
           "/admin/influencer/getById",
@@ -506,10 +561,20 @@ export default function AdminInfluencerView() {
         setData(influencerDoc);
         setProfiles(normalizeProfiles(influencerDoc.page1));
         setError(null);
+
+        const paymentResp: PaymentDetailsResponse = await post(
+          "/payment-details/get-payment-details",
+          {
+            influencerId: influencerDoc.influencerId || influencerDoc._id,
+          },
+        );
+
+        setPaymentDetails(paymentResp?.data || []);
       } catch (e: any) {
         setError(e?.message ?? "Failed to load influencer");
       } finally {
         setLoading(false);
+        setPaymentLoading(false);
       }
     };
 
@@ -696,6 +761,12 @@ export default function AdminInfluencerView() {
               className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
             >
               Audience
+            </TabsTrigger>
+            <TabsTrigger
+              value="payment"
+              className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+            >
+              Payment Details
             </TabsTrigger>
           </TabsList>
 
@@ -1259,6 +1330,72 @@ export default function AdminInfluencerView() {
                 )}
               </Section>
             ))}
+          </TabsContent>
+
+          <TabsContent value="payment" className="space-y-6">
+            <Section
+              title={
+                <>
+                  <Info className="h-5 w-5" />
+                  Payment Details
+                </>
+              }
+              subtitle="Available payout methods for this influencer"
+            >
+              {paymentLoading ? (
+                <div className="text-slate-600">Loading payment details...</div>
+              ) : paymentDetails.length ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {paymentDetails.map((item, idx) => (
+                    <Card key={item._id || idx} className="p-5 shadow-md">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-lg font-semibold text-slate-900">
+                            {item.type === 0 ? "PayPal" : "Bank"}
+                          </h4>
+
+                          {item.isDefault && (
+                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                              Default
+                            </Badge>
+                          )}
+                        </div>
+
+                        <Pill tone={item.type === 0 ? "default" : "muted"}>
+                          {item.type === 0 ? "PayPal" : "Bank Transfer"}
+                        </Pill>
+                      </div>
+
+                      {item.type === 0 ? (
+                        <>
+                          <KVRow label="Email" value={<Copyable value={item.paypal?.email} />} />
+                          <KVRow label="Username" value={item.paypal?.username || "—"} />
+                        </>
+                      ) : (
+                        <>
+                          <KVRow label="Account Holder" value={item.bank?.accountHolder || "—"} />
+                          <KVRow label="Account Number" value={item.bank?.accountNumber || "—"} />
+                          <KVRow label="Bank Name" value={item.bank?.bankName || "—"} />
+                          <KVRow label="Branch" value={item.bank?.branch || "—"} />
+                          <KVRow label="IFSC" value={item.bank?.ifsc || "—"} />
+                          <KVRow label="SWIFT" value={item.bank?.swift || "—"} />
+                          <KVRow label="Country" value={item.bank?.countryName || "—"} />
+                        </>
+                      )}
+
+                      <Separator className="my-4" />
+
+                      <div className="text-xs text-slate-500 space-y-1">
+                        <div>Created: {fmtDateTime(item.createdAt)}</div>
+                        <div>Updated: {fmtDateTime(item.updatedAt)}</div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-slate-600">No payment details available.</div>
+              )}
+            </Section>
           </TabsContent>
         </Tabs>
       </div>

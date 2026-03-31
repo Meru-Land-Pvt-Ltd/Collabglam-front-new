@@ -1214,8 +1214,8 @@ export default function Page() {
               />
             </section>
 
-            <section className="mt-6 grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)_340px]">
-              <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+<section className="mt-6 grid gap-4 xl:h-[calc(100vh-260px)] xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+<div className="flex h-full min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                 <PanelHeader
                   title="Threads"
                   subtitle="Primary inbox view"
@@ -1284,7 +1284,7 @@ export default function Page() {
                   />
                 </div>
 
-                <div className="mt-4 max-h-[760px] space-y-2 overflow-y-auto pr-1">
+<div className="mt-4 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
                   {filteredThreads.length ? (
                     filteredThreads.map((thread) => (
                       <ThreadListItem
@@ -1304,7 +1304,7 @@ export default function Page() {
                 </div>
               </div>
 
-              <div className="flex min-h-[760px] flex-col rounded-[28px] border border-slate-200 bg-white shadow-sm">
+<div className="flex h-full min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white shadow-sm">
                 {selectedThread ? (
                   <>
                     <div className="border-b border-slate-200 px-5 py-5">
@@ -1351,14 +1351,14 @@ export default function Page() {
                       </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto px-5 py-5">
+<div className="flex-1 min-h-0 overflow-y-auto px-5 py-5">
                       {loadingMessages ? (
                         <div className="flex h-full items-center justify-center text-slate-500">
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Loading conversation...
                         </div>
                       ) : selectedThread.messages.length ? (
-                        <div className="space-y-4">
+                       <div className="space-y-4">
                           {selectedThread.messages.map((message) => (
                             <MessageBubble key={message.id} message={message} />
                           ))}
@@ -1399,8 +1399,8 @@ export default function Page() {
                 )}
               </div>
 
-              <div className="space-y-4">
-                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="h-full min-h-0 space-y-4 overflow-hidden">
+                <div className="flex min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                   <PanelHeader
                     title="Compose tools"
                     subtitle="Templates, upload and send"
@@ -1470,7 +1470,7 @@ export default function Page() {
                   </div>
                 </div>
 
-                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                   <PanelHeader
                     title="Recipients"
                     subtitle={
@@ -1518,7 +1518,7 @@ export default function Page() {
                     </span>
                   </div>
 
-                  <div className="mt-4 max-h-[480px] space-y-2 overflow-y-auto pr-1">
+                  <div className="mt-4 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
                     {loadingRecipients ? (
                       <div className="flex items-center justify-center py-10 text-slate-500">
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
