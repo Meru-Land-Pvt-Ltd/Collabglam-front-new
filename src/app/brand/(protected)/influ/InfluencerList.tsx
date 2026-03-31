@@ -50,7 +50,7 @@ import { useInfluencerCounts } from "./InfluencerCountsContext";
 type Tab = "all" | "applied" | "active" | "shortlisted" | "undecided" | "rejected";
 
 type ContractMeta = {
-  _id?: string;
+  _id: string;
   contractId: string;
   campaignId: string;
   status?: string;
