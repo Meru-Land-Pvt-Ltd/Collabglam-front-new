@@ -1491,10 +1491,17 @@ function InfluencerContractModal({
 
     try {
       const res = await apiGetInfluencerSignature(influencerId);
-      const existingId = res?.data?._id || "";
+
+      // res is already the typed payload, not an AxiosResponse
+      const existingId = res?._id || "";
+      const existingUrl =
+        res?.signatureUrl || res?.url || res?.signature?.url || "";
+
       if (existingId) setSavedSignatureId(existingId);
+      if (existingUrl) setSavedSignatureUrl(existingUrl);
+
       setShowAcceptSignatureModal(true);
-    } catch (e) {
+    } catch {
       setShowAcceptSignatureModal(true);
     } finally {
       setSignatureLoading(false);
@@ -1769,12 +1776,22 @@ function InfluencerContractModal({
 
       if (signatureFile && !signatureInfluencerId) {
         const influencerId = getInfluencerId();
+
+        if (!influencerId) {
+          toast({
+            icon: "error",
+            title: "Missing influencer",
+            text: "Influencer ID not found.",
+          });
+          return;
+        }
+
         const formData = new FormData();
         formData.append("influencerId", influencerId);
         formData.append("signature", signatureFile);
 
         const uploadRes = await apiUploadInfluencerSignature(formData);
-        const uploadedId = uploadRes?._id || uploadRes?.data?._id || "";
+        const uploadedId = uploadRes?._id || "";
 
         if (!uploadedId) {
           toast({
@@ -2063,7 +2080,7 @@ function InfluencerContractModal({
                 onValueChange={(v) =>
                   setLocal((p) => ({ ...p, taxFormType: v }))
                 }
-                // disabled={!canEdit}
+              // disabled={!canEdit}
               >
                 <SelectItem value="W-9">W-9</SelectItem>
                 <SelectItem value="W-8">W-8</SelectItem>
