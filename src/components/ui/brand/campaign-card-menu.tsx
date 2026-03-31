@@ -8,6 +8,7 @@ import {
   LinkSimple,
   PaperPlaneTilt,
 } from "@phosphor-icons/react";
+import { apiEnableCampaignShare } from "@/app/brand/services/brandApi";
 
 type Props = {
   viewHref: string;
@@ -23,6 +24,46 @@ function toAbsoluteUrl(href: string) {
   return `${window.location.origin}${href}`;
 }
 
+function extractCampaignId(viewHref: string) {
+  try {
+    const url = new URL(toAbsoluteUrl(viewHref));
+    return url.searchParams.get("id");
+  } catch {
+    return null;
+  }
+}
+
+async function safeCopy(text: string) {
+  if (
+    typeof navigator !== "undefined" &&
+    navigator.clipboard &&
+    typeof navigator.clipboard.writeText === "function"
+  ) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  if (typeof document !== "undefined") {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.left = "-9999px";
+
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+
+    const success = document.execCommand("copy");
+    document.body.removeChild(textarea);
+
+    return success;
+  }
+
+  return false;
+}
+
 export default function CampaignCardMenu({ viewHref, inviteHref }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -35,10 +76,43 @@ export default function CampaignCardMenu({ viewHref, inviteHref }: Props) {
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(toAbsoluteUrl(viewHref));
-    } catch {
-      // ignore silently for now
+      const campaignId = extractCampaignId(viewHref);
+
+      if (!campaignId) {
+        throw new Error("Campaign ID not found");
+      }
+
+      const brandId =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("brandId") ||
+            window.localStorage.getItem("brandID") ||
+            window.localStorage.getItem("brand_id")
+          : null;
+
+      if (!brandId) {
+        throw new Error("Brand ID missing");
+      }
+
+      const res: any = await apiEnableCampaignShare({
+        brandId,
+        campaignId,
+      });
+
+      const shareUrl = res?.shareUrl || res?.data?.shareUrl;
+
+      if (!shareUrl) {
+        throw new Error("Share URL not returned");
+      }
+
+      const copied = await safeCopy(shareUrl);
+
+      if (!copied) {
+        window.prompt("Copy this public link:", shareUrl);
+      }
+    } catch (err) {
+      console.error("Copy public link failed:", err);
     }
+
     setOpen(false);
   };
 
