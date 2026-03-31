@@ -517,7 +517,7 @@ function DefaultTable({
 
                         <div className="flex min-w-0 flex-col">
                           <span
-                            className="truncate border border-red-500 hover:underline hover:cursor-pointer"
+                            className="truncate hover:underline hover:cursor-pointer"
                             style={{
                               color: "var(--Light-Text-Primary, #1A1A1A)",
                               fontFamily: "var(--Font-Family-Inter, Inter)",
