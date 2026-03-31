@@ -141,6 +141,7 @@ interface CampaignData {
   hasApplied: number;
   hasMilestone: number;
   productImages: CampaignImage[];
+  raw?: any;
 }
 
 const CONTRACT_STATUS = {
@@ -299,8 +300,8 @@ const emptyLocal: LocalInfluencer = {
 const tabs = [
   { value: "all", label: "All" },
   { value: "applied", label: "Applied Campaigns" },
-  { value: "active", label: "Active Campaigns" },
   { value: "Contracted", label: "Contracted" },
+  { value: "active", label: "Active Campaigns" },
   { value: "Rejected", label: "Rejected" },
 ];
 
@@ -464,6 +465,15 @@ function mapApiCampaign(c: any): CampaignData {
 
   const id = c._id || c.id || c.campaignId || "";
 
+  const countryValues: string[] = Array.isArray(c.targetCountryValues)
+    ? c.targetCountryValues.filter(Boolean)
+    : [];
+
+  const primaryCountry =
+    countryValues[0] ||
+    c.targetCountry ||
+    c.createdLocation?.country ||
+    "";
 
   return {
     id,
@@ -481,7 +491,7 @@ function mapApiCampaign(c: any): CampaignData {
     category,
     platform:
       platforms.length > 0 ? normPlatform(platforms[0]) : c.campaignType || "",
-    location: c.targetCountry || "Remote",
+    location: primaryCountry,
     status: c.status || "",
     campaignStatus: c.campaignStatus || c.status || "",
     contractId: resolvedContractId,
@@ -493,25 +503,73 @@ function mapApiCampaign(c: any): CampaignData {
     timeline: { startDate, endDate },
     isActive: c.isActive ?? 1,
     isApproved: c.isApproved ?? 1,
+    raw: c,
   };
 }
 
 function campaignToPreview(campaign: CampaignData) {
+  const raw = campaign.raw || {};
+
+  const countryValues: string[] = Array.isArray(raw?.targetCountryValues)
+    ? raw.targetCountryValues.filter(Boolean)
+    : campaign.location
+      ? [campaign.location]
+      : [];
+
+  const ageValues: string[] = Array.isArray(raw?.targetAgeGroupValues)
+    ? raw.targetAgeGroupValues.filter(Boolean)
+    : [];
+
+  const goalValues: string[] = Array.isArray(raw?.campaignGoalValues)
+    ? raw.campaignGoalValues.filter(Boolean)
+    : ["Brand Awareness"];
+
+  const categories =
+    Array.isArray(raw?.categories) && raw.categories.length > 0
+      ? raw.categories
+      : campaign.category
+        ? [{ categoryName: campaign.category }]
+        : [];
+
   return {
     form: {
+      campaignTitle: raw?.campaignTitle || campaign.title,
       title: campaign.title,
       description: campaign.description,
       categoryName: campaign.category,
-      targetCountry: [campaign.location],
-      targetAgeGroups: ["18-24"],
-      goals: ["Brand Awareness"],
+      categories,
+
+      // convert string arrays into object arrays expected by cardPreview
+      targetCountryIds: countryValues.map((countryName: string) => ({
+        countryName,
+      })),
+      targetAgeRanges: ageValues.map((range: string) => ({
+        range,
+      })),
+      campaignGoals: goalValues.map((goal: string) => ({
+        goal,
+      })),
+
       campaignBudget: campaign.budgetMax,
+      budget: campaign.budgetMax,
       productImages: campaign.productImages,
     },
     meta: {
-      countryMap: { [campaign.location]: campaign.location },
-      ageMap: { "18-24": "18–24" },
-      goalsMap: { "Brand Awareness": "Brand Awareness" },
+      countryMap: countryValues.reduce(
+        (acc: Record<string, string>, item: string) => {
+          acc[item] = item;
+          return acc;
+        },
+        {}
+      ),
+      ageMap: ageValues.reduce((acc: Record<string, string>, item: string) => {
+        acc[item] = item;
+        return acc;
+      }, {}),
+      goalsMap: goalValues.reduce((acc: Record<string, string>, item: string) => {
+        acc[item] = item;
+        return acc;
+      }, {}),
       campaignBudget: campaign.budgetMax,
     },
   };

@@ -1704,7 +1704,12 @@ export default function ViewCampaignPage() {
     details?.selectedInfluencerIds ??
     [];
 
-  const selectedCount = asArray(selectedList).length;
+  const selectedCount =
+  Number(
+    (campaign as any)?.count ??
+    details?.count ??
+    0
+  ) || 0;
 
   const selectedInfluencerDisplay =
     (campaignStatusCounts.active ?? 0) > 0
