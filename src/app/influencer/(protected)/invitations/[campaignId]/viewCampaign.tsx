@@ -1429,7 +1429,7 @@ export default function ViewCampaignPage() {
             </div>
           ) : null}
 
-          <div className="mt-5 flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 min-h-[11.4375rem] gap-[1.3125rem]">
+          {/* <div className="mt-5 flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 min-h-[11.4375rem] gap-[1.3125rem]">
             <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem]">Hashtags</div>
 
             <div className="flex flex-wrap gap-2 self-stretch">
@@ -1448,7 +1448,7 @@ export default function ViewCampaignPage() {
                 <span className="text-[#969696] text-[0.875rem] leading-[1.25rem]">—</span>
               )}
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
 

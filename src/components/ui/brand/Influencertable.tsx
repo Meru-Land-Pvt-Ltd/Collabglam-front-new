@@ -909,7 +909,7 @@ function ShortlistedTable({
 
                       <div className="flex min-w-0 flex-col">
                         <span
-                          className="truncate hover:underline hover:cursor-pointer"
+                          className="truncate hover:underline hover:cursor-pointer outline-none border-none focus:outline-none focus:ring-0"
                           style={{
                             color: "var(--Light-Text-Primary, #1A1A1A)",
                             fontFamily: "var(--Font-Family-Inter, Inter)",

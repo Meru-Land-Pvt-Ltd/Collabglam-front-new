@@ -694,10 +694,10 @@ export function ManualPreviewCard({
           <ContractActions contract={contract} />
         ) : (
           <div className="flex items-center gap-3 shrink-0 cursor-pointer">
-            <Button variant="ghost" className="shadow-none hover:bg-white">
+            {/* <Button variant="ghost" className="shadow-none hover:bg-white">
               <BookmarkSimpleIcon />
               <span>Save</span>
-            </Button>
+            </Button> */}
             <Button variant="default" onClick={onViewClick}>
               View
             </Button>
