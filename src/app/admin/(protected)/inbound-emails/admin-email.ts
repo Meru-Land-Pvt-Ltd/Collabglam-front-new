@@ -74,16 +74,31 @@ export type AdminEmailThreadDto = {
   lastProviderStatus?: ProviderStatus | null;
 
   executiveId?:
-    | string
-    | {
-        _id: string;
-        name?: string;
-        email?: string;
-        proxyEmail?: string;
-        role?: AdminRole | string;
-      };
+  | string
+  | {
+    _id: string;
+    name?: string;
+    email?: string;
+    proxyEmail?: string;
+    role?: AdminRole | string;
+  };
 };
 
+
+export type AdminEmailMessageAttachmentDto = {
+  _id?: string;
+  filename?: string | null;
+  contentType?: string | null;
+  contentDisposition?: string | null;
+  contentId?: string | null;
+  transferEncoding?: string | null;
+  size?: number;
+  checksum?: string | null;
+  related?: boolean;
+  s3Bucket?: string | null;
+  s3Key?: string | null;
+  downloadUrl?: string | null;
+};
 
 export type AdminEmailMessageDto = {
   _id: string;
@@ -100,6 +115,7 @@ export type AdminEmailMessageDto = {
   providerStatus?: ProviderStatus;
   textPreview?: string | null;
   htmlPreview?: string | null;
+  attachments?: AdminEmailMessageAttachmentDto[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -124,6 +140,7 @@ export type ComposeEmailInput = {
   subject?: string;
   text?: string;
   html?: string;
+  attachments?: EmailAttachmentInput[];
 };
 
 export type ComposeEmailResponse = ApiSuccess<{
@@ -149,6 +166,7 @@ export type ReplyToThreadInput = {
   html?: string;
   cc?: string[] | string;
   bcc?: string[] | string;
+  attachments?: EmailAttachmentInput[];
 };
 
 export type ReplyToThreadResponse = ApiSuccess<{
@@ -210,6 +228,7 @@ export type SendSelectedPipelineEmailsInput = {
   subject?: string;
   text?: string;
   html?: string;
+  attachments?: EmailAttachmentInput[];
 };
 
 export type SendSelectedPipelineEmailsResponse = ApiSuccess<{
@@ -250,6 +269,7 @@ export type SendSelectedBrandOutreachEmailsInput = {
   subject?: string;
   text?: string;
   html?: string;
+  attachments?: EmailAttachmentInput[];
 };
 
 export type SendSelectedBrandOutreachEmailsResponse = ApiSuccess<{
@@ -406,3 +426,10 @@ export async function deleteEmailTemplateById(templateId: string) {
     {}
   );
 }
+
+export type EmailAttachmentInput = {
+  filename: string;
+  contentType: string;
+  size: number;
+  contentBase64: string;
+};

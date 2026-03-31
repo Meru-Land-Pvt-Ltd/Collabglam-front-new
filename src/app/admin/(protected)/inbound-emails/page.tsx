@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   ChevronRight,
-  FileSpreadsheet,
   FileText,
   Inbox,
   Loader2,
@@ -31,6 +30,7 @@ import {
   type BrandOutreachRecipientDto,
   type EmailTemplateDto,
   type MailboxViewFilter,
+  type EmailAttachmentInput,
   type ProviderStatus,
   composeAdminEmail,
   createEmailTemplate,
@@ -91,6 +91,17 @@ type Recipient = {
   replyToEmail?: string;
 };
 
+type MessageAttachment = {
+  id?: string;
+  filename: string;
+  contentType?: string | null;
+  size?: number;
+  s3Bucket?: string | null;
+  s3Key?: string | null;
+  downloadUrl?: string | null;
+  url?: string | null;
+};
+
 type Message = {
   id: string;
   sender: string;
@@ -100,6 +111,7 @@ type Message = {
   time: string;
   direction: "INBOUND" | "OUTBOUND";
   providerStatus?: string;
+  attachments: MessageAttachment[];
 };
 
 type Thread = {
@@ -128,12 +140,6 @@ type UploadSummary = {
   invalidRows: number;
 };
 
-type EmailEditorAttachment = {
-  filename: string;
-  contentType: string;
-  size: number;
-  contentBase64: string;
-};
 
 type MailTemplate = {
   id: string;
@@ -388,6 +394,19 @@ function mapBackendMessageToUi(
 ): Message {
   const body = msg.textPreview || stripHtml(msg.htmlPreview) || "";
 
+const attachments = Array.isArray(msg.attachments)
+  ? msg.attachments.map((item) => ({
+      id: item._id,
+      filename: item.filename || "attachment",
+      contentType: item.contentType || null,
+      size: item.size || 0,
+      s3Bucket: item.s3Bucket || null,
+      s3Key: item.s3Key || null,
+      downloadUrl: item.downloadUrl || null,
+      url: (item as any).url || null,
+    }))
+  : [];
+
   return {
     id: msg._id,
     sender:
@@ -404,6 +423,7 @@ function mapBackendMessageToUi(
     time: formatDateTime(msg.createdAt),
     direction: msg.direction,
     providerStatus: msg.providerStatus,
+    attachments,
   };
 }
 
@@ -938,7 +958,7 @@ export default function Page() {
     subject: string;
     body: string;
     htmlBody: string;
-    attachments: EmailEditorAttachment[];
+    attachments: EmailAttachmentInput[];
   }) => {
     try {
       setEditorSending(true);
@@ -955,6 +975,7 @@ export default function Page() {
           html: payload.htmlBody,
           cc: payload.cc,
           bcc: payload.bcc,
+          attachments: payload.attachments,
         });
 
         await loadThreadsFromApi();
@@ -978,6 +999,7 @@ export default function Page() {
             subject: payload.subject,
             text: payload.body,
             html: payload.htmlBody,
+            attachments: payload.attachments,
           });
         } else if (selectionMode === "brand") {
           const selectedBrandOutreachIds = recipients
@@ -993,6 +1015,7 @@ export default function Page() {
             subject: payload.subject,
             text: payload.body,
             html: payload.htmlBody,
+            attachments: payload.attachments,
           });
         } else {
           response = await composeAdminEmail({
@@ -1002,6 +1025,7 @@ export default function Page() {
             subject: payload.subject,
             text: payload.body,
             html: payload.htmlBody,
+            attachments: payload.attachments,
           });
         }
 
@@ -1214,8 +1238,8 @@ export default function Page() {
               />
             </section>
 
-<section className="mt-6 grid gap-4 xl:h-[calc(100vh-260px)] xl:grid-cols-[340px_minmax(0,1fr)_340px]">
-<div className="flex h-full min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="mt-6 grid gap-4 xl:h-[calc(100vh-260px)] xl:grid-cols-[340px_minmax(0,1fr)_340px]">
+              <div className="flex h-full min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                 <PanelHeader
                   title="Threads"
                   subtitle="Primary inbox view"
@@ -1284,7 +1308,7 @@ export default function Page() {
                   />
                 </div>
 
-<div className="mt-4 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
+                <div className="mt-4 flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">
                   {filteredThreads.length ? (
                     filteredThreads.map((thread) => (
                       <ThreadListItem
@@ -1304,7 +1328,7 @@ export default function Page() {
                 </div>
               </div>
 
-<div className="flex h-full min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white shadow-sm">
+              <div className="flex h-full min-h-0 flex-col rounded-[28px] border border-slate-200 bg-white shadow-sm">
                 {selectedThread ? (
                   <>
                     <div className="border-b border-slate-200 px-5 py-5">
@@ -1351,14 +1375,14 @@ export default function Page() {
                       </div>
                     </div>
 
-<div className="flex-1 min-h-0 overflow-y-auto px-5 py-5">
+                    <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5">
                       {loadingMessages ? (
                         <div className="flex h-full items-center justify-center text-slate-500">
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Loading conversation...
                         </div>
                       ) : selectedThread.messages.length ? (
-                       <div className="space-y-4">
+                        <div className="space-y-4">
                           {selectedThread.messages.map((message) => (
                             <MessageBubble key={message.id} message={message} />
                           ))}
@@ -2060,6 +2084,34 @@ function RecipientListItem({
   );
 }
 
+function formatFileSize(bytes?: number) {
+  const size = Number(bytes || 0);
+  if (!size) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function buildAttachmentHref(attachment: {
+  downloadUrl?: string | null;
+  url?: string | null;
+  s3Bucket?: string | null;
+  s3Key?: string | null;
+}) {
+  if (attachment.downloadUrl) return attachment.downloadUrl;
+  if (attachment.url) return attachment.url;
+
+  // only works if bucket/object is publicly accessible
+  if (attachment.s3Bucket && attachment.s3Key) {
+    return `https://${attachment.s3Bucket}.s3.amazonaws.com/${attachment.s3Key
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/")}`;
+  }
+
+  return null;
+}
+
 function MessageBubble({ message }: { message: Message }) {
   const isExecutive = message.role === "executive";
 
@@ -2087,6 +2139,86 @@ function MessageBubble({ message }: { message: Message }) {
         </div>
 
         <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
+
+        {message.attachments?.length ? (
+          <div className="mt-3 space-y-2">
+            {message.attachments.map((attachment, index) => (
+              <div
+                key={attachment.id || `${attachment.filename}-${index}`}
+                className={cn(
+                  "rounded-2xl border px-3 py-2 text-sm",
+                  isExecutive
+                    ? "border-white/20 bg-white/10"
+                    : "border-slate-200 bg-white"
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">
+                      {attachment.filename}
+                    </div>
+                    <div
+                      className={cn(
+                        "mt-0.5 text-xs",
+                        isExecutive ? "text-white/70" : "text-slate-500"
+                      )}
+                    >
+                      {attachment.contentType || "file"}
+                      {attachment.size
+                        ? ` • ${formatFileSize(attachment.size)}`
+                        : ""}
+                    </div>
+                  </div>
+
+
+{(() => {
+  const fileHref = buildAttachmentHref(attachment);
+
+  return fileHref ? (
+    <div className="shrink-0 flex items-center gap-2">
+      <a
+        href={fileHref}
+        target="_blank"
+        rel="noreferrer"
+        className={cn(
+          "rounded-lg px-3 py-1.5 text-xs font-medium transition",
+          isExecutive
+            ? "bg-white text-slate-900 hover:bg-slate-100"
+            : "bg-slate-900 text-white hover:bg-slate-800"
+        )}
+      >
+        View
+      </a>
+
+      <a
+        href={fileHref}
+        download={attachment.filename}
+        className={cn(
+          "rounded-lg px-3 py-1.5 text-xs font-medium transition border",
+          isExecutive
+            ? "border-white/20 bg-white/10 text-white hover:bg-white/20"
+            : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+        )}
+      >
+        Download
+      </a>
+    </div>
+  ) : (
+    <span
+      className={cn(
+        "shrink-0 text-xs",
+        isExecutive ? "text-white/70" : "text-slate-500"
+      )}
+    >
+      Unavailable
+    </span>
+  );
+})()}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
