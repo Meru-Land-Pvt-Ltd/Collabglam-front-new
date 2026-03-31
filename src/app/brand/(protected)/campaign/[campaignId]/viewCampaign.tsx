@@ -14,6 +14,7 @@ import {
   apiCampaignDelete,
   apiCampaignUpdateStatus,
   apiCampaignInviteInfluencer,
+  apiGetListByCampaign,
 } from "@/app/brand/services/brandApi";
 import { InfluencerTable, type InfluencerRow } from "@/components/ui/brand/Influencertable";
 import { ArrowUpRight } from "lucide-react";
@@ -90,6 +91,7 @@ interface InfluencerContextMenuProps {
   onClose?: () => void;
   hideInviteInfluencer?: boolean;
   hideDelete?: boolean;
+  disableDelete?: boolean;
 }
 
 function asArray<T = any>(v: any): T[] {
@@ -483,6 +485,7 @@ export function InfluencerContextMenu({
   onDelete,
   hideInviteInfluencer = false,
   hideDelete = false,
+  disableDelete = false,
 }: InfluencerContextMenuProps) {
   const [workspaceSubmenuOpen, setWorkspaceSubmenuOpen] = useState(false);
   const menuRootRef = useRef<HTMLDivElement | null>(null);
@@ -651,15 +654,19 @@ export function InfluencerContextMenu({
             <>
               <div className="border-t border-[#F0F0F0] my-2" />
               <button
-                onClick={onDelete}
-                className="
-                  flex items-center gap-2
-                  px-2 py-2
-                  rounded-md
-                  text-sm font-medium
-                  text-[#E53935]
-                  hover:bg-[#F5F5F5]
-                "
+                onClick={disableDelete ? undefined : onDelete}
+                disabled={disableDelete}
+                title={disableDelete ? "Cannot delete because campaign has active or invited influencers" : "Delete"}
+                className={`
+    flex items-center gap-2
+    px-2 py-2
+    rounded-md
+    text-sm font-medium
+    ${disableDelete
+                    ? "text-[#B8B8B8] cursor-not-allowed opacity-60"
+                    : "text-[#E53935] hover:bg-[#F5F5F5]"
+                  }
+  `}
               >
                 <Trash size={16} />
                 Delete
@@ -1047,6 +1054,7 @@ export default function ViewCampaignPage() {
   const topupStatus = searchParams.get("topup");
   const stripeSessionId = searchParams.get("session_id");
 
+
   const campaignId = useMemo(
     () => normalizeMongoId(idFromQuery ?? (params as any)?.campaignId),
     [idFromQuery, params]
@@ -1085,6 +1093,9 @@ export default function ViewCampaignPage() {
   const [otherInfoOpen, setOtherInfoOpen] = useState(false);
   const [audiencePlatformsOpen, setAudiencePlatformsOpen] = useState(false);
   const [additionalInfoOpen, setAdditionalInfoOpen] = useState(false);
+
+
+
 
   useEffect(() => {
     const id =
@@ -1434,6 +1445,68 @@ export default function ViewCampaignPage() {
       setTopupLoading(false);
     }
   };
+  const [campaignStatusCounts, setCampaignStatusCounts] = useState({
+    active: 0,
+    invited: 0,
+    total: 0,
+  });
+
+
+  const hasProtectedInfluencers =
+    (campaignStatusCounts.active ?? 0) > 0 || (campaignStatusCounts.invited ?? 0) > 0;
+  {
+    hasProtectedInfluencers ? (
+      <div className="text-sm text-red-500">
+        This campaign cannot be deleted because it has active or invited influencers.
+      </div>
+    ) : null
+  }
+
+
+
+
+
+  useEffect(() => {
+    if (!campaignId) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const res: any = await apiGetListByCampaign({
+          campaignId,
+          page: 1,
+          limit: 100,
+        });
+
+        if (cancelled) return;
+
+        const counts = res?.statusCounts ?? res?.data?.statusCounts ?? {};
+
+        setCampaignStatusCounts({
+          total: Number(counts?.total ?? 0),
+          active: Number(counts?.active ?? 0),
+          invited: Number(counts?.invited ?? 0),
+        });
+      } catch (e) {
+        if (cancelled) return;
+
+        setCampaignStatusCounts({
+          total: 0,
+          active: 0,
+          invited: 0,
+        });
+
+        console.error("Failed to load campaign influencer counts:", e);
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignId]);
 
   if (loading) {
     return (
@@ -1578,6 +1651,15 @@ export default function ViewCampaignPage() {
 
   const selectedCount = asArray(selectedList).length;
 
+  const selectedInfluencerDisplay =
+    (campaignStatusCounts.active ?? 0) > 0
+      ? `${pad2(campaignStatusCounts.active)}`
+      : (campaignStatusCounts.invited ?? 0) > 0
+        ? `${pad2(campaignStatusCounts.invited)}`
+        : totalInfluencers
+          ? `${pad2(selectedCount)}/${pad2(totalInfluencers)}`
+          : "—";
+
   const startAt = (campaign as any)?.startAt ?? details?.startAt ?? null;
   const endAt = (campaign as any)?.endAt ?? details?.endAt ?? null;
   const showEditButton = canShowEditCampaign(campaign);
@@ -1633,7 +1715,10 @@ export default function ViewCampaignPage() {
     ""
   ).trim();
 
-  const lorem10 = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do.";
+  const lorem1 = "Supporting details and references for this campaign.";
+  const lorem2 = "Audience demographics and distribution channels defined for the campaign.";
+  const lorem3 = "Additional notes and campaign-specific details.";
+  const lorem4 = "Suggested creators based on campaign targeting.";
 
   const carouselImages = Array.from(new Set(campaignImageUrls));
 
@@ -1844,7 +1929,10 @@ export default function ViewCampaignPage() {
                 }}
                 onViewInfluencerList={() => router.push(`/brand/influ/all?campaignId=${campaignId}`)}
                 onInviteInfluencer={() => router.push(`/brand/browse-influencer?campaignId=${campaignId}`)}
-                onDelete={() => setDeleteDialogOpen(true)}
+                onDelete={() => {
+                  if (hasProtectedInfluencers) return;
+                  setDeleteDialogOpen(true);
+                }}
               />
             </div>
           </div>
@@ -1895,7 +1983,7 @@ export default function ViewCampaignPage() {
                 />
                 <Metric
                   label="Selected Influencer"
-                  value={totalInfluencers ? `${pad2(selectedCount)}/${pad2(totalInfluencers)}` : "—"}
+                  value={selectedInfluencerDisplay}
                   onClick={() => router.push(`/brand/influ/active?campaignId=${campaignId}`)}
                 />
                 <Metric label="Timeline" value={timelineText} />
@@ -2024,7 +2112,7 @@ export default function ViewCampaignPage() {
             </div>
 
             <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              {lorem10}
+              {lorem1}
             </div>
           </div>
 
@@ -2134,7 +2222,7 @@ export default function ViewCampaignPage() {
             </div>
 
             <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              {lorem10}
+              {lorem2}
             </div>
           </div>
 
@@ -2310,7 +2398,7 @@ export default function ViewCampaignPage() {
             </div>
 
             <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-              {lorem10}
+              {lorem3}
             </div>
           </div>
 
@@ -2382,7 +2470,7 @@ export default function ViewCampaignPage() {
               </div>
             ) : null}
 
-            <div className="mt-5 flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[11.4375rem] gap-[1.3125rem]">
+            {/* <div className="mt-5 flex flex-col items-start self-stretch rounded-[0.75rem] border border-[#E6E6E6] bg-white p-3 h-[11.4375rem] gap-[1.3125rem]">
               <div className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-[1.25rem]">
                 Hashtags
               </div>
@@ -2403,11 +2491,11 @@ export default function ViewCampaignPage() {
                   <span className="text-[#969696] text-[0.875rem] leading-[1.25rem]">—</span>
                 )}
               </div>
-            </div>
+            </div> */}
           </div>
         ) : null}
       </div>
-      {!isAdminCreatedCampaign ? (
+      {/* {!isAdminCreatedCampaign ? (
         <div className="mt-7 w-full flex flex-col items-start self-stretch">
           <div
             className="self-stretch text-[#1A1A1A] text-[1.25rem] font-semibold leading-[1.75rem]"
@@ -2554,7 +2642,7 @@ export default function ViewCampaignPage() {
             )}
           </div>
         </div>
-      ) : null}
+      ) : null} */}
 
       {addFundsModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30 px-4">
@@ -2669,7 +2757,11 @@ export default function ViewCampaignPage() {
               <Button
                 variant="raised"
                 onClick={handleDelete}
-                className="h-[1rem] w-[8rem] px-2 rounded-lg bg-red-100 text-sm hover:bg-red-50 font-medium text-white flex items-center gap-2"
+                disabled={hasProtectedInfluencers}
+                className={`h-[1rem] w-[8rem] px-2 rounded-lg text-sm font-medium flex items-center gap-2 ${hasProtectedInfluencers
+                  ? "bg-gray-100 cursor-not-allowed opacity-60"
+                  : "bg-red-100 hover:bg-red-50"
+                  }`}
               >
                 <div className="flex gap-2 items-center">
                   <TrashIcon className="h-4 w-4 text-red-500" weight="bold" />

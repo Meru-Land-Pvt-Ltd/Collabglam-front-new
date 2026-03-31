@@ -675,7 +675,7 @@ export default function CampaignListPage({
     const goToApplied = () => {
       if (locked) return;
       if (typeof window !== "undefined") {
-        window.location.href = `/brand/influ/applied?campaignId=${encodeURIComponent(
+        window.location.href = `/brand/influ/all?campaignId=${encodeURIComponent(
           campaignId
         )}`;
       }
@@ -744,7 +744,7 @@ export default function CampaignListPage({
               value: `$${formatBudget(campaignBudget)}`,
             },
             {
-              label: "Applied",
+              label: "Applicants",
               value: (
                 <button
                   type="button"

@@ -317,13 +317,6 @@ export default function BrandDashboardHome() {
                 accentFrom={accentFrom}
               />
             )}
-
-            <StatCard
-              icon={<HiOutlineCurrencyDollar className="text-[#10b981]" size={32} />}
-              label="Budget Remaining"
-              value={`$${budgetRemaining.toLocaleString()}`}
-              accentFrom={accentFrom}
-            />
           </div>
 
           {/* Main grid */}
@@ -360,7 +353,7 @@ export default function BrandDashboardHome() {
                     </Button>
 
                     <Button
-                      onClick={() => router.push("/brand/add-edit-campaign")}                    >
+                      onClick={() => router.push("/brand/create-campaign")}  >
                       Create New Campaign
                     </Button>
                   </div>
@@ -563,7 +556,7 @@ export default function BrandDashboardHome() {
             </div>
 
             {/* ✅ Inbox hidden for FULLY MANAGED */}
-            {!isFullyManaged && (
+            
               <div className="lg:col-span-1 bg-white rounded-lg shadow p-6 flex flex-col min-h-[520px]">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -672,7 +665,7 @@ export default function BrandDashboardHome() {
                   )}
                 </div>
               </div>
-            )}
+            
           </div>
         </main>
       </div >

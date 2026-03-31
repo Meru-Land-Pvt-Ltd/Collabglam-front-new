@@ -71,7 +71,7 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
   headers: { Accept: 'application/json' },
-  timeout: 20000,
+  timeout: 40000,
 })
 
 // Secondary API (BASE_URL2)
@@ -79,7 +79,7 @@ const api2 = axios.create({
   baseURL: API_BASE_URL2,
   withCredentials: true,
   headers: { Accept: 'application/json' },
-  timeout: 20000,
+  timeout: 40000,
 })
 
 /** ---- Interceptors ---- */
