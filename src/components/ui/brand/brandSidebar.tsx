@@ -68,7 +68,7 @@ type Item = {
   key: string;
   label: string;
   icon: React.ElementType;
-  section: "dashboard" | "manage";
+  section: "overview" | "manage";
   right?: React.ReactNode;
   children?: Array<{ key: string; label: string }>;
 };
@@ -510,13 +510,13 @@ export default function BrandSidebar({
 
   const items = useMemo<Item[]>(
     () => [
-      { key: "dashboard", label: "Dashboard", icon: House, section: "dashboard" },
-      { key: "create", label: "Create Campaign", icon: NotePencil, section: "dashboard" },
+      { key: "dashboard", label: "Dashboard", icon: House, section: "overview" },
+      { key: "create", label: "Create Campaign", icon: NotePencil, section: "overview" },
       {
         key: "campaigns",
         label: "Campaigns",
         icon: CardsThree,
-        section: "dashboard",
+        section: "overview",
         children: [
           { key: "campaigns_all", label: "All Campaigns" },
           { key: "campaigns_active", label: "Active Campaigns" },
@@ -524,9 +524,9 @@ export default function BrandSidebar({
           { key: "campaigns_scheduled", label: "Scheduled Campaigns " },
         ],
       },
-      { key: "browse", label: "Browse Influencer", icon: Users, section: "dashboard" },
-      { key: "inbox", label: "Inbox", icon: PaperPlaneTilt, section: "dashboard" },
-      { key: "wallet", label: "Wallet", icon: Wallet, section: "dashboard" },
+      { key: "browse", label: "Browse Influencer", icon: Users, section: "overview" },
+      { key: "inbox", label: "Inbox", icon: PaperPlaneTilt, section: "overview" },
+      { key: "wallet", label: "Wallet", icon: Wallet, section: "overview" },
       { key: "credits", label: "Credits", icon: ContactlessPayment, section: "manage" },
       {
         key: "notification",
@@ -547,7 +547,7 @@ export default function BrandSidebar({
 
 const dashboardItems = useMemo(() => {
   return items.filter((i) => {
-    if (i.section !== "dashboard") return false;
+    if (i.section !== "overview") return false;
 
     return true;
   });
@@ -1291,7 +1291,7 @@ const dashboardItems = useMemo(() => {
                 transition={motionTransitions.content}
                 className="mb-4 w-full text-[16px] font-semibold text-neutral-600"
               >
-                Dashboard
+                Overview
               </m.div>
             )}
           </AnimatePresence>

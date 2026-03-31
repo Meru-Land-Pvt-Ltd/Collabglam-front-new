@@ -189,16 +189,17 @@ function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
     "Uncategorized";
 
   const location =
+    campaign?.targetCountryIds?.[0]?.countryName ||
     campaign?.targetCountries?.[0]?.name ||
     campaign?.targetCountry ||
     campaign?.createdLocation?.country ||
-    "Remote";
+    "";
 
   const firstImage =
     Array.isArray(campaign?.productImages) && campaign.productImages.length > 0
       ? campaign.productImages[0]
       : "";
-
+  
   return {
     id,
     title: campaign?.campaignTitle || "Untitled Campaign",
@@ -226,34 +227,56 @@ function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
 }
 
 function campaignToPreview(campaign: UICampaign) {
+  const rawCountries =
+    campaign.raw?.targetCountryIds?.map((item: any) => item?.countryName).filter(Boolean) || [];
+
   const ageRanges =
-    campaign.raw?.targetAgeRangesDetails?.map((item: any) => item.range) || [];
+    campaign.raw?.targetAgeRanges?.map((item: any) => item?.range).filter(Boolean) ||
+    campaign.raw?.targetAgeRangesDetails?.map((item: any) => item?.range).filter(Boolean) ||
+    [];
+
+  const goals =
+    campaign.raw?.campaignGoals?.map((item: any) => item?.goal).filter(Boolean) || [];
+
+  const categories = Array.isArray(campaign.raw?.categories)
+    ? campaign.raw.categories
+    : [];
+
+  const productImages = Array.isArray(campaign.raw?.productImages)
+    ? campaign.raw.productImages
+    : [];
 
   return {
     form: {
-      title: campaign.title,
+      campaignTitle: campaign.raw?.campaignTitle || campaign.title,
       description: campaign.description,
       categoryName: campaign.category,
-      targetCountry: [campaign.location],
-      targetAgeGroups: ageRanges,
-      goals: campaign.platforms.length ? campaign.platforms : ["Brand Awareness"],
+      categories,
+      targetCountryIds: campaign.raw?.targetCountryIds || [],
+      targetAgeRanges: campaign.raw?.targetAgeRanges || [],
+      campaignGoals: goals.length
+        ? goals.map((goal: string) => ({ goal }))
+        : [{ goal: "Brand Awareness" }],
       campaignBudget: campaign.budgetMax,
+      budget: campaign.budgetMax,
+      productImages,
     },
     meta: {
-      countryMap: {
-        [campaign.location]: campaign.location,
-      },
-      ageMap: ageRanges.reduce((acc: Record<string, string>, item: string) => {
-        acc[item] = item;
-        return acc;
-      }, {}),
-      goalsMap: campaign.platforms.reduce(
+      countryMap: rawCountries.reduce(
         (acc: Record<string, string>, item: string) => {
           acc[item] = item;
           return acc;
         },
         {},
       ),
+      ageMap: ageRanges.reduce((acc: Record<string, string>, item: string) => {
+        acc[item] = item;
+        return acc;
+      }, {}),
+      goalsMap: goals.reduce((acc: Record<string, string>, item: string) => {
+        acc[item] = item;
+        return acc;
+      }, {}),
       campaignBudget: campaign.budgetMax,
     },
   };
