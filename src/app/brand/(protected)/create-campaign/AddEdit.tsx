@@ -778,8 +778,8 @@ function CreateByAIScreen({
       const res: any = await apiCampaignPrefillAI(payload);
 
       const pseudoDoc = {
-        ...(res?.prefill ?? {}),
-        details: res?.prefillDetails ?? res?.details ?? null,
+        ...res,
+        details: res?.details ?? null,
         byAi: 1,
         status: "draft",
       };
