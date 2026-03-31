@@ -387,63 +387,45 @@ function InviteActions({ invite }: { invite: InviteCardProps }) {
 /* ─────────────────────── Contract actions (inline, replaces Save/View) ─────────────────────── */
 
 function ContractActions({ contract }: { contract: ContractCardProps }) {
-  const { needsAccept, canEdit, canSign, canReject } = resolveContractStatus(contract.meta);
-  console.log("needsAccept", needsAccept)
-  console.log("canEdit", canEdit)
+  const contractStatus = String(contract?.meta?.status || "").trim().toUpperCase();
 
-  console.log("canSign", canSign)
-
-  console.log("canReject", canReject)
-
-  return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      {/* {(needsAccept || canEdit) && (
+  if (contractStatus === "INFLUENCER_ACCEPTED") {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
         <Button
-          onClick={contract.onReviewAccept}
-          className="rounded-lg bg-black px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+          variant="ghost"
+          onClick={contract.onView}
+          className="flex items-center gap-1 rounded-lg border hover:bg-gray-100 border-neutral-200 bg-white text-black px-3 py-2 text-[12px] font-medium"
         >
-          {needsAccept ? "Review & Accept" : "Edit Details"}
+          <Eye className="h-3 w-3" />
+          View Contract
         </Button>
-      )} */}
-      {(needsAccept) && (
+      </div>
+    );
+  }
+
+  if (contractStatus === "BRAND_SENT_DRAFT") {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
         <Button
           onClick={contract.onReviewAccept}
           className="rounded-lg bg-black px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
         >
           Review & Accept
         </Button>
-      )}
-      {canSign && (
-        <Button
-          onClick={contract.onSign}
-          className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98]"
-        >
-          <PenLine className="h-3 w-3" />
-          Sign
-        </Button>
-      )}
 
-      <Button
-        variant="ghost"
-        onClick={contract.onView}
-        className="flex items-center gap-1 rounded-lg border hover:bg-gray-100 border-neutral-200 bg-white text-black px-3 py-2 text-[12px] font-medium  "
-      >
-        <Eye className="h-3 w-3" />
-        Review & Accept
-      </Button>
-
-      {canReject && (
         <Button
           onClick={contract.onReject}
           className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
         >
           Reject
         </Button>
-      )}
-    </div>
-  );
-}
+      </div>
+    );
+  }
 
+  return null;
+}
 /* ─────────────────────── ManualPreviewCard ─────────────────────── */
 
 export function ManualPreviewCard({
