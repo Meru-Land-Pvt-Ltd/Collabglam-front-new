@@ -554,7 +554,7 @@ export default function Sidebar({
         label: "Help",
         icon: Question,
         section: "footer",
-        href: "/influencer/support-center",
+        href: "/influencer/support-centre",
       },
     ],
     [campaignBadge, appliedBadge, messagesBadge]
