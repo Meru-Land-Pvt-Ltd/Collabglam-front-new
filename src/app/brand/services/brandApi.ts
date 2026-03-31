@@ -1484,7 +1484,7 @@ export type GetListByCampaignPayload = {
   sortField?: ApplyListSortField;
   createdPage?: boolean | "true" | "false";
   sortOrder?: 0 | 1; // 0 = asc, 1 = desc
-
+  filterStatus?: "all" | "applied" | "active" | "shortlisted" | "undecided" | "rejected" | "invited" | "completed";
   // new applicant decision filters
   isShortlisted?: ApplicantDecisionFilter;
   isUndicided?: ApplicantDecisionFilter;
@@ -1541,6 +1541,7 @@ export async function apiGetListByCampaign(
       limit: payload.limit ?? 10,
       search: payload.search,
       sortField: payload.sortField,
+      filterStatus: payload.filterStatus,
       createdPage: payload.createdPage,
       sortOrder: payload.sortOrder ?? 0,
       isShortlisted: payload.isShortlisted,

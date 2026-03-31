@@ -388,18 +388,31 @@ function InviteActions({ invite }: { invite: InviteCardProps }) {
 
 function ContractActions({ contract }: { contract: ContractCardProps }) {
   const { needsAccept, canEdit, canSign, canReject } = resolveContractStatus(contract.meta);
+  console.log("needsAccept", needsAccept)
+  console.log("canEdit", canEdit)
+
+  console.log("canSign", canSign)
+
+  console.log("canReject", canReject)
 
   return (
     <div className="flex items-center gap-1.5 shrink-0">
-      {(needsAccept || canEdit) && (
+      {/* {(needsAccept || canEdit) && (
         <Button
           onClick={contract.onReviewAccept}
           className="rounded-lg bg-black px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
         >
           {needsAccept ? "Review & Accept" : "Edit Details"}
         </Button>
+      )} */}
+      {(needsAccept) && (
+        <Button
+          onClick={contract.onReviewAccept}
+          className="rounded-lg bg-black px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+        >
+          Review & Accept
+        </Button>
       )}
-
       {canSign && (
         <Button
           onClick={contract.onSign}
@@ -411,12 +424,12 @@ function ContractActions({ contract }: { contract: ContractCardProps }) {
       )}
 
       <Button
-      variant="ghost"
+        variant="ghost"
         onClick={contract.onView}
         className="flex items-center gap-1 rounded-lg border hover:bg-gray-100 border-neutral-200 bg-white text-black px-3 py-2 text-[12px] font-medium  "
       >
         <Eye className="h-3 w-3" />
-        View
+        Review & Accept
       </Button>
 
       {canReject && (

@@ -517,7 +517,7 @@ function DefaultTable({
 
                         <div className="flex min-w-0 flex-col">
                           <span
-                            className="truncate"
+                            className="truncate hover:underline hover:cursor-pointer"
                             style={{
                               color: "var(--Light-Text-Primary, #1A1A1A)",
                               fontFamily: "var(--Font-Family-Inter, Inter)",
@@ -528,6 +528,7 @@ function DefaultTable({
                               letterSpacing: "var(--Letter-Spacing-0, 0)",
                             }}
                             title={r.profile.name}
+                            onClick={() => window.open(`/mediakit/${r.id}`, "_blank")}
                           >
                             {r.profile.name}
                           </span>
@@ -908,7 +909,7 @@ function ShortlistedTable({
 
                       <div className="flex min-w-0 flex-col">
                         <span
-                          className="truncate"
+                          className="truncate hover:underline hover:cursor-pointer"
                           style={{
                             color: "var(--Light-Text-Primary, #1A1A1A)",
                             fontFamily: "var(--Font-Family-Inter, Inter)",
@@ -919,6 +920,7 @@ function ShortlistedTable({
                             letterSpacing: "var(--Letter-Spacing-0, 0)",
                           }}
                           title={r.profile.name}
+                          onClick={() => window.open(`/mediakit/${r.id}`, "_blank")}
                         >
                           {r.profile.name}
                         </span>
@@ -1071,7 +1073,7 @@ function RecommendedTable({
 
                     <div className="flex min-w-0 flex-col">
                       <span
-                        className="truncate"
+                        className="truncate hover:underline hover:cursor-pointer"
                         style={{
                           color: "var(--Light-Text-Primary, #1A1A1A)",
                           fontFamily: "var(--Font-Family-Inter, Inter)",
@@ -1081,6 +1083,7 @@ function RecommendedTable({
                           letterSpacing: "var(--Letter-Spacing-0, 0)",
                         }}
                         title={r.profile.name}
+                        onClick={() => window.open(`/mediakit/${r.id}`, "_blank")}
                       >
                         {r.profile.name}
                       </span>
