@@ -43,13 +43,13 @@ type Props = {
 /** ✅ /admin-invitations/send response shape */
 type StoreInvitationResponse =
   | {
-      status: 'success';
-      message?: string;
-      requested?: number;
-      stored?: number;
-      missingCampaigns?: string[];
-      invitations?: any[];
-    }
+    status: 'success';
+    message?: string;
+    requested?: number;
+    stored?: number;
+    missingCampaigns?: string[];
+    invitations?: any[];
+  }
   | { status: 'error'; message?: string };
 
 export default function InfluencerDetailFullPage({
@@ -382,11 +382,10 @@ export default function InfluencerDetailFullPage({
                               onClick={() => toggleCampaign(c.campaignsId, !checked)}
                             >
                               <span
-                                className={`absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 flex items-center justify-center rounded ${
-                                  checked
+                                className={`absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 flex items-center justify-center rounded ${checked
                                     ? 'border border-orange-400 bg-orange-50 text-orange-500'
                                     : 'border border-gray-200 bg-white text-transparent'
-                                }`}
+                                  }`}
                               >
                                 {checked ? <Check className="h-3 w-3" /> : null}
                               </span>
@@ -418,10 +417,9 @@ export default function InfluencerDetailFullPage({
                           onClick={handleSendFromDropdown}
                           disabled={!canAct}
                           className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
-                            ${
-                              canAct
-                                ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
-                                : 'bg-gray-300 cursor-not-allowed opacity-70'
+                            ${canAct
+                              ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
+                              : 'bg-gray-300 cursor-not-allowed opacity-70'
                             }`}
                         >
                           {sendingInvite ? 'Sending…' : 'Send Invite'}
@@ -493,12 +491,20 @@ const LoadingState: React.FC = () => (
   </div>
 );
 
-const ErrorState: React.FC<{ error: string }> = ({ error }) => (
-  <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 text-sm flex items-start gap-2">
-    <AlertCircle className="h-5 w-5 mt-0.5" />
-    <div>
-      <div className="font-semibold">Limit Reached</div>
-      <div>{error}</div>
+const ErrorState: React.FC<{ error: string }> = ({ error }) => {
+  const isLimitError =
+    error.toLowerCase().includes('limit') ||
+    error.toLowerCase().includes('quota');
+
+  return (
+    <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 text-sm flex items-start gap-2">
+      <AlertCircle className="h-5 w-5 mt-0.5" />
+      <div>
+        <div className="font-semibold">
+          {isLimitError ? 'Limit Reached' : 'Error'}
+        </div>
+        <div>{error}</div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
