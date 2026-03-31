@@ -549,10 +549,6 @@ const dashboardItems = useMemo(() => {
   return items.filter((i) => {
     if (i.section !== "dashboard") return false;
 
-    if (isFullyManagedPlan && (i.key === "browse" || i.key === "inbox")) {
-      return false;
-    }
-
     return true;
   });
 }, [items, isFullyManagedPlan]);

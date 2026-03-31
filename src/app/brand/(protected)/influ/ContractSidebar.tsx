@@ -34,6 +34,7 @@ const MinimalPdfPreview = dynamic(() => import("@/components/ui/MinimalPdfPrevie
 });
 type PaymentType = "fixed_payment" | "milestone_based" | "product_gifting";
 type ContractMeta = {
+  _id: string;
   contractId: string;
   campaignId: string;
   status?: string;
@@ -1501,7 +1502,7 @@ export default function ContractSidebarExtracted({
         res = await api.post(
           "/contract/brand/update",
           {
-            contractId: currentContract.contractId,
+            contractId: currentContract._id || "",
             brandId: resolvedBrandId,
             preview: true,
             brandUpdates: buildBrandUpdatesPayload(),
@@ -1662,7 +1663,7 @@ export default function ContractSidebarExtracted({
         });
       } else {
         await post("/contract/brand/update", {
-          contractId: currentContract.contractId,
+          contractId: currentContract._id || "",
           brandId: resolvedBrandId,
           type: 0,
           brandUpdates: buildBrandUpdatesPayload(),

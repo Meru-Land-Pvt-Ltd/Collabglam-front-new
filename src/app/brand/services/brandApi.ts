@@ -1900,3 +1900,97 @@ export async function apiGetDeliverablesByMilestone(
     }
   );
 }
+
+/** -------- Public Campaign Share APIs -------- */
+
+export type EnableCampaignSharePayload = {
+  brandId: string;
+  campaignId: string;
+};
+
+export type EnableCampaignShareResponse = {
+  message: string;
+  shareUrl: string;
+  publicShareToken: string;
+  isPublic: boolean;
+};
+
+export async function apiEnableCampaignShare(
+  payload: EnableCampaignSharePayload
+) {
+  return apiPost<EnableCampaignShareResponse>(
+    `${CAMPAIGN_BASE}/share/enable`,
+    {
+      brandId: payload.brandId,
+      campaignId: payload.campaignId,
+    }
+  );
+}
+
+export type DisableCampaignSharePayload = {
+  brandId: string;
+  campaignId: string;
+};
+
+export type DisableCampaignShareResponse = {
+  message: string;
+  isPublic: boolean;
+};
+
+export async function apiDisableCampaignShare(
+  payload: DisableCampaignSharePayload
+) {
+  return apiPost<DisableCampaignShareResponse>(
+    `${CAMPAIGN_BASE}/share/disable`,
+    {
+      brandId: payload.brandId,
+      campaignId: payload.campaignId,
+    }
+  );
+}
+
+export type PublicCampaignDoc = {
+  _id: string;
+  campaignTitle: string;
+  description?: string;
+  campaignType?: string;
+
+  campaignBudget?: number;
+  budget?: number;
+  paymentType?: string;
+
+  platformSelection?: string[];
+
+  targetCountryIds?: string[];
+  targetAgeRanges?: string[];
+
+  productImages?: any[];
+  productLink?: string;
+  videoLink?: string;
+
+  additionalNotes?: string;
+
+  startAt?: string | null;
+  endAt?: string | null;
+  status?: string;
+
+  brandName?: string;
+
+  categoryId?: string | null;
+  subcategoryIds?: string[];
+
+  contentFormats?: string[];
+  contentLanguageIds?: string[];
+  preferredHashtags?: string[];
+  campaignGoals?: string[];
+};
+
+export type GetPublicCampaignResponse = {
+  doc: PublicCampaignDoc;
+};
+
+export async function apiGetPublicCampaign(token: string) {
+  return apiGet<GetPublicCampaignResponse>(
+    `${CAMPAIGN_BASE}/public/${encodeURIComponent(token)}`
+  );
+}

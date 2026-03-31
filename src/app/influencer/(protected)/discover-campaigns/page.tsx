@@ -35,6 +35,8 @@ import {
   getApiErrorMessage,
   type ActiveCampaignItem,
 } from "@/services/influencerApi";
+import { apiCategoryGetAll, apiListCountries } from "@/app/influencer/services/influencerApi";
+
 import { useRouter } from "next/navigation";
 
 /* -------------------------------------------------------------------------- */
@@ -64,6 +66,11 @@ type SelectOption = {
   value: string;
   label: string;
   icon: React.ElementType;
+};
+
+type CategoryRow = {
+  id: string;
+  name: string;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -270,6 +277,14 @@ export default function DiscoverCampaigns() {
   const [campaigns, setCampaigns] = useState<UICampaign[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
 
+  const [categoryOptions, setCategoryOptions] = useState<SelectOption[]>([
+    { value: "all", label: "All Categories", icon: LayoutGrid },
+  ]);
+
+  const [locationOptions, setLocationOptions] = useState<SelectOption[]>([
+    { value: "all", label: "All Locations", icon: Globe },
+  ]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -282,6 +297,74 @@ export default function DiscoverCampaigns() {
 
     return () => clearTimeout(timer);
   }, [search]);
+
+  /* -------------------------- FETCH FILTER OPTIONS -------------------------- */
+
+  useEffect(() => {
+    let ignore = false;
+
+    const fetchFilterOptions = async () => {
+      try {
+        const [categoriesRes, countriesRes] = await Promise.all([
+          apiCategoryGetAll(),
+          apiListCountries(),
+        ]);
+
+        if (ignore) return;
+
+        const mappedCategories: SelectOption[] = [
+          { value: "all", label: "All Categories", icon: LayoutGrid },
+          ...(Array.isArray(categoriesRes) ? categoriesRes : []).map(
+            (c: CategoryRow) => ({
+              value: String(c?.name || "").trim(),
+              label: String(c?.name || "").trim(),
+              icon: getCategoryIcon(String(c?.name || "")),
+            }),
+          ),
+        ].filter((item) => item.value);
+
+        const rawCountries: any[] = Array.isArray(countriesRes)
+          ? countriesRes
+          : Array.isArray((countriesRes as any)?.countries)
+            ? (countriesRes as any).countries
+            : Array.isArray((countriesRes as any)?.data)
+              ? (countriesRes as any).data
+              : [];
+
+        const mappedLocations: SelectOption[] = [
+          { value: "all", label: "All Locations", icon: Globe },
+          ...rawCountries
+            .map((country: any) => {
+              const name = String(
+                country?.name ??
+                country?.countryName ??
+                country?.label ??
+                country?.title ??
+                "",
+              ).trim();
+
+              return {
+                value: name,
+                label: name,
+                icon: name.toLowerCase() === "remote" ? Globe : MapPin,
+              };
+            })
+            .filter((item: SelectOption) => !!item.value),
+        ];
+
+        setCategoryOptions(mappedCategories);
+        setLocationOptions(mappedLocations);
+      } catch (err) {
+        console.error("Failed to load filter options", err);
+      }
+    };
+
+    fetchFilterOptions();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   /* ------------------------------- FETCH DATA ------------------------------- */
 
@@ -353,19 +436,6 @@ export default function DiscoverCampaigns() {
 
   /* ------------------------------ FILTER OPTIONS ---------------------------- */
 
-  const categories = useMemo<SelectOption[]>(() => {
-    const unique = [...new Set(campaigns.map((c) => c.category).filter(Boolean))];
-
-    return [
-      { value: "all", label: "All Categories", icon: LayoutGrid },
-      ...unique.map((category) => ({
-        value: category,
-        label: category,
-        icon: getCategoryIcon(category),
-      })),
-    ];
-  }, [campaigns]);
-
   const platforms = useMemo<SelectOption[]>(() => {
     const flat = campaigns.flatMap((c) => c.platforms || []);
     const unique = [...new Set(flat.filter(Boolean))];
@@ -375,19 +445,6 @@ export default function DiscoverCampaigns() {
       label: platform,
       icon: getPlatformIcon(platform),
     }));
-  }, [campaigns]);
-
-  const locations = useMemo<SelectOption[]>(() => {
-    const unique = [...new Set(campaigns.map((c) => c.location).filter(Boolean))];
-
-    return [
-      { value: "all", label: "All Locations", icon: Globe },
-      ...unique.map((location) => ({
-        value: location,
-        label: location,
-        icon: location.toLowerCase() === "remote" ? Globe : MapPin,
-      })),
-    ];
   }, [campaigns]);
 
   const maxBudget = useMemo(() => {
@@ -500,7 +557,7 @@ export default function DiscoverCampaigns() {
                 searchable
                 size="small"
               >
-                {categories.map((cat) => {
+                {categoryOptions.map((cat) => {
                   const Icon = cat.icon;
                   return (
                     <SelectItem key={cat.value} value={cat.value}>
@@ -554,7 +611,7 @@ export default function DiscoverCampaigns() {
                 onValueChange={setSelectedLocation}
                 searchable
               >
-                {locations.map((loc) => {
+                {locationOptions.map((loc) => {
                   const Icon = loc.icon;
                   return (
                     <SelectItem key={loc.value} value={loc.value}>

@@ -392,7 +392,7 @@ export default function BrandDashboardHome() {
                                 WebkitBackgroundClip: "text",
                                 color: "transparent",
                               }}
-                              onClick={() => router.push(`/brand/created-campaign?id=${id}`)}
+                              onClick={() => router.push(`/brand/campaign?id=${id}`)}
                             >
                               View
                             </button>
@@ -540,7 +540,7 @@ export default function BrandDashboardHome() {
                                     WebkitBackgroundClip: "text",
                                     color: "transparent",
                                   }}
-                                  onClick={() => router.push(`/brand/created-campaign/view-campaign?id=${id}`)}
+                                  onClick={() => router.push(`/brand/campaign/view-campaign?id=${id}`)}
                                 >
                                   View
                                 </button>

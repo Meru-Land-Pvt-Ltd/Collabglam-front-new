@@ -15,6 +15,7 @@ import {
   apiCampaignUpdateStatus,
   apiCampaignInviteInfluencer,
   apiGetListByCampaign,
+  apiEnableCampaignShare,
 } from "@/app/brand/services/brandApi";
 import { InfluencerTable, type InfluencerRow } from "@/components/ui/brand/Influencertable";
 import { ArrowUpRight } from "lucide-react";
@@ -204,7 +205,36 @@ function mapRecommendedToRow(x: any): InfluencerRow {
     appliedDate,
   };
 }
+const copyText = async (text: string) => {
+  if (
+    typeof navigator !== "undefined" &&
+    navigator.clipboard &&
+    typeof navigator.clipboard.writeText === "function"
+  ) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
 
+  if (typeof document !== "undefined") {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+
+    const success = document.execCommand("copy");
+    document.body.removeChild(textarea);
+
+    if (success) return true;
+  }
+
+  return false;
+};
 const PAGE_WRAP = "flex w-full flex-col items-start gap-7 px-4 py-6 sm:px-6 lg:px-10 xl:px-14";
 
 function pad2(n: number) {
@@ -653,24 +683,56 @@ export function InfluencerContextMenu({
           {!hideDelete ? (
             <>
               <div className="border-t border-[#F0F0F0] my-2" />
-              <button
-                onClick={disableDelete ? undefined : onDelete}
-                disabled={disableDelete}
-                title={disableDelete ? "Cannot delete because campaign has active or invited influencers" : "Delete"}
-                className={`
-    flex items-center gap-2
-    px-2 py-2
-    rounded-md
-    text-sm font-medium
-    ${disableDelete
-                    ? "text-[#B8B8B8] cursor-not-allowed opacity-60"
-                    : "text-[#E53935] hover:bg-[#F5F5F5]"
+
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (disableDelete) {
+                      toast({
+                        icon: "error",
+                        title: "This campaign cannot be deleted because it has active or invited influencers.",
+                      });
+                      return;
+                    }
+                    onDelete?.();
+                  }}
+                  title={
+                    disableDelete
+                      ? "This campaign cannot be deleted because it has active or invited influencers."
+                      : "Delete"
                   }
-  `}
-              >
-                <Trash size={16} />
-                Delete
-              </button>
+                  className={`
+          flex w-full items-center gap-2
+          px-2 py-2
+          rounded-md
+          text-sm font-medium
+          transition-colors
+          ${disableDelete
+                      ? "text-[#B8B8B8] cursor-not-allowed opacity-60"
+                      : "text-[#E53935] hover:bg-[#F5F5F5]"
+                    }
+        `}
+                >
+                  <Trash size={16} />
+                  Delete
+                </button>
+
+                {disableDelete ? (
+                  <div
+                    className="
+            pointer-events-none
+            absolute left-0 top-full z-20 mt-2
+            hidden w-[15rem] rounded-lg border border-[#F1D5D2]
+            bg-[#FFF5F4] px-3 py-2 text-xs font-medium text-[#D14343]
+            shadow-md
+            group-hover:block
+          "
+                  >
+                    This campaign cannot be deleted because it has active or invited influencers.
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : null}
         </div>
@@ -1454,13 +1516,6 @@ export default function ViewCampaignPage() {
 
   const hasProtectedInfluencers =
     (campaignStatusCounts.active ?? 0) > 0 || (campaignStatusCounts.invited ?? 0) > 0;
-  {
-    hasProtectedInfluencers ? (
-      <div className="text-sm text-red-500">
-        This campaign cannot be deleted because it has active or invited influencers.
-      </div>
-    ) : null
-  }
 
 
 
@@ -1902,7 +1957,7 @@ export default function ViewCampaignPage() {
                   size="sm"
                   className="my-0 h-8 rounded-lg border border-[#1A1A1A] bg-white px-2 shadow-none gap-2"
                   rightIcon={<UsersIcon weight="bold" style={{ width: "0.875rem", height: "0.875rem" }} />}
-                  onClick={() => router.push(`/brand/campaign/${campaignId}/influencers`)}
+                  onClick={() => router.push("/brand/browse-influencer")}
                 >
                   <>
                     <span className="text-center text-[#1A1A1A] text-[0.75rem] font-semibold leading-5 whitespace-nowrap hidden sm:inline">
@@ -1918,19 +1973,46 @@ export default function ViewCampaignPage() {
               <InfluencerContextMenu
                 hideInviteInfluencer={isAdminCreatedCampaign}
                 hideDelete={isAdminCreatedCampaign}
+                disableDelete={hasProtectedInfluencers}
                 onCopyProfileLink={async () => {
-                  const link = `${window.location.origin}/brand/viewCampaign?id=${campaignId}`;
                   try {
-                    await navigator.clipboard.writeText(link);
-                    toast({ icon: "success", title: "Campaign link copied" });
-                  } catch {
-                    toast({ icon: "error", title: "Could not copy campaign link" });
+                    const res: any = await apiEnableCampaignShare({
+                      brandId,
+                      campaignId,
+                    });
+
+                    const shareUrl =
+                      res?.shareUrl ||
+                      res?.data?.shareUrl;
+
+                    if (!shareUrl) {
+                      throw new Error("Share URL not returned");
+                    }
+
+                    const copied = await copyText(shareUrl);
+
+                    if (copied) {
+                      toast({ icon: "success", title: "Public campaign link copied" });
+                    } else {
+                      prompt("Copy this public campaign link:", shareUrl);
+                    }
+                  } catch (e) {
+                    toast({
+                      icon: "error",
+                      title: getApiErrorMessage(e, "Could not copy public campaign link"),
+                    });
                   }
                 }}
                 onViewInfluencerList={() => router.push(`/brand/influ/all?campaignId=${campaignId}`)}
                 onInviteInfluencer={() => router.push(`/brand/browse-influencer?campaignId=${campaignId}`)}
                 onDelete={() => {
-                  if (hasProtectedInfluencers) return;
+                  if (hasProtectedInfluencers) {
+                    toast({
+                      icon: "error",
+                      title: "This campaign cannot be deleted because it has active or invited influencers.",
+                    });
+                    return;
+                  }
                   setDeleteDialogOpen(true);
                 }}
               />
@@ -1979,7 +2061,6 @@ export default function ViewCampaignPage() {
                 <Metric
                   label="Total Influencer"
                   value={totalInfluencers || "—"}
-                  onClick={() => router.push(`/brand/influ/all?campaignId=${campaignId}`)}
                 />
                 <Metric
                   label="Selected Influencer"
@@ -2744,6 +2825,12 @@ export default function ViewCampaignPage() {
             <div className="text-[#B8B8B8] text-sm font-normal leading-5">
               You're about to permanently delete this campaign.
             </div>
+
+            {hasProtectedInfluencers ? (
+              <div className="text-sm text-red-500">
+                This campaign cannot be deleted because it has active or invited influencers.
+              </div>
+            ) : null}
 
             <div className="flex items-center justify-end gap-3 mt-2">
               <Button
