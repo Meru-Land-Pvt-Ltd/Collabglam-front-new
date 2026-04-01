@@ -10,7 +10,7 @@ const MODASH_BASE = "/modash";
 const APPLY_BASE = "/apply";
 const LIST_BASE = "/list";
 const MILESTONE_BASE = "/milestone";
-const DELEVERABLE_BASE = "/deliverable";
+const DELIVERABLE_BASE = "/deliverable";
 const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 const CONTRACT_BASE = "/contract"
 const PAYMENT_BASE = "/payment-details";
@@ -890,7 +890,7 @@ export async function apiCreateDeliverableApproval(
   };
 
   return apiPostRaw<CreateDeliverableApprovalEnvelope>(
-    `${DELEVERABLE_BASE}/create`,
+    `${DELIVERABLE_BASE}/create`,
     payload,
     {
       headers: {
@@ -915,7 +915,7 @@ export async function apiListDeliverablesByCampaign(
   }
 
   return apiGetRaw<ListDeliverablesByCampaignEnvelope>(
-    `${DELEVERABLE_BASE}/campaign/${campaignId}`,
+    `${DELIVERABLE_BASE}/campaign/${campaignId}`,
     status ? { status } : undefined,
     {
       headers: {
@@ -1303,7 +1303,7 @@ export async function apiGetDeliverablesByInfluencer(
   }
 
   return apiPostRaw<GetDeliverablesListEnvelope>(
-    `${DELEVERABLE_BASE}/by-brand`,
+    `${DELIVERABLE_BASE}/by-brand`,
     {
       influencerId,
       status: input.status,
@@ -1331,7 +1331,7 @@ export async function apiGetDeliverablesByMilestone(
   }
 
   return apiPostRaw<GetDeliverablesListEnvelope>(
-    `${DELEVERABLE_BASE}/by-milestone`,
+    `${DELIVERABLE_BASE}/by-milestone`,
     {
       milestoneId,
       brandId: input.brandId,
@@ -1363,6 +1363,9 @@ export type GetDeliverableStatusByInfluencerIdInput = {
 };
 
 export type GetDeliverableStatusByInfluencerIdResponse = {
+  rows: DeliverableItem[];
+  items: DeliverableItem[];
+  deliverables: DeliverableItem[];
   success: boolean;
   message: string;
   influencerId: string;
@@ -1383,8 +1386,8 @@ export async function apiGetDeliverableStatusByInfluencerId(
   input: GetDeliverableStatusByInfluencerIdInput,
   token?: string
 ) {
-  const influencerId = String(input.influencerId || "").trim();
-  const campaignId = String(input.campaignId || "").trim();
+  const influencerId = String(input.influencerId ?? "").trim();
+  const campaignId = String(input.campaignId ?? "").trim();
 
   if (!influencerId) {
     throw new Error("influencerId is required");
@@ -1395,12 +1398,12 @@ export async function apiGetDeliverableStatusByInfluencerId(
   }
 
   return apiPostRaw<GetDeliverableStatusByInfluencerIdResponse>(
-    `${DELEVERABLE_BASE}/status/by-influencer`,
+    `${DELIVERABLE_BASE}/status/by-influencer`, // <- fix this if you had DELEVERABLE_BASE by mistake
     {
       influencerId,
       campaignId,
-      page: input.page ?? 1,
-      limit: input.limit ?? 20,
+      page: Number(input.page ?? 1),
+      limit: Number(input.limit ?? 20),
     },
     {
       headers: {

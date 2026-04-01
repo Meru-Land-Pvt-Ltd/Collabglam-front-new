@@ -245,7 +245,11 @@ export default function InfluencerMilestonesPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    const campaignId = searchParams.get("campaignId") || searchParams.get("id") || "";
+    const campaignId =
+        searchParams.get("campaignId") ||
+        searchParams.get("campaign_id") ||
+        searchParams.get("id") ||
+        "";
     const campaignTitle = searchParams.get("campaignTitle") || "My Milestones";
 
     const [milestones, setMilestones] = useState<CampaignMilestoneRow[]>([]);
@@ -301,20 +305,10 @@ export default function InfluencerMilestonesPage() {
             try {
                 setLoading(true);
 
-                const [milestoneRes, deliverableRes] = await Promise.all([
-                    apiGetMilestonesByInfluencer(finalInfluencerId, finalToken),
-                    campaignId
-                        ? apiGetDeliverableStatusByInfluencerId(
-                            {
-                                influencerId: finalInfluencerId,
-                                campaignId,
-                                page: 1,
-                                limit: 200,
-                            },
-                            finalToken
-                        )
-                        : Promise.resolve(null),
-                ]);
+                const milestoneRes = await apiGetMilestonesByInfluencer(
+                    finalInfluencerId,
+                    finalToken
+                );
 
                 const milestoneRows = Array.isArray(milestoneRes?.milestones)
                     ? milestoneRes.milestones.map(normalizeMilestone)
@@ -328,13 +322,42 @@ export default function InfluencerMilestonesPage() {
 
                 setMilestones(filteredMilestones);
 
-                const rawDeliverables = Array.isArray(deliverableRes?.data)
-                    ? deliverableRes.data.map(normalizeDeliverable)
-                    : [];
+                const effectiveCampaignId =
+                    campaignId ||
+                    filteredMilestones[0]?.campaignId ||
+                    milestoneRows[0]?.campaignId ||
+                    "";
+
+                let rawDeliverables: CampaignDeliverableRow[] = [];
+
+                if (effectiveCampaignId) {
+                    const deliverableRes = await apiGetDeliverableStatusByInfluencerId(
+                        {
+                            influencerId: finalInfluencerId,
+                            campaignId: effectiveCampaignId,
+                            page: 1,
+                            limit: 200,
+                        },
+                        finalToken
+                    );
+
+                    const deliverableList =
+                        deliverableRes?.data ||
+                        deliverableRes?.deliverables ||
+                        deliverableRes?.items ||
+                        deliverableRes?.rows ||
+                        [];
+
+                    rawDeliverables = Array.isArray(deliverableList)
+                        ? deliverableList.map(normalizeDeliverable)
+                        : [];
+                }
 
                 const filteredDeliverables = rawDeliverables.filter((item) => {
                     const sameCampaign =
-                        !item.campaignId || String(item.campaignId) === String(campaignId);
+                        !effectiveCampaignId ||
+                        !item.campaignId ||
+                        String(item.campaignId) === String(effectiveCampaignId);
 
                     const sameInfluencer =
                         !item.influencerId ||

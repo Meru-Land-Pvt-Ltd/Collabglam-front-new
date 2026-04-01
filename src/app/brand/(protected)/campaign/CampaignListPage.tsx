@@ -217,11 +217,10 @@ function LockedShell({
     >
       {locked ? (
         <div
-          className={`pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 transition-all duration-100 ${
-            showTip
-              ? "translate-y-0 opacity-100"
-              : "-translate-y-1 opacity-0"
-          }`}
+          className={`pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 transition-all duration-100 ${showTip
+            ? "translate-y-0 opacity-100"
+            : "-translate-y-1 opacity-0"
+            }`}
         >
           <div className="rounded-full border border-white/20 bg-black/15 px-3 py-1.5 text-[15px] font-medium text-black shadow-lg whitespace-nowrap">
             {LOCK_TOOLTIP}
@@ -367,6 +366,37 @@ function campaignFooterText(c: any) {
   }
 
   return scheduleOrExpiryText(c?.status, c?.startAt ?? null, c?.endAt ?? null);
+}
+
+function allImages(c: any): string[] {
+  const out: string[] = [];
+
+  if (c?.productImage && typeof c.productImage === "string") {
+    out.push(c.productImage);
+  }
+
+  const arr = c?.productImages;
+  if (Array.isArray(arr)) {
+    for (const v of arr) {
+      if (typeof v === "string") {
+        out.push(v);
+        continue;
+      }
+
+      const src =
+        v?.url ??
+        v?.src ??
+        v?.image ??
+        v?.dataUrl ??
+        v?.dataurl ??
+        v?.data?.url ??
+        undefined;
+
+      if (src) out.push(src);
+    }
+  }
+
+  return Array.from(new Set(out.filter(Boolean)));
 }
 
 const GRID_WRAP = "mx-auto w-full max-w-[100vw]";
@@ -715,14 +745,15 @@ export default function CampaignListPage({
         ]
         : []),
     ];
+    const imageUrls = allImages(c);
 
     return (
-      <LockedShell key={campaignId} locked={locked} radiusClass="rounded-[1rem]"> 
+      <LockedShell key={campaignId} locked={locked} radiusClass="rounded-[1rem]">
         <BrandCampaignCard
           className="min-w-0"
           size="md"
-          logoUrl={firstImage(c)}
-          logoUrls={(c.productImages ?? []) as any[]}
+          logoUrl={imageUrls[0] || ""}
+          logoUrls={imageUrls}
           logoAriaLabel="Product image"
           name={c.campaignTitle}
           statusLabel={statusLabel(c.status)}
@@ -819,7 +850,7 @@ export default function CampaignListPage({
       const acceptedCount = c.acceptedContracts ?? 0;
       const totalInfluencers = c.numberOfInfluencers ?? 0;
       const campaignBudget = c.campaignBudget ?? 0;
-      
+
 
       const handleView = () => {
         if (locked) return;
@@ -840,6 +871,7 @@ export default function CampaignListPage({
       return {
         key: campaignId,
         logoSrc: firstImage(c),
+        logoImages: allImages(c),
         logoAlt: "Product image",
         name: c.campaignTitle,
         badges: [
