@@ -749,9 +749,9 @@ export default function BrandProfilePage() {
                     value={formatMoney(wallet?.frozenBalance)}
                   />
 
-                  <button className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#ececec] bg-white px-5 text-sm font-medium text-[#111111] hover:bg-[#fafafa]">
+                  {/* <button className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-[#ececec] bg-white px-5 text-sm font-medium text-[#111111] hover:bg-[#fafafa]">
                     Add Funds
-                  </button>
+                  </button> */}
                 </div>
               </section>
 
