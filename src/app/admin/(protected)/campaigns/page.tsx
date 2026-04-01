@@ -12,7 +12,9 @@ import {
   ChevronUp,
   Clock3,
   Eye,
+  ExternalLink,
   FileText,
+  Link2,
   MoreHorizontal,
   Pencil,
   RefreshCw,
@@ -311,6 +313,29 @@ export default function AdminCampaignsPage() {
   }, [page, sortKey, sortAsc, search, statusFilter]);
 
   const handleRefresh = () => fetchCampaigns();
+
+  const handleOpenPublicLink = async (campaign: Campaign) => {
+    try {
+      const response = await post<any>("/admin/campaign/share/enable", {
+        campaignId: campaign.campaignId,
+        brandId: campaign.brandId,
+      });
+
+      const shareUrl =
+        response?.shareUrl ||
+        response?.data?.shareUrl ||
+        response?.result?.shareUrl ||
+        "";
+
+      if (!shareUrl) {
+        throw new Error("Public link not received");
+      }
+
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      alert(err?.message || "Failed to open public link");
+    }
+  };
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -671,6 +696,15 @@ export default function AdminCampaignsPage() {
                               </Link>
                             </Button>
 
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => handleOpenPublicLink(campaign)}
+                              className="h-9 rounded-xl border-black/10 bg-white"
+                            >
+                              <Link2 className="mr-2 h-4 w-4" />
+                              Public Link
+                            </Button>
                             {campaign.createdByAdmin ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>

@@ -31,7 +31,6 @@ import {
   apiUploadInfluencerSignature,
 } from "../../services/influencerApi";
 import { ArrowSquareInIcon, DownloadSimpleIcon, InfoIcon, Signature } from "@phosphor-icons/react";
-// import { useSidebarWidth } from "./useSidebarWidth";
 import dynamic from "next/dynamic";
 
 const MinimalPdfPreview = dynamic(
@@ -141,7 +140,6 @@ interface CampaignData {
   hasApplied: number;
   hasMilestone: number;
   productImages: CampaignImage[];
-  raw?: any;
 }
 
 const CONTRACT_STATUS = {
@@ -158,8 +156,7 @@ const CONTRACT_STATUS = {
   SUPERSEDED: "SUPERSEDED",
 } as const;
 
-type ContractStatus =
-  (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
+type ContractStatus = (typeof CONTRACT_STATUS)[keyof typeof CONTRACT_STATUS];
 
 type PartyConfirm = {
   confirmed?: boolean;
@@ -191,21 +188,18 @@ type ContractInfluencerContent = {
   whatsApp?: string;
   taxFormType?: string;
   taxId?: string;
-
-  // address fields
   addressLine1?: string;
   addressLine2?: string;
   city?: string;
   state?: string;
   zipPostalCode?: string;
   country?: string;
-
   ftcAcknowledgement?: string;
   shipToName?: string;
   shipToAddress?: string;
   shipToPhone?: string;
   deliveryNotes?: string;
-  notes?: string
+  notes?: string;
 };
 
 type ContractMeta = {
@@ -244,20 +238,17 @@ type LocalInfluencer = {
   contactEmail: string;
   contactPhone: string;
   whatsApp: string;
-  // address: string;
-
-  addressLine1: string; // NEW
-  addressLine2: string; // NEW
-  city: string;         // NEW
-  state: string;        // NEW
-  zip: string;          // NEW
-  country: string;      // NEW
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
   ftcAcknowledgement: string;
   shipToName: string;
   shipToAddress: string;
   shipToPhone: string;
   deliveryNotes: string;
-
   payoutMethod: string;
   payoutAccount: string;
   taxFormType: string;
@@ -269,13 +260,10 @@ const emptyLocal: LocalInfluencer = {
   legalName: "",
   contactName: "",
   postingHandleUrl: "",
-
   contactEmail: "",
   contactPhone: "",
-
   taxFormType: "",
   taxId: "",
-
   addressLine1: "",
   addressLine2: "",
   city: "",
@@ -283,16 +271,15 @@ const emptyLocal: LocalInfluencer = {
   zip: "",
   country: "",
   whatsApp: "",
-  ftcAcknowledgement: "Both Parties must comply with applicable endorsement, advertising, and platform requirements. Influencer may not publish false, misleading, unsafe, or unsubstantiated claims",
-
+  ftcAcknowledgement:
+    "Both Parties must comply with applicable endorsement, advertising, and platform requirements. Influencer may not publish false, misleading, unsafe, or unsubstantiated claims",
   shipToName: "",
   shipToAddress: "",
   shipToPhone: "",
   deliveryNotes: "",
-
   payoutMethod: "",
   payoutAccount: "",
-  notes: ""
+  notes: "",
 };
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
@@ -300,8 +287,8 @@ const emptyLocal: LocalInfluencer = {
 const tabs = [
   { value: "all", label: "All" },
   { value: "applied", label: "Applied Campaigns" },
-  { value: "Contracted", label: "Contracted" },
   { value: "active", label: "Active Campaigns" },
+  { value: "Contracted", label: "Contracted" },
   { value: "Rejected", label: "Rejected" },
 ];
 
@@ -312,55 +299,45 @@ const sanitizeLocal = (p: LocalInfluencer): LocalInfluencer => ({
   legalName: trimStr(p.legalName),
   contactName: trimStr(p.contactName),
   postingHandleUrl: trimStr(p.postingHandleUrl),
-
   contactEmail: trimStr(p.contactEmail),
   contactPhone: trimStr(p.contactPhone),
   whatsApp: trimStr(p.whatsApp),
-
   addressLine1: trimStr(p.addressLine1),
   addressLine2: trimStr(p.addressLine2),
   city: trimStr(p.city),
   state: trimStr(p.state),
   zip: trimStr(p.zip),
   country: trimStr(p.country),
-
   ftcAcknowledgement: trimStr(p.ftcAcknowledgement),
-
   shipToName: trimStr(p.shipToName),
   shipToAddress: trimStr(p.shipToAddress),
   shipToPhone: trimStr(p.shipToPhone),
   deliveryNotes: trimStr(p.deliveryNotes),
-
   payoutMethod: trimStr(p.payoutMethod),
   payoutAccount: trimStr(p.payoutAccount),
-
   taxFormType: trimStr(p.taxFormType),
   taxId: trimStr(p.taxId),
-  notes: trimStr(p.notes)
+  notes: trimStr(p.notes),
 });
+
 const toContractInfluencerPayload = (
   p: LocalInfluencer
 ): ContractInfluencerContent => ({
   legalName: p.legalName,
   contactName: p.contactName,
   postingHandleUrl: p.postingHandleUrl,
-
   email: p.contactEmail,
   phone: p.contactPhone,
   whatsApp: p.whatsApp,
-
   taxFormType: p.taxFormType,
   taxId: p.taxId,
-
   addressLine1: p.addressLine1,
   addressLine2: p.addressLine2,
   city: p.city,
   state: p.state,
   zipPostalCode: p.zip,
   country: p.country,
-
   ftcAcknowledgement: p.ftcAcknowledgement,
-
   shipToName: p.shipToName,
   shipToAddress: p.shipToAddress,
   shipToPhone: p.shipToPhone,
@@ -407,7 +384,8 @@ function signingStatusLabel(meta?: ContractMeta | null) {
 
   const st = normStatus(meta.status);
   if (st === CONTRACT_STATUS.MILESTONES_CREATED) return "Milestone Added";
-  if (st === CONTRACT_STATUS.CONTRACT_SIGNED) return "Awaiting Milestone Creation";
+  if (st === CONTRACT_STATUS.CONTRACT_SIGNED)
+    return "Awaiting Milestone Creation";
 
   const isSigningPhase = isReadyToSignMeta(meta);
   if (!isSigningPhase) return null;
@@ -465,16 +443,6 @@ function mapApiCampaign(c: any): CampaignData {
 
   const id = c._id || c.id || c.campaignId || "";
 
-  const countryValues: string[] = Array.isArray(c.targetCountryValues)
-    ? c.targetCountryValues.filter(Boolean)
-    : [];
-
-  const primaryCountry =
-    countryValues[0] ||
-    c.targetCountry ||
-    c.createdLocation?.country ||
-    "";
-
   return {
     id,
     brandId: c.brandId || "",
@@ -491,7 +459,7 @@ function mapApiCampaign(c: any): CampaignData {
     category,
     platform:
       platforms.length > 0 ? normPlatform(platforms[0]) : c.campaignType || "",
-    location: primaryCountry,
+    location: c.targetCountry || "Remote",
     status: c.status || "",
     campaignStatus: c.campaignStatus || c.status || "",
     contractId: resolvedContractId,
@@ -503,73 +471,25 @@ function mapApiCampaign(c: any): CampaignData {
     timeline: { startDate, endDate },
     isActive: c.isActive ?? 1,
     isApproved: c.isApproved ?? 1,
-    raw: c,
   };
 }
 
 function campaignToPreview(campaign: CampaignData) {
-  const raw = campaign.raw || {};
-
-  const countryValues: string[] = Array.isArray(raw?.targetCountryValues)
-    ? raw.targetCountryValues.filter(Boolean)
-    : campaign.location
-      ? [campaign.location]
-      : [];
-
-  const ageValues: string[] = Array.isArray(raw?.targetAgeGroupValues)
-    ? raw.targetAgeGroupValues.filter(Boolean)
-    : [];
-
-  const goalValues: string[] = Array.isArray(raw?.campaignGoalValues)
-    ? raw.campaignGoalValues.filter(Boolean)
-    : ["Brand Awareness"];
-
-  const categories =
-    Array.isArray(raw?.categories) && raw.categories.length > 0
-      ? raw.categories
-      : campaign.category
-        ? [{ categoryName: campaign.category }]
-        : [];
-
   return {
     form: {
-      campaignTitle: raw?.campaignTitle || campaign.title,
       title: campaign.title,
       description: campaign.description,
       categoryName: campaign.category,
-      categories,
-
-      // convert string arrays into object arrays expected by cardPreview
-      targetCountryIds: countryValues.map((countryName: string) => ({
-        countryName,
-      })),
-      targetAgeRanges: ageValues.map((range: string) => ({
-        range,
-      })),
-      campaignGoals: goalValues.map((goal: string) => ({
-        goal,
-      })),
-
+      targetCountry: [campaign.location],
+      targetAgeGroups: ["18-24"],
+      goals: ["Brand Awareness"],
       campaignBudget: campaign.budgetMax,
-      budget: campaign.budgetMax,
       productImages: campaign.productImages,
     },
     meta: {
-      countryMap: countryValues.reduce(
-        (acc: Record<string, string>, item: string) => {
-          acc[item] = item;
-          return acc;
-        },
-        {}
-      ),
-      ageMap: ageValues.reduce((acc: Record<string, string>, item: string) => {
-        acc[item] = item;
-        return acc;
-      }, {}),
-      goalsMap: goalValues.reduce((acc: Record<string, string>, item: string) => {
-        acc[item] = item;
-        return acc;
-      }, {}),
+      countryMap: { [campaign.location]: campaign.location },
+      ageMap: { "18-24": "18–24" },
+      goalsMap: { "Brand Awareness": "Brand Awareness" },
       campaignBudget: campaign.budgetMax,
     },
   };
@@ -885,7 +805,8 @@ function SignatureModal({
         <div className="p-5 space-y-4">
           <div className="flex flex-col gap-2">
             <p className="text-sm text-gray-700">
-              This signature will be embedded into your agreement as your authorized sign-off.
+              This signature will be embedded into your agreement as your
+              authorized sign-off.
             </p>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
               <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5">
@@ -1124,7 +1045,7 @@ function RejectButton({
                   Reject Contract
                 </h2>
                 <p className="text-xs sm:text-sm text-gray-600 mt-0.5">
-                  Let the brand know why you’re rejecting this contract.
+                  Let the brand know why you're rejecting this contract.
                 </p>
               </div>
               <button
@@ -1326,7 +1247,7 @@ function ContractActionBar({
               "view"
             )
           }
-          className="flex-1 py-2 px-3 rounded-lg bg-gray-50  text-gray-700 text-xs font-medium border border-gray-200 transition-colors flex items-center justify-center gap-1"
+          className="flex-1 py-2 px-3 rounded-lg bg-gray-50 text-gray-700 text-xs font-medium border border-gray-200 transition-colors flex items-center justify-center gap-1"
         >
           <Eye className="h-3 w-3" />
           View
@@ -1341,16 +1262,15 @@ function ContractActionBar({
 }
 
 /* ───────────────────────── Contract Modal ───────────────────────── */
-// Add this hook directly in the file — no import needed
+
 function useInfluencerSidebarWidth() {
   const [width, setWidth] = useState(0);
 
   useEffect(() => {
-    // Try all possible sidebar selectors until one matches
     const selectors = [
-      '[data-sidebar]',
-      '.sidebar',
-      'aside',
+      "[data-sidebar]",
+      ".sidebar",
+      "aside",
       'nav[class*="sidebar"]',
       'div[class*="sidebar"]',
       '[class*="sidebar"]',
@@ -1394,7 +1314,6 @@ const urlToDataUrl = async (url: string) => {
 };
 
 const extractSignatureUrl = (res: any) => {
-  // adjust keys to your real backend response
   return (
     res?.data?.signatureUrl ||
     res?.data?.url ||
@@ -1403,11 +1322,12 @@ const extractSignatureUrl = (res: any) => {
     ""
   );
 };
+
 const extractSignatureId = (res: any): string => {
   return res?.data?._id || "";
 };
-function InfluencerContractModal({
 
+function InfluencerContractModal({
   open,
   onClose,
   contractId,
@@ -1441,6 +1361,9 @@ function InfluencerContractModal({
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedSignaturePreview, setSelectedSignaturePreview] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<keyof LocalInfluencer, string>>
+  >({});
   const influencerAccepted = hasAcceptedCurrent(meta, "influencer");
   const brandAccepted = hasAcceptedCurrent(meta, "brand");
   const brandSigned = !!meta?.signatures?.brand?.signed;
@@ -1465,7 +1388,58 @@ function InfluencerContractModal({
     if (anyoneSigned) return false;
     return true;
   }, [readOnly, locked, readyToSign, rejected, superseded, anyoneSigned]);
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phoneRegex = /^\d{7,15}$/;
+  const zipRegex = /^\d{4,10}$/;
 
+  const validateOptionalInfluencerForm = useCallback(
+    (data: LocalInfluencer) => {
+      const v = sanitizeLocal(data);
+      const errors: Partial<Record<keyof LocalInfluencer, string>> = {};
+
+      if (v.contactEmail && !emailRegex.test(v.contactEmail)) {
+        errors.contactEmail = "Enter a valid email address.";
+      }
+
+      if (v.contactPhone && !phoneRegex.test(v.contactPhone)) {
+        errors.contactPhone = "Phone number must be 7 to 15 digits.";
+      }
+
+      if (v.zip && !zipRegex.test(v.zip)) {
+        errors.zip = "ZIP / Postal Code must be 4 to 10 digits.";
+      }
+
+      // if (v.taxId && !taxIdRegex.test(v.taxId)) {
+      //   errors.taxId = "Tax ID format is invalid.";
+      // }
+
+      if (v.taxFormType && !["W-9", "W-8"].includes(v.taxFormType)) {
+        errors.taxFormType = "Select a valid tax form type.";
+      }
+
+      if (v.postingHandleUrl) {
+        const looksLikeUrl =
+          /^https?:\/\/.+/i.test(v.postingHandleUrl) ||
+          /^www\..+/i.test(v.postingHandleUrl) ||
+          /^@?[A-Za-z0-9._-]+$/.test(v.postingHandleUrl);
+
+        if (!looksLikeUrl) {
+          errors.postingHandleUrl = "Enter a valid profile URL or handle.";
+        }
+      }
+
+      if (v.shipToPhone && !phoneRegex.test(v.shipToPhone)) {
+        errors.shipToPhone = "Shipping phone must be 7 to 15 digits.";
+      }
+
+      return {
+        isValid: Object.keys(errors).length === 0,
+        errors,
+        sanitized: v,
+      };
+    },
+    []
+  );
   const cleanupPreview = useCallback(() => {
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -1496,15 +1470,17 @@ function InfluencerContractModal({
 
     setSignatureFile(file);
     setSelectedSignaturePreview(localPreviewUrl);
-
-    // important: clear old saved signature so submit uses the new uploaded file
     setSavedSignatureUrl("");
   };
 
   const openAcceptSignatureFlow = async () => {
     const influencerId = getInfluencerId();
     if (!influencerId) {
-      toast({ icon: "error", title: "Missing influencer", text: "Influencer ID not found." });
+      toast({
+        icon: "error",
+        title: "Missing influencer",
+        text: "Influencer ID not found.",
+      });
       return;
     }
 
@@ -1515,51 +1491,47 @@ function InfluencerContractModal({
 
     try {
       const res = await apiGetInfluencerSignature(influencerId);
+
+      // res is already the typed payload, not an AxiosResponse
       const existingId = res?._id || "";
+      const existingUrl =
+        res?.signatureUrl || res?.url || res?.signature?.url || "";
+
       if (existingId) setSavedSignatureId(existingId);
+      if (existingUrl) setSavedSignatureUrl(existingUrl);
+
       setShowAcceptSignatureModal(true);
-    } catch (e) {
+    } catch {
       setShowAcceptSignatureModal(true);
     } finally {
       setSignatureLoading(false);
     }
   };
 
-  const mapApiToLocal = (inf?: ContractInfluencerContent): LocalInfluencer => ({
+  const mapApiToLocal = (
+    inf?: ContractInfluencerContent
+  ): LocalInfluencer => ({
     legalName: inf?.legalName || "",
     contactName: inf?.contactName || "",
     postingHandleUrl: inf?.postingHandleUrl || "",
-
-    // ✅ FIXED mapping
     contactEmail: inf?.email || "",
     contactPhone: inf?.phone || "",
-
     whatsApp: inf?.whatsApp || "",
-
     taxFormType: inf?.taxFormType || "",
     taxId: inf?.taxId || "",
-
     addressLine1: inf?.addressLine1 || "",
     addressLine2: inf?.addressLine2 || "",
     city: inf?.city || "",
     state: inf?.state || "",
-
-    // ✅ IMPORTANT
     zip: inf?.zipPostalCode || "",
-
     country: inf?.country || "",
-
     ftcAcknowledgement: inf?.ftcAcknowledgement || "",
-
     shipToName: inf?.shipToName || "",
     shipToAddress: inf?.shipToAddress || "",
     shipToPhone: inf?.shipToPhone || "",
     deliveryNotes: inf?.deliveryNotes || "",
-
     payoutMethod: "",
     payoutAccount: "",
-
-    // ✅ notes
     notes: inf?.notes || "",
   });
 
@@ -1588,31 +1560,25 @@ function InfluencerContractModal({
       legalName: bestName,
       contactName: bestName,
       postingHandleUrl: bestHandle,
-
       contactEmail: lite?.email || "",
       contactPhone: lite?.phone || "",
       whatsApp: lite?.whatsapp || "",
-
       addressLine1: "",
       addressLine2: "",
       city: "",
       state: "",
       zip: "",
       country: "",
-
       taxFormType: "",
       taxId: "",
-
       ftcAcknowledgement: "",
-
       shipToName: "",
       shipToAddress: "",
       shipToPhone: "",
       deliveryNotes: "",
-
       payoutMethod: "",
       payoutAccount: "",
-      notes: ""
+      notes: "",
     };
   }, []);
 
@@ -1664,71 +1630,37 @@ function InfluencerContractModal({
       if (chosen) {
         const nextMeta = toContractMeta(chosen);
         setMeta(nextMeta);
-
-        // prefer _id first
         setEffectiveContractId(nextMeta._id || nextMeta.contractId || contractId);
 
         const contentInfluencer = chosen?.content?.influencer || {};
         setLocal((prev) =>
           sanitizeLocal({
             ...prev,
-
             legalName: contentInfluencer.legalName ?? prev.legalName,
-
             contactName:
               contentInfluencer.contactName ??
               contentInfluencer.legalName ??
               prev.contactName,
-
             postingHandleUrl:
               contentInfluencer.postingHandleUrl ?? prev.postingHandleUrl,
-
-
-            contactEmail:
-              contentInfluencer.email ?? prev.contactEmail,
-
-            contactPhone:
-              contentInfluencer.phone ?? prev.contactPhone,
-
+            contactEmail: contentInfluencer.email ?? prev.contactEmail,
+            contactPhone: contentInfluencer.phone ?? prev.contactPhone,
             whatsApp: contentInfluencer.whatsApp ?? prev.whatsApp,
-
-
-            addressLine1:
-              contentInfluencer.addressLine1 ?? prev.addressLine1,
-            addressLine2:
-              contentInfluencer.addressLine2 ?? prev.addressLine2,
+            addressLine1: contentInfluencer.addressLine1 ?? prev.addressLine1,
+            addressLine2: contentInfluencer.addressLine2 ?? prev.addressLine2,
             city: contentInfluencer.city ?? prev.city,
             state: contentInfluencer.state ?? prev.state,
-
-
-            zip:
-              contentInfluencer.zipPostalCode ?? prev.zip,
-
+            zip: contentInfluencer.zipPostalCode ?? prev.zip,
             country: contentInfluencer.country ?? prev.country,
-
-            taxFormType:
-              contentInfluencer.taxFormType ?? prev.taxFormType,
-
-            taxId:
-              contentInfluencer.taxId ?? prev.taxId,
-
-            notes:
-              contentInfluencer.notes ?? prev.notes,
-
+            taxFormType: contentInfluencer.taxFormType ?? prev.taxFormType,
+            taxId: contentInfluencer.taxId ?? prev.taxId,
+            notes: contentInfluencer.notes ?? prev.notes,
             ftcAcknowledgement:
               contentInfluencer.ftcAcknowledgement ?? prev.ftcAcknowledgement,
-
-            shipToName:
-              contentInfluencer.shipToName ?? prev.shipToName,
-
-            shipToAddress:
-              contentInfluencer.shipToAddress ?? prev.shipToAddress,
-
-            shipToPhone:
-              contentInfluencer.shipToPhone ?? prev.shipToPhone,
-
-            deliveryNotes:
-              contentInfluencer.deliveryNotes ?? prev.deliveryNotes,
+            shipToName: contentInfluencer.shipToName ?? prev.shipToName,
+            shipToAddress: contentInfluencer.shipToAddress ?? prev.shipToAddress,
+            shipToPhone: contentInfluencer.shipToPhone ?? prev.shipToPhone,
+            deliveryNotes: contentInfluencer.deliveryNotes ?? prev.deliveryNotes,
           })
         );
       } else {
@@ -1743,7 +1675,7 @@ function InfluencerContractModal({
 
   const markViewed = useCallback(async (id: string) => {
     try {
-      console.log("markViewed", id)
+      console.log("markViewed", id);
       await post("/contract/viewed", { contractId: id, role: "influencer" });
     } catch {
       // non-fatal
@@ -1769,7 +1701,7 @@ function InfluencerContractModal({
 
   useEffect(() => {
     if (!open || !effectiveContractId) return;
-    console.log("effectiveContractId", effectiveContractId)
+    console.log("effectiveContractId", effectiveContractId);
     markViewed(effectiveContractId);
   }, [open, effectiveContractId, markViewed]);
 
@@ -1816,50 +1748,70 @@ function InfluencerContractModal({
   const handleAcceptWithSignature = async () => {
     if (!signatureChecked) {
       toast({
-        icon: "error", title: "Confirmation required",
-        text: "Please confirm that you agree to all terms before signing."
+        icon: "error",
+        title: "Confirmation required",
+        text: "Please confirm that you agree to all terms before signing.",
       });
       return;
     }
 
-    // Prevent double-clicks
+    const { isValid, errors, sanitized } = validateOptionalInfluencerForm(local);
+    setFieldErrors(errors);
+
+    if (!isValid) {
+      toast({
+        icon: "error",
+        title: "Invalid form",
+        text: "Please fix the highlighted fields before continuing.",
+      });
+      return;
+    }
+
     if (isWorking) return;
     setIsWorking(true);
 
     try {
-      const payload = toContractInfluencerPayload(sanitizeLocal(local));
-      let signatureInfluencerId = savedSignatureId; // use cached _id if already uploaded
+      const payload = toContractInfluencerPayload(sanitized);
+      let signatureInfluencerId = savedSignatureId;
 
-      if (signatureFile && !signatureInfluencerId) {  // ← only upload if no _id yet
+      if (signatureFile && !signatureInfluencerId) {
         const influencerId = getInfluencerId();
+
+        if (!influencerId) {
+          toast({
+            icon: "error",
+            title: "Missing influencer",
+            text: "Influencer ID not found.",
+          });
+          return;
+        }
+
         const formData = new FormData();
         formData.append("influencerId", influencerId);
         formData.append("signature", signatureFile);
 
         const uploadRes = await apiUploadInfluencerSignature(formData);
-
-        const uploadedId =
-          uploadRes?._id ||
-          uploadRes?.signature?._id ||
-          "";
+        const uploadedId = uploadRes?._id || "";
 
         if (!uploadedId) {
           toast({
-            icon: "error", title: "Upload failed",
-            text: "Signature uploaded but no ID returned. Please try again."
+            icon: "error",
+            title: "Upload failed",
+            text: "Signature uploaded but no ID returned. Please try again.",
           });
           return;
         }
 
-        setSavedSignatureId(uploadedId);      // ← cache it, next click won't re-upload
-        setSignatureFile(null);               // ← clear file, _id is the source of truth now
+        setSavedSignatureId(uploadedId);
+        setSignatureFile(null);
         signatureInfluencerId = uploadedId;
       }
 
       if (!signatureInfluencerId) {
         toast({
-          icon: "error", title: "Signature required",
-          text: "Please upload a signature before continuing."
+          icon: "error",
+          title: "Signature required",
+          text: "Please upload a signature before continuing.",
         });
         return;
       }
@@ -1871,8 +1823,9 @@ function InfluencerContractModal({
       });
 
       toast({
-        icon: "success", title: "Accepted & Signed",
-        text: "Contract accepted successfully."
+        icon: "success",
+        title: "Accepted & Signed",
+        text: "Contract accepted successfully.",
       });
 
       setShowAcceptSignatureModal(false);
@@ -1882,13 +1835,15 @@ function InfluencerContractModal({
       onClose();
     } catch (e: any) {
       toast({
-        icon: "error", title: "Error",
-        text: apiMessage(e, "Failed to accept and sign.")
+        icon: "error",
+        title: "Error",
+        text: apiMessage(e, "Failed to accept and sign."),
       });
     } finally {
       setIsWorking(false);
     }
   };
+
   const acceptOrSave = async () => {
     if (!hasAcceptedCurrent(meta, "influencer")) {
       await openAcceptSignatureFlow();
@@ -1961,38 +1916,6 @@ function InfluencerContractModal({
     setShowSignModal(true);
   };
 
-  // const signWithSignature = async (signatureDataUrl: string) => {
-  //   setIsWorking(true);
-  //   try {
-  //     await post("/contract/sign", {
-  //       contractId: effectiveContractId,
-  //       role: "influencer",
-  //       name: local.legalName || local.contactName,
-  //       email: local.contactEmail,
-  //       signatureImageDataUrl: signatureDataUrl,
-  //     });
-
-  //     toast({
-  //       icon: "success",
-  //       title: "Signed",
-  //       text: "Signature recorded.",
-  //     });
-
-  //     setShowSignModal(false);
-  //     await fetchContractMeta();
-  //     onAfterAction?.();
-  //     onClose();
-  //   } catch (e: any) {
-  //     toast({
-  //       icon: "error",
-  //       title: "Sign Error",
-  //       text: apiMessage(e, "Failed to sign."),
-  //     });
-  //   } finally {
-  //     setIsWorking(false);
-  //   }
-  // };
-
   if (!open) return null;
 
   return (
@@ -2008,7 +1931,6 @@ function InfluencerContractModal({
         sidebarOffset={sidebarOffset}
         footer={
           influencerAccepted ? (
-            // pdfOnly mode — just the download button
             <Button
               variant="secondary"
               className="ml-auto shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
@@ -2044,16 +1966,18 @@ function InfluencerContractModal({
                 variant="secondary"
                 className="shrink-0"
                 onClick={() =>
-                  previewUrl ? window.open(previewUrl, "_blank") : generatePreview()
+                  previewUrl
+                    ? window.open(previewUrl, "_blank")
+                    : generatePreview()
                 }
               >
                 <Eye className="mr-2 h-5 w-5" />
                 Preview
               </Button>
+
               <Button
-                variant="secondary"
+                variant="link"
                 className="shrink-0"
-                // disabled={isWorking}
                 onClick={async () => {
                   try {
                     setIsWorking(true);
@@ -2063,7 +1987,10 @@ function InfluencerContractModal({
                       brandId: campaign.brandId,
                       subject: campaign.title,
                     });
-                    const threadId = res?.data?.threadId || res?.threadId || (res as any)?._id;
+                    const threadId =
+                      res?.data?.threadId ||
+                      res?.threadId ||
+                      (res as any)?._id;
                     if (!threadId) throw new Error("No thread ID returned.");
                     router.push(`/influencer/inbox/${threadId}`);
                   } catch (e: any) {
@@ -2079,6 +2006,7 @@ function InfluencerContractModal({
               >
                 Request Change
               </Button>
+
               <Button
                 variant="secondary"
                 className="shrink-0 flex items-center gap-2 !border !border-[#E6E6E6] !bg-white"
@@ -2110,195 +2038,175 @@ function InfluencerContractModal({
           )
         }
       >
-        {!influencerAccepted && (<div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 border-b border-gray-100 pb-3 text-xl font-semibold text-gray-800">
-            Fill Your Details to Accept
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <FloatingInput
-              id="legalName"
-              label="Legal Name"
-              value={local.legalName}
-              onChange={(v) => setLocal((p) => ({ ...p, legalName: v }))}
-            // disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="contactEmail"
-              label="Email"
-              value={local.contactEmail}
-              onChange={(v) => setLocal((p) => ({ ...p, contactEmail: v }))}
-            //disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="contactPhone"
-              label="Phone"
-              value={local.contactPhone}
-              onChange={(v) => setLocal((p) => ({ ...p, contactPhone: v }))}
-            //disabled={!canEdit}
-            />
-
-            <FloatingSelect
-              label="Tax Form Type"
-              required
-              value={local.taxFormType || ""}
-              onValueChange={(v) =>
-                setLocal((p) => ({ ...p, taxFormType: v }))
-              }
-              disabled={!canEdit}
-            >
-              <SelectItem value="W-9">W-9</SelectItem>
-              <SelectItem value="W-8">W-8</SelectItem>
-            </FloatingSelect>
-            <FloatingInput
-              id="taxId"
-              label="Tax ID (SSN/EIN)"
-              value={local.taxId}
-              onChange={(v) => setLocal((p) => ({ ...p, taxId: v }))}
-            // disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="addressLine1"
-              label="Address Line 1"
-              value={local.addressLine1}
-              onChange={(v) => setLocal((p) => ({ ...p, addressLine1: v }))}
-            // disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="addressLine2"
-              label="Address Line 2"
-              value={local.addressLine2}
-              onChange={(v) => setLocal((p) => ({ ...p, addressLine2: v }))}
-            //disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="city"
-              label="City"
-              value={local.city}
-              onChange={(v) => setLocal((p) => ({ ...p, city: v }))}
-            //disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="state"
-              label="State"
-              value={local.state}
-              onChange={(v) => setLocal((p) => ({ ...p, state: v }))}
-            //disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="zip"
-              label="ZIP / Postal Code"
-              value={local.zip}
-              onChange={(v) => setLocal((p) => ({ ...p, zip: v }))}
-            //disabled={!canEdit}
-            />
-
-            <FloatingInput
-              id="country"
-              label="Country"
-              value={local.country}
-              onChange={(v) => setLocal((p) => ({ ...p, country: v }))}
-            //disabled={!canEdit}
-            />
-
-
-            {/* <FloatingTextarea
-              id="notes"
-              label="Notes (optional)"
-              value={local.notes}
-              onChange={(v) => setLocal((p) => ({ ...p, notes: v }))}
-              rows={3}
-            /> */}
-
-          </div>
-
-          {/* <div className="mt-3">
-            <FloatingTextarea
-              id="address"
-              label="Address"
-              value={local.address}
-              onChange={(v) => setLocal((p) => ({ ...p, address: v }))}
-              rows={4}
-              disabled={!canEdit}
-            />
-          </div> */}
-
-
-          <div className="mt-5 border-t pt-4">
-            <div className="mb-3 text-xl font-semibold text-gray-800">
-              FTC / Disclosure Acknowledgement
+        {!influencerAccepted && (
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 border-b border-gray-100 pb-3 text-xl font-semibold text-gray-800">
+              Fill Your Details to Accept
             </div>
-            <FloatingTextarea
-              id="ftcAcknowledgement"
-              label="FTC / Disclosure Acknowledgement"
-              value={local.ftcAcknowledgement}
-              onChange={(v) =>
-                setLocal((p) => ({ ...p, ftcAcknowledgement: v }))
-              }
-              rows={4}
-              disabled
-            />
-          </div>
 
-          {isGifting && (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <FloatingInput
+                id="legalName"
+                label="Legal Name"
+                value={local.legalName}
+                onChange={(v) => setLocal((p) => ({ ...p, legalName: v }))}
+              />
+
+              <FloatingInput
+                id="contactEmail"
+                label="Email"
+                type="email"
+                value={local.contactEmail}
+                onChange={(v) => setLocal((p) => ({ ...p, contactEmail: v }))}
+              />
+
+              <FloatingInput
+                id="contactPhone"
+                label="Phone"
+                type="text"
+                value={local.contactPhone}
+                onChange={(v) =>
+                  setLocal((p) => ({
+                    ...p,
+                    contactPhone: v.replace(/\D/g, ""),
+                  }))
+                }
+              />
+
+              <FloatingSelect
+                label="Tax Form Type"
+                required
+                value={local.taxFormType || ""}
+                onValueChange={(v) =>
+                  setLocal((p) => ({ ...p, taxFormType: v }))
+                }
+              // disabled={!canEdit}
+              >
+                <SelectItem value="W-9">W-9</SelectItem>
+                <SelectItem value="W-8">W-8</SelectItem>
+              </FloatingSelect>
+
+              <FloatingInput
+                id="taxId"
+                label="Tax ID (SSN/EIN)"
+                value={local.taxId}
+                onChange={(v) => setLocal((p) => ({ ...p, taxId: v }))}
+              />
+
+              <FloatingInput
+                id="addressLine1"
+                label="Address Line 1"
+                value={local.addressLine1}
+                onChange={(v) => setLocal((p) => ({ ...p, addressLine1: v }))}
+              />
+
+              <FloatingInput
+                id="addressLine2"
+                label="Address Line 2"
+                value={local.addressLine2}
+                onChange={(v) => setLocal((p) => ({ ...p, addressLine2: v }))}
+              />
+
+              <FloatingInput
+                id="city"
+                label="City"
+                value={local.city}
+                onChange={(v) => setLocal((p) => ({ ...p, city: v }))}
+              />
+
+              <FloatingInput
+                id="state"
+                label="State"
+                value={local.state}
+                onChange={(v) => setLocal((p) => ({ ...p, state: v }))}
+              />
+
+              <FloatingInput
+                id="zip"
+                label="ZIP / Postal Code"
+                value={local.zip}
+                onChange={(v) => setLocal((p) => ({ ...p, zip: v }))}
+              />
+
+              <FloatingInput
+                id="country"
+                label="Country"
+                value={local.country}
+                onChange={(v) => setLocal((p) => ({ ...p, country: v }))}
+              />
+            </div>
+
             <div className="mt-5 border-t pt-4">
-              <div className="mb-3 font-semibold text-gray-800">
-                Shipping Details
+              <div className="mb-3 text-xl font-semibold text-gray-800">
+                FTC / Disclosure Acknowledgement
               </div>
-
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <FloatingInput
-                  id="shipToName"
-                  label="Ship-To Name"
-                  value={local.shipToName}
-                  onChange={(v) => setLocal((p) => ({ ...p, shipToName: v }))}
-                  disabled={!canEdit}
-                />
-
-                <FloatingInput
-                  id="shipToPhone"
-                  label="Shipping Phone Number"
-                  value={local.shipToPhone}
-                  onChange={(v) => setLocal((p) => ({ ...p, shipToPhone: v }))}
-                  disabled={!canEdit}
-                />
-              </div>
-
-              <div className="mt-3">
-                <FloatingTextarea
-                  id="shipToAddress"
-                  label="Shipping Address"
-                  value={local.shipToAddress}
-                  onChange={(v) =>
-                    setLocal((p) => ({ ...p, shipToAddress: v }))
-                  }
-                  rows={3}
-                  disabled={!canEdit}
-                />
-              </div>
-
-              <div className="mt-3">
-                <FloatingTextarea
-                  id="deliveryNotes"
-                  label="Delivery Instructions"
-                  value={local.deliveryNotes}
-                  onChange={(v) =>
-                    setLocal((p) => ({ ...p, deliveryNotes: v }))
-                  }
-                  rows={3}
-                  disabled={!canEdit}
-                />
-              </div>
+              <FloatingTextarea
+                id="ftcAcknowledgement"
+                label="FTC / Disclosure Acknowledgement"
+                value={local.ftcAcknowledgement}
+                onChange={(v) =>
+                  setLocal((p) => ({ ...p, ftcAcknowledgement: v }))
+                }
+                rows={4}
+                disabled
+              />
             </div>
-          )}
-        </div>)}
+
+            {isGifting && (
+              <div className="mt-5 border-t pt-4">
+                <div className="mb-3 font-semibold text-gray-800">
+                  Shipping Details
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <FloatingInput
+                    id="shipToName"
+                    label="Ship-To Name"
+                    value={local.shipToName}
+                    onChange={(v) => setLocal((p) => ({ ...p, shipToName: v }))}
+                    disabled={!canEdit}
+                  />
+
+                  <FloatingInput
+                    id="shipToPhone"
+                    label="Shipping Phone Number"
+                    value={local.shipToPhone}
+                    onChange={(v) =>
+                      setLocal((p) => ({ ...p, shipToPhone: v }))
+                    }
+                    disabled={!canEdit}
+                  />
+                </div>
+
+                <div className="mt-3">
+                  <FloatingTextarea
+                    id="shipToAddress"
+                    label="Shipping Address"
+                    value={local.shipToAddress}
+                    onChange={(v) =>
+                      setLocal((p) => ({ ...p, shipToAddress: v }))
+                    }
+                    rows={3}
+                    disabled={!canEdit}
+                  />
+                </div>
+
+                <div className="mt-3">
+                  <FloatingTextarea
+                    id="deliveryNotes"
+                    label="Delivery Instructions"
+                    value={local.deliveryNotes}
+                    onChange={(v) =>
+                      setLocal((p) => ({ ...p, deliveryNotes: v }))
+                    }
+                    rows={3}
+                    disabled={!canEdit}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </InfluencerSidebarShell>
 
       <Dialog
@@ -2326,28 +2234,26 @@ function InfluencerContractModal({
             >
               <div className="flex min-h-[140px] items-center justify-center rounded-2xl bg-white p-4">
                 {selectedSignaturePreview ? (
-                  <img src={selectedSignaturePreview} alt="Signature"
-                    className="max-h-24 w-auto object-contain" />
+                  <img
+                    src={selectedSignaturePreview}
+                    alt="Signature"
+                    className="max-h-24 w-auto object-contain"
+                  />
                 ) : savedSignatureId ? (
-                  // already has a saved signature on file — show a placeholder
                   <div className="flex flex-col items-center gap-2 text-gray-600">
                     <Signature className="h-16 w-16" />
-                    <span className="text-sm font-medium">Signature on file</span>
+                    <span className="text-sm font-medium">
+                      Signature on file
+                    </span>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-gray-400">
                     <Signature className="h-32 w-32 text-black" />
-                    <span className="text-sm text-gray-500">Click to upload signature</span>
+                    <span className="text-sm text-gray-500">
+                      Click to upload signature
+                    </span>
                   </div>
                 )}
-
-                {/* <span>
-                  {selectedSignaturePreview
-                    ? "New signature selected"
-                    : savedSignatureId
-                      ? "Using signature on file"
-                      : "Click the signature area to upload"}
-                </span> */}
               </div>
 
               <div className="mt-4 flex items-center justify-between">
@@ -2381,15 +2287,18 @@ function InfluencerContractModal({
               </div>
 
               <span className="text-[15px] leading-relaxed text-gray-800">
-                By signing, I confirm that I have read and therefore agree to all
-                contractual terms, which I acknowledge as legally binding.
+                By signing, I confirm that I have read and therefore agree to
+                all contractual terms, which I acknowledge as legally binding.
               </span>
             </label>
 
             {!signatureChecked && (
               <div className="flex items-start gap-3 rounded-xl bg-[#FFF1F0] px-4 py-3 text-[14px] leading-tight text-[#E04438]">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>Please confirm that you agree to all terms before signing the contract.</p>
+                <p>
+                  Please confirm that you agree to all terms before signing the
+                  contract.
+                </p>
               </div>
             )}
 
@@ -2408,7 +2317,7 @@ function InfluencerContractModal({
                   !signatureChecked ||
                   isWorking ||
                   signatureLoading ||
-                  (!savedSignatureUrl && !signatureFile)
+                  (!savedSignatureUrl && !signatureFile && !savedSignatureId)
                 }
                 className="rounded-xl bg-black px-8 text-white hover:bg-gray-800 disabled:opacity-50"
               >
@@ -2418,12 +2327,6 @@ function InfluencerContractModal({
           </div>
         </DialogContent>
       </Dialog>
-      {/* <SignatureModal
-        open={showSignModal}
-        onClose={() => setShowSignModal(false)}
-        title="Sign as Influencer"
-        onSubmit={signWithSignature}
-      /> */}
     </TooltipProvider>
   );
 }
@@ -2464,16 +2367,19 @@ export default function MyCampaignsPage() {
   const [aiCreated, setAiCreated] = useState(false);
   const [sortBy] = useState("match");
 
-  const [metaCache, setMetaCache] = useState<Record<string, ContractMeta | null>>(
-    {}
-  );
+  const [metaCache, setMetaCache] = useState<
+    Record<string, ContractMeta | null>
+  >({});
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorReadOnly, setEditorReadOnly] = useState(false);
   const [editorContractId, setEditorContractId] = useState("");
-  const [editorCampaign, setEditorCampaign] = useState<CampaignData | null>(null);
-  const [editorInitialMode, setEditorInitialMode] =
-    useState<"view" | "edit">("edit");
+  const [editorCampaign, setEditorCampaign] = useState<CampaignData | null>(
+    null
+  );
+  const [editorInitialMode, setEditorInitialMode] = useState<"view" | "edit">(
+    "edit"
+  );
 
   const [topSignOpen, setTopSignOpen] = useState(false);
   const [topSignContractId, setTopSignContractId] = useState("");
@@ -2485,6 +2391,7 @@ export default function MyCampaignsPage() {
   const [pendingRejectId, setPendingRejectId] = useState<string | null>(null);
 
   const router = useRouter();
+
   useEffect(() => {
     if (!pageRef.current) return;
 
@@ -2501,6 +2408,7 @@ export default function MyCampaignsPage() {
 
     return () => ro.disconnect();
   }, []);
+
   const fetchCampaigns = useCallback(
     async (tab: string = activeTab) => {
       setIsLoading(true);
@@ -2558,7 +2466,6 @@ export default function MyCampaignsPage() {
                   : [];
         } else if (tab === "Rejected") {
           res = await api.get(`/campaign/rejected/${id}`);
-          // API returns { success, count, data: [ { _id, campaignId, status, campaignData: {...} } ] }
           const items: any[] = Array.isArray(res?.data?.data)
             ? res.data.data
             : Array.isArray(res?.data)
@@ -2612,7 +2519,9 @@ export default function MyCampaignsPage() {
     if (!influencerId) return;
 
     try {
-      const candidates = list.filter((c) => c.isContracted === 1 || c.contractId);
+      const candidates = list.filter(
+        (c) => c.isContracted === 1 || c.contractId
+      );
 
       const metas = await Promise.all(
         candidates.map(async (c) => {
@@ -2623,7 +2532,9 @@ export default function MyCampaignsPage() {
               campaignId: c.id,
             });
 
-            const arr: any[] = Array.isArray(res?.contracts) ? res.contracts : [];
+            const arr: any[] = Array.isArray(res?.contracts)
+              ? res.contracts
+              : [];
             const chosen = pickActiveContract(arr, c.contractId);
 
             return {
@@ -2911,9 +2822,10 @@ export default function MyCampaignsPage() {
     creatorStatus !== "all" ||
     categoryIds.length > 0 ||
     aiCreated;
+
   return (
     <TooltipProvider>
-      <div className="min-h-screen" >
+      <div className="min-h-screen">
         <div className="max-w-[1400px] mx-auto px-6 py-10 space-y-10">
           <div className="flex items-center justify-between">
             <div>
@@ -3051,8 +2963,10 @@ export default function MyCampaignsPage() {
                 const { form, meta: previewMeta } = campaignToPreview(campaign);
                 const contractMeta = metaCache[campaign.id] ?? null;
                 const effectiveContractId =
-                  contractMeta?._id || contractMeta?.contractId || campaign.contractId;
-                console.log("contractMeta", contractMeta)
+                  contractMeta?._id ||
+                  contractMeta?.contractId ||
+                  campaign.contractId;
+                console.log("contractMeta", contractMeta);
 
                 const contractProp =
                   campaign.isContracted === 1 && effectiveContractId
@@ -3086,7 +3000,8 @@ export default function MyCampaignsPage() {
                           isReadyToSign: isReadyToSignMeta(contractMeta),
                         });
                       },
-                      onReject: () => setPendingRejectId(effectiveContractId),
+                      onReject: () =>
+                        setPendingRejectId(effectiveContractId),
                     }
                     : undefined;
 

@@ -262,7 +262,7 @@ function mapApplicantToRow(a: any): InfluencerRow {
     followers: Number(a?.audienceSize ?? 0) || 0,
     engagement: toEngagementPercent(a?.engagementRate),
     appliedDate,
-    status: getApplicantDisplayStatus(a),
+    status: getProfessionalContractStatusMessage(a, null),
     budget: Number(a?.feeAmount ?? 0) > 0 ? String(a.feeAmount) : "—",
     __source: "applicant",
     __raw: a,
@@ -327,7 +327,58 @@ function hasMilestonesCreated(meta?: ContractMeta | null) {
     Boolean(meta.statusFlags?.hasMilestones)
   );
 }
+function getProfessionalContractStatusMessage(
+  raw: any,
+  meta?: ContractMeta | null
+): string {
+  const status = String(meta?.status || raw?.lifecycleStatusRaw || "").toUpperCase();
 
+  if (!hasExistingContract(raw, meta)) {
+    if (Number(raw?.isRejected) === 1) return "Application Rejected";
+    if (Number(raw?.isUndicided) === 1) return "Under Review";
+    if (Number(raw?.isShortlisted) === 1) return "Shortlisted";
+    if (Number(raw?.isAccepted) === 1) return "Approved";
+    return "Application Received";
+  }
+
+  switch (status) {
+    case CONTRACT_STATUS.DRAFT:
+      return "Draft Saved";
+
+    case CONTRACT_STATUS.BRAND_SENT_DRAFT:
+      return "Contract Sent";
+
+    case CONTRACT_STATUS.BRAND_EDITED:
+      return "Updated by Brand";
+
+    case CONTRACT_STATUS.INFLUENCER_EDITED:
+      return "Changes Requested by Influencer";
+
+    case CONTRACT_STATUS.BRAND_ACCEPTED:
+      return "Accepted by Brand";
+
+    case CONTRACT_STATUS.INFLUENCER_ACCEPTED:
+      return "Accepted by Influencer";
+
+    case CONTRACT_STATUS.READY_TO_SIGN:
+      return "Ready for Signature";
+
+    case CONTRACT_STATUS.CONTRACT_SIGNED:
+      return "Contract Signed";
+
+    case CONTRACT_STATUS.MILESTONES_CREATED:
+      return "Milestones Created";
+
+    case CONTRACT_STATUS.REJECTED:
+      return "Contract Declined";
+
+    case CONTRACT_STATUS.SUPERSEDED:
+      return "Superseded";
+
+    default:
+      return "Contract in Progress";
+  }
+}
 function getPrimaryAction(raw: any, meta?: ContractMeta | null): { label: string; viewOnly: boolean } {
   const statusStr = String(meta?.status || "");
   const locked = isLockedStatus(statusStr);
@@ -382,6 +433,9 @@ function ActionButtons({
   onAccept,
   showSign,
   onSign,
+  showViewContract,
+  onViewContract,
+  isViewContractLoading,
 }: {
   primaryLabel: string;
   onPrimary: () => void;
@@ -392,6 +446,9 @@ function ActionButtons({
   onAccept?: () => void;
   showSign?: boolean;
   onSign?: () => void;
+  showViewContract?: boolean;
+  onViewContract?: () => void;
+  isViewContractLoading?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -432,7 +489,15 @@ function ActionButtons({
       >
         Manage
       </button> */}
-
+      {showViewContract && onViewContract ? (
+        <button
+          type="button"
+          onClick={onViewContract}
+          className="inline-flex h-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white px-3 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+        >
+          {isViewContractLoading ? "Opening…" : "View Contract"}  {/* ← use own flag */}
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={onMail}
@@ -465,6 +530,8 @@ function ActiveMilestoneActions({
   showSign,
   onSign,
   isAdminCreatedCampaign = false,
+  showViewContract,
+  onViewContract,
 }: {
   onAddMilestone: () => void;
   showViewMilestone: boolean;
@@ -477,6 +544,8 @@ function ActiveMilestoneActions({
   showSign?: boolean;
   onSign?: () => void;
   isAdminCreatedCampaign?: boolean;
+  showViewContract?: boolean;
+  onViewContract?: () => void;
 }) {
   return (
     <div className="flex items-start gap-2">
@@ -510,6 +579,16 @@ function ActiveMilestoneActions({
             ) : null}
           </>
         )}
+
+        {showViewContract && onViewContract ? (
+          <button
+            type="button"
+            onClick={onViewContract}
+            className="inline-flex h-8 items-center justify-center rounded-[0.5rem] border border-[#E6E6E6] bg-white px-3 text-[12px] font-medium text-[#1A1A1A] hover:bg-[#F7F7F7]"
+          >
+            View Contract
+          </button>
+        ) : null}
       </div>
 
       {/* {showAccept && onAccept ? (
@@ -1664,6 +1743,8 @@ export default function InfluencerList() {
             onAccept={() => openContractSidebar(row)}
             showSign={showSign}
             onSign={() => openSignModal(meta)}
+            showViewContract={hasExistingContract(raw, meta)}
+            onViewContract={() => handleViewContractPdf(row)}
           />
         );
       }
@@ -1671,7 +1752,7 @@ export default function InfluencerList() {
       // Has contract but not active → Send Contract / View Contract + Manage
       return (
         <ActionButtons
-          primaryLabel={isLoading ? "Opening…" : primaryLabel}
+          primaryLabel={isLoading && viewOnly ? "Opening…" : primaryLabel}
           onPrimary={() =>
             viewOnly ? handleViewContractPdf(row) : openContractSidebar(row)
           }
@@ -1692,6 +1773,8 @@ export default function InfluencerList() {
           onAccept={() => handleBrandAccept(row)}
           showSign={showSign}
           onSign={() => openSignModal(meta)}
+          showViewContract={!viewOnly && hasExistingContract(raw, meta)}
+          onViewContract={() => handleViewContractPdf(row)}
         />
       );
     },
@@ -1756,6 +1839,7 @@ export default function InfluencerList() {
                     </Button>
                   </div>
                 </div>
+
               )}
               renderDefaultActions={renderAllTabActions}
               // ── Per-row action renderers ────────────────────────────────
@@ -1791,6 +1875,8 @@ export default function InfluencerList() {
                     onAccept={() => handleBrandAccept(row)}
                     showSign={showSign}
                     onSign={() => openSignModal(meta)}
+                    showViewContract={!viewOnly && hasExistingContract(raw, meta)}
+                    onViewContract={() => handleViewContractPdf(row)}
                   />
                 );
               }}
@@ -1830,6 +1916,18 @@ export default function InfluencerList() {
                     showSign={isAdminCreatedCampaign ? false : showSign}
                     onSign={() => openSignModal(meta)}
                   />
+                );
+              }}
+              renderStatus={(row) => {
+                const raw = (row as any)?.__raw ?? {};
+                const meta = contractMetaMap[row.id] ?? null;
+
+                return (
+                  <div className="flex min-h-[1.75rem] items-center justify-center rounded-[1.25rem] px-3 bg-[#F9F9F9]">
+                    <span className="whitespace-nowrap text-[0.875rem] font-semibold text-[#1A1A1A]">
+                      {getProfessionalContractStatusMessage(raw, meta)}
+                    </span>
+                  </div>
                 );
               }}
             />
