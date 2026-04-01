@@ -273,7 +273,7 @@ export default function AdminPaymentPage() {
         ) : payouts.length === 0 ? (
           <Card className="p-10 text-center text-slate-500">No payouts found.</Card>
         ) : (
-          <Card className="overflow-hidden border border-slate-200 p-0 shadow-sm">
+          <Card className="overflow-auto border border-slate-200 p-0 shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
