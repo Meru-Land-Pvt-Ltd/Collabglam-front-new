@@ -35,6 +35,7 @@ function WalletTopupModal({
   open,
   onClose,
   brandId,
+  campaignId,
   defaultAmount,
   walletInfo,
   onSuccess,
@@ -42,10 +43,12 @@ function WalletTopupModal({
   open: boolean;
   onClose: () => void;
   brandId: string;
+  campaignId: string;
   defaultAmount: number;
   walletInfo?: WalletShortfallState | null;
   onSuccess?: (payload: {
     brandId: string;
+    campaignId: string;
     amount: number;
     walletBalance?: number;
     frozenBalance?: number;
@@ -66,49 +69,52 @@ function WalletTopupModal({
 
   if (!open) return null;
 
-const handleTopup = async () => {
-  try {
-    setError("");
 
-    const amountNum = Number(amount);
+  const handleTopup = async () => {
+    try {
+      setError("");
 
-    if (!brandId) {
-      setError("Brand ID is missing.");
-      return;
+      const amountNum = Number(amount);
+
+      if (!brandId) {
+        setError("Brand ID is missing.");
+        return;
+      }
+
+      if (!amount || Number.isNaN(amountNum) || amountNum <= 0) {
+        setError("Please enter a valid top-up amount greater than 0.");
+        return;
+      }
+
+      setSubmitting(true);
+
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+
+      const res = await apiBrandWalletTopup({
+        brandId,
+        campaignId,
+        amount: amountNum,
+        successUrl: `${origin}/brand/wallet/topup/success`,
+        cancelUrl: `${origin}/brand/wallet/topup/cancel`,
+      });
+
+      if (res.checkoutUrl) {
+        window.location.href = res.checkoutUrl;
+        return;
+      }
+
+      onSuccess?.({
+        brandId,
+        campaignId,
+        amount: amountNum,
+      });
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to top up wallet"));
+    } finally {
+      setSubmitting(false);
     }
-
-    if (!amount || Number.isNaN(amountNum) || amountNum <= 0) {
-      setError("Please enter a valid top-up amount greater than 0.");
-      return;
-    }
-
-    setSubmitting(true);
-
-    const origin =
-      typeof window !== "undefined" ? window.location.origin : "";
-
-    const res = await apiBrandWalletTopup({
-      brandId,
-      amount: amountNum,
-      successUrl: `${origin}/brand/wallet/topup/success`,
-      cancelUrl: `${origin}/brand/wallet/topup/cancel`,
-    });
-
-    if (res.checkoutUrl) {
-      window.location.href = res.checkoutUrl;
-      return;
-    }
-
-    onSuccess?.({
-      brandId,
-      amount: amountNum,
-    });
-  } catch (err) {
-    setError(getApiErrorMessage(err, "Failed to top up wallet"));
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   return (
     <div
@@ -512,6 +518,7 @@ export default function AddMilestoneCard({
         open={walletModalOpen}
         onClose={() => setWalletModalOpen(false)}
         brandId={brandId}
+        campaignId={campaignId || ""}
         defaultAmount={Number(walletShortfall?.needToAdd || 0)}
         walletInfo={walletShortfall}
         onSuccess={handleWalletTopupSuccess}
