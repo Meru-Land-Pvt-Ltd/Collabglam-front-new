@@ -14,6 +14,7 @@ import {
     Clock3,
     X,
 } from "lucide-react";
+import Swal from "sweetalert2";
 
 import { Button } from "@/components/ui/buttonComp";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -260,10 +261,10 @@ export default function BrandMilestonesPage() {
             }))
             .sort((a, b) => a.influencerName.localeCompare(b.influencerName));
     }, [milestones, influencerIdFilter]);
-    
+
     const handleSeeDeliverable = (row: CampaignMilestoneRow) => {
         router.push(
-            `/brand/deleverables?campaignId=${row.campaignId}&brandId=${brandId}&influencerId=${row.influencerId}`
+            `/brand/deleverables?campaignId=${row.campaignId}&brandId=${brandId}&influencerId=${row.influencerId}&milestoneId=${row.milestoneId}&milestoneHistoryId=${row.milestoneHistoryId}`
         );
     };
     const handleRelease = async (row: CampaignMilestoneRow) => {
@@ -271,11 +272,17 @@ export default function BrandMilestonesPage() {
             return;
         }
 
-        const ok = window.confirm(
-            `Release milestone "${row.milestoneTitle}" for ${formatMoney(row.amount)}?`
-        );
+        const result = await Swal.fire({
+            title: "Release milestone?",
+            text: `Release milestone "${row.milestoneTitle}" for ${formatMoney(row.amount)}?`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Yes, release it",
+            cancelButtonText: "Cancel",
+            reverseButtons: true,
+        });
 
-        if (!ok) return;
+        if (!result.isConfirmed) return;
 
         try {
             setReleasingId(row.milestoneHistoryId);
@@ -286,8 +293,20 @@ export default function BrandMilestonesPage() {
             });
 
             await fetchPageData();
+
+            await Swal.fire({
+                title: "Released",
+                text: "Milestone released successfully.",
+                icon: "success",
+                confirmButtonText: "OK",
+            });
         } catch (err) {
-            alert(getApiErrorMessage(err, "Failed to release milestone"));
+            await Swal.fire({
+                title: "Failed",
+                text: getApiErrorMessage(err, "Failed to release milestone"),
+                icon: "error",
+                confirmButtonText: "OK",
+            });
         } finally {
             setReleasingId("");
         }

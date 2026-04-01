@@ -22,7 +22,6 @@ import {
     apiCreateDeliverableApproval,
     apiGetMilestonesByInfluencer,
     apiListDeliverablesByCampaign,
-    apiGetDeliverableStatusByInfluencerId,
     getApiErrorMessage,
 } from "@/app/influencer/services/influencerApi";
 
@@ -126,9 +125,11 @@ function isReleased(row: CampaignMilestoneRow) {
     );
 }
 
-function isRevisionStatus(value?: string) {
-    const status = String(value || "").toLowerCase();
+function isRevisionStatus(value?: string | number | null) {
+    // Numeric 0 means revision requested
+    if (value === 0 || value === "0") return true;
 
+    const status = String(value || "").toLowerCase();
     return (
         status.includes("revision") ||
         status.includes("revise") ||
@@ -144,16 +145,20 @@ function hasRevisionRequest(
     milestone: CampaignMilestoneRow,
     deliverable?: CampaignDeliverableRow | null
 ) {
+    // Primary check: deliverable status 0 = revision, milestone status text
     return (
-        isRevisionStatus(milestone.status) ||
-        isRevisionStatus(deliverable?.status)
+        isRevisionStatus(deliverable?.status) ||   // check deliverable first
+        isRevisionStatus(milestone.status)
     );
 }
 
 function statusBadge(
     row: CampaignMilestoneRow,
-    deliverable?: CampaignDeliverableRow | null
+    deliverable?: CampaignDeliverableRow | null,
+    hadRevisionEarlier?: boolean
 ) {
+    const latestStatus = String(deliverable?.status || "").toLowerCase();
+
     if (isReleased(row)) {
         return (
             <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
@@ -163,11 +168,20 @@ function statusBadge(
         );
     }
 
-    if (hasRevisionRequest(row, deliverable)) {
+    if (isRevisionStatus(latestStatus)) {
         return (
             <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700">
                 <MessageSquareMore className="h-3.5 w-3.5" />
                 Revision Requested
+            </span>
+        );
+    }
+
+    if (latestStatus === "pending" && hadRevisionEarlier) {
+        return (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+                <Clock3 className="h-3.5 w-3.5" />
+                Revision Submitted
             </span>
         );
     }
@@ -331,14 +345,9 @@ export default function InfluencerMilestonesPage() {
                 let rawDeliverables: CampaignDeliverableRow[] = [];
 
                 if (effectiveCampaignId) {
-                    const deliverableRes = await apiGetDeliverableStatusByInfluencerId(
-                        {
-                            influencerId: finalInfluencerId,
-                            campaignId: effectiveCampaignId,
-                            page: 1,
-                            limit: 200,
-                        },
-                        finalToken
+                    const deliverableRes = await apiListDeliverablesByCampaign(
+                        effectiveCampaignId,
+                        { token: finalToken }
                     );
 
                     const deliverableList =
@@ -411,8 +420,8 @@ export default function InfluencerMilestonesPage() {
         );
     }, [milestones]);
 
-    const latestDeliverableByKey = useMemo(() => {
-        const map = new Map<string, CampaignDeliverableRow>();
+    const deliverablesByMilestoneKey = useMemo(() => {
+        const map = new Map<string, CampaignDeliverableRow[]>();
 
         for (const item of deliverables) {
             const keys = [
@@ -421,11 +430,21 @@ export default function InfluencerMilestonesPage() {
             ].filter(Boolean);
 
             for (const key of keys) {
-                const prev = map.get(key);
-                if (!prev || getItemTime(item) >= getItemTime(prev)) {
-                    map.set(key, item);
-                }
+                const existing = map.get(key) || [];
+                existing.push(item);
+                map.set(key, existing);
             }
+        }
+
+        for (const [key, items] of map.entries()) {
+            map.set(
+                key,
+                [...items].sort(
+                    (a, b) =>
+                        new Date(b.updatedAt || b.createdAt || "").getTime() -
+                        new Date(a.updatedAt || a.createdAt || "").getTime()
+                )
+            );
         }
 
         return map;
@@ -661,24 +680,50 @@ export default function InfluencerMilestonesPage() {
                 ) : (
                     <div className="space-y-4">
                         {sortedMilestones.map((row) => {
-                            const latestDeliverable =
-                                latestDeliverableByKey.get(row.milestoneHistoryId) ||
-                                latestDeliverableByKey.get(row.milestoneId) ||
-                                null;
+                            const milestoneDeliverables = deliverables
+                                .filter(
+                                    (item) =>
+                                        String(item.milestoneHistoryId || "") ===
+                                        String(row.milestoneHistoryId || "")
+                                )
+                                .sort(
+                                    (a, b) =>
+                                        new Date(b.updatedAt || b.createdAt || "").getTime() -
+                                        new Date(a.updatedAt || a.createdAt || "").getTime()
+                                );
+
+                            const latestDeliverable = milestoneDeliverables[0] || null;
+                            const latestStatus = String(latestDeliverable?.status || "").toLowerCase();
 
                             const released = isReleased(row);
-                            const revisionRequested = hasRevisionRequest(row, latestDeliverable);
-                            const hasSubmittedDeliverable = !!latestDeliverable;
+                            const hasSubmittedDeliverable = milestoneDeliverables.length > 0;
+                            const hadRevisionEarlier = milestoneDeliverables.some((item) =>
+                                isRevisionStatus(item.status)
+                            );
+
+                            const revisionRequested =
+                                milestoneDeliverables.some((item) => isRevisionStatus(item.status)) ||
+                                isRevisionStatus(row.status);
 
                             const showAddDeliverable =
                                 !released && !hasSubmittedDeliverable;
 
                             const showAddRevision =
-                                !released && hasSubmittedDeliverable && revisionRequested;
+                                !released && hasSubmittedDeliverable && isRevisionStatus(latestStatus);
 
-                            const showLockedButton =
-                                !released && hasSubmittedDeliverable && !revisionRequested;
+                            const showRevisionSubmitted =
+                                !released &&
+                                hasSubmittedDeliverable &&
+                                latestStatus === "pending" &&
+                                hadRevisionEarlier;
 
+                            const showSubmitted =
+                                !released &&
+                                hasSubmittedDeliverable &&
+                                latestStatus === "pending" &&
+                                !hadRevisionEarlier;
+
+                            const showSeeDeliverable = hasSubmittedDeliverable;
                             return (
                                 <div
                                     key={row.milestoneHistoryId}
@@ -721,11 +766,7 @@ export default function InfluencerMilestonesPage() {
                                                 <Button
                                                     type="button"
                                                     onClick={() =>
-                                                        openDeliverableModal(
-                                                            row,
-                                                            "deliverable",
-                                                            null
-                                                        )
+                                                        openDeliverableModal(row, "deliverable", null)
                                                     }
                                                     className="h-10 rounded-lg px-4"
                                                 >
@@ -738,11 +779,7 @@ export default function InfluencerMilestonesPage() {
                                                 <Button
                                                     type="button"
                                                     onClick={() =>
-                                                        openDeliverableModal(
-                                                            row,
-                                                            "revision",
-                                                            latestDeliverable
-                                                        )
+                                                        openDeliverableModal(row, "revision", latestDeliverable)
                                                     }
                                                     className="h-10 rounded-lg px-4"
                                                 >
@@ -751,7 +788,18 @@ export default function InfluencerMilestonesPage() {
                                                 </Button>
                                             ) : null}
 
-                                            {showLockedButton ? (
+                                            {showRevisionSubmitted ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    disabled
+                                                    className="h-10 rounded-lg px-4 opacity-60"
+                                                >
+                                                    Revision Submitted
+                                                </Button>
+                                            ) : null}
+
+                                            {showSubmitted ? (
                                                 <Button
                                                     type="button"
                                                     variant="outline"
@@ -762,15 +810,17 @@ export default function InfluencerMilestonesPage() {
                                                 </Button>
                                             ) : null}
 
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => handleSeeDeliverable(row)}
-                                                className="h-10 rounded-lg px-4"
-                                            >
-                                                <FolderOpen className="mr-2 h-4 w-4" />
-                                                See Deliverable
-                                            </Button>
+                                            {showSeeDeliverable ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => handleSeeDeliverable(row)}
+                                                    className="h-10 rounded-lg px-4"
+                                                >
+                                                    <FolderOpen className="mr-2 h-4 w-4" />
+                                                    See Deliverable
+                                                </Button>
+                                            ) : null}
                                         </div>
                                     </div>
                                 </div>

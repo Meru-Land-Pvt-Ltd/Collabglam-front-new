@@ -865,6 +865,9 @@ export type CreateDeliverableApprovalEnvelope = {
 };
 
 export type ListDeliverablesByCampaignEnvelope = {
+  rows: DeliverableItem[];
+  items: DeliverableItem[];
+  deliverables: DeliverableItem[];
   success: boolean;
   message: string;
   count: number;
