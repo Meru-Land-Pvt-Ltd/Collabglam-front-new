@@ -87,6 +87,33 @@ interface ListResponse {
   campaigns: Campaign[];
 }
 
+type AddFundsResponse = {
+  brandId: string;
+  campaignId: string;
+  campaignMongoId?: string;
+  addedAmount: number;
+  currency: string;
+  wallet: {
+    walletBalance: number;
+    frozenBalance: number;
+    usableBalance: number;
+  };
+  campaignFreeze: {
+    brandId: string;
+    campaignId: string;
+    totalFrozenAmount: number;
+    currentFrozenAmount: number;
+    totalAllocatedAmount: number;
+    totalReleasedAmount: number;
+    availableToAllocate: number;
+    influencerAllocations: Array<{
+      influencerId: string;
+      amount: number;
+      releasedAmount: number;
+    }>;
+  };
+};
+
 const MAX_NAME_LENGTH = 72;
 
 const statusOptions = [
@@ -261,7 +288,64 @@ export default function AdminCampaignsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortAsc, setSortAsc] = useState(true);
 
+  const [isAddFundsOpen, setIsAddFundsOpen] = useState(false);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [fundAmount, setFundAmount] = useState("");
+  const [fundNote, setFundNote] = useState("");
+  const [addingFunds, setAddingFunds] = useState(false);
+
   const [canEditCampaigns, setCanEditCampaigns] = useState(false);
+
+  const openAddFundsModal = (campaign: Campaign) => {
+    setSelectedCampaign(campaign);
+    setFundAmount("");
+    setFundNote("");
+    setIsAddFundsOpen(true);
+  };
+
+  const closeAddFundsModal = () => {
+    if (addingFunds) return;
+    setIsAddFundsOpen(false);
+    setSelectedCampaign(null);
+    setFundAmount("");
+    setFundNote("");
+  };
+
+  const handleAddFunds = async () => {
+    if (!selectedCampaign) return;
+
+    const amount = Number(fundAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      window.alert("Please enter a valid amount greater than 0");
+      return;
+    }
+
+    setAddingFunds(true);
+
+    try {
+      const response = await post<AddFundsResponse>("/admin/campaign/add-funds", {
+        brandId: selectedCampaign.brandId,
+        campaignId: selectedCampaign.campaignId,
+        amount,
+        currency: "usd",
+        note: fundNote || "Admin added campaign funds manually",
+      });
+
+      window.alert(
+        `Funds added successfully. Frozen balance: $${Number(
+          response?.campaignFreeze?.currentFrozenAmount || 0
+        ).toFixed(2)}`
+      );
+
+      closeAddFundsModal();
+      fetchCampaigns();
+    } catch (err: any) {
+      window.alert(err?.message || "Failed to add campaign funds");
+    } finally {
+      setAddingFunds(false);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -695,6 +779,14 @@ export default function AdminCampaignsPage() {
                                 <FileText className="h-4.5 w-4.5" />
                               </Link>
                             </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => openAddFundsModal(campaign)}
+                              className="h-9 rounded-xl border-black/10 bg-white"
+                            >
+                              Add Funds
+                            </Button>
 
                             <Button
                               type="button"
@@ -782,6 +874,95 @@ export default function AdminCampaignsPage() {
           </div>
         ) : null}
       </div>
+
+      {isAddFundsOpen && selectedCampaign ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-black">Add Campaign Funds</h2>
+                <p className="mt-1 text-sm text-black/55">
+                  Funds will be added directly to this campaign and frozen immediately.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeAddFundsModal}
+                disabled={addingFunds}
+                className="rounded-lg px-2 py-1 text-black/60 hover:bg-black/5"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="rounded-2xl border border-black/10 bg-black/[0.02] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-black/45">
+                  Campaign
+                </p>
+                <p className="mt-2 text-sm font-semibold text-black">
+                  {selectedCampaign.name || "—"}
+                </p>
+                <p className="mt-1 text-xs text-black/50">
+                  Brand: {selectedCampaign.brandName || "—"}
+                </p>
+                <p className="mt-1 text-xs text-black/40">
+                  Campaign ID: {selectedCampaign.campaignId}
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-black">
+                  Amount
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={fundAmount}
+                  onChange={(e) => setFundAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  className="h-11 rounded-2xl border-black/10 bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-black">
+                  Note
+                </label>
+                <Input
+                  value={fundNote}
+                  onChange={(e) => setFundNote(e.target.value)}
+                  placeholder="Optional note"
+                  className="h-11 rounded-2xl border-black/10 bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeAddFundsModal}
+                disabled={addingFunds}
+                className="h-11 rounded-2xl border-black/10 bg-white"
+              >
+                Cancel
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleAddFunds}
+                disabled={addingFunds}
+                className="h-11 rounded-2xl bg-black text-white hover:bg-black/90"
+              >
+                {addingFunds ? "Adding..." : "Add Funds"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
