@@ -2032,3 +2032,10 @@ export async function apiGetFrozenAmountForCampaign(params: {
 }) {
   return apiGet<FrozenAmountResponse>(`${WALLET_BASE}/freeze-amount`, params);
 }
+
+export async function apiUploadImages(files: File[]) {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("images", file));
+
+  return apiPost<any>(`${CAMPAIGN_BASE}/upload-image`, formData);
+}

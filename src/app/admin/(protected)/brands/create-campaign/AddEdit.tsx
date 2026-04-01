@@ -19,6 +19,7 @@ import {
   CreateCampaignManualPayload,
   EditDraftPayload,
   EnrichedCampaignDoc,
+  apiUploadImages,
 } from "../../../../brand/services/brandApi";
 
 import {
@@ -682,7 +683,7 @@ function CreateManualScreen({
 
   const [campaignId, setCampaignId] = useState<string>("");
   const [publishing, setPublishing] = useState(false);
-
+  
   const [draftSaving, setDraftSaving] = useState(false);
   const [draftJustSaved, setDraftJustSaved] = useState(false);
   const draftSavedTimerRef = useRef<number | null>(null);
@@ -1118,7 +1119,38 @@ function CreateManualScreen({
     setPublishing(true);
 
     try {
-      const productImages = await filesToDataUrls(form.productFiles ?? []);
+      // ✅ Step 1: Upload new files → get back S3 URLs
+      let uploadedImages: Array<{
+        dataUrl: string;
+        name: string;
+        type: string;
+        contentType: string;
+        originalSize: number;
+        size: number;
+        key: string;
+      }> = [];
+
+      if (form.productFiles?.length) {
+        const uploadRes = await apiUploadImages(form.productFiles);
+        const urls: string[] = uploadRes?.urls ?? uploadRes?.data?.urls ?? [];
+
+        // ✅ Step 2: Map each S3 URL with its file metadata by index
+        uploadedImages = urls.map((url, i) => {
+          const file = form.productFiles[i];
+          const key =
+            url.split("/campaign-images/")[1] ?? url.split("/").pop() ?? "";
+
+          return {
+            dataUrl: url,
+            name: file?.name ?? "",
+            type: file?.type ?? "image/jpeg",
+            contentType: file?.type ?? "image/jpeg",
+            originalSize: file?.size ?? 0,
+            size: file?.size ?? 0,
+            key,
+          };
+        });
+      }
 
       if (campaignId) {
         const payload: ActorAwareEditPayload = compact({
@@ -1133,7 +1165,8 @@ function CreateManualScreen({
           categoryId: form.categoryId,
           subcategoryIds: form.subcategories,
           productLink: form.productLink.trim(),
-          productImages,
+          // ✅ Step 3: S3 URLs with full metadata — no base64
+          productImages: uploadedImages.length ? uploadedImages : undefined,
           campaignGoals: form.goals,
           influencerTierIds: form.influencerTier,
           contentFormats: form.contentFormats,
@@ -1158,10 +1191,14 @@ function CreateManualScreen({
 
         toastSuccess(extractBackendSuccessMessage(updated, "Campaign published"));
       } else {
-        const payload = await buildCreateManualPayload(brandId, form, true);
+        // ✅ Step 4: Build base payload (includeFiles: false — files already uploaded)
+        // then inject S3 images directly so no base64 runs inside the builder
+        const base = buildCreateManualPayload(brandId, form, false) as ActorAwareCreatePayload;
 
         const created: any = await apiCampaignCreate({
-          ...(payload as ActorAwareCreatePayload),
+          ...base,
+          // ✅ Override productImages with S3 URLs + full metadata
+          productImages: uploadedImages,
           status: "active" as CampaignStatus,
         });
 
@@ -1205,7 +1242,7 @@ function CreateManualScreen({
   const countrySearchProps = useSearchProps(lists.search.countries.value, lists.search.countries.onChange);
   const ageSearchProps = useSearchProps(lists.search.ageRanges.value, lists.search.ageRanges.onChange);
   const hashtagSearchProps = useSearchProps(lists.search.preferredHashtags.value, lists.search.preferredHashtags.onChange);
-
+  console.log("campaignId",campaignId)
   return (
     <>
       <div className="cg-page-frame flex min-h-0 h-[100dvh] w-full flex-col overflow-hidden">
@@ -1622,7 +1659,7 @@ export default function CreateCampaignPage() {
   const searchParams = useSearchParams();
   const editCampaignId = searchParams.get("campaignId");
   const queryBrandId = searchParams.get("brandId");
-
+  
   const sidebarOffsetPx = useSidebarOffsetPx();
   const [manualFromCampaign, setManualFromCampaign] = useState<EnrichedCampaignDoc | null>(null);
   const [loading, setLoading] = useState(Boolean(editCampaignId));
