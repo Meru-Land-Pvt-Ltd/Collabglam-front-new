@@ -75,8 +75,16 @@ type WalletData = {
   freezes: Array<{
     brandId: string;
     campaignId: string;
-    influencerId?: string;
-    freezeAmount: number;
+    totalFrozenAmount: number;
+    currentFrozenAmount: number;
+    totalAllocatedAmount: number;
+    totalReleasedAmount: number;
+    availableToAllocate: number;
+    influencerAllocations: Array<{
+      influencerId: string;
+      amount: number;
+      releasedAmount: number;
+    }>;
   }>;
 };
 
@@ -288,9 +296,9 @@ export default function BrandProfilePage() {
     const storedBrandId =
       typeof window !== "undefined"
         ? localStorage.getItem("brandId") ||
-          localStorage.getItem("brand_id") ||
-          localStorage.getItem("userId") ||
-          ""
+        localStorage.getItem("brand_id") ||
+        localStorage.getItem("userId") ||
+        ""
         : "";
 
     if (!storedBrandId) {
@@ -319,7 +327,7 @@ export default function BrandProfilePage() {
         ]);
 
         const profile = profileRes as BrandProfile;
-        const walletData = walletRes as WalletData;
+        const walletData: WalletData = walletRes;
 
         setBrand(profile);
         setWallet(walletData);
@@ -785,7 +793,7 @@ export default function BrandProfilePage() {
                               Campaign frozen amount
                             </td>
                             <td className="px-5 py-5 text-sm font-medium text-[#111111] md:px-6">
-                              {formatMoney(freeze.freezeAmount)}
+                              {formatMoney(freeze.totalFrozenAmount)}
                             </td>
                             <td className="px-5 py-5 text-sm text-[#4b5563] md:px-6">
                               Frozen
