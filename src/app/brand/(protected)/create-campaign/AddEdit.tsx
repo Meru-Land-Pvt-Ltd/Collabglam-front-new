@@ -27,6 +27,7 @@ import {
   EnrichedCampaignDoc,
   PrefillCampaignAIPayload,
   GetTimezonesByCountriesResponse,
+  apiUploadImages,
 } from "../../services/brandApi";
 
 import {
@@ -439,7 +440,7 @@ const TODAY = todayISO();
 /* ============================================================================
    ✅ Payload builders
 ============================================================================ */
-async function buildCreateAIPayload(form: CampaignForm, opts?: { saveDraft?: boolean }): Promise<PrefillCampaignAIPayload> {
+async function buildCreateAIPayload(form: CampaignForm, uploadedImages: Array<{ dataUrl: string; name: string; type: string; contentType: string; originalSize: number; size: number; key: string }>, opts?: { saveDraft?: boolean }): Promise<PrefillCampaignAIPayload> {
   const brandId = getBrandId();
   const productImages = await filesToDataUrls(form.files ?? []);
 
@@ -450,7 +451,7 @@ async function buildCreateAIPayload(form: CampaignForm, opts?: { saveDraft?: boo
     campaignType: form.campaignType,
     categoryId: form.categoryId,
     subcategoryIds: form.subcategory,
-    productImages,
+    productImages: uploadedImages,
     productLink: form.productLink.trim() || undefined,
     targetCountryIds: form.country,
     targetAgeRanges: form.ageGroup,
@@ -774,12 +775,51 @@ function CreateByAIScreen({
   const submitAI = useCallback(async () => {
     setSubmitting(true);
     try {
-      const payload = await buildCreateAIPayload(form, { saveDraft: false });
+      // ✅ Step 1: Upload files first → get S3 URLs
+      let uploadedImages: Array<{
+        dataUrl: string;
+        name: string;
+        type: string;
+        contentType: string;
+        originalSize: number;
+        size: number;
+        key: string;
+      }> = [];
+
+      if (form.files?.length) {
+        const uploadRes = await apiUploadImages(form.files);
+        const urls: string[] = uploadRes?.urls ?? uploadRes?.data?.urls ?? [];
+
+        // ✅ Step 2: Map S3 URLs with file metadata by index
+        uploadedImages = urls.map((url, i) => {
+          const file = form.files[i];
+          const key =
+            url.split("/campaign-images/")[1] ?? url.split("/").pop() ?? "";
+
+          return {
+            dataUrl: url,
+            name: file?.name ?? "",
+            type: file?.type ?? "image/jpeg",
+            contentType: file?.type ?? "image/jpeg",
+            originalSize: file?.size ?? 0,
+            size: file?.size ?? 0,
+            key,
+          };
+        });
+      }
+
+      // ✅ Step 3: Build payload with S3 URLs — no base64
+      const payload = await buildCreateAIPayload(
+        form,
+        uploadedImages,  // ← pass uploaded images
+        { saveDraft: false }
+      );
+
       const res: any = await apiCampaignPrefillAI(payload);
 
       const pseudoDoc = {
-        ...res,
-        details: res?.details ?? null,
+        ...(res?.prefill ?? {}),
+        details: res?.prefillDetails ?? res?.details ?? null,
         byAi: 1,
         status: "draft",
       };
@@ -1792,7 +1832,35 @@ function CreateManualScreen({
       let cid: string | undefined;
 
       try {
-        const productImages = await filesToDataUrls(form.productFiles ?? []);
+        // ✅ Step 1: Upload new files → get back S3 URLs
+        let uploadedImages: SavedProductImage[] = [];
+        if (form.productFiles?.length) {
+          const uploadRes = await apiUploadImages(form.productFiles);
+          const urls: string[] = uploadRes?.urls ?? uploadRes?.data?.urls ?? [];
+
+          // ✅ Step 2: Map each S3 URL with its corresponding file metadata by index
+          uploadedImages = urls.map((url, i) => {
+            const file = form.productFiles[i];
+            const key =
+              url.split("/campaign-images/")[1] ?? url.split("/").pop() ?? "";
+
+            return {
+              dataUrl: url,
+              name: file?.name ?? "",
+              type: file?.type ?? "image/jpeg",
+              contentType: file?.type ?? "image/jpeg",
+              originalSize: file?.size ?? 0,
+              size: file?.size ?? 0,
+              key,
+            };
+          });
+        }
+
+        // ✅ Step 3: Merge existing saved images with newly uploaded S3 images
+        const allProductImages: SavedProductImage[] = [
+          ...savedProductImages,
+          ...uploadedImages,
+        ];
 
         if (campaignId) {
           const payload: EditDraftPayload = compact({
@@ -1806,7 +1874,8 @@ function CreateManualScreen({
             categoryId: form.categoryId,
             subcategoryIds: form.subcategories,
             productLink: form.productLink.trim(),
-            productImages,
+            // ✅ Full metadata objects with S3 dataUrl — no base64
+            productImages: allProductImages.length ? allProductImages : undefined,
             campaignGoals: form.goals,
             influencerTierIds: form.influencerTier,
             contentFormats: form.contentFormats,
@@ -1816,8 +1885,12 @@ function CreateManualScreen({
             targetAgeRanges: form.targetAgeGroups,
             preferredHashtags: form.hashtags,
             numberOfInfluencers: Number(form.numberOfInfluencers || 0),
-            ...(Number(form.minFollowers) > 0 ? { minFollowers: Number(form.minFollowers) } : {}),
-            ...(Number(form.maxFollowers) > 0 ? { maxFollowers: Number(form.maxFollowers) } : {}),
+            ...(Number(form.minFollowers) > 0
+              ? { minFollowers: Number(form.minFollowers) }
+              : {}),
+            ...(Number(form.maxFollowers) > 0
+              ? { maxFollowers: Number(form.maxFollowers) }
+              : {}),
             campaignBudget: Number(form.campaignBudget || 0),
             paymentType: form.paymentType,
             additionalNotes: form.additionalNotes || undefined,
@@ -1833,11 +1906,23 @@ function CreateManualScreen({
           toastSuccess(
             extractBackendSuccessMessage(
               updated,
-              status === "scheduled" ? "Campaign scheduled" : status === "active" ? "Campaign published" : "Campaign updated"
+              status === "scheduled"
+                ? "Campaign scheduled"
+                : status === "active"
+                  ? "Campaign published"
+                  : "Campaign updated"
             )
           );
         } else {
-          const payload = await buildCreateManualPayload(form, true, savedProductImages);
+          // ✅ Empty productFiles so filesToDataUrls([]) = [] inside builder (no base64)
+          // ✅ includeFiles: true so the async merge path runs
+          // ✅ allProductImages passed as savedProductImages → S3 URLs merged into payload
+          const payload = await buildCreateManualPayload(
+            { ...form, productFiles: [] },
+            true,
+            allProductImages
+          );
+
           const created: any = await apiCampaignCreate({
             ...(payload as CreateCampaignManualPayload),
             status,
@@ -1850,7 +1935,11 @@ function CreateManualScreen({
           toastSuccess(
             extractBackendSuccessMessage(
               created,
-              status === "scheduled" ? "Campaign scheduled" : status === "active" ? "Campaign published" : "Campaign created"
+              status === "scheduled"
+                ? "Campaign scheduled"
+                : status === "active"
+                  ? "Campaign published"
+                  : "Campaign created"
             )
           );
         }
@@ -1890,6 +1979,7 @@ function CreateManualScreen({
       form,
       dateOk,
       productFileErrors,
+      savedProductImages,
       resetForm,
       onAfterPublish,
       extractBackendMessage,
