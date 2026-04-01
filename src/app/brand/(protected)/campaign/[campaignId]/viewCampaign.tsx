@@ -1201,36 +1201,32 @@ export default function ViewCampaignPage() {
     };
   }, [brandId, campaignId]);
 
-const readBrandWallet = useCallback(async () => {
-  if (!brandId || !campaignId) {
+  const readBrandWallet = useCallback(async () => {
+    if (!brandId || !campaignId) {
+      return {
+        campaignTotalFrozenAmount: 0,
+        campaignCurrentFrozenAmount: 0,
+      };
+    }
+
+    const walletData = await apiGetBrandWallet({ brandId });
+
+    const freezes = Array.isArray(walletData?.freezes) ? walletData.freezes : [];
+
+    const currentCampaignFreeze = freezes.find((freeze: any) => {
+      const freezeCampaignId = normalizeMongoId(freeze?.campaignId);
+      return freezeCampaignId === campaignId;
+    });
+
     return {
-      usableBalance: 0,
-      campaignFreezeAmount: 0,
-      campaignReleasedAmount: 0,
-      campaignAvailableToAllocate: 0,
-      campaignTotalFrozenAmount: 0,
+      campaignTotalFrozenAmount: Number(
+        currentCampaignFreeze?.totalFrozenAmount ?? 0
+      ),
+      campaignCurrentFrozenAmount: Number(
+        currentCampaignFreeze?.currentFrozenAmount ?? 0
+      ),
     };
-  }
-
-  const walletData = await apiGetBrandWallet({ brandId });
-
-  const usable = Number(walletData?.usableBalance ?? walletData?.walletBalance ?? 0);
-
-  const freezes = Array.isArray(walletData?.freezes) ? walletData.freezes : [];
-
-  const currentCampaignFreeze = freezes.find((freeze: any) => {
-    const freezeCampaignId = normalizeMongoId(freeze?.campaignId);
-    return freezeCampaignId === campaignId;
-  });
-
-  return {
-    usableBalance: Number.isFinite(usable) ? usable : 0,
-    campaignFreezeAmount: Number(currentCampaignFreeze?.currentFrozenAmount ?? 0),
-    campaignReleasedAmount: Number(currentCampaignFreeze?.totalReleasedAmount ?? 0),
-    campaignAvailableToAllocate: Number(currentCampaignFreeze?.availableToAllocate ?? 0),
-    campaignTotalFrozenAmount: Number(currentCampaignFreeze?.totalFrozenAmount ?? 0),
-  };
-}, [brandId, campaignId]);
+  }, [brandId, campaignId]);
 
   useEffect(() => {
     if (!brandId || !campaignId) return;
@@ -1242,8 +1238,8 @@ const readBrandWallet = useCallback(async () => {
         const walletSnapshot = await readBrandWallet();
 
         if (!cancelled) {
-          setUsableWalletBalance(walletSnapshot.usableBalance);
-          setCampaignFreezeAmount(walletSnapshot.campaignReleasedAmount);
+          setUsableWalletBalance(walletSnapshot.campaignCurrentFrozenAmount);
+          setCampaignFreezeAmount(walletSnapshot.campaignTotalFrozenAmount);
         }
       } catch {
         if (!cancelled) {
@@ -1283,8 +1279,8 @@ const readBrandWallet = useCallback(async () => {
 
         if (cancelled) return;
 
-        setUsableWalletBalance(walletSnapshot.usableBalance);
-        setCampaignFreezeAmount(walletSnapshot.campaignReleasedAmount);
+        setUsableWalletBalance(walletSnapshot.campaignCurrentFrozenAmount);
+        setCampaignFreezeAmount(walletSnapshot.campaignTotalFrozenAmount);
         setTopupAmount("");
         setAddFundsModalOpen(false);
 
@@ -1708,11 +1704,11 @@ const readBrandWallet = useCallback(async () => {
     [];
 
   const selectedCount =
-  Number(
-    (campaign as any)?.count ??
-    details?.count ??
-    0
-  ) || 0;
+    Number(
+      (campaign as any)?.count ??
+      details?.count ??
+      0
+    ) || 0;
 
   const selectedInfluencerDisplay =
     (campaignStatusCounts.active ?? 0) > 0
@@ -1885,10 +1881,28 @@ const readBrandWallet = useCallback(async () => {
     setActiveSlide(bestIdx);
   };
 
-  const usableBudgetValue = Number.isFinite(usableWalletBalance) ? usableWalletBalance : 0;
-  const usedBudgetValue = Number.isFinite(campaignFreezeAmount) ? campaignFreezeAmount : 0;
-  const shownBudgetText = (budgetTab === "remaining" ? usableBudgetValue : usedBudgetValue).toLocaleString("en-US");
+  const effectiveBudgetTab: "remaining" | "used" =
+    isAdminCreatedCampaign ? "remaining" : budgetTab;
 
+  const totalFrozenAmount = Number.isFinite(campaignFreezeAmount)
+    ? campaignFreezeAmount
+    : 0;
+
+  const currentFrozenAmount = Number.isFinite(usableWalletBalance)
+    ? usableWalletBalance
+    : 0;
+
+  const usableBudgetValue = currentFrozenAmount;
+
+  const usedBudgetValue = Math.max(
+    0,
+    totalFrozenAmount - currentFrozenAmount
+  );
+
+  const shownBudgetValue =
+    effectiveBudgetTab === "remaining" ? usableBudgetValue : usedBudgetValue;
+
+  const shownBudgetText = shownBudgetValue.toLocaleString("en-US");
   const showLoadMore = recommendedRows.length > 0 && recommendedHasMore !== false;
 
   return (
@@ -1990,8 +2004,8 @@ const readBrandWallet = useCallback(async () => {
                     });
 
                     const shareUrl =
-                      res?.shareUrl || 
-                      res?.data?.shareUrl; 
+                      res?.shareUrl ||
+                      res?.data?.shareUrl;
 
                     if (!shareUrl) {
                       throw new Error("Share URL not returned");
@@ -2110,23 +2124,25 @@ const readBrandWallet = useCallback(async () => {
                 </span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setBudgetTab("used")}
-                className={`flex h-8 px-3 items-center justify-center gap-1 self-stretch rounded-[0.5rem] ${budgetTab === "used" ? "bg-white" : "bg-transparent"
-                  }`}
-              >
-                <span className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
-                  Used Budget
-                </span>
-              </button>
+              {!isAdminCreatedCampaign ? (
+                <button
+                  type="button"
+                  onClick={() => setBudgetTab("used")}
+                  className={`flex h-8 px-3 items-center justify-center gap-1 self-stretch rounded-[0.5rem] ${budgetTab === "used" ? "bg-white" : "bg-transparent"
+                    }`}
+                >
+                  <span className="text-[#1A1A1A] text-[0.75rem] font-semibold leading-5">
+                    Used Budget
+                  </span>
+                </button>
+              ) : null}
             </div>
           </div>
 
           <div className="mt-auto flex w-full items-end justify-between self-stretch gap-4">
             <div className="flex flex-col items-start gap-2">
               <div className="text-[#B8B8B8] text-[0.875rem] font-medium leading-[1.25rem]">
-                {budgetTab === "remaining" ? "Usable budget" : "Used budget"}
+                {effectiveBudgetTab === "remaining" ? "Usable budget" : "Used budget"}
               </div>
 
               <div className="flex items-center gap-[0.1rem]">
