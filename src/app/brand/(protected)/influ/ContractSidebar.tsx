@@ -103,7 +103,7 @@ type ContractFormState = {
   };
   scheduleA: {
     minimumVideoSpecs: string;
-    preShootScriptRequired: boolean;
+    preShootScriptRequired: "" | "yes" | "no";
     preShootScriptDue: string;
     preShootScriptReviewBusinessDays: string;
     mandatoryTagsMentionsLinksCodes: string;
@@ -125,7 +125,7 @@ type ContractFormState = {
       paymentProcessorFeesNotes: string;
       laneAMarketplaceFeeNote: string;
       milestones: ContractMilestone[];
-      influencerBudget: number;
+      influencerBudget: string;
     };
     rawFiles: {
       rawSourceFileDelivery: string;
@@ -437,6 +437,8 @@ function getAtPath(obj: any, path: string, fallback: any = "") {
   return value === undefined || value === null ? fallback : value;
 }
 
+
+
 function setAtPath<T extends Record<string, any>>(obj: T, path: string, value: any): T {
   const clone = deepClone(obj);
   const keys = String(path).split(".");
@@ -545,7 +547,7 @@ function createDefaultScheduleDeliverable(index: number = 1): ScheduleADeliverab
     platform: "",
     handle: "",
     deliverableFormat: "",
-    qty: "1",
+    qty: "",
     draftRequired: false,
     draftDue: "",
     liveDate: "",
@@ -581,7 +583,7 @@ function createDefaultContractForm(): ContractFormState {
     },
     scheduleA: {
       minimumVideoSpecs: "",
-      preShootScriptRequired: false,
+      preShootScriptRequired: "",
       preShootScriptDue: "",
       preShootScriptReviewBusinessDays: "",
       mandatoryTagsMentionsLinksCodes: "",
@@ -605,7 +607,7 @@ function createDefaultContractForm(): ContractFormState {
         laneAMarketplaceFeeNote:
           "Unless expressly stated otherwise, 10% of the applicable Influencer compensation funded through the Platform is deducted from the Influencer payout and retained by CollabGlam; the Brand-funded campaign amount remains fixed.",
         milestones: [createDefaultCommercialMilestone()],
-        influencerBudget: 0
+        influencerBudget: ""
       },
       rawFiles: {
         rawSourceFileDelivery: "",
@@ -984,7 +986,11 @@ export default function ContractSidebarExtracted({
   const setContractField = useCallback((path: string, value: any) => {
     setContractForm((prev) => setAtPath(prev, path, value));
   }, []);
-
+  const preShootScriptRequiredValue = getAtPath(
+    contractForm,
+    "scheduleA.preShootScriptRequired",
+    ""
+  );
   const prefillFormFor = useCallback(
     (inf: any, meta?: ContractMeta | null) => {
       const base = createDefaultContractForm();
@@ -1320,8 +1326,10 @@ export default function ContractSidebarExtracted({
       nextErrors[key] = message;
     };
 
-    const feeRaw = String(contractForm.scheduleA.commercial.totalCampaignFee ?? "");
-    const feeValue = Number(feeRaw);
+    const influencerFeeRaw = String(
+      contractForm.scheduleA.commercial.influencerBudget ?? ""
+    );
+    const influencerFeeValue = Number(influencerFeeRaw);
     const revisionRaw = String(
       contractForm.scheduleA.review.includedRevisionRounds ?? ""
     );
@@ -1347,9 +1355,23 @@ export default function ContractSidebarExtracted({
       add("campaign.paymentType", "Payment type is required.");
     }
 
+    if (!String(contractForm.scheduleA.dispute.disputeResolutionMethod ?? "").trim()) {
+      add(
+        "scheduleA.dispute.disputeResolutionMethod",
+        "Dispute resolution method is required."
+      );
+    }
+
     if (activePaymentType !== PAYMENT_TYPE.GIFTING) {
-      if (!feeRaw.trim() || Number.isNaN(feeValue) || feeValue < 0) {
-        add("scheduleA.commercial.totalCampaignFee", "Enter a valid non-negative fee.");
+      if (
+        !influencerFeeRaw.trim() ||
+        Number.isNaN(influencerFeeValue) ||
+        influencerFeeValue < 0
+      ) {
+        add(
+          "scheduleA.commercial.influencerBudget",
+          "Enter a valid non-negative influencer fee."
+        );
       }
     }
 
@@ -2301,17 +2323,21 @@ export default function ContractSidebarExtracted({
                   <FloatingSelect
                     label="Pre-Shoot Script Required"
                     info={SIDEBAR_TOOLTIPS.preShootScriptRequired}
-                    value={isPreShootScriptRequired ? "yes" : "no"}
+                    value={preShootScriptRequiredValue}
                     onValueChange={(value) => {
-                      const required = value === "yes";
-
                       setContractForm((prev) => {
                         const next = deepClone(prev);
-                        next.scheduleA.preShootScriptRequired = required;
 
-                        if (!required) {
+                        if (value === "yes") {
+                          next.scheduleA.preShootScriptRequired = "yes";
+                        } else if (value === "no") {
+                          next.scheduleA.preShootScriptRequired = "no";
                           next.scheduleA.preShootScriptDue = "";
                           next.scheduleA.preShootScriptReviewBusinessDays = "2";
+                        } else {
+                          next.scheduleA.preShootScriptRequired = "";
+                          next.scheduleA.preShootScriptDue = "";
+                          next.scheduleA.preShootScriptReviewBusinessDays = "";
                         }
 
                         return next;
@@ -2319,11 +2345,8 @@ export default function ContractSidebarExtracted({
                     }}
                     searchable={false}
                   >
-                    {YES_NO_BOOL_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
                   </FloatingSelect>
 
                   {isPreShootScriptRequired && (
@@ -3069,15 +3092,16 @@ export default function ContractSidebarExtracted({
                 <FloatingSelect
                   label="Dispute Resolution Method"
                   info={SIDEBAR_TOOLTIPS.disputeResolutionMethod}
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.dispute.disputeResolutionMethod"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.dispute.disputeResolutionMethod")}
                   onValueChange={(value) =>
                     setContractField("scheduleA.dispute.disputeResolutionMethod", value)
                   }
                   searchable={false}
-                  required
+                  required={true}
+                  state={
+                    formErrors["scheduleA.dispute.disputeResolutionMethod"] ? "error" : undefined
+                  }
+                  errorText={formErrors["scheduleA.dispute.disputeResolutionMethod"] || ""}
                 >
                   {DISPUTE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>

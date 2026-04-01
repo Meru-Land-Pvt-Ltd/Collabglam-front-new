@@ -788,7 +788,7 @@ function SearchParamsHandler({
 export default function SupportPage() {
   const [isRaiseIssueOpen, setIsRaiseIssueOpen] = useState(false);
   const [popup, setPopup] = useState<SupportPopupState | null>(null);
-
+  const router = useRouter();
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
@@ -881,7 +881,7 @@ export default function SupportPage() {
                 </h2>
               </div>
 
-              <button className="text-sm font-semibold text-black transition hover:text-slate-700">
+              <button onClick={()=>router.push(`/faqs`)} className="text-sm font-semibold text-black transition hover:text-slate-700 cursor-pointer">
                 Browse full documentation
               </button>
             </div>

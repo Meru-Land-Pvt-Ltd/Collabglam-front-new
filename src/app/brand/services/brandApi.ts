@@ -736,87 +736,6 @@ export type WalletFreezeRow = {
   freezeAmount: number;
 };
 
-export type BrandWalletResponse = {
-  brandId: string;
-  walletBalance: number;
-  frozenBalance: number;
-  usableBalance: number;
-  freezes: WalletFreezeRow[];
-};
-
-export async function apiGetBrandWallet(params: { brandId: string }) {
-  return apiGet<BrandWalletResponse>(`${WALLET_BASE}`, {
-    brandId: params.brandId,
-  });
-}
-
-export type BrandWalletTopupPayload = {
-  brandId: string;
-  campaignId?: string;
-  amount: number;
-  currency?: string;
-  successUrl: string;
-  cancelUrl: string;
-};
-
-export type BrandWalletTopupResponse = {
-  message: string;
-  brandId: string;
-  amount: number;
-  currency: string;
-  sessionId: string;
-  checkoutUrl?: string;
-};
-
-export async function apiBrandWalletTopup(payload: BrandWalletTopupPayload) {
-  return apiPost<BrandWalletTopupResponse>(`${WALLET_BASE}/topup`, {
-    brandId: payload.brandId,
-    campaignId: payload.campaignId,
-    amount: payload.amount,
-    currency: payload.currency ?? "inr",
-    successUrl: payload.successUrl,
-    cancelUrl: payload.cancelUrl,
-  });
-}
-
-export type ConfirmBrandWalletTopupPayload = {
-  brandId: string;
-  sessionId: string;
-};
-
-export type ConfirmBrandWalletTopupResponse = {
-  message: string;
-  brandId: string;
-  addedAmount: number;
-  walletBalance: number;
-  frozenBalance: number;
-  usableBalance: number;
-};
-
-export async function apiConfirmBrandWalletTopup(
-  payload: ConfirmBrandWalletTopupPayload
-) {
-  return apiPost<ConfirmBrandWalletTopupResponse>(`${WALLET_BASE}/topup/confirm`, {
-    brandId: payload.brandId,
-    sessionId: payload.sessionId,
-  });
-}
-
-export type FrozenAmountResponse = {
-  brandId: string;
-  campaignId: string;
-  influencerId?: string | null;
-  frozenAmount: number;
-};
-
-export async function apiGetFrozenAmountForCampaign(params: {
-  brandId: string;
-  campaignId: string;
-  influencerId?: string;
-}) {
-  return apiGet<FrozenAmountResponse>(`${WALLET_BASE}/freeze-amount`, params);
-}
-
 export type RecommendedInfluencerRow = {
   influencerId: string;
   name: string;
@@ -1993,4 +1912,123 @@ export async function apiGetPublicCampaign(token: string) {
   return apiGet<GetPublicCampaignResponse>(
     `${CAMPAIGN_BASE}/public/${encodeURIComponent(token)}`
   );
+}
+
+/** -------------------------
+ *  WALLET APIs
+ *  ------------------------*/
+export type CampaignInfluencerAllocationRow = {
+  influencerId: string;
+  amount: number;
+  releasedAmount: number;
+};
+
+export type CampaignFreezeRow = {
+  brandId: string;
+  campaignId: string;
+
+  totalFrozenAmount: number;
+  currentFrozenAmount: number;
+  totalAllocatedAmount: number;
+  totalReleasedAmount: number;
+  availableToAllocate: number;
+
+  influencerAllocations: CampaignInfluencerAllocationRow[];
+};
+
+export type BrandWalletResponse = {
+  brandId: string;
+  walletBalance: number;
+  frozenBalance: number;
+  usableBalance: number;
+  freezes: CampaignFreezeRow[];
+};
+
+export async function apiGetBrandWallet(params: { brandId: string }) {
+  return apiGet<BrandWalletResponse>(`${WALLET_BASE}`, {
+    brandId: params.brandId,
+  });
+}
+
+export type BrandWalletTopupPayload = {
+  brandId: string;
+  campaignId: string; // required now
+  amount: number;
+  currency?: string;
+  successUrl: string;
+  cancelUrl: string;
+};
+
+export type BrandWalletTopupResponse = {
+  message: string;
+  brandId: string;
+  campaignId: string;
+  amount: number;
+  currency: string;
+  sessionId: string;
+  checkoutUrl?: string;
+};
+
+export async function apiBrandWalletTopup(payload: BrandWalletTopupPayload) {
+  return apiPost<BrandWalletTopupResponse>(`${WALLET_BASE}/topup`, {
+    brandId: payload.brandId,
+    campaignId: payload.campaignId,
+    amount: payload.amount,
+    currency: payload.currency ?? "usd",
+    successUrl: payload.successUrl,
+    cancelUrl: payload.cancelUrl,
+  });
+}
+
+export type ConfirmBrandWalletTopupPayload = {
+  brandId: string;
+  sessionId: string;
+};
+
+export type ConfirmBrandWalletTopupResponse = {
+  message: string;
+  brandId: string;
+  campaignId: string;
+  addedAmount: number;
+  walletBalance: number;
+  frozenBalance: number;
+  usableBalance: number;
+  campaignFreeze: CampaignFreezeRow | null;
+};
+
+export async function apiConfirmBrandWalletTopup(
+  payload: ConfirmBrandWalletTopupPayload
+) {
+  return apiPost<ConfirmBrandWalletTopupResponse>(`${WALLET_BASE}/topup/confirm`, {
+    brandId: payload.brandId,
+    sessionId: payload.sessionId,
+  });
+}
+
+export type FrozenInfluencerSummary = {
+  influencerId: string;
+  amount: number;
+  releasedAmount: number;
+  pendingAmount: number;
+};
+
+export type FrozenAmountResponse = {
+  brandId: string;
+  campaignId: string;
+
+  totalFrozenAmount: number;
+  currentFrozenAmount: number;
+  totalAllocatedAmount: number;
+  totalReleasedAmount: number;
+  availableToAllocate: number;
+
+  influencer: FrozenInfluencerSummary | null;
+};
+
+export async function apiGetFrozenAmountForCampaign(params: {
+  brandId: string;
+  campaignId: string;
+  influencerId?: string;
+}) {
+  return apiGet<FrozenAmountResponse>(`${WALLET_BASE}/freeze-amount`, params);
 }

@@ -1201,33 +1201,36 @@ export default function ViewCampaignPage() {
     };
   }, [brandId, campaignId]);
 
-  const readBrandWallet = useCallback(async () => {
-    if (!brandId || !campaignId) {
-      return { usableBalance: 0, campaignFreezeAmount: 0 };
-    }
-
-    const res: any = await apiGetBrandWallet({ brandId });
-    const walletData = res?.data ?? res?.data?.data ?? res ?? {};
-
-    const usableRaw =
-      walletData?.usableBalance ?? walletData?.walletBalance ?? 0;
-
-    const usable = Number(usableRaw);
-
-    const freezes = Array.isArray(walletData?.freezes) ? walletData.freezes : [];
-    const currentCampaignFreeze = freezes.reduce((sum: number, freeze: any) => {
-      const freezeCampaignId = normalizeMongoId(freeze?.campaignId);
-      if (freezeCampaignId !== campaignId) return sum;
-
-      const amount = Number(freeze?.freezeAmount ?? 0);
-      return sum + (Number.isFinite(amount) ? amount : 0);
-    }, 0);
-
+const readBrandWallet = useCallback(async () => {
+  if (!brandId || !campaignId) {
     return {
-      usableBalance: Number.isFinite(usable) ? usable : 0,
-      campaignFreezeAmount: currentCampaignFreeze,
+      usableBalance: 0,
+      campaignFreezeAmount: 0,
+      campaignReleasedAmount: 0,
+      campaignAvailableToAllocate: 0,
+      campaignTotalFrozenAmount: 0,
     };
-  }, [brandId, campaignId]);
+  }
+
+  const walletData = await apiGetBrandWallet({ brandId });
+
+  const usable = Number(walletData?.usableBalance ?? walletData?.walletBalance ?? 0);
+
+  const freezes = Array.isArray(walletData?.freezes) ? walletData.freezes : [];
+
+  const currentCampaignFreeze = freezes.find((freeze: any) => {
+    const freezeCampaignId = normalizeMongoId(freeze?.campaignId);
+    return freezeCampaignId === campaignId;
+  });
+
+  return {
+    usableBalance: Number.isFinite(usable) ? usable : 0,
+    campaignFreezeAmount: Number(currentCampaignFreeze?.currentFrozenAmount ?? 0),
+    campaignReleasedAmount: Number(currentCampaignFreeze?.totalReleasedAmount ?? 0),
+    campaignAvailableToAllocate: Number(currentCampaignFreeze?.availableToAllocate ?? 0),
+    campaignTotalFrozenAmount: Number(currentCampaignFreeze?.totalFrozenAmount ?? 0),
+  };
+}, [brandId, campaignId]);
 
   useEffect(() => {
     if (!brandId || !campaignId) return;
@@ -1240,7 +1243,7 @@ export default function ViewCampaignPage() {
 
         if (!cancelled) {
           setUsableWalletBalance(walletSnapshot.usableBalance);
-          setCampaignFreezeAmount(walletSnapshot.campaignFreezeAmount);
+          setCampaignFreezeAmount(walletSnapshot.campaignReleasedAmount);
         }
       } catch {
         if (!cancelled) {
@@ -1281,7 +1284,7 @@ export default function ViewCampaignPage() {
         if (cancelled) return;
 
         setUsableWalletBalance(walletSnapshot.usableBalance);
-        setCampaignFreezeAmount(walletSnapshot.campaignFreezeAmount);
+        setCampaignFreezeAmount(walletSnapshot.campaignReleasedAmount);
         setTopupAmount("");
         setAddFundsModalOpen(false);
 

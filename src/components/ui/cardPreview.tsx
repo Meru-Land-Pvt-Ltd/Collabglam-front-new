@@ -8,72 +8,33 @@ import {
 } from "@phosphor-icons/react";
 import { PenLine, Eye } from "lucide-react";
 import { Button } from "./button";
+import { useRouter } from "next/navigation";
 
 type Option = { label: string; value: string };
 type IdLabelMap = Record<string, string>;
-
 export type ProductImage =
   | string
   | {
-      name?: string;
-      type?: string;
-      size?: number;
-      dataUrl?: string;
-      url?: string;
-      originalSize?: number;
-      key?: string;
-      contentType?: string;
-    };
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl?: string;
+    url?: string;
+  };
 
-type CampaignGoalItem = {
-  _id?: string;
-  goal?: string;
-};
-
-type CampaignCountryItem = {
-  _id?: string;
-  countryName?: string;
-  flag?: string;
-};
-
-type CampaignAgeRangeItem = {
-  _id?: string;
-  range?: string;
-};
-
-type CampaignCategoryItem = {
-  categoryId?: string;
-  categoryName?: string;
-  subcategoryId?: string;
-  subcategoryName?: string;
-};
 
 export type ManualForm = {
   title?: string;
-  campaignTitle?: string;
   description?: string;
-
   categoryName?: string;
-  categories?: CampaignCategoryItem[];
-
   subcategories?: string[];
-
   targetCountry?: string[];
-  targetCountryIds?: CampaignCountryItem[];
-
   targetAgeGroups?: string[];
-  targetAgeRanges?: CampaignAgeRangeItem[];
-
   goals?: string[];
-  campaignGoals?: CampaignGoalItem[];
-
   platforms?: string[];
   hashtags?: string[];
   campaigngoal?: string;
-
   campaignBudget?: number;
-  budget?: number;
-
   productImages?: ProductImage[];
 };
 
@@ -83,6 +44,7 @@ export type PreviewMeta = {
   ageMap?: IdLabelMap;
   goalsMap?: IdLabelMap;
   hashtagsMap?: IdLabelMap;
+
   campaignBudget?: number;
 };
 
@@ -123,7 +85,9 @@ export type ContractCardMeta = {
 };
 
 export type ContractCardProps = {
+  /** The effective contract id to act on */
   contractId: string;
+  /** Live contract metadata (fetched async; null = not loaded yet) */
   meta: ContractCardMeta | null;
   onReviewAccept: () => void;
   onView: () => void;
@@ -134,7 +98,6 @@ export type ContractCardProps = {
 /* ─────────────────────── Internal helpers ─────────────────────── */
 
 const normSt = (s?: string) => String(s || "").trim().toUpperCase();
-
 function hasAcceptedCurrent(
   meta: ContractCardMeta | null,
   role: "brand" | "influencer"
@@ -147,13 +110,11 @@ function hasAcceptedCurrent(
     Number(acceptance.acceptedVersion || 0) === version
   );
 }
-
 function getProductImageSrc(img?: ProductImage) {
   if (!img) return "";
   if (typeof img === "string") return img;
   return img.dataUrl || img.url || "";
 }
-
 function resolveContractStatus(meta: ContractCardMeta | null): {
   statusText: string;
   isLocked: boolean;
@@ -196,6 +157,7 @@ function resolveContractStatus(meta: ContractCardMeta | null): {
     !influencerSigned;
   const canReject = !isLocked && !isRejected && !isSuperseded;
 
+  // Human-readable status label
   const sigLabel = (() => {
     if (st === "MILESTONES_CREATED") return "Milestone Added";
     if (st === "CONTRACT_SIGNED") return "Awaiting Milestone Creation";
@@ -215,20 +177,20 @@ function resolveContractStatus(meta: ContractCardMeta | null): {
     (st === "BRAND_SENT_DRAFT"
       ? "Awaiting Your Acceptance"
       : st === "BRAND_EDITED"
-      ? "Updated by Brand"
-      : st === "INFLUENCER_ACCEPTED"
-      ? "Awaiting Brand Acceptance"
-      : st === "INFLUENCER_EDITED"
-      ? "Sent to Brand"
-      : st === "READY_TO_SIGN"
-      ? "Ready to Sign"
-      : st === "REJECTED"
-      ? "Rejected"
-      : st === "SUPERSEDED"
-      ? "Superseded"
-      : meta?.status
-      ? String(meta.status)
-      : "Contract");
+        ? "Updated by Brand"
+        : st === "INFLUENCER_ACCEPTED"
+          ? "Awaiting Brand Acceptance"
+          : st === "INFLUENCER_EDITED"
+            ? "Sent to Brand"
+            : st === "READY_TO_SIGN"
+              ? "Ready to Sign"
+              : st === "REJECTED"
+                ? "Rejected"
+                : st === "SUPERSEDED"
+                  ? "Superseded"
+                  : meta?.status
+                    ? String(meta.status)
+                    : "Contract");
 
   return {
     statusText,
@@ -320,6 +282,7 @@ function OutlinedPill({
         "border border-[#1A1A1A] bg-white",
         "px-3 py-1 text-[12px] text-neutral-900",
         "min-w-0",
+        "min-w-0",
         className,
       ].join(" ")}
     >
@@ -355,9 +318,10 @@ export type InviteCardProps = {
   onViewDetails: () => void;
 };
 
-/* ─────────────────────── Invite actions ─────────────────────── */
+/* ─────────────────────── Invite actions (inline, replaces Save/View) ─────────────────────── */
 
 function InviteActions({ invite }: { invite: InviteCardProps }) {
+  const isPending = !invite.status || invite.status === "pending";
   const isAccepted = invite.status === "accepted";
   const isDeclined = invite.status === "declined";
 
@@ -399,7 +363,7 @@ function InviteActions({ invite }: { invite: InviteCardProps }) {
     <div className="flex items-center gap-1.5 shrink-0">
       <button
         onClick={invite.onAccept}
-        className="rounded-lg bg-[#1A1A1A] text-white px-3 py-2 text-[12px] font-semibold shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
+        className="rounded-lg bg-[#1A1A1A] text-white px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
       >
         Accept Invite
       </button>
@@ -420,53 +384,48 @@ function InviteActions({ invite }: { invite: InviteCardProps }) {
   );
 }
 
-/* ─────────────────────── Contract actions ─────────────────────── */
+/* ─────────────────────── Contract actions (inline, replaces Save/View) ─────────────────────── */
 
 function ContractActions({ contract }: { contract: ContractCardProps }) {
-  const { needsAccept, canSign, canReject } = resolveContractStatus(contract.meta);
+  const contractStatus = String(contract?.meta?.status || "").trim().toUpperCase();
 
-  return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      {needsAccept && (
+  if (contractStatus === "INFLUENCER_ACCEPTED") {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Button
+          variant="ghost"
+          onClick={contract.onView}
+          className="flex items-center gap-1 rounded-lg border hover:bg-gray-100 border-neutral-200 bg-white text-black px-3 py-2 text-[12px] font-medium"
+        >
+          <Eye className="h-3 w-3" />
+          View Contract
+        </Button>
+      </div>
+    );
+  }
+
+  if (contractStatus === "BRAND_SENT_DRAFT") {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0">
         <Button
           onClick={contract.onReviewAccept}
           className="rounded-lg bg-black px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] whitespace-nowrap"
         >
           Review & Accept
         </Button>
-      )}
 
-      {canSign && (
-        <Button
-          onClick={contract.onSign}
-          className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-[#FFBF00] to-[#FFDB58] px-3 py-2 text-[12px] font-semibold text-gray-900 shadow-sm transition hover:brightness-95 active:scale-[0.98]"
-        >
-          <PenLine className="h-3 w-3" />
-          Sign
-        </Button>
-      )}
-
-      <Button
-        variant="ghost"
-        onClick={contract.onView}
-        className="flex items-center gap-1 rounded-lg border hover:bg-gray-100 border-neutral-200 bg-white text-black px-3 py-2 text-[12px] font-medium"
-      >
-        <Eye className="h-3 w-3" />
-        View
-      </Button>
-
-      {canReject && (
         <Button
           onClick={contract.onReject}
           className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-600 transition hover:bg-red-100 active:scale-[0.98]"
         >
           Reject
         </Button>
-      )}
-    </div>
-  );
-}
+      </div>
+    );
+  }
 
+  return null;
+}
 /* ─────────────────────── ManualPreviewCard ─────────────────────── */
 
 export function ManualPreviewCard({
@@ -488,67 +447,44 @@ export function ManualPreviewCard({
   showViewMilestone?: boolean;
   onViewMilestone?: () => void;
 }) {
-  const title = (form.campaignTitle ?? form.title ?? "").trim();
-  const desc = (form.description ?? "").trim();
-
+  console.log("Contract in manualpreview card", contract)
+  const title = form.title?.trim() ?? "";
+  const desc = form.description?.trim() ?? "";
   const productImages = useMemo(
     () => (Array.isArray(form.productImages) ? form.productImages : []),
     [form.productImages]
   );
 
-  const heroImage = useMemo(() => {
-    for (const img of productImages) {
-      const src = getProductImageSrc(img);
-      if (src) return src;
-    }
-    return "";
-  }, [productImages]);
+  const heroImage = useMemo(
+    () => getProductImageSrc(productImages[0]),
+    [productImages]
+  );
 
-  const imageCount = productImages.filter((img) => !!getProductImageSrc(img)).length;
+  const imageCount = productImages.length;
   const hasTitle = Boolean(title);
   const hasDesc = Boolean(desc);
 
-  const categoryLabel = useMemo(() => {
-    if (form.categoryName?.trim()) return form.categoryName.trim();
-    if (Array.isArray(form.categories) && form.categories.length > 0) {
-      return form.categories[0]?.categoryName?.trim() || "";
-    }
-    return "";
-  }, [form.categoryName, form.categories]);
+  const categoryLabel = (form.categoryName ?? "").trim();
 
-  const countryLabels = useMemo(() => {
-    if (Array.isArray(form.targetCountryIds) && form.targetCountryIds.length > 0) {
-      return form.targetCountryIds
-        .map((item) => stripLeadingEmoji(item.countryName || ""))
-        .filter(Boolean);
-    }
-    return idsToLabels(form.targetCountry, meta?.countryMap, stripLeadingEmoji);
-  }, [form.targetCountryIds, form.targetCountry, meta?.countryMap]);
-
+  const countryLabels = useMemo(
+    () => idsToLabels(form.targetCountry, meta?.countryMap, stripLeadingEmoji),
+    [form.targetCountry, meta?.countryMap]
+  );
   const country = useMemo(() => firstAndExtra(countryLabels), [countryLabels]);
 
-  const ageLabels = useMemo(() => {
-    if (Array.isArray(form.targetAgeRanges) && form.targetAgeRanges.length > 0) {
-      return form.targetAgeRanges.map((item) => item.range || "").filter(Boolean);
-    }
-    return idsToLabels(form.targetAgeGroups, meta?.ageMap);
-  }, [form.targetAgeRanges, form.targetAgeGroups, meta?.ageMap]);
-
+  const ageLabels = useMemo(
+    () => idsToLabels(form.targetAgeGroups, meta?.ageMap),
+    [form.targetAgeGroups, meta?.ageMap]
+  );
   const age = useMemo(() => firstAndExtra(ageLabels), [ageLabels]);
 
-  const goalLabels = useMemo(() => {
-    if (Array.isArray(form.campaignGoals) && form.campaignGoals.length > 0) {
-      return form.campaignGoals.map((item) => item.goal || "").filter(Boolean);
-    }
-    return idsToLabels(form.goals, meta?.goalsMap);
-  }, [form.campaignGoals, form.goals, meta?.goalsMap]);
-
+  const budget = Number(meta?.campaignBudget ?? form?.campaignBudget ?? 0);
+  const goalLabels = useMemo(
+    () => idsToLabels(form.goals, meta?.goalsMap),
+    [form.goals, meta?.goalsMap]
+  );
   const goal = useMemo(() => firstAndExtra(goalLabels), [goalLabels]);
   const topBadge = goal.first ? pillText(goal.first, goal.extra) : "";
-
-  const budget = Number(
-    form.budget ?? form.campaignBudget ?? meta?.campaignBudget ?? 0
-  );
 
   return (
     <div
@@ -559,6 +495,7 @@ export function ManualPreviewCard({
         className,
       ].join(" ")}
     >
+      {/* Campaign goal badge */}
       <div className="flex justify-end">
         {topBadge ? (
           <CampaignGlobalBadge value={topBadge} />
@@ -567,6 +504,7 @@ export function ManualPreviewCard({
         )}
       </div>
 
+      {/* center image icon */}
       <div className="mt-6 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5">
         {heroImage ? (
           <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-neutral-100">
@@ -588,6 +526,7 @@ export function ManualPreviewCard({
         )}
       </div>
 
+      {/* AD badge */}
       <div className="mt-8 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-6">
         <div className="grid h-11 w-11 place-items-center rounded-s border-2 border-neutral-200 bg-white">
           <span className="text-[0.75rem] font-semibold tracking-wide text-neutral-900">
@@ -596,6 +535,7 @@ export function ManualPreviewCard({
         </div>
       </div>
 
+      {/* top row: Category + Age + dots */}
       <div className="mt-6 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-4">
         <div className="flex items-center gap-3 min-w-0">
           {categoryLabel ? (
@@ -605,7 +545,6 @@ export function ManualPreviewCard({
           ) : (
             <SkeletonLine className="h-4 w-20" />
           )}
-
           {age.first ? (
             <OutlinedPill className="max-w-[170px]">
               <UsersThree size={14} className="text-[#1A1A1A]" />
@@ -615,7 +554,6 @@ export function ManualPreviewCard({
             <SkeletonLine className="h-4 w-14" />
           )}
         </div>
-
         <button
           type="button"
           aria-label="More"
@@ -625,6 +563,7 @@ export function ManualPreviewCard({
         </button>
       </div>
 
+      {/* Campaign Title */}
       <div className="mt-3">
         {hasTitle ? (
           <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1rem] font-semibold leading-[1.5rem] tracking-[0]">
@@ -634,7 +573,6 @@ export function ManualPreviewCard({
           <SkeletonLine className="w-[58%] h-4" />
         )}
       </div>
-
       <div className="mt-3 space-y-3">
         {hasDesc ? (
           <div className="text-[0.75rem] leading-5 text-neutral-700 line-clamp-2">
@@ -648,6 +586,7 @@ export function ManualPreviewCard({
         )}
       </div>
 
+      {/* countries line */}
       <div className="mt-3">
         {country.first ? (
           <div className="flex items-center gap-2 min-w-0">
@@ -665,44 +604,49 @@ export function ManualPreviewCard({
         )}
       </div>
 
+
       <div className="mt-6 h-px w-full bg-neutral-100 [@media_(max-width:80rem)_and_(max-height:50rem)]:mt-5" />
 
+
       <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
-        <div className="min-w-0 flex-1">
-          {budget > 0 ? (
-            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
-              ${formatBudget(budget)}
-            </span>
+
+        <div className="mt-4 flex items-center justify-between gap-3 [@media_(max-width:1280px)_and_(max-height:800px)]:mt-3">
+          <div className="min-w-0 flex-1">
+            {budget > 0 ? (
+              <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[#1A1A1A] font-['Inter'] text-[1.25rem] font-semibold leading-[1.75rem] tracking-[0]">
+                ${formatBudget(budget)}
+              </span>
+            ) : (
+              <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            )}
+          </div>
+
+          {invite ? (
+            <InviteActions invite={invite} />
+          ) : showViewMilestone ? (
+            <div className="flex items-center gap-3 shrink-0">
+              <Button
+                variant="default"
+                onClick={onViewMilestone}
+                className="bg-black text-white"
+              >
+                View Milestone
+              </Button>
+            </div>
+          ) : contract ? (
+            <ContractActions contract={contract} />
           ) : (
-            <div className="h-4 w-24 rounded-full bg-neutral-100" />
+            <div className="flex items-center gap-3 shrink-0 cursor-pointer">
+              <Button variant="ghost" className="shadow-none hover:bg-white">
+                <BookmarkSimpleIcon />
+                <span>Save</span>
+              </Button>
+              <Button variant="default" onClick={onViewClick}>
+                View
+              </Button>
+            </div>
           )}
         </div>
-
-        {invite ? (
-          <InviteActions invite={invite} />
-        ) : showViewMilestone ? (
-          <div className="flex items-center gap-3 shrink-0">
-            <Button
-              variant="default"
-              onClick={onViewMilestone}
-              className="bg-black text-white"
-            >
-              View Milestone
-            </Button>
-          </div>
-        ) : contract ? (
-          <ContractActions contract={contract} />
-        ) : (
-          <div className="flex items-center gap-3 shrink-0 cursor-pointer">
-            {/* <Button variant="ghost" className="shadow-none hover:bg-white">
-              <BookmarkSimpleIcon />
-              <span>Save</span>
-            </Button> */}
-            <Button variant="default" onClick={onViewClick}>
-              View
-            </Button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -716,7 +660,7 @@ export function ManualPreviewCardStack({
   meta?: PreviewMeta;
 }) {
   return (
-    <div className="h-full min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-contain">
+    <div className="h-full min-h-0 w-full  overflow-y-auto overflow-x-hidden overscroll-contain">
       <div className="min-h-full flex items-center justify-center px-6 py-10 [@media_(max-height:50rem)]:items-start [@media_(max-height:50rem)]:py-6">
         <div
           className="
