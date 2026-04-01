@@ -1987,8 +1987,8 @@ export default function ViewCampaignPage() {
                     });
 
                     const shareUrl =
-                      res?.shareUrl ||
-                      res?.data?.shareUrl;
+                      res?.shareUrl || 
+                      res?.data?.shareUrl; 
 
                     if (!shareUrl) {
                       throw new Error("Share URL not returned");
