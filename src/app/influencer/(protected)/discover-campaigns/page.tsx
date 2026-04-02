@@ -21,12 +21,14 @@ import { InstagramLogoIcon, YoutubeLogoIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/buttonComp";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
 import {
-  FloatingSelect,
-  FloatingMultiSelect,
-  SelectItem,
-} from "@/components/ui/selectComp";
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "@/components/ui/combobox";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ManualPreviewCard } from "@/components/ui/cardPreview";
 
@@ -35,7 +37,10 @@ import {
   getApiErrorMessage,
   type ActiveCampaignItem,
 } from "@/services/influencerApi";
-import { apiCategoryGetAll, apiListCountries } from "@/app/influencer/services/influencerApi";
+import {
+  apiCategoryGetAll,
+  apiListCountries,
+} from "@/app/influencer/services/influencerApi";
 
 import { useRouter } from "next/navigation";
 
@@ -83,6 +88,9 @@ const sortOptions: SelectOption[] = [
   { value: "budget-low", label: "Lowest Budget", icon: TrendingDown },
   { value: "ending", label: "Ending Soon", icon: Clock },
 ];
+
+const filterTriggerClassName =
+  "flex h-12 w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-gray-300 focus:outline-none";
 
 function normalizePlatformLabel(value?: string) {
   const v = String(value || "").trim().toLowerCase();
@@ -160,9 +168,9 @@ function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
 
   const platforms: string[] = Array.isArray(campaign?.platformSelection)
     ? campaign.platformSelection
-      .filter((p: unknown): p is string => typeof p === "string")
-      .map((p: string) => normalizePlatformLabel(p))
-      .filter((p: any): p is string => Boolean(p))
+        .filter((p: unknown): p is string => typeof p === "string")
+        .map((p: string) => normalizePlatformLabel(p))
+        .filter((p: any): p is string => Boolean(p))
     : [];
 
   const normalizedPlatforms: string[] = Array.from(new Set(platforms));
@@ -199,7 +207,7 @@ function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
     Array.isArray(campaign?.productImages) && campaign.productImages.length > 0
       ? campaign.productImages[0]
       : "";
-  
+
   return {
     id,
     title: campaign?.campaignTitle || "Untitled Campaign",
@@ -228,11 +236,15 @@ function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
 
 function campaignToPreview(campaign: UICampaign) {
   const rawCountries =
-    campaign.raw?.targetCountryIds?.map((item: any) => item?.countryName).filter(Boolean) || [];
+    campaign.raw?.targetCountryIds
+      ?.map((item: any) => item?.countryName)
+      .filter(Boolean) || [];
 
   const ageRanges =
     campaign.raw?.targetAgeRanges?.map((item: any) => item?.range).filter(Boolean) ||
-    campaign.raw?.targetAgeRangesDetails?.map((item: any) => item?.range).filter(Boolean) ||
+    campaign.raw?.targetAgeRangesDetails
+      ?.map((item: any) => item?.range)
+      .filter(Boolean) ||
     [];
 
   const goals =
@@ -282,6 +294,154 @@ function campaignToPreview(campaign: UICampaign) {
   };
 }
 
+function resolveBudgetRange(
+  budgetValue: string,
+  maxBudget: number,
+): [number, number] {
+  switch (budgetValue) {
+    case "0-5000":
+      return [0, Math.min(5000, maxBudget)];
+    case "5000-10000":
+      return maxBudget >= 5000 ? [5000, Math.min(10000, maxBudget)] : [0, maxBudget];
+    case "10000-25000":
+      return maxBudget >= 10000
+        ? [10000, Math.min(25000, maxBudget)]
+        : [0, maxBudget];
+    case "25000-50000":
+      return maxBudget >= 25000
+        ? [25000, Math.min(50000, maxBudget)]
+        : [0, maxBudget];
+    case "50000+":
+      return maxBudget >= 50000 ? [50000, maxBudget] : [0, maxBudget];
+    default:
+      return [0, maxBudget];
+  }
+}
+
+function SingleFilterCombobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  widthClassName = "w-[220px]",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: SelectOption[];
+  placeholder: string;
+  searchPlaceholder: string;
+  widthClassName?: string;
+}) {
+  const selectedOption =
+    options.find((option) => option.value === value) ?? options[0];
+  const Icon = selectedOption?.icon ?? LayoutGrid;
+
+  return (
+    <div className={`${widthClassName} shrink-0`}>
+      <Combobox value={value} onValueChange={(nextValue: any) => onChange(String(nextValue))}>
+        <ComboboxTrigger className={filterTriggerClassName}>
+          <span className="flex min-w-0 items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0 text-gray-500" />
+            <span className="truncate">
+              {selectedOption?.label || placeholder}
+            </span>
+          </span>
+        </ComboboxTrigger>
+
+        <ComboboxContent
+          showSearch
+          searchPlaceholder={searchPlaceholder}
+          className="group/combobox-content"
+        >
+          <ComboboxList>
+            {options.map((option) => {
+              const OptionIcon = option.icon;
+
+              return (
+                <ComboboxItem key={option.value} value={option.value}>
+                  <div className="flex items-center gap-2">
+                    <OptionIcon className="h-4 w-4 text-gray-500" />
+                    <span>{option.label}</span>
+                  </div>
+                </ComboboxItem>
+              );
+            })}
+            <ComboboxEmpty>No results found.</ComboboxEmpty>
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    </div>
+  );
+}
+
+function MultiFilterCombobox({
+  value,
+  onChange,
+  options,
+  widthClassName = "w-[250px]",
+}: {
+  value: string[];
+  onChange: (value: string[]) => void;
+  options: SelectOption[];
+  widthClassName?: string;
+}) {
+  const summary =
+    value.length === 0
+      ? "All Platforms"
+      : value.length === 1
+        ? value[0]
+        : `${value.length} Platforms`;
+
+  const SummaryIcon =
+    value.length === 1 ? getPlatformIcon(value[0]) : Globe;
+
+  return (
+    <div className={`${widthClassName} shrink-0`}>
+      <Combobox
+        multiple
+        value={value}
+        onValueChange={(nextValue: any) =>
+          onChange(Array.isArray(nextValue) ? nextValue : [])
+        }
+      >
+        <ComboboxTrigger className={filterTriggerClassName}>
+          <span className="flex min-w-0 items-center gap-2">
+            <SummaryIcon className="h-4 w-4 shrink-0 text-gray-500" />
+            <span className="truncate">{summary}</span>
+          </span>
+        </ComboboxTrigger>
+
+        <ComboboxContent
+          showSearch
+          searchPlaceholder="Search platforms..."
+          className="group/combobox-content"
+        >
+          <ComboboxList>
+            {options.map((option) => {
+              const OptionIcon = option.icon;
+
+              return (
+                <ComboboxItem
+                  key={option.value}
+                  value={option.value}
+                  showCheckbox
+                >
+                  <div className="flex items-center gap-2">
+                    <OptionIcon className="h-4 w-4 text-gray-500" />
+                    <span>{option.label}</span>
+                  </div>
+                </ComboboxItem>
+              );
+            })}
+            <ComboboxEmpty>No platforms found.</ComboboxEmpty>
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                    PAGE                                    */
 /* -------------------------------------------------------------------------- */
@@ -294,6 +454,7 @@ export default function DiscoverCampaigns() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedPlatform, setSelectedPlatform] = useState<string[]>([]);
   const [selectedLocation, setSelectedLocation] = useState("all");
+  const [selectedBudget, setSelectedBudget] = useState("all");
   const [sortBy, setSortBy] = useState("match");
   const [budgetRange, setBudgetRange] = useState<[number, number]>([0, 100000]);
 
@@ -360,10 +521,10 @@ export default function DiscoverCampaigns() {
             .map((country: any) => {
               const name = String(
                 country?.name ??
-                country?.countryName ??
-                country?.label ??
-                country?.title ??
-                "",
+                  country?.countryName ??
+                  country?.label ??
+                  country?.title ??
+                  "",
               ).trim();
 
               return {
@@ -436,8 +597,8 @@ export default function DiscoverCampaigns() {
         setServerTotal(
           Number(
             (res as any)?.data?.pagination?.total ??
-            (res as any)?.meta?.total ??
-            mapped.length,
+              (res as any)?.meta?.total ??
+              mapped.length,
           ),
         );
       } catch (err) {
@@ -475,9 +636,50 @@ export default function DiscoverCampaigns() {
     return max > 0 ? Math.ceil(max / 1000) * 1000 : 100000;
   }, [campaigns]);
 
-  useEffect(() => {
-    setBudgetRange([0, maxBudget]);
+  const budgetOptions = useMemo<SelectOption[]>(() => {
+    const options: SelectOption[] = [
+      { value: "all", label: "Any Budget", icon: ArrowUpDown },
+      { value: "0-5000", label: "Up to $5,000", icon: TrendingDown },
+    ];
+
+    if (maxBudget > 5000) {
+      options.push({
+        value: "5000-10000",
+        label: "$5,000 - $10,000",
+        icon: TrendingUp,
+      });
+    }
+
+    if (maxBudget > 10000) {
+      options.push({
+        value: "10000-25000",
+        label: "$10,000 - $25,000",
+        icon: TrendingUp,
+      });
+    }
+
+    if (maxBudget > 25000) {
+      options.push({
+        value: "25000-50000",
+        label: "$25,000 - $50,000",
+        icon: TrendingUp,
+      });
+    }
+
+    if (maxBudget > 50000) {
+      options.push({
+        value: "50000+",
+        label: "$50,000+",
+        icon: TrendingUp,
+      });
+    }
+
+    return options;
   }, [maxBudget]);
+
+  useEffect(() => {
+    setBudgetRange(resolveBudgetRange(selectedBudget, maxBudget));
+  }, [maxBudget, selectedBudget]);
 
   /* ------------------------------ FILTER LOGIC ------------------------------ */
 
@@ -552,121 +754,69 @@ export default function DiscoverCampaigns() {
             </Badge>
           </div>
 
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input
-              placeholder="Search campaigns, brands, or keywords..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-12 rounded-xl pl-11 pr-10"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                <X className="h-4 w-4 text-gray-400" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="w-[220px] shrink-0">
-              <FloatingSelect
-                label="Category"
-                value={selectedCategory}
-                onValueChange={setSelectedCategory}
-                searchable
-                size="small"
-              >
-                {categoryOptions.map((cat) => {
-                  const Icon = cat.icon;
-                  return (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-gray-500" />
-                        {cat.label}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </FloatingSelect>
-            </div>
-
-            <div className="w-[240px] shrink-0">
-              <FloatingMultiSelect
-                label="Platform"
-                options={platforms.map((p) => ({
-                  value: p.value,
-                  label: p.label,
-                }))}
-                value={selectedPlatform}
-                onValueChange={setSelectedPlatform}
-                searchable
-                includeAll={false}
-              />
-            </div>
-
-            <div className="flex min-h-[4rem] w-[320px] shrink-0 flex-col justify-center rounded-lg border bg-white p-4 shadow-sm md:min-h-[4.25rem] xl:min-h-[4.5rem] 2xl:min-h-[5rem]">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm text-gray-500">Budget</span>
-                <span className="text-sm font-medium text-gray-700">
-                  ${budgetRange[0]} - ${budgetRange[1]}
-                </span>
+          <div className="overflow-x-auto">
+            <div className="flex min-w-max items-center gap-4 pb-1">
+              <div className="relative w-[340px] shrink-0">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Search campaigns, brands, or keywords..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-12 rounded-xl pl-11 pr-10"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2"
+                  >
+                    <X className="h-4 w-4 text-gray-400" />
+                  </button>
+                )}
               </div>
 
-              <Slider
-                min={0}
-                max={maxBudget}
-                step={500}
-                value={budgetRange}
-                onValueChange={(value) =>
-                  setBudgetRange(value as [number, number])
-                }
+              <SingleFilterCombobox
+                value={selectedCategory}
+                onChange={setSelectedCategory}
+                options={categoryOptions}
+                placeholder="Category"
+                searchPlaceholder="Search categories..."
+                widthClassName="w-[220px]"
               />
-            </div>
 
-            <div className="w-[220px] shrink-0">
-              <FloatingSelect
-                label="Location"
+              <MultiFilterCombobox
+                value={selectedPlatform}
+                onChange={setSelectedPlatform}
+                options={platforms}
+                widthClassName="w-[240px]"
+              />
+
+              <SingleFilterCombobox
+                value={selectedBudget}
+                onChange={setSelectedBudget}
+                options={budgetOptions}
+                placeholder="Budget"
+                searchPlaceholder="Search budget..."
+                widthClassName="w-[210px]"
+              />
+
+              <SingleFilterCombobox
                 value={selectedLocation}
-                onValueChange={setSelectedLocation}
-                searchable
-              >
-                {locationOptions.map((loc) => {
-                  const Icon = loc.icon;
-                  return (
-                    <SelectItem key={loc.value} value={loc.value}>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-gray-500" />
-                        {loc.label}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </FloatingSelect>
-            </div>
+                onChange={setSelectedLocation}
+                options={locationOptions}
+                placeholder="Location"
+                searchPlaceholder="Search locations..."
+                widthClassName="w-[220px]"
+              />
 
-            <div className="w-[220px] shrink-0">
-              <FloatingSelect
-                label="Sort by"
+              <SingleFilterCombobox
                 value={sortBy}
-                onValueChange={setSortBy}
-                searchable={false}
-              >
-                {sortOptions.map((opt) => {
-                  const Icon = opt.icon;
-                  return (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-gray-500" />
-                        {opt.label}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </FloatingSelect>
+                onChange={setSortBy}
+                options={sortOptions}
+                placeholder="Sort by"
+                searchPlaceholder="Search sort..."
+                widthClassName="w-[220px]"
+              />
             </div>
           </div>
 
