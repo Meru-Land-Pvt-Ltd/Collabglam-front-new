@@ -140,7 +140,7 @@ export default function AdminPaymentPage() {
       setTotalPages(data.totalPages || 1);
       setTotal(data.total || 0);
     } catch (err: any) {
-      setError(err?.message || "Failed to load payouts.");
+      setError("Oops! Something went wrong while fetching payouts. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

@@ -510,11 +510,11 @@ export default function AdminDashboardPage() {
         key: keyof SectionErrorMap;
         request: Promise<SafeResult<any>>;
       }> = [
-        {
-          key: "campaigns",
-          request: safeGet<any>(API.campaigns, undefined, "Campaigns"),
-        },
-      ];
+          {
+            key: "campaigns",
+            request: safeGet<any>(API.campaigns, undefined, "Campaigns"),
+          },
+        ];
 
       if (me.role === "bme" || me.role === "ime") {
         requestEntries.push({
@@ -587,7 +587,7 @@ export default function AdminDashboardPage() {
       setState(nextState);
       setSectionErrors(nextErrors);
     } catch (error: any) {
-      setFatalError(error?.message || "Failed to load dashboard");
+      setFatalError("Oops! Something went wrong while loading your dashboard. Please check your connection and try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -620,10 +620,12 @@ export default function AdminDashboardPage() {
                   <AlertTriangle className="h-6 w-6" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-semibold text-slate-900">Unable to open dashboard</h1>
-                  <p className="mt-2 text-sm text-slate-600">{fatalError}</p>
+                  <h1 className="text-2xl font-semibold text-slate-900">Something went wrong</h1>
+                  <p className="mt-2 text-sm text-slate-600">
+                    We couldn't load your dashboard — this is usually a connection hiccup.
+                  </p>
                   <p className="mt-2 text-sm text-slate-500">
-                    Your login may have expired or the profile API is unavailable.
+                    Hit <strong>Retry</strong> to try again, or go to Login if the issue persists.
                   </p>
                 </div>
               </div>

@@ -753,7 +753,7 @@ async function addOutreach() {
       setItems(results);
       updatePaging(resp, results.length);
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to load saved influencers.');
+      await showErr("Oops! Something went wrong while loading saved influencers. Please check your connection and try again.");
     } finally {
       setListLoading(false);
     }

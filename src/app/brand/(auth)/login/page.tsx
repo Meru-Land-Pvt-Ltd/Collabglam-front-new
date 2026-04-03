@@ -40,7 +40,13 @@ function getApiErrorDetails(err: any, fallbackMsg = "Login failed"): ApiErrDetai
 
   const code = data?.code ?? data?.error?.code ?? err?.code ?? undefined;
 
+  const rawStr = typeof data === "string" ? data : null;
+  const strippedStr = rawStr
+    ? rawStr.replace(/^[A-Za-z]*Error:\s*/i, "").trim()
+    : null;
+
   const message =
+    strippedStr ??
     data?.message ??
     data?.error?.message ??
     err?.message ??
@@ -71,12 +77,12 @@ function prettifyRateLimitMessage(msg: string) {
       unitRaw === "second"
         ? "seconds"
         : unitRaw === "minute"
-        ? "minutes"
-        : unitRaw === "hour"
-        ? "hours"
-        : unitRaw;
+          ? "minutes"
+          : unitRaw === "hour"
+            ? "hours"
+            : unitRaw;
 
-    return `Too many failed login attempts. Please try again in ${n} ${unit}.`;
+    return `Please try again after ${n} ${unit}.`;
   }
 
   return m;

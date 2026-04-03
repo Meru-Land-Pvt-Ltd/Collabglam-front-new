@@ -36,6 +36,7 @@ import {
   type ActiveCampaignItem,
 } from "@/services/influencerApi";
 import { useRouter } from "next/navigation";
+import { friendlyInfluencerError } from "@/lib/error";
 
 /* -------------------------------------------------------------------------- */
 /*                                   TYPES                                    */
@@ -338,7 +339,8 @@ export default function DiscoverCampaigns() {
         if (ignore) return;
         setCampaigns([]);
         setServerTotal(0);
-        setError(getApiErrorMessage(err, "Failed to load campaigns."));
+        const { influencerId } = getInfluencerAuth();
+        setError(friendlyInfluencerError(err, influencerId));
       } finally {
         if (!ignore) setLoading(false);
       }

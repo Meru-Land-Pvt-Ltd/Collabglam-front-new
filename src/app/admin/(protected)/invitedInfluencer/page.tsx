@@ -184,7 +184,7 @@ export default function Page() {
       setExpanded({});
       setSelected({});
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to load invitations.');
+      await showErr("Oops! Something went wrong while loading invitations. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { post } from "@/lib/api";
 import BrandTourModal from "@/components/common/BrandTourModal";
 import { Button } from "@/components/ui/buttonComp";
+import { friendlyBrandError } from "@/lib/error";
 
 /* ✅ FULLY MANAGED plan gate (use plan name + plan id) */
 const FULLY_MANAGED_PLAN_ID = "1f46c6f6-63ae-4c4f-943d-798d644257f9";
@@ -150,7 +151,7 @@ export default function BrandDashboardHome() {
       typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
 
     if (!brandId) {
-      setFatalError("No brandId found in localStorage");
+      setFatalError("Your session looks incomplete.Please log in again.");
       return;
     }
 
@@ -176,10 +177,7 @@ export default function BrandDashboardHome() {
         setData(dashRes);
       } catch (err: any) {
         setFatalError(
-          err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Could not load dashboard"
+         friendlyBrandError(err,brandId)
         );
         setInboxLoading(false);
         return;
@@ -210,10 +208,7 @@ export default function BrandDashboardHome() {
         setInbox(unique);
       } catch (err: any) {
         setInboxError(
-          err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          "Could not load inbox"
+          friendlyBrandError(err,brandId)
         );
         setInbox([]);
       }

@@ -755,7 +755,7 @@ const AdminBrandPage: NextPage = () => {
       setError(null);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || "Failed to load brands.");
+      setError("Oops! Something went wrong while loading brands. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

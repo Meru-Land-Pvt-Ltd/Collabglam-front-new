@@ -94,7 +94,7 @@ export default function BrandActiveCampaignsPage() {
       try {
         const brandId =
           typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
-        if (!brandId) throw new Error("No brandId found in localStorage.");
+        if (!brandId) throw new Error("Your session looks incomplete.Please log in again.");
 
         const res = await post<CampaignsApiResponse>("/campaign/accepted", {
           brandId,

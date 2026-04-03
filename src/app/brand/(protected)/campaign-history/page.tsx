@@ -232,7 +232,7 @@ export default function BrandCampaignHistoryPage() {
       const brandId =
         typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
 
-      if (!brandId) throw new Error("No brandId found in localStorage.");
+      if (!brandId) throw new Error("Your session looks incomplete.Please log in again.");
 
       const payload = buildPayload(brandId);
       const fetchKey = JSON.stringify(payload);

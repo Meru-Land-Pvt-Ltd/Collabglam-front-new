@@ -122,7 +122,7 @@ export default function AdminDisputesPage() {
       setTotalPages(data.totalPages || 1);
       setTotal(data.total || 0);
     } catch (e: any) {
-      setError(e?.message || "Failed to load disputes");
+      setError("Oops! Something went wrong while fetching disputes. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

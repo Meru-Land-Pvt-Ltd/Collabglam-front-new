@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import RaiseIssueModal from "./RaiseIssueModal";
 import DisputeHistorySection from "./DisputeHistorySection";
+import { friendlyBrandError } from "@/lib/error";
 
 type FAQItem = {
   question: string;
@@ -409,8 +410,9 @@ function ContactSupportSection({
           limit: 1000,
         });
         setCampaigns(data?.data || []);
-      } catch {
+      } catch (e) {
         setCampaigns([]);
+        setError(friendlyBrandError(e, brandId));
       } finally {
         setLoadingCampaigns(false);
       }
@@ -537,12 +539,9 @@ function ContactSupportSection({
       resetForm();
       onSuccess(createdTicketId);
     } catch (e: any) {
-      const message =
-        e?.response?.data?.message ||
-        e?.message ||
-        "Failed to submit support request";
-      setError(message);
-      onError(message);
+      
+      setError(friendlyBrandError(e, brandId));
+      onError(friendlyBrandError(e, brandId));
     } finally {
       setSubmitting(false);
     }

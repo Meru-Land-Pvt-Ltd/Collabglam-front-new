@@ -30,6 +30,7 @@ import {
   Check,
   PencilSimple,
 } from "@phosphor-icons/react";
+import { friendlyInfluencerError } from "@/lib/error";
 
 type FilterOption = {
   id: string;
@@ -203,7 +204,7 @@ function getStoredInfluencerId(): string {
     try {
       const parsed = JSON.parse(influencerRaw);
       return parsed?.influencerId || parsed?._id || "";
-    } catch {}
+    } catch { }
   }
 
   const userRaw = localStorage.getItem("user");
@@ -211,7 +212,7 @@ function getStoredInfluencerId(): string {
     try {
       const parsed = JSON.parse(userRaw);
       return parsed?.influencerId || parsed?._id || "";
-    } catch {}
+    } catch { }
   }
 
   return "";
@@ -254,11 +255,9 @@ export default function InfluencerInboxPage() {
       setThreads(Array.isArray(data?.threads) ? data.threads : []);
       setSelectedIds([]);
     } catch (err: any) {
+
       setError(
-        err?.response?.data?.error ||
-          err?.message ||
-          "Failed to load inbox"
-      );
+        friendlyInfluencerError(err, influencerId));
       setThreads([]);
     } finally {
       setLoading(false);

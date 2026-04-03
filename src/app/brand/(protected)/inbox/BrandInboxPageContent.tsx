@@ -295,7 +295,7 @@ export default function BrandInboxPageContent() {
 
       if (!storedBrandId) {
         setBrandId("");
-        setError("Brand ID not found. Please sign in again.");
+        setError("Your session has expired. Please log in again.");
         setThreads([]);
         setContacts([]);
         return;

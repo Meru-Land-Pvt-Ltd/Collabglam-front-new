@@ -131,7 +131,7 @@ export default function AdminPaymentsPage() {
       }
     } catch (error: any) {
       console.error(error);
-      Swal.fire("Error", error?.message || "Failed to fetch payments", "error");
+      Swal.fire("Oops! Something went wrong while fetching payments. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

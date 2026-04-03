@@ -907,7 +907,7 @@ export default function EditCampaignPage() {
             const brandId = getBrandId();
 
             if (!brandId) {
-                toastError("Login required", "BrandId missing. Please login again.");
+                toastError("Login required", "Your session looks incomplete. Please login again.");
                 setLoading(false);
                 return;
             }
@@ -1242,7 +1242,7 @@ export default function EditCampaignPage() {
 
         const brandId = getBrandId();
         if (!brandId) {
-            toastError("Login required", "BrandId missing. Please login again.");
+            toastError("Login required", "Your session looks incomplete. Please login again.");
             return;
         }
 

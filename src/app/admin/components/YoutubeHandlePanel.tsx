@@ -120,7 +120,7 @@ type SortMode = 'engagement_upload' | 'engagement' | 'uploads' | 'created';
 function showErr(message: string) {
   return swal({
     title: 'Error',
-    text: message || 'Something went wrong.',
+    text: message  || 'Something went wrong.',
     icon: 'error',
   });
 }
@@ -755,7 +755,7 @@ export default function YoutubeHandlePanel() {
         }
       }
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to load saved data.');
+      await showErr("Failed to load saved influencers. Please try again.");
     } finally {
       setListLoading(false);
     }
@@ -849,7 +849,7 @@ export default function YoutubeHandlePanel() {
       setSearchHint('Fetched & saved. Expanded below.');
       setQuery(h);
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to fetch from YouTube.');
+      await showErr("Failed to fetch data for that handle. Please make sure it's a valid YouTube handle and try again.");
     } finally {
       setSearchLoading(false);
     }

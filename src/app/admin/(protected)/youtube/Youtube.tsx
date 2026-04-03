@@ -1660,7 +1660,7 @@ export default function Page() {
         }
       }
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to load saved data.');
+      await showErr("Oops, couldn't load saved creators. Please try again.");
     } finally {
       setListLoading(false);
     }

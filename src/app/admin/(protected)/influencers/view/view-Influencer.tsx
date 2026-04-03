@@ -571,7 +571,7 @@ export default function AdminInfluencerView() {
 
         setPaymentDetails(paymentResp?.data || []);
       } catch (e: any) {
-        setError(e?.message ?? "Failed to load influencer");
+        setError("Oops! Something went wrong while fetching influencer details. Please check your connection and try again.");
       } finally {
         setLoading(false);
         setPaymentLoading(false);

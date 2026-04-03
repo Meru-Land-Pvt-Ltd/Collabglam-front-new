@@ -121,7 +121,7 @@ export default function CampaignsPage() {
       const resp = await get<CampaignListResponse>('/admins/campaign/list');
       setItems(Array.isArray(resp?.data) ? resp.data : []);
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to load campaigns.');
+      await showErr("Oops! Something went wrong while loading campaigns. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

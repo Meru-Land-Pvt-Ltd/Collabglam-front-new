@@ -35,6 +35,7 @@ import CampaignFilter, {
   type SelectOption,
 } from "./CampaignFilter";
 import CampaignCardMenu from "@/components/ui/brand/campaign-card-menu";
+import { friendlyBrandError } from "@/lib/error";
 
 type Props = {
   title: string;
@@ -217,11 +218,10 @@ function LockedShell({
     >
       {locked ? (
         <div
-          className={`pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 transition-all duration-100 ${
-            showTip
-              ? "translate-y-0 opacity-100"
-              : "-translate-y-1 opacity-0"
-          }`}
+          className={`pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 transition-all duration-100 ${showTip
+            ? "translate-y-0 opacity-100"
+            : "-translate-y-1 opacity-0"
+            }`}
         >
           <div className="rounded-full border border-white/20 bg-black/15 px-3 py-1.5 text-[15px] font-medium text-black shadow-lg whitespace-nowrap">
             {LOCK_TOOLTIP}
@@ -588,7 +588,7 @@ export default function CampaignListPage({
 
     const fetchData = async () => {
       if (!brandId) {
-        setErrMsg("Brand ID is required.");
+        setErrMsg("Your session has expired. Please log in again.");
         setHasLoadedOnce(true);
         setItems([]);
         setHasMore(false);
@@ -631,7 +631,7 @@ export default function CampaignListPage({
       } catch (e) {
         if (cancelled) return;
         setHasLoadedOnce(true);
-        setErrMsg(getApiErrorMessage(e, "Failed to load campaigns"));
+        setErrMsg(friendlyBrandError(e, brandId));
         if (page === 1) setItems([]);
       } finally {
         if (cancelled) return;
@@ -717,7 +717,7 @@ export default function CampaignListPage({
     ];
 
     return (
-      <LockedShell key={campaignId} locked={locked} radiusClass="rounded-[1rem]"> 
+      <LockedShell key={campaignId} locked={locked} radiusClass="rounded-[1rem]">
         <BrandCampaignCard
           className="min-w-0"
           size="md"
@@ -819,7 +819,7 @@ export default function CampaignListPage({
       const acceptedCount = c.acceptedContracts ?? 0;
       const totalInfluencers = c.numberOfInfluencers ?? 0;
       const campaignBudget = c.campaignBudget ?? 0;
-      
+
 
       const handleView = () => {
         if (locked) return;

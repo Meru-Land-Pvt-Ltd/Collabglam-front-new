@@ -437,8 +437,6 @@ function getAtPath(obj: any, path: string, fallback: any = "") {
   return value === undefined || value === null ? fallback : value;
 }
 
-
-
 function setAtPath<T extends Record<string, any>>(obj: T, path: string, value: any): T {
   const clone = deepClone(obj);
   const keys = String(path).split(".");
@@ -660,6 +658,11 @@ function createDefaultContractForm(): ContractFormState {
   };
 }
 
+/** Returns the latest non-empty YYYY-MM-DD string among the arguments. */
+function maxDate(...dates: string[]): string {
+  return dates.filter(Boolean).sort().at(-1) ?? "";
+}
+
 function toInputDate(v?: string | Date | null) {
   if (!v) return "";
   const d = new Date(v);
@@ -730,15 +733,12 @@ function extractBrandSignature(response: any) {
   const payload = response?.data ?? response ?? {};
   const message = String(payload?.message || "");
 
-  // The record might be an object (from some endpoints) or the payload itself is the doc
   const record =
     payload?.data ||
     payload?.activeSignature ||
     payload?.brandSignature ||
     null;
 
-  // ✅ _id is at the TOP LEVEL of payload (from GET /contract/signature/:brandId)
-  // record?.signature is the data URL string — not an object with _id
   const signatureId =
     typeof payload?._id === "string" && payload._id
       ? payload._id
@@ -746,7 +746,6 @@ function extractBrandSignature(response: any) {
         ? record._id
         : "";
 
-  // signature is also directly on payload
   const rawSignature =
     typeof payload?.signature === "string" && payload.signature
       ? payload.signature
@@ -838,22 +837,18 @@ export default function ContractSidebarExtracted({
       try {
         setContractLoading(true);
 
-        // 1. If preview already exists, download that directly
         if (previewBlob) {
           const url = URL.createObjectURL(previewBlob);
-
           const link = document.createElement("a");
           link.href = url;
           link.download = filename;
           document.body.appendChild(link);
           link.click();
           link.remove();
-
           URL.revokeObjectURL(url);
           return;
         }
 
-        // 2. Otherwise fetch saved/generated contract from backend
         const contractId = currentContract?.contractId;
         if (!contractId) {
           Swal.fire(
@@ -917,9 +912,9 @@ export default function ContractSidebarExtracted({
         console.log("Signature check →", { hasSignature, signatureId });
 
         if (hasSignature) {
-          setSignatureStatus("exists");          // ← THIS WAS MISSING
-          setActiveBrandSignatureSrc(src || ""); // ← THIS WAS MISSING
-          setActiveBrandSignatureData(signatureData || ""); // ← THIS WAS MISSING
+          setSignatureStatus("exists");
+          setActiveBrandSignatureSrc(src || "");
+          setActiveBrandSignatureData(signatureData || "");
           setActiveBrandSignatureId(signatureId || "");
         } else {
           setSignatureStatus("missing");
@@ -945,15 +940,14 @@ export default function ContractSidebarExtracted({
 
     return () => { mounted = false; };
   }, [open, resolvedBrandId]);
+
   useEffect(() => {
     if (!open) return;
-
     setInlineSignatureTab("default");
     setInlineDrawnSig("");
     setInlineAgreed(false);
     setInlineShowError(false);
   }, [open]);
-
 
   useEffect(() => {
     if (brandIdProp) {
@@ -986,11 +980,13 @@ export default function ContractSidebarExtracted({
   const setContractField = useCallback((path: string, value: any) => {
     setContractForm((prev) => setAtPath(prev, path, value));
   }, []);
+
   const preShootScriptRequiredValue = getAtPath(
     contractForm,
     "scheduleA.preShootScriptRequired",
     ""
   );
+
   const prefillFormFor = useCallback(
     (inf: any, meta?: ContractMeta | null) => {
       const base = createDefaultContractForm();
@@ -1001,8 +997,6 @@ export default function ContractSidebarExtracted({
         base.brand.noticeEmail = localStorage.getItem("brandEmail") || "";
         base.brand.noticePhone = localStorage.getItem("brandPhone") || "";
         base.brand.billingAddress = localStorage.getItem("brandAddress") || "";
-        // base.brand.brandPoc = localStorage.getItem("brandPOC") || "";
-        // base.brand.brandPocDesignation = localStorage.getItem("brandPOCDesignation") || "";
       }
 
       base.influencer.legalName = inf?.name || "";
@@ -1159,9 +1153,7 @@ export default function ContractSidebarExtracted({
       }
     })();
 
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [
     open,
     resolvedBrandId,
@@ -1225,9 +1217,7 @@ export default function ContractSidebarExtracted({
       }
     })();
 
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [open]);
 
   useEffect(() => {
@@ -1320,10 +1310,15 @@ export default function ContractSidebarExtracted({
     };
   }, [buildContentPayload]);
 
+  // ---------------------------------------------------------------------------
+  // validateForPreview — includes date-ordering rules:
+  //   Effective Date ≤ Pre-shoot Due (if any) ≤ Draft Due (if any) ≤ Live Date
+  // ---------------------------------------------------------------------------
   const validateForPreview = useCallback(() => {
     const nextErrors: Record<string, string> = {};
     const add = (key: string, message: string) => {
-      nextErrors[key] = message;
+      // Only keep the first error per key so messages stay readable
+      if (!nextErrors[key]) nextErrors[key] = message;
     };
 
     const influencerFeeRaw = String(
@@ -1339,6 +1334,7 @@ export default function ContractSidebarExtracted({
     );
     const reviewDays = Number(reviewDaysRaw);
 
+    // ── Required fields ──────────────────────────────────────────────────────
     if (!String(contractForm.brand.legalName ?? "").trim()) {
       add("brand.legalName", "Brand legal name is required.");
     }
@@ -1354,14 +1350,12 @@ export default function ContractSidebarExtracted({
     if (!contractForm.campaign.paymentType) {
       add("campaign.paymentType", "Payment type is required.");
     }
-
     if (!String(contractForm.scheduleA.dispute.disputeResolutionMethod ?? "").trim()) {
       add(
         "scheduleA.dispute.disputeResolutionMethod",
         "Dispute resolution method is required."
       );
     }
-
     if (activePaymentType !== PAYMENT_TYPE.GIFTING) {
       if (
         !influencerFeeRaw.trim() ||
@@ -1374,7 +1368,6 @@ export default function ContractSidebarExtracted({
         );
       }
     }
-
     if (activePaymentType === PAYMENT_TYPE.MILESTONE) {
       const milestones = contractForm.scheduleA.commercial.milestones || [];
       if (!milestones.length) {
@@ -1393,49 +1386,78 @@ export default function ContractSidebarExtracted({
         }
       }
     }
-
     if (Number.isNaN(revisionValue) || revisionValue < 0) {
       add(
         "scheduleA.review.includedRevisionRounds",
         "Revision rounds must be zero or more."
       );
     }
-
     if (Number.isNaN(reviewDays) || reviewDays < 0) {
       add(
         "scheduleA.preShootScriptReviewBusinessDays",
         "Review business days must be zero or more."
       );
     }
-
     if (!requestedEffDate) {
       add("requestedEffDate", "Requested effective date is required.");
     }
-
     if (!deliverables.length) {
       add("scheduleA.deliverables", "Add at least one deliverable.");
-    } else {
-      const messages: string[] = [];
-      deliverables.forEach((row, index) => {
-        const label = `Deliverable #${index + 1}`;
-        const qtyNum = Number(row.qty || "");
-        // if (!row.deliverableFormat.trim()) {
-        //   messages.push(`${label}: deliverable format is required.`);
-        // }
-        // if (!row.platform.trim()) {
-        //   messages.push(`${label}: platform is required.`);
-        // }
-        // if (!row.handle.trim()) {
-        //   messages.push(`${label}: handle is required.`);
-        // }
-        // if (!row.qty.trim() || Number.isNaN(qtyNum) || qtyNum < 1) {
-        //   messages.push(`${label}: quantity must be at least 1.`);
-        // }
-      });
-      if (messages.length) {
-        add("scheduleA.deliverables", messages.join(" "));
-      }
     }
+
+    // ── Date ordering: Effective → Pre-shoot → Draft → Live ─────────────────
+    const effDate = requestedEffDate;
+    const isPreShoot = contractForm.scheduleA.preShootScriptRequired === "yes";
+    const preShootDue = isPreShoot
+      ? String(contractForm.scheduleA.preShootScriptDue || "")
+      : "";
+
+    // 1. Pre-shoot must be ≥ effective date
+    if (effDate && isPreShoot && preShootDue && preShootDue < effDate) {
+      add(
+        "scheduleA.preShootScriptDue",
+        `Pre-shoot script due (${preShootDue}) must be on or after the effective date (${effDate}).`
+      );
+    }
+
+    deliverables.forEach((row, index) => {
+      const label = `Deliverable #${index + 1}`;
+
+      // 2. Draft due must be ≥ effective date AND ≥ pre-shoot due
+      if (row.draftRequired && row.draftDue) {
+        if (effDate && row.draftDue < effDate) {
+          add(
+            `deliverable.draftDue.${row.id}`,
+            `${label}: draft due (${row.draftDue}) must be on or after the effective date (${effDate}).`
+          );
+        } else if (preShootDue && row.draftDue < preShootDue) {
+          add(
+            `deliverable.draftDue.${row.id}`,
+            `${label}: draft due (${row.draftDue}) must be on or after the pre-shoot script due date (${preShootDue}).`
+          );
+        }
+      }
+
+      // 3. Live date must be ≥ effective date AND ≥ pre-shoot due AND ≥ draft due
+      if (row.liveDate) {
+        if (effDate && row.liveDate < effDate) {
+          add(
+            `deliverable.liveDate.${row.id}`,
+            `${label}: live date (${row.liveDate}) must be on or after the effective date (${effDate}).`
+          );
+        } else if (preShootDue && row.liveDate < preShootDue) {
+          add(
+            `deliverable.liveDate.${row.id}`,
+            `${label}: live date (${row.liveDate}) must be on or after the pre-shoot script due date (${preShootDue}).`
+          );
+        } else if (row.draftRequired && row.draftDue && row.liveDate < row.draftDue) {
+          add(
+            `deliverable.liveDate.${row.id}`,
+            `${label}: live date (${row.liveDate}) must be on or after the draft due date (${row.draftDue}).`
+          );
+        }
+      }
+    });
 
     setFormErrors(nextErrors);
 
@@ -1446,7 +1468,6 @@ export default function ContractSidebarExtracted({
 
     return true;
   }, [activePaymentType, contractForm, deliverables, requestedEffDate]);
-
 
   const handleOpenPreviewInNewTab = useCallback(() => {
     if (!previewUrl) {
@@ -1543,26 +1564,16 @@ export default function ContractSidebarExtracted({
       const contentType =
         res?.headers?.["content-type"] || res?.headers?.["Content-Type"] || blob.type;
 
-      console.log("Preview response content-type:", contentType);
-      console.log("Preview blob type:", blob.type);
-      console.log("Preview blob size:", blob.size);
-
       if (!contentType?.includes("pdf") && blob.type && !blob.type.includes("pdf")) {
         let serverMessage = "Server did not return a PDF preview.";
-
         try {
           const text = await blob.text();
-          console.error("Non-PDF preview response:", text);
           serverMessage = text || serverMessage;
-        } catch (readErr) {
-          console.error("Could not read non-PDF blob:", readErr);
-        }
-
+        } catch { /* ignore */ }
         throw new Error(serverMessage);
       }
 
       setPreviewBlob(blob);
-
       setPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(blob);
@@ -1574,8 +1585,6 @@ export default function ContractSidebarExtracted({
         text: isBulkMode ? "Sample preview generated for bulk contract." : undefined,
       });
     } catch (e: any) {
-      console.error("Preview generation failed:", e);
-
       let errorText =
         e?.response?.data?.message ||
         e?.message ||
@@ -1585,17 +1594,10 @@ export default function ContractSidebarExtracted({
         try {
           const blobText = await e.response.data.text();
           errorText = blobText || errorText;
-          console.error("Preview error blob text:", blobText);
-        } catch (blobErr) {
-          console.error("Could not parse error blob:", blobErr);
-        }
+        } catch { /* ignore */ }
       }
 
-      toast({
-        icon: "error",
-        title: "Preview failed",
-        text: errorText,
-      });
+      toast({ icon: "error", title: "Preview failed", text: errorText });
     } finally {
       setIsPreviewLoading(false);
     }
@@ -1626,11 +1628,7 @@ export default function ContractSidebarExtracted({
           .filter(Boolean);
 
         if (!influencerIds.length) {
-          toast({
-            icon: "error",
-            title: "No influencer selected",
-            text: "Please select at least one influencer.",
-          });
+          toast({ icon: "error", title: "No influencer selected", text: "Please select at least one influencer." });
           return;
         }
 
@@ -1641,7 +1639,6 @@ export default function ContractSidebarExtracted({
           content: buildBulkContentPayload(),
           requestedEffectiveDate: requestedEffDate,
           requestedEffectiveDateTimezone: requestedEffTz,
-          // ...(signatureBrand ? { signatureId } : {}),
           signatureBrand: signatureId
         });
 
@@ -1660,15 +1657,9 @@ export default function ContractSidebarExtracted({
           content: contentWithSig,
           requestedEffectiveDate: requestedEffDate,
           requestedEffectiveDateTimezone: requestedEffTz,
-          // ...(signatureBrand ? { signatureId } : {}),
           signatureBrand: signatureId
         });
-
-        toast({
-          icon: "success",
-          title: "Sent",
-          text: "Contract created and shared.",
-        });
+        toast({ icon: "success", title: "Sent", text: "Contract created and shared." });
       } else if (isRejectedMeta(currentContract)) {
         await post("/contract/resend", {
           contractId: currentContract.contractId,
@@ -1677,12 +1668,7 @@ export default function ContractSidebarExtracted({
           requestedEffectiveDateTimezone: requestedEffTz,
           ...(signatureBrand ? { signatureBrand } : {}),
         });
-
-        toast({
-          icon: "success",
-          title: "Resent",
-          text: "Contract resent successfully.",
-        });
+        toast({ icon: "success", title: "Resent", text: "Contract resent successfully." });
       } else {
         await post("/contract/brand/update", {
           contractId: currentContract._id || "",
@@ -1691,12 +1677,7 @@ export default function ContractSidebarExtracted({
           brandUpdates: buildBrandUpdatesPayload(),
           ...(signatureBrand ? { signatureBrand } : {}),
         });
-
-        toast({
-          icon: "success",
-          title: "Updated",
-          text: "Contract updated and shared.",
-        });
+        toast({ icon: "success", title: "Updated", text: "Contract updated and shared." });
       }
 
       await onSuccess?.();
@@ -1725,15 +1706,12 @@ export default function ContractSidebarExtracted({
     onSuccess,
     onClose,
   ]);
+
   const getLatestBrandSignature = useCallback(async (): Promise<{ signatureData: string; signatureId: string }> => {
     if (!resolvedBrandId) return { signatureData: "", signatureId: "" };
-
     try {
       const res = await apigetSignatureExistance(resolvedBrandId);
       const { hasSignature, src, signatureData, signatureId } = extractBrandSignature(res);
-
-      console.log("Fresh signature fetch:", { hasSignature, signatureId });
-
       if (hasSignature) {
         setSignatureStatus("exists");
         setActiveBrandSignatureSrc(src || "");
@@ -1741,17 +1719,17 @@ export default function ContractSidebarExtracted({
         setActiveBrandSignatureId(signatureId || "");
         return { signatureData: signatureData || "", signatureId: signatureId || "" };
       }
-
       setSignatureStatus("missing");
       setActiveBrandSignatureSrc("");
       setActiveBrandSignatureData("");
       setActiveBrandSignatureId("");
       return { signatureData: "", signatureId: "" };
-    } catch (error: any) {
+    } catch {
       setActiveBrandSignatureId("");
       return { signatureData: "", signatureId: "" };
     }
   }, [resolvedBrandId]);
+
   const handleSubmit = useCallback(async () => {
     if (!resolvedBrandId || !campaignId) return;
 
@@ -1765,10 +1743,8 @@ export default function ContractSidebarExtracted({
     const { signatureData, signatureId } = await getLatestBrandSignature();
 
     if (signatureData) {
-      // Signature exists — require inline agreement
       if (!inlineAgreed) {
         setInlineShowError(true);
-        // Scroll to signature section
         document.getElementById("signature-section")?.scrollIntoView({ behavior: "smooth" });
         return;
       }
@@ -1776,7 +1752,6 @@ export default function ContractSidebarExtracted({
       return;
     }
 
-    // No signature — open modal
     setShowSignatureModal(true);
   }, [
     resolvedBrandId,
@@ -1787,6 +1762,7 @@ export default function ContractSidebarExtracted({
     inlineAgreed,
     handleActualSubmit,
   ]);
+
   const submitLabel = isBulkMode
     ? "Send Bulk Contracts"
     : !currentContract?.contractId
@@ -1796,6 +1772,38 @@ export default function ContractSidebarExtracted({
         : "Update Contract";
 
   const todayStr = toInputDate(new Date());
+
+  // ---------------------------------------------------------------------------
+  // Derived min-date values for ordered date inputs
+  // Order: effectiveDate → preShootDue → draftDue → liveDate
+  // ---------------------------------------------------------------------------
+  const preShootDueValue = contractForm.scheduleA.preShootScriptRequired === "yes"
+    ? String(contractForm.scheduleA.preShootScriptDue || "")
+    : "";
+
+  /** Earliest allowed date for pre-shoot script due. */
+  const minPreShootDue = maxDate(todayStr, requestedEffDate);
+
+  /**
+   * Per-deliverable min dates. Memoised so re-renders are cheap.
+   * Returns { minDraftDue, minLiveDate } keyed by deliverable id.
+   */
+  const deliverableMinDates = useMemo(() => {
+    return deliverables.reduce<Record<string, { minDraftDue: string; minLiveDate: string }>>(
+      (acc, row) => {
+        const minDraftDue = maxDate(todayStr, requestedEffDate, preShootDueValue);
+        const minLiveDate = maxDate(
+          todayStr,
+          requestedEffDate,
+          preShootDueValue,
+          row.draftRequired ? row.draftDue : ""
+        );
+        acc[row.id] = { minDraftDue, minLiveDate };
+        return acc;
+      },
+      {}
+    );
+  }, [deliverables, todayStr, requestedEffDate, preShootDueValue]);
 
   const usageRightOptions = useMemo(
     () =>
@@ -1826,36 +1834,16 @@ export default function ContractSidebarExtracted({
     },
     [contractForm.scheduleA.usageRights.rows, setContractField]
   );
+
   const handlePaymentTypeChange = useCallback((value: string) => {
     const nextType = normalizePaymentType(value);
-
     setContractForm((prev) => {
       const next = deepClone(prev);
       next.campaign.paymentType = nextType;
-
-      // if (nextType === PAYMENT_TYPE.MILESTONE) {
-      //   if (!next.scheduleA.commercial.milestones.length) {
-      //     next.scheduleA.commercial.milestones = [createDefaultCommercialMilestone()];
-      //   }
-      //   next.scheduleA.commercial.paymentStructure = "";
-      // }
-
-      // if (nextType === PAYMENT_TYPE.FIXED) {
-      //   next.scheduleA.commercial.milestones = [];
-      //   if (!next.scheduleA.commercial.paymentStructure) {
-      //     next.scheduleA.commercial.paymentStructure = "50% advance / 50% balance";
-      //   }
-      // }
-
-      // if (nextType === PAYMENT_TYPE.GIFTING) {
-      //   next.scheduleA.commercial.milestones = [];
-      //   next.scheduleA.commercial.paymentStructure = "";
-      //   next.scheduleA.commercial.totalCampaignFee = "0";
-      // }
-
       return next;
     });
   }, []);
+
   if (!open) return null;
   if (!isBulkMode && !primaryInfluencer) return null;
   if (isBulkMode && !bulkInfluencers?.length) return null;
@@ -1892,13 +1880,9 @@ export default function ContractSidebarExtracted({
               disabled={isPreviewLoading || isSubmitLoading || !resolvedBrandId}
             >
               {isPreviewLoading ? (
-                <>
-                  <span className="mr-2 animate-spin">⏳</span> Generating…
-                </>
+                <><span className="mr-2 animate-spin">⏳</span> Generating…</>
               ) : (
-                <>
-                  <Eye className="mr-2 h-5 w-5" /> Preview
-                </>
+                <><Eye className="mr-2 h-5 w-5" /> Preview</>
               )}
             </Button>
 
@@ -1907,9 +1891,7 @@ export default function ContractSidebarExtracted({
               disabled={!previewUrl || isSubmitLoading || isPreviewLoading || !resolvedBrandId}
             >
               {isSubmitLoading ? (
-                <>
-                  <span className="mr-2 animate-spin">⏳</span> Processing…
-                </>
+                <><span className="mr-2 animate-spin">⏳</span> Processing…</>
               ) : isBulkMode ? (
                 `${submitLabel}${bulkInfluencers.length ? ` (${bulkInfluencers.length})` : ""}`
               ) : (
@@ -1923,6 +1905,7 @@ export default function ContractSidebarExtracted({
           <div className="p-6 text-sm text-gray-600">Loading contract…</div>
         ) : (
           <>
+            {/* ── Brand ────────────────────────────────────────────────────── */}
             <SidebarSection title="Brand" icon={<FileText className="h-4 w-4" />}>
               <div className="space-y-3">
                 <FloatingInput
@@ -1930,47 +1913,19 @@ export default function ContractSidebarExtracted({
                   label="Brand Legal Name"
                   info={SIDEBAR_TOOLTIPS.brandLegalName}
                   value={getAtPath(contractForm, "brand.legalName")}
-                  onValueChange={(value: string) =>
-                    setContractField("brand.legalName", value)
-                  }
+                  onValueChange={(value: string) => setContractField("brand.legalName", value)}
                   state={formErrors["brand.legalName"] ? "error" : undefined}
                   errorText={formErrors["brand.legalName"] || ""}
                   required
                 />
-
                 <FloatingInput
                   id="brand-contact-person"
                   label="Contact Person Name"
                   info={SIDEBAR_TOOLTIPS.brandContactPerson}
                   value={getAtPath(contractForm, "brand.contactPersonName")}
-                  onValueChange={(value: string) =>
-                    setContractField("brand.contactPersonName", value)
-                  }
+                  onValueChange={(value: string) => setContractField("brand.contactPersonName", value)}
                   required
                 />
-
-                {/* <FloatingInput
-                  id="brand-notice-email"
-                  label="Notice Email"
-                  info={SIDEBAR_TOOLTIPS.brandNoticeEmail}
-                  value={getAtPath(contractForm, "brand.noticeEmail")}
-                  onValueChange={(value: string) =>
-                    setContractField("brand.noticeEmail", value)
-                  }
-                  required
-                /> */}
-
-                {/* <FloatingInput
-                  id="brand-notice-phone"
-                  label="Notice Phone"
-                  info={SIDEBAR_TOOLTIPS.brandNoticePhone}
-                  value={getAtPath(contractForm, "brand.noticePhone")}
-                  onValueChange={(value: string) =>
-                    setContractField("brand.noticePhone", value)
-                  }
-                  required
-                /> */}
-
                 <LabeledTextarea
                   id="brand-billing-address"
                   label="Billing Address"
@@ -1981,31 +1936,10 @@ export default function ContractSidebarExtracted({
                   }
                   required
                 />
-
-                {/* <FloatingInput
-                  id="brand-poc"
-                  label="Brand POC"
-                  info={SIDEBAR_TOOLTIPS.brandPoc}
-                  value={getAtPath(contractForm, "brand.brandPoc")}
-                  onValueChange={(value: string) =>
-                    setContractField("brand.brandPoc", value)
-                  }
-                // required
-                /> */}
-
-                {/* <FloatingInput
-                  id="brand-poc-designation"
-                  label="Brand POC Designation"
-                  info={SIDEBAR_TOOLTIPS.brandPocDesignation}
-                  value={getAtPath(contractForm, "brand.brandPocDesignation")}
-                  onValueChange={(value: string) =>
-                    setContractField("brand.brandPocDesignation", value)
-                  }
-                // required
-                /> */}
               </div>
             </SidebarSection>
 
+            {/* ── Campaign Overview ─────────────────────────────────────────── */}
             <SidebarSection title="Campaign Overview" icon={<Info className="h-4 w-4" />}>
               <div className="space-y-4">
                 <FloatingInput
@@ -2013,14 +1947,11 @@ export default function ContractSidebarExtracted({
                   label="Campaign Title / ID"
                   info={SIDEBAR_TOOLTIPS.campaignTitle}
                   value={getAtPath(contractForm, "campaign.campaignTitleOrId")}
-                  onValueChange={(value: string) =>
-                    setContractField("campaign.campaignTitleOrId", value)
-                  }
+                  onValueChange={(value: string) => setContractField("campaign.campaignTitleOrId", value)}
                   state={formErrors["campaign.campaignTitleOrId"] ? "error" : undefined}
                   errorText={formErrors["campaign.campaignTitleOrId"] || ""}
                   required
                 />
-
                 <LabeledTextarea
                   id="campaign-products-services"
                   label="Products / Services Covered"
@@ -2030,7 +1961,6 @@ export default function ContractSidebarExtracted({
                     setContractField("campaign.productsServicesCovered", e.target.value)
                   }
                 />
-
                 <FloatingSelect
                   label="Campaign Payment Type"
                   value={getAtPath(contractForm, "campaign.paymentType")}
@@ -2058,6 +1988,7 @@ export default function ContractSidebarExtracted({
                     }
                   />
 
+                  {/* ① Effective Date — anchor for all downstream dates */}
                   <FloatingDateInput
                     id="requested-effective-date"
                     label="Requested Effective Date"
@@ -2091,190 +2022,195 @@ export default function ContractSidebarExtracted({
               </div>
             </SidebarSection>
 
+            {/* ── Deliverables & Publication Timeline ──────────────────────── */}
             <SidebarSection
               title="Deliverables & Publication Timeline"
               icon={<ClipboardText className="h-4 w-4" />}
             >
               <div className="space-y-4">
+                {/* Date-order hint banner */}
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs text-blue-700">
+                  <span className="font-semibold">Date order enforced:</span>{" "}
+                  Effective Date
+                  {contractForm.scheduleA.preShootScriptRequired === "yes" && " → Pre-shoot Due"}
+                  {" → Draft Due → Live Date"}
+                </div>
+
                 {formErrors["scheduleA.deliverables"] ? (
-                  <div className="text-xs text-red-600">
-                    {formErrors["scheduleA.deliverables"]}
-                  </div>
+                  <div className="text-xs text-red-600">{formErrors["scheduleA.deliverables"]}</div>
                 ) : null}
 
-                {deliverables.map((row, index) => (
-                  <div
-                    key={row.id}
-                    className="space-y-3 rounded-xl border border-gray-200 bg-white p-4"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold text-gray-800">
-                        Deliverable #{index + 1}
+                {deliverables.map((row, index) => {
+                  const { minDraftDue, minLiveDate } = deliverableMinDates[row.id] ?? {
+                    minDraftDue: todayStr,
+                    minLiveDate: todayStr,
+                  };
+                  return (
+                    <div
+                      key={row.id}
+                      className="space-y-3 rounded-xl border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-gray-800">
+                          Deliverable #{index + 1}
+                        </div>
+                        {deliverables.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeliverables((prev) => prev.filter((item) => item.id !== row.id))
+                            }
+                            className="text-xs text-gray-500 hover:text-red-600"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
                       </div>
 
-                      {deliverables.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() =>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <FloatingSelect
+                          label="Platform"
+                          info={SIDEBAR_TOOLTIPS.platformHandle}
+                          value={row.platform}
+                          onValueChange={(value) =>
                             setDeliverables((prev) =>
-                              prev.filter((item) => item.id !== row.id)
+                              prev.map((item) =>
+                                item.id === row.id ? { ...item, platform: value } : item
+                              )
                             )
                           }
-                          className="text-xs text-gray-500 hover:text-red-600"
+                          searchable={false}
                         >
-                          Remove
-                        </button>
-                      ) : null}
-                    </div>
+                          <SelectItem value="Instagram">Instagram</SelectItem>
+                          <SelectItem value="YouTube">YouTube</SelectItem>
+                          <SelectItem value="TikTok">TikTok</SelectItem>
+                        </FloatingSelect>
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      {/* <FloatingInput
-                        id={`deliverable-sr-${row.id}`}
-                        label="Sr. No."
-                        type="number"
-                        value={String(index + 1)}
-                        onValueChange={() => undefined}
-                        disabled
-                      /> */}
-
-                      <FloatingSelect
-                        label="Platform"
-                        info={SIDEBAR_TOOLTIPS.platformHandle}
-                        value={row.platform}
-                        onValueChange={(value) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, platform: value } : item
-                            )
-                          )
-                        }
-                        searchable={false}
-                      >
-                        <SelectItem value="Instagram">Instagram</SelectItem>
-                        <SelectItem value="YouTube">YouTube</SelectItem>
-                        <SelectItem value="TikTok">TikTok</SelectItem>
-                      </FloatingSelect>
-
-                      <FloatingInput
-                        id={`deliverable-handle-${row.id}`}
-                        label="Handle"
-                        info="Creator handle for this platform."
-                        value={row.handle}
-                        onValueChange={(value: string) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, handle: value } : item
-                            )
-                          )
-                        }
-                      />
-
-                      <FloatingInput
-                        id={`deliverable-qty-${row.id}`}
-                        label="Qty"
-                        info={SIDEBAR_TOOLTIPS.qty}
-                        type="number"
-                        value={row.qty}
-                        onValueChange={(value: string) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, qty: value } : item
-                            )
-                          )
-                        }
-                      />
-
-                      <FloatingSelect
-                        label="Deliverable Format"
-                        info={SIDEBAR_TOOLTIPS.deliverableFormat}
-                        value={row.deliverableFormat}
-                        onValueChange={(value) =>
-                          setDeliverables((prev) =>
-                            prev.map((item) =>
-                              item.id === row.id ? { ...item, deliverableFormat: value } : item
-                            )
-                          )
-                        }
-                        searchable={false}
-                      >
-                        {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </FloatingSelect>
-                    </div>
-
-
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            id={`deliverable-draft-required-${row.id}`}
-                            type="checkbox"
-                            checked={row.draftRequired}
-                            onChange={(e) =>
-                              setDeliverables((prev) =>
-                                prev.map((item) =>
-                                  item.id === row.id
-                                    ? {
-                                      ...item,
-                                      draftRequired: e.target.checked,
-                                      draftDue: e.target.checked ? item.draftDue : "",
-                                    }
-                                    : item
-                                )
+                        <FloatingInput
+                          id={`deliverable-handle-${row.id}`}
+                          label="Handle"
+                          info="Creator handle for this platform."
+                          value={row.handle}
+                          onValueChange={(value: string) =>
+                            setDeliverables((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id ? { ...item, handle: value } : item
                               )
-                            }
-                            className="h-4 w-4 rounded border-gray-300"
-                          />
-                          <label
-                            htmlFor={`deliverable-draft-required-${row.id}`}
-                            className="text-sm font-medium text-gray-700"
-                          >
-                            Draft Required
-                          </label>
-                        </div>
+                            )
+                          }
+                        />
 
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <FloatingDateInput
-                            id={`deliverable-draft-${row.id}`}
-                            label="Draft Due"
-                            info={SIDEBAR_TOOLTIPS.draftDue}
-                            type="date"
-                            value={row.draftDue}
-                            min={todayStr}
-                            disabled={!row.draftRequired}
-                            onValueChange={(value) =>
-                              setDeliverables((prev) =>
-                                prev.map((item) =>
-                                  item.id === row.id ? { ...item, draftDue: value } : item
-                                )
+                        <FloatingInput
+                          id={`deliverable-qty-${row.id}`}
+                          label="Qty"
+                          info={SIDEBAR_TOOLTIPS.qty}
+                          type="number"
+                          value={row.qty}
+                          onValueChange={(value: string) =>
+                            setDeliverables((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id ? { ...item, qty: value } : item
                               )
-                            }
-                          />
+                            )
+                          }
+                        />
 
-                          <FloatingDateInput
-                            id={`deliverable-live-${row.id}`}
-                            label="Live Date"
-                            info={SIDEBAR_TOOLTIPS.liveDate}
-                            type="date"
-                            value={row.liveDate}
-                            min={todayStr}
-                            onValueChange={(value) =>
-                              setDeliverables((prev) =>
-                                prev.map((item) =>
-                                  item.id === row.id ? { ...item, liveDate: value } : item
-                                )
+                        <FloatingSelect
+                          label="Deliverable Format"
+                          info={SIDEBAR_TOOLTIPS.deliverableFormat}
+                          value={row.deliverableFormat}
+                          onValueChange={(value) =>
+                            setDeliverables((prev) =>
+                              prev.map((item) =>
+                                item.id === row.id ? { ...item, deliverableFormat: value } : item
                               )
-                            }
-                          />
+                            )
+                          }
+                          searchable={false}
+                        >
+                          {DELIVERABLE_FORMAT_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </FloatingSelect>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <input
+                              id={`deliverable-draft-required-${row.id}`}
+                              type="checkbox"
+                              checked={row.draftRequired}
+                              onChange={(e) =>
+                                setDeliverables((prev) =>
+                                  prev.map((item) =>
+                                    item.id === row.id
+                                      ? {
+                                          ...item,
+                                          draftRequired: e.target.checked,
+                                          draftDue: e.target.checked ? item.draftDue : "",
+                                        }
+                                      : item
+                                  )
+                                )
+                              }
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <label
+                              htmlFor={`deliverable-draft-required-${row.id}`}
+                              className="text-sm font-medium text-gray-700"
+                            >
+                              Draft Required
+                            </label>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            {/* ② Draft Due — min = max(effDate, preShootDue) */}
+                            <FloatingDateInput
+                              id={`deliverable-draft-${row.id}`}
+                              label="Draft Due"
+                              info={SIDEBAR_TOOLTIPS.draftDue}
+                              type="date"
+                              value={row.draftDue}
+                              min={minDraftDue || todayStr}
+                              disabled={!row.draftRequired}
+                              onValueChange={(value) =>
+                                setDeliverables((prev) =>
+                                  prev.map((item) =>
+                                    item.id === row.id ? { ...item, draftDue: value } : item
+                                  )
+                                )
+                              }
+                              state={formErrors[`deliverable.draftDue.${row.id}`] ? "error" : undefined}
+                              errorText={formErrors[`deliverable.draftDue.${row.id}`] || ""}
+                            />
+
+                            {/* ③ Live Date — min = max(effDate, preShootDue, draftDue) */}
+                            <FloatingDateInput
+                              id={`deliverable-live-${row.id}`}
+                              label="Live Date"
+                              info={SIDEBAR_TOOLTIPS.liveDate}
+                              type="date"
+                              value={row.liveDate}
+                              min={minLiveDate || todayStr}
+                              onValueChange={(value) =>
+                                setDeliverables((prev) =>
+                                  prev.map((item) =>
+                                    item.id === row.id ? { ...item, liveDate: value } : item
+                                  )
+                                )
+                              }
+                              state={formErrors[`deliverable.liveDate.${row.id}`] ? "error" : undefined}
+                              errorText={formErrors[`deliverable.liveDate.${row.id}`] || ""}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <Button
                   variant="outline"
@@ -2298,7 +2234,6 @@ export default function ContractSidebarExtracted({
                       setContractField("scheduleA.minimumVideoSpecs", e.target.value)
                     }
                   />
-
                   <FloatingTagInput
                     label="Mandatory Tags / Mentions / Links / Codes"
                     info={SIDEBAR_TOOLTIPS.mandatoryTags}
@@ -2317,8 +2252,9 @@ export default function ContractSidebarExtracted({
                 </div>
 
                 <div
-                  className={`grid grid-cols-1 gap-3 ${isPreShootScriptRequired ? "md:grid-cols-3" : "md:grid-cols-1"
-                    }`}
+                  className={`grid grid-cols-1 gap-3 ${
+                    isPreShootScriptRequired ? "md:grid-cols-3" : "md:grid-cols-1"
+                  }`}
                 >
                   <FloatingSelect
                     label="Pre-Shoot Script Required"
@@ -2327,7 +2263,6 @@ export default function ContractSidebarExtracted({
                     onValueChange={(value) => {
                       setContractForm((prev) => {
                         const next = deepClone(prev);
-
                         if (value === "yes") {
                           next.scheduleA.preShootScriptRequired = "yes";
                         } else if (value === "no") {
@@ -2339,7 +2274,6 @@ export default function ContractSidebarExtracted({
                           next.scheduleA.preShootScriptDue = "";
                           next.scheduleA.preShootScriptReviewBusinessDays = "";
                         }
-
                         return next;
                       });
                     }}
@@ -2351,16 +2285,19 @@ export default function ContractSidebarExtracted({
 
                   {isPreShootScriptRequired && (
                     <>
+                      {/* ② Pre-shoot Due — min = max(today, effDate) */}
                       <FloatingDateInput
                         id="pre-shoot-script-due"
                         label="Pre-Shoot Script Due"
                         info={SIDEBAR_TOOLTIPS.preShootScriptDue}
                         type="date"
                         value={getAtPath(contractForm, "scheduleA.preShootScriptDue")}
-                        min={todayStr}
+                        min={minPreShootDue || todayStr}
                         onValueChange={(value) =>
                           setContractField("scheduleA.preShootScriptDue", value)
                         }
+                        state={formErrors["scheduleA.preShootScriptDue"] ? "error" : undefined}
+                        errorText={formErrors["scheduleA.preShootScriptDue"] || ""}
                       />
 
                       <FloatingInput
@@ -2368,24 +2305,16 @@ export default function ContractSidebarExtracted({
                         label="Script Review Business Days"
                         info={SIDEBAR_TOOLTIPS.preShootReviewDays}
                         type="number"
-                        value={getAtPath(
-                          contractForm,
-                          "scheduleA.preShootScriptReviewBusinessDays"
-                        )}
+                        value={getAtPath(contractForm, "scheduleA.preShootScriptReviewBusinessDays")}
                         onValueChange={(value: string) =>
-                          setContractField(
-                            "scheduleA.preShootScriptReviewBusinessDays",
-                            value
-                          )
+                          setContractField("scheduleA.preShootScriptReviewBusinessDays", value)
                         }
                         state={
                           formErrors["scheduleA.preShootScriptReviewBusinessDays"]
                             ? "error"
                             : undefined
                         }
-                        errorText={
-                          formErrors["scheduleA.preShootScriptReviewBusinessDays"] || ""
-                        }
+                        errorText={formErrors["scheduleA.preShootScriptReviewBusinessDays"] || ""}
                       />
                     </>
                   )}
@@ -2393,6 +2322,7 @@ export default function ContractSidebarExtracted({
               </div>
             </SidebarSection>
 
+            {/* ── Review, Revisions & Reshoots ─────────────────────────────── */}
             <SidebarSection
               title="Review, Revisions & Reshoots"
               icon={<PenNib className="h-4 w-4" />}
@@ -2408,13 +2338,10 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.review.includedRevisionRounds", value)
                   }
                   state={
-                    formErrors["scheduleA.review.includedRevisionRounds"]
-                      ? "error"
-                      : undefined
+                    formErrors["scheduleA.review.includedRevisionRounds"] ? "error" : undefined
                   }
                   errorText={formErrors["scheduleA.review.includedRevisionRounds"] || ""}
                 />
-
                 <FloatingInput
                   id="additional-revision-fee"
                   label="Additional Revision Fee"
@@ -2424,7 +2351,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.review.additionalRevisionFee", value)
                   }
                 />
-
                 <FloatingSelect
                   label="Reshoot Obligation"
                   info={SIDEBAR_TOOLTIPS.reshootObligation}
@@ -2440,7 +2366,6 @@ export default function ContractSidebarExtracted({
                     </SelectItem>
                   ))}
                 </FloatingSelect>
-
                 <FloatingInput
                   id="reshoot-fee"
                   label="Reshoot Fee"
@@ -2450,7 +2375,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.review.reshootFee", value)
                   }
                 />
-
                 <FloatingInput
                   id="minimum-live-period"
                   label="Minimum Live Period"
@@ -2463,6 +2387,7 @@ export default function ContractSidebarExtracted({
               </div>
             </SidebarSection>
 
+            {/* ── Commercial Terms ──────────────────────────────────────────── */}
             <SidebarSection title="Commercial Terms" icon={<FileText className="h-4 w-4" />}>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -2476,14 +2401,11 @@ export default function ContractSidebarExtracted({
                       setContractField("scheduleA.commercial.influencerBudget", value)
                     }
                     state={
-                      formErrors["scheduleA.commercial.influencerBudget"]
-                        ? "error"
-                        : undefined
+                      formErrors["scheduleA.commercial.influencerBudget"] ? "error" : undefined
                     }
                     errorText={formErrors["scheduleA.commercial.influencerBudget"] || ""}
                     required
                   />
-
                   <FloatingSelect
                     label="Currency"
                     info={SIDEBAR_TOOLTIPS.currency}
@@ -2492,9 +2414,7 @@ export default function ContractSidebarExtracted({
                       setContractField("scheduleA.commercial.currency", value)
                     }
                     searchable
-                    state={
-                      formErrors["scheduleA.commercial.currency"] ? "error" : undefined
-                    }
+                    state={formErrors["scheduleA.commercial.currency"] ? "error" : undefined}
                     errorText={formErrors["scheduleA.commercial.currency"] || ""}
                     required
                   >
@@ -2523,7 +2443,6 @@ export default function ContractSidebarExtracted({
                         </SelectItem>
                       ))}
                     </FloatingSelect>
-
                     <FloatingInput
                       id="commercial-custom-split"
                       label="Custom"
@@ -2533,7 +2452,6 @@ export default function ContractSidebarExtracted({
                         setContractField("scheduleA.commercial.customSplit", value)
                       }
                     />
-
                     <LabeledTextarea
                       id="advance-payment-trigger"
                       label="Advance Payment Trigger"
@@ -2543,17 +2461,13 @@ export default function ContractSidebarExtracted({
                         setContractField("scheduleA.commercial.advancePaymentTrigger", e.target.value)
                       }
                     />
-
                     <LabeledTextarea
                       id="remaining-payment-trigger"
                       label="Remaining Payment Trigger"
                       info={SIDEBAR_TOOLTIPS.remainingPaymentTrigger}
                       value={getAtPath(contractForm, "scheduleA.commercial.remainingPaymentTrigger")}
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                        setContractField(
-                          "scheduleA.commercial.remainingPaymentTrigger",
-                          e.target.value
-                        )
+                        setContractField("scheduleA.commercial.remainingPaymentTrigger", e.target.value)
                       }
                     />
                   </>
@@ -2573,15 +2487,9 @@ export default function ContractSidebarExtracted({
                   <FloatingSelect
                     label="Payment Processor Fees Borne By"
                     info={SIDEBAR_TOOLTIPS.processorFeesBorneBy}
-                    value={getAtPath(
-                      contractForm,
-                      "scheduleA.commercial.paymentProcessorFeesBorneBy"
-                    )}
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesBorneBy")}
                     onValueChange={(value) =>
-                      setContractField(
-                        "scheduleA.commercial.paymentProcessorFeesBorneBy",
-                        value
-                      )
+                      setContractField("scheduleA.commercial.paymentProcessorFeesBorneBy", value)
                     }
                     searchable={false}
                   >
@@ -2591,20 +2499,13 @@ export default function ContractSidebarExtracted({
                       </SelectItem>
                     ))}
                   </FloatingSelect>
-
                   <FloatingInput
                     id="processor-fees-notes"
                     label="Payment Processor Fee Notes"
                     info={SIDEBAR_TOOLTIPS.processorFeesNotes}
-                    value={getAtPath(
-                      contractForm,
-                      "scheduleA.commercial.paymentProcessorFeesNotes"
-                    )}
+                    value={getAtPath(contractForm, "scheduleA.commercial.paymentProcessorFeesNotes")}
                     onValueChange={(value: string) =>
-                      setContractField(
-                        "scheduleA.commercial.paymentProcessorFeesNotes",
-                        value
-                      )
+                      setContractField("scheduleA.commercial.paymentProcessorFeesNotes", value)
                     }
                   />
                 </div>
@@ -2613,21 +2514,16 @@ export default function ContractSidebarExtracted({
                   id="lane-a-marketplace-fee-note"
                   label="Lane A Marketplace Fee Note"
                   info={SIDEBAR_TOOLTIPS.laneAMarketplaceFeeNote}
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.commercial.laneAMarketplaceFeeNote"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.commercial.laneAMarketplaceFeeNote")}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setContractField(
-                      "scheduleA.commercial.laneAMarketplaceFeeNote",
-                      e.target.value
-                    )
+                    setContractField("scheduleA.commercial.laneAMarketplaceFeeNote", e.target.value)
                   }
                   disabled
                 />
               </div>
             </SidebarSection>
 
+            {/* ── Raw Files & Reporting ─────────────────────────────────────── */}
             <SidebarSection
               title="Raw Files & Reporting"
               icon={<ClipboardText className="h-4 w-4" />}
@@ -2648,7 +2544,6 @@ export default function ContractSidebarExtracted({
                     </SelectItem>
                   ))}
                 </FloatingSelect>
-
                 <FloatingInput
                   id="raw-files-format"
                   label="Format"
@@ -2658,7 +2553,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.rawFiles.format", value)
                   }
                 />
-
                 <FloatingDateInput
                   id="raw-files-delivery-due"
                   label="Delivery Due"
@@ -2670,25 +2564,17 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.rawFiles.deliveryDue", value)
                   }
                 />
-
                 <FloatingDateInput
                   id="analytics-reporting-deadline"
                   label="Analytics Reporting Deadline"
                   info={SIDEBAR_TOOLTIPS.analyticsReportingDeadline}
                   type="date"
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.rawFiles.analyticsReportingDeadline"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.rawFiles.analyticsReportingDeadline")}
                   min={todayStr}
                   onValueChange={(value) =>
-                    setContractField(
-                      "scheduleA.rawFiles.analyticsReportingDeadline",
-                      value
-                    )
+                    setContractField("scheduleA.rawFiles.analyticsReportingDeadline", value)
                   }
                 />
-
                 <FloatingTagInput
                   label="Analytics Reporting Items"
                   info={SIDEBAR_TOOLTIPS.analyticsReportingItems}
@@ -2697,25 +2583,20 @@ export default function ContractSidebarExtracted({
                   )}
                   options={[]}
                   onValueChange={(next) =>
-                    setContractField(
-                      "scheduleA.rawFiles.analyticsReportingItems",
-                      tagsToCsv(next)
-                    )
+                    setContractField("scheduleA.rawFiles.analyticsReportingItems", tagsToCsv(next))
                   }
                   dropdownDirection="up"
                 />
               </div>
             </SidebarSection>
 
+            {/* ── Shipping & Returns ────────────────────────────────────────── */}
             <SidebarSection title="Shipping & Returns" icon={<Info className="h-4 w-4" />}>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingSelect
                   label="Product Shipping Applicable"
                   info={SIDEBAR_TOOLTIPS.productShippingApplicable}
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.shipping.productShippingApplicable"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.shipping.productShippingApplicable")}
                   onValueChange={(value) =>
                     setContractField("scheduleA.shipping.productShippingApplicable", value)
                   }
@@ -2727,7 +2608,6 @@ export default function ContractSidebarExtracted({
                     </SelectItem>
                   ))}
                 </FloatingSelect>
-
                 <FloatingSelect
                   label="Product Returnable"
                   info={SIDEBAR_TOOLTIPS.productReturnable}
@@ -2743,7 +2623,6 @@ export default function ContractSidebarExtracted({
                     </SelectItem>
                   ))}
                 </FloatingSelect>
-
                 <FloatingInput
                   id="ship-to-name"
                   label="Ship-To Name"
@@ -2753,7 +2632,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.shipping.shipToName", value)
                   }
                 />
-
                 <FloatingInput
                   id="ship-to-phone"
                   label="Ship-To Phone"
@@ -2763,7 +2641,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.shipping.shipToPhone", value)
                   }
                 />
-
                 <LabeledTextarea
                   id="ship-to-address"
                   label="Ship-To Address"
@@ -2773,25 +2650,17 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.shipping.shipToAddress", e.target.value)
                   }
                 />
-
                 <FloatingDateInput
                   id="product-receipt-confirmation-deadline"
                   label="Product Receipt Confirmation Deadline"
                   info={SIDEBAR_TOOLTIPS.productReceiptConfirmationDeadline}
                   type="date"
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.shipping.productReceiptConfirmationDeadline"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.shipping.productReceiptConfirmationDeadline")}
                   min={todayStr}
                   onValueChange={(value) =>
-                    setContractField(
-                      "scheduleA.shipping.productReceiptConfirmationDeadline",
-                      value
-                    )
+                    setContractField("scheduleA.shipping.productReceiptConfirmationDeadline", value)
                   }
                 />
-
                 <FloatingInput
                   id="return-window-method"
                   label="Return Window / Method"
@@ -2801,7 +2670,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.shipping.returnWindowMethod", value)
                   }
                 />
-
                 <LabeledTextarea
                   id="risk-of-loss-notes"
                   label="Risk of Loss Notes"
@@ -2814,10 +2682,8 @@ export default function ContractSidebarExtracted({
               </div>
             </SidebarSection>
 
-            <SidebarSection
-              title="Usage Rights"
-              icon={<SealCheck className="h-4 w-4" />}
-            >
+            {/* ── Usage Rights ──────────────────────────────────────────────── */}
+            <SidebarSection title="Usage Rights" icon={<SealCheck className="h-4 w-4" />}>
               <div className="space-y-4">
                 <FloatingMultiSelect
                   label="Granted Usage Rights"
@@ -2828,19 +2694,14 @@ export default function ContractSidebarExtracted({
                   includeAll={false}
                   searchable={false}
                 />
-
                 <div className="space-y-3">
                   {contractForm.scheduleA.usageRights.rows
                     .filter((row) => row.selected)
                     .map((row) => (
-                      <div
-                        key={row.id}
-                        className="rounded-xl border border-gray-200 bg-white p-3"
-                      >
+                      <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-3">
                         <div className="mb-3 text-sm font-semibold text-gray-800">
                           {row.usageRight}
                         </div>
-
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <FloatingInput
                             id={`usage-duration-${row.id}`}
@@ -2856,7 +2717,6 @@ export default function ContractSidebarExtracted({
                               )
                             }
                           />
-
                           <FloatingInput
                             id={`usage-territory-${row.id}`}
                             label="Territory / Notes"
@@ -2866,9 +2726,7 @@ export default function ContractSidebarExtracted({
                               setContractField(
                                 "scheduleA.usageRights.rows",
                                 contractForm.scheduleA.usageRights.rows.map((item) =>
-                                  item.id === row.id
-                                    ? { ...item, territoryNotes: value }
-                                    : item
+                                  item.id === row.id ? { ...item, territoryNotes: value } : item
                                 )
                               )
                             }
@@ -2877,15 +2735,11 @@ export default function ContractSidebarExtracted({
                       </div>
                     ))}
                 </div>
-
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <FloatingSelect
                     label="Attribution Requirement"
                     info={SIDEBAR_TOOLTIPS.attributionRequirement}
-                    value={getAtPath(
-                      contractForm,
-                      "scheduleA.usageRights.attributionRequirement"
-                    )}
+                    value={getAtPath(contractForm, "scheduleA.usageRights.attributionRequirement")}
                     onValueChange={(value) =>
                       setContractField("scheduleA.usageRights.attributionRequirement", value)
                     }
@@ -2897,7 +2751,6 @@ export default function ContractSidebarExtracted({
                       </SelectItem>
                     ))}
                   </FloatingSelect>
-
                   <FloatingSelect
                     label="Editing Rights"
                     info={SIDEBAR_TOOLTIPS.editingRights}
@@ -2914,7 +2767,6 @@ export default function ContractSidebarExtracted({
                     ))}
                   </FloatingSelect>
                 </div>
-
                 <FloatingInput
                   id="attribution-text"
                   label="Attribution Text"
@@ -2924,19 +2776,12 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.usageRights.attributionText", value)
                   }
                 />
-
                 <FloatingSelect
                   label="Music / Stock Asset Responsibility"
                   info={SIDEBAR_TOOLTIPS.musicStockAssetResponsibility}
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.usageRights.musicStockAssetResponsibility"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.usageRights.musicStockAssetResponsibility")}
                   onValueChange={(value) =>
-                    setContractField(
-                      "scheduleA.usageRights.musicStockAssetResponsibility",
-                      value
-                    )
+                    setContractField("scheduleA.usageRights.musicStockAssetResponsibility", value)
                   }
                   searchable={false}
                 >
@@ -2949,6 +2794,7 @@ export default function ContractSidebarExtracted({
               </div>
             </SidebarSection>
 
+            {/* ── Compliance & Brand Safety ─────────────────────────────────── */}
             <SidebarSection
               title="Compliance & Brand Safety"
               icon={<Info className="h-4 w-4" />}
@@ -2958,18 +2804,11 @@ export default function ContractSidebarExtracted({
                   id="creative-brief-mandatory-talking-points"
                   label="Creative Brief / Mandatory Talking Points"
                   info={SIDEBAR_TOOLTIPS.creativeBrief}
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.compliance.creativeBriefMandatoryTalkingPoints"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.compliance.creativeBriefMandatoryTalkingPoints")}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setContractField(
-                      "scheduleA.compliance.creativeBriefMandatoryTalkingPoints",
-                      e.target.value
-                    )
+                    setContractField("scheduleA.compliance.creativeBriefMandatoryTalkingPoints", e.target.value)
                   }
                 />
-
                 <LabeledTextarea
                   id="restricted-statements"
                   label="Restricted Statements"
@@ -2982,10 +2821,8 @@ export default function ContractSidebarExtracted({
               </div>
             </SidebarSection>
 
-            <SidebarSection
-              title="Exclusivity & Morals"
-              icon={<SealCheck className="h-4 w-4" />}
-            >
+            {/* ── Exclusivity & Morals ──────────────────────────────────────── */}
+            <SidebarSection title="Exclusivity & Morals" icon={<SealCheck className="h-4 w-4" />}>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingInput
                   id="competitor-blackout"
@@ -2996,23 +2833,16 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.exclusivity.competitorBlackout", value)
                   }
                 />
-
                 <FloatingTagInput
                   label="Category / Competitor List"
                   info={SIDEBAR_TOOLTIPS.categoryCompetitorList}
-                  value={csvToTags(
-                    getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList")
-                  )}
+                  value={csvToTags(getAtPath(contractForm, "scheduleA.exclusivity.categoryCompetitorList"))}
                   options={[]}
                   onValueChange={(next) =>
-                    setContractField(
-                      "scheduleA.exclusivity.categoryCompetitorList",
-                      tagsToCsv(next)
-                    )
+                    setContractField("scheduleA.exclusivity.categoryCompetitorList", tagsToCsv(next))
                   }
                   dropdownDirection="up"
                 />
-
                 <FloatingInput
                   id="blackout-period"
                   label="Blackout Period"
@@ -3022,14 +2852,10 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.exclusivity.blackoutPeriod", value)
                   }
                 />
-
                 <FloatingSelect
                   label="Optional Morals Clause"
                   info={SIDEBAR_TOOLTIPS.optionalMoralsClause}
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.exclusivity.optionalMoralsClause"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.exclusivity.optionalMoralsClause")}
                   onValueChange={(value) =>
                     setContractField("scheduleA.exclusivity.optionalMoralsClause", value)
                   }
@@ -3044,10 +2870,8 @@ export default function ContractSidebarExtracted({
               </div>
             </SidebarSection>
 
-            <SidebarSection
-              title="Cancellation & Refunds"
-              icon={<Info className="h-4 w-4" />}
-            >
+            {/* ── Cancellation & Refunds ────────────────────────────────────── */}
+            <SidebarSection title="Cancellation & Refunds" icon={<Info className="h-4 w-4" />}>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <LabeledTextarea
                   id="kill-fee-or-prorata"
@@ -3058,25 +2882,19 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.cancellation.killFeeOrProrata", e.target.value)
                   }
                 />
-
                 <LabeledTextarea
                   id="refund-of-unearned-advance"
                   label="Refund of Unearned Advance"
                   info={SIDEBAR_TOOLTIPS.refundOfUnearnedAdvance}
-                  value={getAtPath(
-                    contractForm,
-                    "scheduleA.cancellation.refundOfUnearnedAdvance"
-                  )}
+                  value={getAtPath(contractForm, "scheduleA.cancellation.refundOfUnearnedAdvance")}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setContractField(
-                      "scheduleA.cancellation.refundOfUnearnedAdvance",
-                      e.target.value
-                    )
+                    setContractField("scheduleA.cancellation.refundOfUnearnedAdvance", e.target.value)
                   }
                 />
               </div>
             </SidebarSection>
 
+            {/* ── Dispute & Notices ─────────────────────────────────────────── */}
             <SidebarSection title="Dispute & Notices" icon={<FileText className="h-4 w-4" />}>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <FloatingInput
@@ -3088,7 +2906,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.dispute.governingLaw", value)
                   }
                 />
-
                 <FloatingSelect
                   label="Dispute Resolution Method"
                   info={SIDEBAR_TOOLTIPS.disputeResolutionMethod}
@@ -3109,7 +2926,6 @@ export default function ContractSidebarExtracted({
                     </SelectItem>
                   ))}
                 </FloatingSelect>
-
                 <FloatingInput
                   id="dispute-venue"
                   label="Venue"
@@ -3119,7 +2935,6 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.dispute.disputeVenue", value)
                   }
                 />
-
                 <FloatingInput
                   id="arbitration-seat"
                   label="Arbitration Seat"
@@ -3129,9 +2944,8 @@ export default function ContractSidebarExtracted({
                     setContractField("scheduleA.dispute.arbitrationSeat", value)
                   }
                 />
-
                 <FloatingSelect
-                  label="Attorneys’ Fees"
+                  label="Attorneys' Fees"
                   info={SIDEBAR_TOOLTIPS.attorneysFees}
                   value={getAtPath(contractForm, "scheduleA.dispute.attorneysFees")}
                   onValueChange={(value) =>
@@ -3147,6 +2961,8 @@ export default function ContractSidebarExtracted({
                 </FloatingSelect>
               </div>
             </SidebarSection>
+
+            {/* ── Signature ─────────────────────────────────────────────────── */}
             {signatureStatus === "checking" ? (
               <SidebarSection title="Signature" icon={<Signature className="h-4 w-4" />}>
                 <div className="text-sm text-gray-500">Checking active signature…</div>
@@ -3177,7 +2993,6 @@ export default function ContractSidebarExtracted({
                 </SidebarSection>
               </div>
             ) : null}
-
           </>
         )}
       </ContractSidebarShell>
@@ -3235,27 +3050,27 @@ export function ContractSidebarShell({
   onOpenInNewTab: () => void;
   footer: React.ReactNode;
 }) {
-
   const contractTypeLabel = campaignPaymentType
     ? CONTRACT_TYPE_LABELS[campaignPaymentType]
     : "";
 
   return (
     <div
-      className={`absolute inset-0 z-[120] isolate ${isOpen ? "" : "pointer-events-none"
-        }`}
+      className={`absolute inset-0 z-[120] isolate ${isOpen ? "" : "pointer-events-none"}`}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"
-          }`}
+        className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
         onClick={onClose}
       />
 
       <div
-        className={`absolute inset-0 overflow-hidden bg-white border-l border-gray-200 shadow-2xl transform transition-transform duration-300 ease-out ${isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+        className={`absolute inset-0 overflow-hidden bg-white border-l border-gray-200 shadow-2xl transform transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
       >
         <div className="relative z-10 h-20 border-b border-[#e5e5e5] bg-white">
           <div className="flex h-full items-center justify-between px-6">
@@ -3263,9 +3078,6 @@ export function ContractSidebarShell({
               <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[#9d9d9d]">
                 {title}
               </div>
-              {/* <div className="truncate text-lg font-bold text-[#1a1a1a]">
-                {subtitle}
-              </div> */}
               <div className="mt-1">
                 <select
                   value={campaignPaymentType}
@@ -3302,7 +3114,7 @@ export function ContractSidebarShell({
               </Button>
               <Button
                 type="button"
-                className="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e8e8e8] bg-white !text-black hover:!bg-white "
+                className="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e8e8e8] bg-white !text-black hover:!bg-white"
                 onClick={onClose}
                 aria-label="Close"
               >
@@ -3334,12 +3146,8 @@ export function ContractSidebarShell({
         </div>
 
         <div className="relative z-10 h-[80px] border-t border-gray-200 bg-white px-6 flex items-center justify-between">
-          <div className="truncate text-lg font-bold text-[#1a1a1a]">
-            {subtitle}
-          </div>
-          <div className="flex h-full items-center justify-end gap-3">
-            {footer}
-          </div>
+          <div className="truncate text-lg font-bold text-[#1a1a1a]">{subtitle}</div>
+          <div className="flex h-full items-center justify-end gap-3">{footer}</div>
         </div>
       </div>
     </div>
@@ -3379,11 +3187,7 @@ function CommercialMilestonesEditor({
   onChange: (rows: ContractMilestone[]) => void;
   error?: string;
 }) {
-  const updateRow = (
-    id: string,
-    key: keyof Omit<ContractMilestone, "id">,
-    value: string
-  ) => {
+  const updateRow = (id: string, key: keyof Omit<ContractMilestone, "id">, value: string) => {
     onChange(rows.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
   };
 
@@ -3411,11 +3215,7 @@ function CommercialMilestonesEditor({
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Milestone #{index + 1}</div>
             {rows.length > 1 ? (
-              <button
-                type="button"
-                className="text-xs text-red-600"
-                onClick={() => removeRow(row.id)}
-              >
+              <button type="button" className="text-xs text-red-600" onClick={() => removeRow(row.id)}>
                 Remove
               </button>
             ) : null}
@@ -3425,20 +3225,14 @@ function CommercialMilestonesEditor({
             <FloatingInput
               label="Milestone Name"
               value={row.milestoneName}
-              onValueChange={(value: string) =>
-                updateRow(row.id, "milestoneName", value)
-              }
+              onValueChange={(value: string) => updateRow(row.id, "milestoneName", value)}
             />
-
             <FloatingInput
               label="Payment Amount"
               type="number"
               value={row.paymentAmount}
-              onValueChange={(value: string) =>
-                updateRow(row.id, "paymentAmount", value)
-              }
+              onValueChange={(value: string) => updateRow(row.id, "paymentAmount", value)}
             />
-
             <FloatingDateInput
               label="Due Date"
               type="date"
@@ -3446,7 +3240,6 @@ function CommercialMilestonesEditor({
               min={toInputDate(new Date())}
               onValueChange={(value) => updateRow(row.id, "dueDate", value)}
             />
-
             <LabeledTextarea
               label="Trigger Event"
               value={row.triggerEvent}
@@ -3498,7 +3291,6 @@ function SignatureAgreementBlock({
     const file = e.target.files?.[0];
     if (!file || !brandId) return;
 
-    // Show local preview immediately
     const reader = new FileReader();
     reader.onload = (ev) => {
       setPreviewSrc(ev.target?.result as string);
@@ -3514,14 +3306,12 @@ function SignatureAgreementBlock({
       toast({ icon: "error", title: "Upload failed", text: err?.message || "Could not upload signature." });
     } finally {
       setUploading(false);
-      // Reset input so same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
   return (
     <div className="space-y-3">
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -3530,7 +3320,6 @@ function SignatureAgreementBlock({
         onChange={handleFileChange}
       />
 
-      {/* Signature display — click to upload */}
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
@@ -3546,7 +3335,6 @@ function SignatureAgreementBlock({
               alt="Brand signature"
               className="max-h-[100px] max-w-full object-contain"
             />
-            {/* Hover overlay */}
             <div className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
               <span className="opacity-0 group-hover:opacity-100 text-xs text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-sm transition-opacity">
                 Click to change
@@ -3566,7 +3354,6 @@ function SignatureAgreementBlock({
           <Signature size={14} weight="regular" />
           Signature is selected as primary
         </div>
-
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -3579,8 +3366,11 @@ function SignatureAgreementBlock({
         </button>
       </div>
 
-      <div className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${showError ? "border-red-200 bg-red-50/60" : "border-gray-200 bg-white"
-        }`}>
+      <div
+        className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${
+          showError ? "border-red-200 bg-red-50/60" : "border-gray-200 bg-white"
+        }`}
+      >
         <Toggle checked={agreed} onChange={onAgreeChange} />
         <p className="text-sm text-gray-700 leading-relaxed">
           By signing, I confirm that I have read and therefore agree to all
@@ -3589,8 +3379,13 @@ function SignatureAgreementBlock({
       </div>
 
       {showError && (
-        <div className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3" role="alert">
-          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold">!</span>
+        <div
+          className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3"
+          role="alert"
+        >
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold">
+            !
+          </span>
           <p className="text-sm font-medium text-red-600">
             Please confirm that you agree to all terms before signing the contract.
           </p>
@@ -3599,7 +3394,6 @@ function SignatureAgreementBlock({
     </div>
   );
 }
-
 
 function Toggle({
   checked,
@@ -3614,12 +3408,14 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${checked ? "bg-black" : "bg-gray-200"
-        }`}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${
+        checked ? "bg-black" : "bg-gray-200"
+      }`}
     >
       <span
-        className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"
-          }`}
+        className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ${
+          checked ? "translate-x-5" : "translate-x-0"
+        }`}
       />
     </button>
   );

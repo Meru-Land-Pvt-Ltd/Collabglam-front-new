@@ -169,7 +169,7 @@ const threadId =
 
       const storedBrandId = getStoredBrandId();
       if (!storedBrandId) {
-        setError("Brand ID not found. Please sign in again.");
+        setError("Your session has expired. Please log in again.");
         return;
       }
 

@@ -1034,6 +1034,22 @@ function canShowEditCampaign(c: any): boolean {
   return false;
 }
 
+function friendlyCampaignError(e: any): string {
+  const status = e?.response?.status ?? e?.status;
+  const raw = getApiErrorMessage(e, "");
+
+  if (status === 403 || /forbidden/i.test(raw))
+    return "You don't have permission to view this campaign. Try logging out and back in.";
+  if (status === 401 || /unauthorized/i.test(raw))
+    return "Your session has expired. Please log in again.";
+  if (status === 404 || /not found/i.test(raw))
+    return "This campaign doesn't exist or may have been deleted.";
+  if (status >= 500)
+    return "Something went wrong on our end. Please try again shortly.";
+  if (!navigator.onLine)
+    return "You appear to be offline. Check your connection and try again.";
+  return raw || "Failed to load campaign. Please try again.";
+}
 export default function ViewCampaignPage() {
   const router = useRouter();
   const params = useParams();
@@ -1095,7 +1111,7 @@ export default function ViewCampaignPage() {
     setBrandId(id);
 
     if (!id) {
-      setErr("brandId not found in localStorage. Please login again.");
+      setErr("Your session looks incomplete. Please log in again to continue.");
       setLoading(false);
     }
   }, []);
@@ -1115,7 +1131,7 @@ export default function ViewCampaignPage() {
         setDoc(res ?? null);
       } catch (e) {
         if (cancelled) return;
-        setErr(getApiErrorMessage(e, "Failed to load campaign"));
+        setErr(friendlyCampaignError(e));
       } finally {
         if (cancelled) return;
         setLoading(false);
@@ -1577,11 +1593,11 @@ export default function ViewCampaignPage() {
     [];
 
   const selectedCount =
-  Number(
-    (campaign as any)?.count ??
-    details?.count ??
-    0
-  ) || 0;
+    Number(
+      (campaign as any)?.count ??
+      details?.count ??
+      0
+    ) || 0;
 
   const startAt = (campaign as any)?.startAt ?? details?.startAt ?? null;
   const endAt = (campaign as any)?.endAt ?? details?.endAt ?? null;

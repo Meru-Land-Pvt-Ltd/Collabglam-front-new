@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { post } from "@/lib/api";
 import { Search, ChevronDown, Funnel, ExternalLink } from "lucide-react";
 import DisputeDetailDrawer from "./DisputeDetailDrawer";
+import { friendlyBrandError } from "@/lib/error";
 
 type DisputeStatus =
   | "open"
@@ -248,7 +249,7 @@ export default function DisputeHistorySection() {
       setTotal(0);
       setTotalPages(1);
       setLoading(false);
-      setError("Brand ID not found. Please log in again.");
+      setError("Your session looks incomplete. Please log in again.");
       return;
     }
 
@@ -280,7 +281,7 @@ export default function DisputeHistorySection() {
       setTotalPages(data?.totalPages || 1);
       setTotal(data?.total || 0);
     } catch (e: any) {
-      setError(e?.message || "Failed to load disputes");
+      setError(friendlyBrandError(e, brandId));
     } finally {
       setLoading(false);
     }

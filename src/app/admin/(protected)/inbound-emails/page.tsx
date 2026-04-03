@@ -596,9 +596,7 @@ export default function Page() {
       setMailboxScope(response.data);
     } catch (error: any) {
       setApiError(
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to load mailbox scope"
+        "Failed to load mailbox scope. Please check your connection and try again."
       );
     } finally {
       setLoadingScope(false);

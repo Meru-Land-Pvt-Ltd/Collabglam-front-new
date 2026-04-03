@@ -297,8 +297,8 @@ export default function BrandProfilePage() {
       setLoading(false);
       toast({
         icon: "error",
-        title: "Brand ID missing",
-        text: "brandId was not found in localStorage.",
+        title: "Your session looks incomplete.",
+        text: "Please sign in again.",
       });
       return;
     }

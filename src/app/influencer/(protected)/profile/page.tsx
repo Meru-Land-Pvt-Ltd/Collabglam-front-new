@@ -41,6 +41,7 @@ import {
   Heart,
   MessageCircle,
 } from "lucide-react";
+import { friendlyInfluencerError } from "@/lib/error";
 
 /* ===================== Types ===================== */
 
@@ -896,7 +897,7 @@ export default function InfluencerProfilePage() {
         setSelectedSubcats(preSubcats);
         prevCatIdRef.current = preCategory?.value ?? null;
       } catch (e: any) {
-        setError(e?.message || "Failed to load influencer profile.");
+        setError(friendlyInfluencerError(e,influencerId));
       } finally {
         setLoading(false);
       }

@@ -1540,7 +1540,7 @@ export default function InfluencerList() {
       if (!brandId) {
         toast({
           icon: "error",
-          title: "Brand not found",
+          title: "Your session looks incomplete",
           text: "Please sign in again.",
         });
         return;
@@ -1549,7 +1549,7 @@ export default function InfluencerList() {
       if (!influencerId) {
         toast({
           icon: "error",
-          title: "Influencer not found",
+          title: "Your session looks incomplete",
           text: "Could not identify the influencer for this thread.",
         });
         return;

@@ -45,6 +45,7 @@ const InfluencerSidebarShell = dynamic(
 
 import { Dialog, DialogContent, DialogOverlay } from "@/components/ui/dialog";
 import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
+import { friendlyInfluencerError } from "@/lib/error";
 
 /* ─────────────────────────── Toast / Confirm ─────────────────────────── */
 
@@ -2494,11 +2495,10 @@ export default function MyCampaignsPage() {
         const mapped = rawCampaigns.map(mapApiCampaign);
         setCampaigns(mapped);
       } catch (e: any) {
-        setFetchError(
-          e?.response?.data?.message ||
-          e?.message ||
-          "Failed to load campaigns."
-        );
+        const status = e?.response?.status ?? e?.status;
+        const raw = e?.response?.data?.message || e?.message || "";
+        const influencerId = localStorage.getItem("influencerId") || "";
+        setFetchError(friendlyInfluencerError(e, influencerId));
       } finally {
         setIsLoading(false);
       }

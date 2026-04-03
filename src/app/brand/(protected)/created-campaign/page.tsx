@@ -770,7 +770,7 @@ export default function BrandCreatedCampaignsPage() {
             : null;
 
         if (!brandId) {
-          const msg = "No brandId found in localStorage.";
+          const msg = "Your session looks incomplete.Please log in again.";
           toast({ icon: "error", title: msg });
           throw new Error(msg);
         }
@@ -954,7 +954,7 @@ export default function BrandCreatedCampaignsPage() {
       typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
 
     if (!brandId) {
-      throw new Error("No brandId found in localStorage.");
+      throw new Error("Your session looks incomplete.Please log in again.");
     }
 
     try {

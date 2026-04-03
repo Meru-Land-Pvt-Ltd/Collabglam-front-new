@@ -236,7 +236,7 @@ export default function BrandReviewCampaignsPage() {
       try {
         const brandId =
           typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
-        if (!brandId) throw new Error("No brandId found in localStorage.");
+        if (!brandId) throw new Error("Please log in again.");
 
         const listEndpoint = `/campaign/created-by-admin/${encodeURIComponent(
           brandId

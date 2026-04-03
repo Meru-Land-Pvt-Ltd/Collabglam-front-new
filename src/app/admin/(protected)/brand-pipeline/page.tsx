@@ -438,7 +438,7 @@ export default function BrandPipelinePage() {
         setNetworkRows(Array.isArray(resp?.results) ? resp.results : []);
       }
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to load rows.');
+      await showErr("Oops! Something went wrong while loading campaigns. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

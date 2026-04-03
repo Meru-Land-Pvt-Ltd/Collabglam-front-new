@@ -339,7 +339,7 @@ const AdminInfluencersPage = () => {
       setError(null);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || "Failed to load influencers.");
+     setError("Oops! Something went wrong while loading influencers. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

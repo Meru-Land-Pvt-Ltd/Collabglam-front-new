@@ -299,7 +299,7 @@ export default function AdminCampaignsPage() {
       setPage(data.page || 1);
       setError(null);
     } catch (err: any) {
-      setError(err?.message || "Failed to load campaigns.");
+      setError("Oops! Something went wrong while loading campaigns. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -635,7 +635,7 @@ export default function AdminCampaignsPage() {
                                 className="rounded-xl text-black hover:bg-black/[0.04]"
                               >
                                 <Link
-                                  href={`/admin/brands/create-campaign?brandId=${campaign.brandId}&id=${campaign.campaignId}`}
+                                  href={`/admin/brands/create-campaign?brandId=${campaign.brandId}&campaignId=${campaign.campaignId}`}
                                   aria-label="Edit Campaign"
                                 >
                                   <Pencil className="h-4.5 w-4.5" />

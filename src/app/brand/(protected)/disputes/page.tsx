@@ -201,7 +201,7 @@ const BrandDisputesPage: React.FC = () => {
       setTotal(0);
       setTotalPages(1);
       setLoading(false);
-      setError("Brand ID not found. Please log in again.");
+      setError("Your session looks incomplete. Please log in again.");
       return;
     }
 

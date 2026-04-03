@@ -29,6 +29,7 @@ import PaymentDetailsOverlay, {
   PaypalInfo,
   FormState,
 } from "./paymentOverlayCard";
+import { friendlyInfluencerError } from "@/lib/error";
 
 type PayoutStatus = "pending" | "initiated" | "paid" | string;
 
@@ -289,7 +290,7 @@ export default function WalletPage() {
 
         await loadPaymentDetails();
       } catch (err: any) {
-        setError(err?.message || "Failed to load payout details");
+        setError(friendlyInfluencerError(err, localStorage.getItem("influencerId") || ""));
       } finally {
         setLoading(false);
       }

@@ -79,7 +79,7 @@ export default function ViewBrandProfilePage() {
   if (error || !brand) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-100">
-        <p className="rounded-lg bg-red-100 p-6 text-red-600">{error || "Brand not found."}</p>
+        <p className="rounded-lg bg-red-100 p-6 text-red-600">{error || "Your session looks incomplete. Please log in again."}</p>
       </div>
     );
   }

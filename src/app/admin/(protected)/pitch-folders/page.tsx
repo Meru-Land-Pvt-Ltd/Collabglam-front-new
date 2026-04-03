@@ -193,7 +193,7 @@ export default function PitchFoldersPage() {
       const resp = await get<ListResponse>('/pitch-folders/list', params);
       setFolders(Array.isArray(resp?.data) ? resp.data : []);
     } catch (e: any) {
-      await showErr(e?.message || 'Failed to load folders.');
+      await showErr("Oops! Something went wrong while loading campaigns. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

@@ -25,6 +25,7 @@ import {
     apiGetAllInvitationsByInfluencer,
     getApiErrorMessage,
 } from "@/app/influencer/services/influencerApi";
+import { friendlyInfluencerError } from "@/lib/error";
 
 /* -------------------------------------------------------------------------- */
 /* TYPES */
@@ -443,7 +444,7 @@ export default function InvitesPage() {
 
             if (!influencerId) {
                 setInvites([]);
-                setError("Influencer ID not found. Please log in again.");
+                setError("Your session looks incomplete. Please log out and sign in again.");
                 return;
             }
 
@@ -461,7 +462,8 @@ export default function InvitesPage() {
 
             setInvites(mapped);
         } catch (err) {
-            setError(getApiErrorMessage(err, "Failed to load campaign invites"));
+            const influencerId = localStorage.getItem("influencerId") || "";
+            setError(friendlyInfluencerError(err, influencerId));
             setInvites([]);
         } finally {
             setLoading(false);
