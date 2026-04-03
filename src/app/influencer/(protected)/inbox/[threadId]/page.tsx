@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { get, post } from "@/lib/api";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/buttonComp";
@@ -21,6 +21,12 @@ import {
   ArrowBendUpLeft,
   Paperclip,
 } from "@phosphor-icons/react";
+
+type CampaignRef = {
+  _id: string | null;
+  title?: string;
+  campaignType?: string;
+};
 
 type ThreadMessage = {
   id: string;
@@ -49,6 +55,7 @@ type ThreadMessagesResponse = {
     subject: string;
     lastMessageAt: string | null;
     lastMessageDirection: string | null;
+    campaign?: CampaignRef | null;
     brand: {
       _id?: string | null;
       brandId?: string | null;
@@ -109,12 +116,13 @@ function IconButton({
 export default function InfluencerInboxMailDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
 
   const threadId = Array.isArray(params?.threadId)
     ? params.threadId[0]
     : typeof params?.threadId === "string"
-      ? params.threadId
-      : "";
+    ? params.threadId
+    : "";
 
   const [loading, setLoading] = React.useState(true);
   const [sending, setSending] = React.useState(false);
@@ -124,6 +132,11 @@ export default function InfluencerInboxMailDetailPage() {
   const [messages, setMessages] = React.useState<ThreadMessage[]>([]);
   const [showReply, setShowReply] = React.useState(false);
   const [showCompose, setShowCompose] = React.useState(false);
+
+  const currentCampaignId = React.useMemo(
+    () => thread?.campaign?._id || searchParams.get("campaignId") || undefined,
+    [thread, searchParams]
+  );
 
   const fetchConversation = React.useCallback(async () => {
     try {
@@ -248,7 +261,15 @@ export default function InfluencerInboxMailDetailPage() {
         <div className="flex items-center justify-between border-b border-[#EFEFEF] px-5 py-4">
           <div className="flex items-center gap-1">
             <button
-              onClick={() => router.push("/influencer/inbox")}
+              onClick={() =>
+                router.push(
+                  `/influencer/inbox${
+                    currentCampaignId
+                      ? `?campaignId=${encodeURIComponent(currentCampaignId)}`
+                      : ""
+                  }`
+                )
+              }
               className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] font-medium text-[#7B7B7B] transition-colors hover:bg-[#F3F4F6] hover:text-[#111111]"
             >
               <ArrowLeft size={12} />

@@ -37,6 +37,12 @@ type FilterOption = {
   name: string;
 };
 
+type CampaignRef = {
+  _id: string | null;
+  title?: string;
+  campaignType?: string;
+};
+
 type BrandContact = {
   id: string;
   influencerId: string | null;
@@ -51,6 +57,7 @@ type BrandContact = {
     applied: boolean;
     conversation: boolean;
   };
+  campaign?: CampaignRef | null;
 };
 
 type BrandContactsResponse = {
@@ -69,6 +76,7 @@ type CreateThreadResponse = {
   brandDisplayAlias: string;
   influencerDisplayAlias: string;
   subject: string;
+  campaign?: CampaignRef | null;
 };
 
 type BrandInboxThread = {
@@ -77,6 +85,7 @@ type BrandInboxThread = {
   lastMessageAt: string | null;
   lastMessageDirection: string | null;
   lastMessageSnippet: string;
+  campaign?: CampaignRef | null;
   influencer: {
     influencerId: string | null;
     name: string;
@@ -242,7 +251,7 @@ function getStoredBrandId(): string {
     try {
       const parsed = JSON.parse(brandRaw);
       return parsed?.brandId || parsed?._id || "";
-    } catch { }
+    } catch {}
   }
 
   const userRaw = localStorage.getItem("user");
@@ -250,7 +259,7 @@ function getStoredBrandId(): string {
     try {
       const parsed = JSON.parse(userRaw);
       return parsed?.brandId || parsed?._id || "";
-    } catch { }
+    } catch {}
   }
 
   return "";
@@ -258,16 +267,14 @@ function getStoredBrandId(): string {
 
 function normalizeRecipientValue(value?: string | null) {
   const raw = (value || "").trim();
-
-  // Handles formats like: John <john@mail.com>
   const angleMatch = raw.match(/<([^>]+)>/);
   const extracted = angleMatch?.[1] || raw;
-
   return extracted.trim().toLowerCase();
 }
 
 export default function BrandInboxPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(true);
@@ -280,12 +287,18 @@ export default function BrandInboxPageContent() {
   const [showCompose, setShowCompose] = React.useState(false);
   const [composeThread, setComposeThread] = React.useState<BrandInboxThread | null>(null);
   const [contacts, setContacts] = React.useState<BrandContact[]>([]);
-  const searchParams = useSearchParams();
+
   React.useEffect(() => {
-  if (searchParams.get("compose") === "true") {
-    setShowCompose(true);
-  }
-}, [searchParams]);
+    if (searchParams.get("compose") === "true") {
+      setShowCompose(true);
+    }
+  }, [searchParams]);
+
+  const currentCampaignId = React.useMemo(
+    () => searchParams.get("campaignId") || composeThread?.campaign?._id || undefined,
+    [searchParams, composeThread]
+  );
+
   const fetchThreads = React.useCallback(async () => {
     try {
       setLoading(true);
@@ -314,8 +327,8 @@ export default function BrandInboxPageContent() {
     } catch (err: any) {
       setError(
         err?.response?.data?.error ||
-        err?.message ||
-        "Failed to load inbox"
+          err?.message ||
+          "Failed to load inbox"
       );
       setThreads([]);
       setContacts([]);
@@ -327,7 +340,6 @@ export default function BrandInboxPageContent() {
   React.useEffect(() => {
     fetchThreads();
   }, [fetchThreads]);
-
 
   const filteredThreads = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -364,6 +376,7 @@ export default function BrandInboxPageContent() {
           return {
             influencerId: composeThread.influencer.influencerId,
             threadId: composeThread.threadId,
+            campaignId: composeThread.campaign?._id || null,
             name: composeThread.influencer.name,
             aliasEmail: composeThread.influencer.aliasEmail,
           };
@@ -373,10 +386,7 @@ export default function BrandInboxPageContent() {
       const matchedContact = contacts.find((item) => {
         if (!item.influencerId) return false;
 
-        const candidates = [
-          item.displayAlias,
-          item.name,
-        ]
+        const candidates = [item.displayAlias, item.name]
           .map((v) => normalizeRecipientValue(v))
           .filter(Boolean);
 
@@ -388,6 +398,7 @@ export default function BrandInboxPageContent() {
       return {
         influencerId: matchedContact.influencerId,
         threadId: matchedContact.threadId,
+        campaignId: matchedContact.campaign?._id || null,
         name: matchedContact.name,
         aliasEmail: matchedContact.displayAlias,
       };
@@ -442,23 +453,26 @@ export default function BrandInboxPageContent() {
         );
       }
 
+      const effectiveCampaignId =
+        recipient.campaignId || currentCampaignId || undefined;
+
       let threadId = recipient.threadId || composeThread?.threadId || null;
 
-      // If there is no existing thread, create one first
       if (!threadId) {
         const threadRes = await post<CreateThreadResponse>(`${EMAIL_API_BASE}/threads`, {
           brandId,
           influencerId: recipient.influencerId,
+          campaignId: effectiveCampaignId,
           subject: payload.subject,
         });
 
         threadId = threadRes?.threadId || null;
       }
 
-      // Then send the email
       await post(`${EMAIL_API_BASE}/brand-to-influencer`, {
         brandId,
         influencerId: recipient.influencerId,
+        campaignId: effectiveCampaignId,
         subject: payload.subject,
         body: payload.body,
         htmlBody: payload.htmlBody,
@@ -473,8 +487,8 @@ export default function BrandInboxPageContent() {
     } catch (err: any) {
       setError(
         err?.response?.data?.error ||
-        err?.message ||
-        "Failed to send message"
+          err?.message ||
+          "Failed to send message"
       );
       throw err;
     } finally {
@@ -571,11 +585,20 @@ export default function BrandInboxPageContent() {
             ) : (
               filteredThreads.map((item) => {
                 const checked = selectedIds.includes(item.threadId);
+                const itemCampaignId = item.campaign?._id || null;
 
                 return (
                   <div
                     key={item.threadId}
-                    onClick={() => router.push(`/brand/inbox/${item.threadId}`)}
+                    onClick={() =>
+                      router.push(
+                        `/brand/inbox/${item.threadId}${
+                          itemCampaignId
+                            ? `?campaignId=${encodeURIComponent(itemCampaignId)}`
+                            : ""
+                        }`
+                      )
+                    }
                     className={cn(
                       "cursor-pointer grid grid-cols-[24px_minmax(180px,1.1fr)_minmax(0,4fr)_minmax(120px,140px)] items-center gap-3 border-b border-[#D6D6D6] px-3 py-4 transition-colors hover:bg-[#EDEDED]"
                     )}
