@@ -9,7 +9,7 @@ interface ResultsGridProps {
   platform: Platform;
   results: any[];
   loading: boolean;
-  error?: string;
+  error?: string | null;
   total?: number;
   hasMore?: boolean;
   onLoadMore?: () => void;

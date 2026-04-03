@@ -4,46 +4,27 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ResultsGrid } from "./ResultsGrid";
 import { useInfluencerSearch } from "./useInfluencerSearch";
 import type { Platform } from "./filters";
+import { countActiveFilters } from "./filters";
 import { SearchHeader } from "./SearchHeader";
 import { DetailPanel } from "./DetailPanel";
 import { useInfluencerReport } from "./useInfluencerReport";
 import type { Platform as ReportPlatform } from "./types";
 import { useEmailStatus } from "./useEmailStatus";
 
-function isFilled(value: any): boolean {
-  if (value == null) return false;
-  if (typeof value === "string") return value.trim() !== "";
-  if (typeof value === "number") return true;
-  if (typeof value === "boolean") return value;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") {
-    return Object.values(value).some(isFilled);
-  }
-  return false;
-}
-
 export default function ModashDashboard() {
-  const [platforms, setPlatforms] = useState<Platform[]>([
-    "instagram",
-    "tiktok",
-    "youtube",
-  ]);
+  const [platforms, setPlatforms] = useState<Platform[]>(["instagram", "tiktok", "youtube"]);
   const [queryText, setQueryText] = useState("");
   const [brandId, setBrandId] = useState<string>("");
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<ReportPlatform | null>(null);
+  const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
+  const [calculationMethod, setCalculationMethod] = useState<"median" | "average">("average");
 
   useEffect(() => {
     const id = localStorage.getItem("brandId") || "";
     if (id) setBrandId(id);
   }, []);
-
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedPlatform, setSelectedPlatform] =
-    useState<ReportPlatform | null>(null);
-  const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
-  const [calculationMethod, setCalculationMethod] = useState<
-    "median" | "average"
-  >("average");
 
   const {
     report,
@@ -55,36 +36,14 @@ export default function ModashDashboard() {
   } = useInfluencerReport();
 
   const { exists: emailExists, checkStatus } = useEmailStatus();
+  const { searchState, filters, updateFilter, runSearch, resetFilters, loadMore, loadAll } = useInfluencerSearch(platforms);
 
-  const {
-    searchState,
-    filters,
-    updateFilter,
-    runSearch,
-    resetFilters,
-    loadMore,
-    loadAll,
-  } = useInfluencerSearch(platforms);
-
-  const primaryPlatform: Platform = useMemo(
-    () => platforms[0] ?? "instagram",
-    [platforms]
-  );
-
-  const activeFilterCount = useMemo(() => {
-    const influencerCount = Object.values(filters?.influencer ?? {}).filter(
-      isFilled
-    ).length;
-    const audienceCount = Object.values(filters?.audience ?? {}).filter(
-      isFilled
-    ).length;
-
-    return influencerCount + audienceCount;
-  }, [filters]);
+  const primaryPlatform: Platform = useMemo(() => platforms[0] ?? "instagram", [platforms]);
+  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
 
   const onApplyFilters = useCallback(() => {
-    runSearch({ reset: true, queryText });
-  }, [runSearch, queryText]);
+    runSearch({ queryText });
+  }, [queryText, runSearch]);
 
   const onViewProfile = useCallback(
     (influencer: any) => {
@@ -102,12 +61,12 @@ export default function ModashDashboard() {
 
       if (!idCandidate) return;
 
-      const handleCandidate = influencer?.username ?? null;
+      const handleCandidate = influencer?.username ?? influencer?.handle ?? null;
       const idStr = String(idCandidate);
 
       setSelectedId(idStr);
       setSelectedPlatform(inferredPlatform);
-      setSelectedHandle(handleCandidate ? String(handleCandidate) : null);
+      setSelectedHandle(handleCandidate ? String(handleCandidate).replace(/^@/, "") : null);
       setPanelOpen(true);
 
       fetchReport(idStr, inferredPlatform, calculationMethod);
@@ -119,20 +78,13 @@ export default function ModashDashboard() {
         checkStatus(safeHandle, inferredPlatform);
       }
     },
-    [calculationMethod, fetchReport, platforms, checkStatus]
+    [calculationMethod, checkStatus, fetchReport, platforms],
   );
 
   const handleRefreshReport = useCallback(async () => {
     if (!selectedId || !selectedPlatform) return;
-
-    await fetchReport(
-      selectedId,
-      selectedPlatform,
-      calculationMethod,
-      undefined,
-      true
-    );
-  }, [selectedId, selectedPlatform, calculationMethod, fetchReport]);
+    await fetchReport(selectedId, selectedPlatform, calculationMethod, undefined, true);
+  }, [calculationMethod, fetchReport, selectedId, selectedPlatform]);
 
   return (
     <div className="min-h-screen">
@@ -142,7 +94,7 @@ export default function ModashDashboard() {
             queryText={queryText}
             setQueryText={setQueryText}
             loading={searchState.loading}
-            onSearch={(q) => runSearch({ reset: true, queryText: q })}
+            onSearch={(q) => runSearch({ queryText: q })}
             platforms={platforms}
             setPlatforms={setPlatforms}
             filters={filters}
@@ -182,7 +134,7 @@ export default function ModashDashboard() {
         }}
         emailExists={emailExists}
         brandId={brandId}
-        handle={selectedHandle ?? null}
+        handle={selectedHandle}
         lastFetchedAt={lastFetchedAt}
         onRefreshReport={handleRefreshReport}
       />
