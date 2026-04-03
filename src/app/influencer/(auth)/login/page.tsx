@@ -3,14 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { InstagramLogo } from "@phosphor-icons/react";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";
 
-import { apiSignInInfluencer, getApiErrorMessage } from "../../services/influencerApi";
+import {
+  apiSignInInfluencer,
+  getApiErrorMessage,
+} from "../../services/influencerApi";
 import { toast, ToastStyles } from "@/components/ui/toast";
 
 type ErrorKind =
@@ -28,7 +30,37 @@ type ApiErrDetails = {
   status?: number;
 };
 
-function getApiErrorDetails(err: any, fallbackMsg = "Login failed"): ApiErrDetails {
+type OnboardingRoute =
+  | "page1"
+  | "page2"
+  | "page3"
+  | "campaign"
+  | "homepage";
+
+type SignInResponse = {
+  token: string;
+  influencerId: string;
+  route?: OnboardingRoute;
+  onboarding?: {
+    page1Done?: boolean;
+    page2Done?: boolean;
+    page3Done?: boolean;
+  };
+};
+
+type CookieOptions = {
+  days?: number;
+  path?: string;
+  sameSite?: "Lax" | "Strict" | "None";
+  secure?: boolean;
+};
+
+const ONBOARDING_RESUME_KEY = "cg_influencer_onboarding_resume_step";
+
+function getApiErrorDetails(
+  err: any,
+  fallbackMsg = "Login failed"
+): ApiErrDetails {
   const data = err?.response?.data ?? err?.data ?? err?.cause?.data ?? undefined;
 
   const status =
@@ -38,17 +70,10 @@ function getApiErrorDetails(err: any, fallbackMsg = "Login failed"): ApiErrDetai
     data?.error?.status ??
     undefined;
 
-  const code =
-    data?.code ??
-    data?.error?.code ??
-    err?.code ??
-    undefined;
+  const code = data?.code ?? data?.error?.code ?? err?.code ?? undefined;
 
   const message =
-    data?.message ??
-    data?.error?.message ??
-    err?.message ??
-    fallbackMsg;
+    data?.message ?? data?.error?.message ?? err?.message ?? fallbackMsg;
 
   return {
     message: String(message || fallbackMsg),
@@ -57,14 +82,6 @@ function getApiErrorDetails(err: any, fallbackMsg = "Login failed"): ApiErrDetai
   };
 }
 
-
-type CookieOptions = {
-  days?: number; // expiry in days
-  path?: string;
-  sameSite?: "Lax" | "Strict" | "None";
-  secure?: boolean;
-};
-
 function setCookie(name: string, value: string, opts: CookieOptions = {}) {
   if (typeof document === "undefined") return;
 
@@ -72,10 +89,13 @@ function setCookie(name: string, value: string, opts: CookieOptions = {}) {
     days = 30,
     path = "/",
     sameSite = "Lax",
-    secure = typeof window !== "undefined" ? window.location.protocol === "https:" : false,
+    secure =
+      typeof window !== "undefined"
+        ? window.location.protocol === "https:"
+        : false,
   } = opts;
 
-  const maxAge = days * 24 * 60 * 60; // seconds
+  const maxAge = days * 24 * 60 * 60;
 
   document.cookie =
     `${encodeURIComponent(name)}=${encodeURIComponent(value)}` +
@@ -85,16 +105,17 @@ function setCookie(name: string, value: string, opts: CookieOptions = {}) {
     (secure ? "; Secure" : "");
 }
 
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
+function persistOnboardingRoute(route?: OnboardingRoute) {
+  try {
+    if (route === "page1" || route === "page2" || route === "page3") {
+      sessionStorage.setItem(ONBOARDING_RESUME_KEY, route);
+      return;
+    }
 
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${encodeURIComponent(name)}=`));
-
-  if (!match) return null;
-  const value = match.split("=").slice(1).join("=");
-  return decodeURIComponent(value);
+    sessionStorage.removeItem(ONBOARDING_RESUME_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 function prettifyRateLimitMessage(msg: string) {
@@ -105,7 +126,10 @@ function prettifyRateLimitMessage(msg: string) {
     return "Too many failed login attempts. Please try again after 24 hours.";
   }
 
-  const match = m.match(/try again in\s+(\d+)\s+(seconds|second|minutes|minute|hours|hour)/i);
+  const match = m.match(
+    /try again in\s+(\d+)\s+(seconds|second|minutes|minute|hours|hour)/i
+  );
+
   if (match) {
     const n = match[1];
     const unitRaw = match[2].toLowerCase();
@@ -113,10 +137,10 @@ function prettifyRateLimitMessage(msg: string) {
       unitRaw === "second"
         ? "seconds"
         : unitRaw === "minute"
-          ? "minutes"
-          : unitRaw === "hour"
-            ? "hours"
-            : unitRaw;
+        ? "minutes"
+        : unitRaw === "hour"
+        ? "hours"
+        : unitRaw;
 
     return `Too many failed login attempts. Please try again in ${n} ${unit}.`;
   }
@@ -124,7 +148,11 @@ function prettifyRateLimitMessage(msg: string) {
   return m;
 }
 
-function mapLoginError(d: ApiErrDetails): { kind: ErrorKind; title: string; text: string } {
+function mapLoginError(d: ApiErrDetails): {
+  kind: ErrorKind;
+  title: string;
+  text: string;
+} {
   const msg = (d.message || "").toLowerCase();
   const code = (d.code || "").toUpperCase();
   const status = d.status;
@@ -179,13 +207,21 @@ function mapLoginError(d: ApiErrDetails): { kind: ErrorKind; title: string; text
     msg.includes("invalid token") ||
     msg.includes("auth")
   ) {
-    return { kind: "SERVER", title: "Login issue", text: "Something went wrong. Please try again." };
+    return {
+      kind: "SERVER",
+      title: "Login issue",
+      text: "Something went wrong. Please try again.",
+    };
   }
 
-  return { kind: "UNKNOWN", title: "Login failed", text: d.message || "Please check your details and try again." };
+  return {
+    kind: "UNKNOWN",
+    title: "Login failed",
+    text: d.message || "Please check your details and try again.",
+  };
 }
 
-function routeToPath(route?: string) {
+function routeToPath(route?: OnboardingRoute) {
   switch (route) {
     case "page1":
       return "/influencer/onboarding?step=page1";
@@ -193,12 +229,22 @@ function routeToPath(route?: string) {
       return "/influencer/onboarding?step=page2";
     case "page3":
       return "/influencer/onboarding?step=page3";
+    case "homepage":
     case "campaign":
     default:
-      return "/influencer/campaign";
+      return "/influencer/dashboards";
   }
 }
 
+function getPostLoginRedirect(res?: SignInResponse) {
+  const route = res?.route;
+
+  if (route === "page1" || route === "page2" || route === "page3") {
+    return routeToPath(route);
+  }
+
+  return "/influencer/dashboards";
+}
 
 export default function InfluencerLoginPage() {
   const router = useRouter();
@@ -247,14 +293,21 @@ export default function InfluencerLoginPage() {
     if (!ok) return;
 
     setLoading(true);
+
     try {
-      const res = await apiSignInInfluencer(emailTrimmed, password);
+      const res = (await apiSignInInfluencer(
+        emailTrimmed,
+        password
+      )) as SignInResponse;
 
       setCookie("token", res.token, { days: 30 });
       setCookie("influencerId", res.influencerId, { days: 30 });
-      // store in localStorage
+
       localStorage.setItem("token", res.token);
+      localStorage.setItem("influencerToken", res.token);
       localStorage.setItem("influencerId", res.influencerId);
+
+      persistOnboardingRoute(res.route);
 
       await fetch("/api-1/influencer-auth", {
         method: "POST",
@@ -263,21 +316,18 @@ export default function InfluencerLoginPage() {
         body: JSON.stringify({ token: res.token }),
       });
 
-      // ✅ UPDATED: go onboarding first if incomplete
-      const onboardingDone =
-        res?.onboarding?.page1Done &&
-        res?.onboarding?.page2Done &&
-        res?.onboarding?.page3Done;
-
-      router.replace(
-        onboardingDone ? "/influencer/dashboards" : routeToPath(res.route)
-      );
+      const redirectPath = getPostLoginRedirect(res);
+      router.replace(redirectPath);
     } catch (err) {
       const fallback = getApiErrorMessage(err, "Login failed");
       const details = getApiErrorDetails(err, fallback);
       const mapped = mapLoginError(details);
 
-      toast({ icon: "error", title: mapped.title, text: mapped.text });
+      toast({
+        icon: "error",
+        title: mapped.title,
+        text: mapped.text,
+      });
     } finally {
       setLoading(false);
     }
@@ -287,7 +337,6 @@ export default function InfluencerLoginPage() {
     <div className="min-h-screen bg-background text-foreground">
       <ToastStyles />
 
-      {/* Header */}
       <header className="w-full bg-white border-y border-[color:var(--Border-Primary,#B3B3B3)]">
         <div
           className="
@@ -308,7 +357,9 @@ export default function InfluencerLoginPage() {
             />
 
             <span className="leading-tight">
-              <span className="block text-[20px] font-bold text-tx-primary">CollabGlam</span>
+              <span className="block text-[20px] font-bold text-tx-primary">
+                CollabGlam
+              </span>
               <span className="block text-[10px] leading-[12px] text-tx-tertiary -mt-[2px]">
                 For Influencers
               </span>
@@ -327,10 +378,8 @@ export default function InfluencerLoginPage() {
         </div>
       </header>
 
-      {/* Body */}
       <main className="mx-auto max-w-full flex-1 py-[20px] ">
         <div className="grid h-full items-stretch gap-[40px] lg:grid-cols-2">
-          {/* LEFT IMAGE */}
           <section className="order-1 lg:order-1 lg:h-full">
             <div className="flex w-full pr-[20px] lg:h-full lg:items-stretch">
               <div
@@ -359,8 +408,10 @@ export default function InfluencerLoginPage() {
                       style={{
                         backdropFilter: "blur(12px)",
                         WebkitBackdropFilter: "blur(12px)",
-                        maskImage: "linear-gradient(to top, black 0%, transparent 100%)",
-                        WebkitMaskImage: "linear-gradient(to top, black 0%, transparent 100%)",
+                        maskImage:
+                          "linear-gradient(to top, black 0%, transparent 100%)",
+                        WebkitMaskImage:
+                          "linear-gradient(to top, black 0%, transparent 100%)",
                       }}
                     />
                     <p className="relative text-center text-white font-semibold text-[24px] leading-[32px] z-10">
@@ -372,7 +423,6 @@ export default function InfluencerLoginPage() {
             </div>
           </section>
 
-          {/* RIGHT FORM */}
           <section className="order-1 xl:order-2 flex lg:h-full lg:items-center">
             <div className="mx-auto w-full max-w-[520px] px-4 sm:px-6 lg:px-8 py-8 lg:py-0">
               <h1 className="cg-heading">Welcome Back</h1>
@@ -380,26 +430,6 @@ export default function InfluencerLoginPage() {
               <p className="mt-m cg-description">
                 Enter your email and password so we can take you back to your dashboard and ongoing work.
               </p>
-
-              {/* <div className="mt-2xl">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full !my-0 rounded-m"
-                  leftIcon={<InstagramLogo size={18} />}
-                  onClick={() => console.log("instagram oauth")}
-                >
-                  Continue With Instagram
-                </Button>
-              </div> */}
-
-              {/* <div className="mt-2xl flex h-[1.5rem] w-full items-center justify-center">
-                <div className="h-0 w-[12rem] border-t border-bd-subtle opacity-100" />
-                <span className="mx-[0.5rem] flex h-[1.5rem] items-center justify-center cg-ts text-tx-tertiary">
-                  or
-                </span>
-                <div className="h-0 w-[12rem] border-t border-bd-subtle opacity-100" />
-              </div> */}
 
               <form onSubmit={onSubmit} className="space-y-m mt-2xl">
                 <FloatingInput
@@ -458,7 +488,10 @@ export default function InfluencerLoginPage() {
 
                 <p className="cg-auth-helper">
                   Don’t Have an Account?{" "}
-                  <Link href="/influencer/signup" className="cg-auth-link hover:underline">
+                  <Link
+                    href="/influencer/signup"
+                    className="cg-auth-link hover:underline"
+                  >
                     Signup
                   </Link>
                 </p>

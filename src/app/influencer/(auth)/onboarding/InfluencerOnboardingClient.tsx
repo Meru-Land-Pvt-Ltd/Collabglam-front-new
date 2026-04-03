@@ -9,7 +9,7 @@ import {
   TiktokLogo,
   CheckCircle,
 } from "@phosphor-icons/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { cn } from "@/lib/utils";
 import {
@@ -55,7 +55,19 @@ type PlatformState = {
   error?: string;
 };
 
+type PlatformPreview = {
+  username: string;
+  handle: string;
+  displayName: string;
+  imageUrl?: string;
+  profileUrl?: string;
+};
+
+type OnboardingStepParam = "page1" | "page2" | "page3";
+
+const TOTAL_STEPS = 3;
 const REDIRECT_TOAST_KEY = "cg_redirect_toast_v1";
+const ONBOARDING_RESUME_KEY = "cg_influencer_onboarding_resume_step";
 
 type RedirectToastPayload = {
   icon?: "success" | "error" | "info" | "warning";
@@ -95,6 +107,17 @@ function getBackendMessage(resp: any) {
   return influencerId ? `${message} (ID: ${influencerId})` : message;
 }
 
+function getBackendRoute(resp: any): string | undefined {
+  const payload = normalizeApiPayload(resp);
+  return (
+    payload?.route ||
+    payload?.data?.route ||
+    resp?.route ||
+    resp?.data?.route ||
+    undefined
+  );
+}
+
 function stripAt(value: string) {
   return String(value || "").trim().replace(/^@+/, "");
 }
@@ -104,23 +127,140 @@ function withAt(value: string) {
   return v ? `@${v}` : "";
 }
 
-function normalizeResolvedProfile(raw: any, typedHandle: string) {
+function isValidStepParam(value: string | null | undefined): value is OnboardingStepParam {
+  return value === "page1" || value === "page2" || value === "page3";
+}
+
+function getStepIndexFromParam(
+  value: string | null | undefined
+): number | null {
+  if (value === "page1") return 0;
+  if (value === "page2") return 1;
+  if (value === "page3") return 2;
+  return null;
+}
+
+function getStepParamFromIndex(index: number): OnboardingStepParam {
+  if (index <= 0) return "page1";
+  if (index === 1) return "page2";
+  return "page3";
+}
+
+function persistOnboardingStep(step: OnboardingStepParam) {
+  try {
+    sessionStorage.setItem(ONBOARDING_RESUME_KEY, step);
+  } catch {
+    // ignore
+  }
+}
+
+function readStoredOnboardingStep(): OnboardingStepParam | null {
+  try {
+    const raw = sessionStorage.getItem(ONBOARDING_RESUME_KEY);
+    return isValidStepParam(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearStoredOnboardingStep() {
+  try {
+    sessionStorage.removeItem(ONBOARDING_RESUME_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function getResolvedSource(raw: any) {
   const source = raw?.profile ?? raw?.data?.profile ?? raw?.data ?? raw ?? {};
-  const profile = source?.profile ?? source;
+  return source?.profile ?? source;
+}
+
+function normalizeResolvedProfile(raw: any, typedHandle: string) {
+  const profile = getResolvedSource(raw);
 
   const username = String(
-    profile?.username ||
-    source?.username ||
-    stripAt(profile?.handle || source?.handle || typedHandle)
+    profile?.username || stripAt(profile?.handle || typedHandle)
   ).trim();
 
   const handle = String(
-    profile?.handle || source?.handle || withAt(username || typedHandle)
+    profile?.handle || withAt(username || typedHandle)
   ).trim();
 
   return {
     username: stripAt(username),
     handle: handle.startsWith("@") ? handle : withAt(handle),
+  };
+}
+
+function getPlatformProfileUrl(platformKey: string, username: string) {
+  const cleanUsername = stripAt(username);
+  if (!cleanUsername) return "";
+
+  if (platformKey === "instagram") {
+    return `https://www.instagram.com/${cleanUsername}/`;
+  }
+
+  if (platformKey === "youtube") {
+    return `https://www.youtube.com/@${cleanUsername}`;
+  }
+
+  if (platformKey === "tiktok") {
+    return `https://www.tiktok.com/@${cleanUsername}`;
+  }
+
+  return "";
+}
+
+function getPlatformPreview(
+  platformKey: string,
+  status?: PlatformState
+): PlatformPreview | null {
+  if (!status?.resolved) return null;
+
+  const profile = getResolvedSource(status?.resolvedData);
+
+  const username = stripAt(
+    status?.username ||
+      profile?.username ||
+      profile?.handle ||
+      status?.handle ||
+      ""
+  );
+
+  const handle = withAt(profile?.handle || status?.handle || username);
+
+  if (!username && !handle) return null;
+
+  const displayName = String(
+    profile?.fullName ||
+      profile?.fullname ||
+      profile?.displayName ||
+      profile?.name ||
+      username
+  ).trim();
+
+  const imageUrl =
+    profile?.profilePictureUrl ||
+    profile?.profilePicture ||
+    profile?.avatarUrl ||
+    profile?.avatar ||
+    profile?.imageUrl ||
+    profile?.image ||
+    profile?.picture ||
+    "";
+
+  const profileUrl =
+    profile?.url ||
+    profile?.profileUrl ||
+    getPlatformProfileUrl(platformKey, username);
+
+  return {
+    username,
+    handle: handle || withAt(username),
+    displayName: displayName || username,
+    imageUrl: imageUrl || undefined,
+    profileUrl: profileUrl || undefined,
   };
 }
 
@@ -275,6 +415,7 @@ function PlatformRow({
   onHandleChange: (value: string) => void;
 }) {
   const radioId = `primary-${platformKey}`;
+  const preview = getPlatformPreview(platformKey, status);
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -419,6 +560,54 @@ function PlatformRow({
               </span>
             )}
           </div>
+
+          {preview ? (
+            <div className="mt-3 rounded-[14px] border border-neutral-200 bg-neutral-50 p-3">
+              <div className="mb-2 text-[12px] font-medium text-neutral-600">
+                Profile preview
+              </div>
+
+              <div className="flex items-center gap-3">
+                {preview.imageUrl ? (
+                  <img
+                    src={preview.imageUrl}
+                    alt={preview.displayName || preview.handle}
+                    className="h-12 w-12 rounded-full object-cover border border-neutral-200 bg-white"
+                  />
+                ) : (
+                  <div className="h-12 w-12 rounded-full border border-neutral-200 bg-white flex items-center justify-center text-[16px] font-semibold text-neutral-700">
+                    {(preview.displayName || preview.username || platformKey)
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-semibold text-neutral-900">
+                    {preview.displayName}
+                  </div>
+                  <div className="truncate text-[12px] text-neutral-500">
+                    {preview.handle}
+                  </div>
+                </div>
+
+                {preview.profileUrl ? (
+                  <a
+                    href={preview.profileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 rounded-[10px] border border-neutral-200 bg-white px-3 py-2 text-[12px] font-medium text-neutral-700 hover:bg-neutral-100"
+                  >
+                    View
+                  </a>
+                ) : null}
+              </div>
+
+              <p className="mt-2 text-[12px] text-neutral-500">
+                This is the profile resolved from the handle you entered.
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -427,6 +616,7 @@ function PlatformRow({
 
 export default function InfluencerOnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const getToken = React.useCallback(() => {
     return (
@@ -468,13 +658,44 @@ export default function InfluencerOnboardingPage() {
   >({});
   const resolveSeqRef = React.useRef<Record<string, number>>({});
 
+  const setStepWithRoute = React.useCallback(
+    (stepIndex: number) => {
+      const boundedIndex = Math.max(0, Math.min(TOTAL_STEPS - 1, stepIndex));
+      const nextStepParam = getStepParamFromIndex(boundedIndex);
+      const currentStepParam = searchParams.get("step");
+
+      setOnboardStep(boundedIndex);
+      persistOnboardingStep(nextStepParam);
+
+      if (currentStepParam !== nextStepParam) {
+        router.replace(`/influencer/onboarding?step=${nextStepParam}`);
+      }
+    },
+    [router, searchParams]
+  );
+
   React.useEffect(() => {
     const token = getToken();
     if (!token) {
       router.replace("/influencer/signup");
       return;
     }
-  }, [router, getToken]);
+
+    const urlStep = searchParams.get("step");
+    const urlStepIndex = getStepIndexFromParam(urlStep);
+    const storedStep = readStoredOnboardingStep();
+    const storedStepIndex = getStepIndexFromParam(storedStep);
+
+    const nextStepIndex = urlStepIndex ?? storedStepIndex ?? 0;
+    const nextStepParam = getStepParamFromIndex(nextStepIndex);
+
+    setOnboardStep(nextStepIndex);
+    persistOnboardingStep(nextStepParam);
+
+    if (urlStepIndex === null) {
+      router.replace(`/influencer/onboarding?step=${nextStepParam}`);
+    }
+  }, [router, getToken, searchParams]);
 
   React.useEffect(() => {
     return () => {
@@ -484,7 +705,6 @@ export default function InfluencerOnboardingPage() {
     };
   }, []);
 
-  const TOTAL_STEPS = 3;
   const progressPct = ((onboardStep + 1) / TOTAL_STEPS) * 100;
 
   const page1Resolving = React.useMemo(() => {
@@ -504,10 +724,10 @@ export default function InfluencerOnboardingPage() {
         const state = platformStates[platform];
         return Boolean(
           state &&
-          stripAt(state.handle) &&
-          state.resolved &&
-          !state.loading &&
-          !state.error
+            stripAt(state.handle) &&
+            state.resolved &&
+            !state.loading &&
+            !state.error
         );
       });
     }
@@ -525,7 +745,7 @@ export default function InfluencerOnboardingPage() {
 
   const onboardPrev = () => {
     if (isLoading) return;
-    setOnboardStep((s) => Math.max(0, s - 1));
+    setStepWithRoute(onboardStep - 1);
   };
 
   const togglePlatform = (platform: string) => {
@@ -717,7 +937,7 @@ export default function InfluencerOnboardingPage() {
       return await apiSaveInfluencerOnboarding(
         {
           page1,
-          preferredProvider: data.primaryPlatform,
+          preferredPlatform: data.primaryPlatform,
         },
         token
       );
@@ -731,19 +951,19 @@ export default function InfluencerOnboardingPage() {
           : []),
         ...(data.projectLength
           ? [
-            {
-              question: "Preferred project length",
-              answers: [data.projectLength],
-            },
-          ]
+              {
+                question: "Preferred project length",
+                answers: [data.projectLength],
+              },
+            ]
           : []),
         ...(data.compensationTypes.length
           ? [
-            {
-              question: "Choose compensation types you want",
-              answers: data.compensationTypes,
-            },
-          ]
+              {
+                question: "Choose compensation types you want",
+                answers: data.compensationTypes,
+              },
+            ]
           : []),
       ];
 
@@ -753,9 +973,9 @@ export default function InfluencerOnboardingPage() {
     if (stepIndex === 2) {
       const customGoals = includes(data.campaignGoals, "Others")
         ? data.otherCampaignGoal
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
         : [];
 
       const goalAnswers = [
@@ -777,19 +997,19 @@ export default function InfluencerOnboardingPage() {
         },
         ...(data.preferredProjectType.length
           ? [
-            {
-              question: "Preferred project type",
-              answers: data.preferredProjectType,
-            },
-          ]
+              {
+                question: "Preferred project type",
+                answers: data.preferredProjectType,
+              },
+            ]
           : []),
         ...(data.deliveryPreference.length
           ? [
-            {
-              question: "Which type of delivery you prefer",
-              answers: data.deliveryPreference,
-            },
-          ]
+              {
+                question: "Which type of delivery you prefer",
+                answers: data.deliveryPreference,
+              },
+            ]
           : []),
       ];
 
@@ -805,12 +1025,20 @@ export default function InfluencerOnboardingPage() {
 
     try {
       const resp = await saveCurrentStep(onboardStep);
+      const backendRoute = getBackendRoute(resp);
 
       if (onboardStep < TOTAL_STEPS - 1) {
-        setOnboardStep((s) => s + 1);
+        const backendStepIndex = getStepIndexFromParam(backendRoute);
+        if (backendStepIndex !== null) {
+          setStepWithRoute(backendStepIndex);
+          return;
+        }
+
+        setStepWithRoute(onboardStep + 1);
         return;
       }
 
+      clearStoredOnboardingStep();
       const msg = getBackendMessage(resp);
       setRedirectToast({ icon: "success", title: "Success", text: msg });
       router.push("/influencer/dashboards");
@@ -841,14 +1069,23 @@ export default function InfluencerOnboardingPage() {
         resp = await apiSaveInfluencerOnboarding({ ispage3Skip: true }, token);
       }
 
+      const backendRoute = getBackendRoute(resp);
+
       if (onboardStep < TOTAL_STEPS - 1) {
-        setOnboardStep((s) => s + 1);
+        const backendStepIndex = getStepIndexFromParam(backendRoute);
+        if (backendStepIndex !== null) {
+          setStepWithRoute(backendStepIndex);
+          return;
+        }
+
+        setStepWithRoute(onboardStep + 1);
         return;
       }
 
+      clearStoredOnboardingStep();
       const msg = resp ? getBackendMessage(resp) : "Onboarding skipped";
       setRedirectToast({ icon: "success", title: "Done", text: msg });
-      router.push("/influencer/campaign");
+      router.push("/influencer/dashboards");
     } catch (e) {
       const msg = getApiErrorMessage(e, "Failed to skip step");
       setFormError(msg);
@@ -862,15 +1099,15 @@ export default function InfluencerOnboardingPage() {
     onboardStep === 0
       ? "Choose your platforms"
       : onboardStep === 1
-        ? "How do you like to work?"
-        : "Your collaboration preferences";
+      ? "How do you like to work?"
+      : "Your collaboration preferences";
 
   const subtitle =
     onboardStep === 0
       ? "Select platforms, enter handles, and wait for verification before continuing."
       : onboardStep === 1
-        ? "Tell us what you create and how you prefer to get paid."
-        : "Pick your industries, project types, and delivery preferences.";
+      ? "Tell us what you create and how you prefer to get paid."
+      : "Pick your industries, project types, and delivery preferences.";
 
   return (
     <div className="min-h-[100svh] bg-background text-foreground flex flex-col overflow-x-hidden">
@@ -1162,8 +1399,8 @@ export default function InfluencerOnboardingPage() {
                   {isLoading
                     ? "Saving..."
                     : onboardStep === 0 && page1Resolving
-                      ? "Resolving handle..."
-                      : "Continue"}
+                    ? "Resolving handle..."
+                    : "Continue"}
                 </Button>
 
                 {onboardStep !== 0 ? (

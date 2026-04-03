@@ -163,6 +163,43 @@ function getInfluencerAuth() {
   return { influencerId, token };
 }
 
+function getImageUrl(image: any) {
+  if (!image) return "";
+  if (typeof image === "string") return image;
+
+  return (
+    image?.dataUrl ||
+    image?.url ||
+    image?.path ||
+    image?.src ||
+    image?.imageUrl ||
+    ""
+  );
+}
+
+function getMappedTextList(items: any, keys: string[]) {
+  if (!Array.isArray(items)) return [];
+
+  const values = items
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+
+      if (item && typeof item === "object") {
+        for (const key of keys) {
+          const value = item?.[key];
+          if (typeof value === "string" && value.trim()) {
+            return value.trim();
+          }
+        }
+      }
+
+      return "";
+    })
+    .filter(Boolean);
+
+  return Array.from(new Set(values));
+}
+
 function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
   const budget = Number(campaign?.campaignBudget ?? campaign?.budget ?? 0);
 
@@ -226,52 +263,130 @@ function mapApiCampaignToUi(campaign: ActiveCampaignItem | any): UICampaign {
     applications,
     brand: brandName,
     brandLogo: campaign?.brandLogo || "",
-    image:
-      typeof firstImage === "string"
-        ? firstImage
-        : firstImage?.url || firstImage?.path || "",
+    image: getImageUrl(firstImage),
     raw: campaign,
   };
 }
 
 function campaignToPreview(campaign: UICampaign) {
-  const rawCountries =
-    campaign.raw?.targetCountryIds
-      ?.map((item: any) => item?.countryName)
-      .filter(Boolean) || [];
+  const rawCountries = getMappedTextList(campaign.raw?.targetCountryIds, [
+    "countryName",
+    "name",
+    "label",
+    "title",
+  ]);
 
-  const ageRanges =
-    campaign.raw?.targetAgeRanges?.map((item: any) => item?.range).filter(Boolean) ||
-    campaign.raw?.targetAgeRangesDetails
-      ?.map((item: any) => item?.range)
-      .filter(Boolean) ||
-    [];
+  const ageRanges = [
+    ...getMappedTextList(campaign.raw?.targetAgeRanges, [
+      "range",
+      "name",
+      "label",
+      "title",
+    ]),
+    ...getMappedTextList(campaign.raw?.targetAgeRangesDetails, [
+      "range",
+      "name",
+      "label",
+      "title",
+    ]),
+  ].filter(Boolean);
 
-  const goals =
-    campaign.raw?.campaignGoals?.map((item: any) => item?.goal).filter(Boolean) || [];
+  const uniqueAgeRanges = Array.from(new Set(ageRanges));
+
+  const goals = getMappedTextList(campaign.raw?.campaignGoals, [
+    "goal",
+    "name",
+    "label",
+    "title",
+  ]);
+
+  const productServiceInfo = getMappedTextList(campaign.raw?.productServiceInfo, [
+    "title",
+    "name",
+    "label",
+    "service",
+    "product",
+    "value",
+    "info",
+  ]);
 
   const categories = Array.isArray(campaign.raw?.categories)
     ? campaign.raw.categories
     : [];
 
-  const productImages = Array.isArray(campaign.raw?.productImages)
+  const allProductImages = Array.isArray(campaign.raw?.productImages)
     ? campaign.raw.productImages
     : [];
 
+  const productImages =
+    allProductImages.length > 0 ? [allProductImages[0]] : [];
+
+  const ageText = uniqueAgeRanges.join(", ");
+  const countryText = rawCountries.join(", ") || campaign.location || "";
+  const goalsText = goals.join(", ");
+  const productServiceText = productServiceInfo.join(", ");
+
+  const categoryWithAge = [campaign.category, ageText].filter(Boolean).join(" • ");
+
+  const topRightTag = [productServiceText, goalsText]
+    .filter(Boolean)
+    .join(" • ");
+
   return {
     form: {
+      title: campaign.raw?.campaignTitle || campaign.title,
+      name: campaign.raw?.campaignTitle || campaign.title,
       campaignTitle: campaign.raw?.campaignTitle || campaign.title,
+
       description: campaign.description,
-      categoryName: campaign.category,
-      categories,
-      targetCountryIds: campaign.raw?.targetCountryIds || [],
-      targetAgeRanges: campaign.raw?.targetAgeRanges || [],
+
+      categoryName: categoryWithAge || campaign.category,
+      categoryLabel: campaign.category,
+
+      ageGroup: ageText,
+      ageGroupText: ageText,
+      targetAgeRanges:
+        campaign.raw?.targetAgeRanges ||
+        uniqueAgeRanges.map((range: string) => ({ range })),
+
+      country: countryText,
+      countryText,
+      targetCountry:
+        rawCountries.length > 0
+          ? rawCountries
+          : countryText
+          ? [countryText]
+          : [],
+      targetCountryIds:
+        campaign.raw?.targetCountryIds ||
+        rawCountries.map((countryName: string) => ({ countryName })),
+
       campaignGoals: goals.length
         ? goals.map((goal: string) => ({ goal }))
-        : [{ goal: "Brand Awareness" }],
+        : [],
+      goalText: goalsText,
+      goalsText,
+
+      productServiceInfo:
+        productServiceInfo.length > 0 ? productServiceInfo : [],
+      productServiceText,
+
+      topRightTag,
+      topTag: topRightTag,
+      badgeText: topRightTag,
+      tagText: topRightTag,
+
       campaignBudget: campaign.budgetMax,
       budget: campaign.budgetMax,
+
       productImages,
+      allProductImages,
+      coverImage: getImageUrl(productImages[0]),
+      image: getImageUrl(productImages[0]),
+
+      secondaryText: countryText,
+      footerText: countryText,
+      subDescription: countryText,
     },
     meta: {
       countryMap: rawCountries.reduce(
@@ -281,15 +396,23 @@ function campaignToPreview(campaign: UICampaign) {
         },
         {},
       ),
-      ageMap: ageRanges.reduce((acc: Record<string, string>, item: string) => {
-        acc[item] = item;
-        return acc;
-      }, {}),
+      ageMap: uniqueAgeRanges.reduce(
+        (acc: Record<string, string>, item: string) => {
+          acc[item] = item;
+          return acc;
+        },
+        {},
+      ),
       goalsMap: goals.reduce((acc: Record<string, string>, item: string) => {
         acc[item] = item;
         return acc;
       }, {}),
       campaignBudget: campaign.budgetMax,
+      countryText,
+      ageText,
+      goalsText,
+      productServiceText,
+      topRightTag,
     },
   };
 }
@@ -472,8 +595,6 @@ export default function DiscoverCampaigns() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  /* ----------------------------- DEBOUNCE SEARCH ---------------------------- */
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search.trim());
@@ -481,8 +602,6 @@ export default function DiscoverCampaigns() {
 
     return () => clearTimeout(timer);
   }, [search]);
-
-  /* -------------------------- FETCH FILTER OPTIONS -------------------------- */
 
   useEffect(() => {
     let ignore = false;
@@ -550,8 +669,6 @@ export default function DiscoverCampaigns() {
     };
   }, []);
 
-  /* ------------------------------- FETCH DATA ------------------------------- */
-
   useEffect(() => {
     let ignore = false;
 
@@ -618,8 +735,6 @@ export default function DiscoverCampaigns() {
     };
   }, [debouncedSearch]);
 
-  /* ------------------------------ FILTER OPTIONS ---------------------------- */
-
   const platforms = useMemo<SelectOption[]>(() => {
     const flat = campaigns.flatMap((c) => c.platforms || []);
     const unique = [...new Set(flat.filter(Boolean))];
@@ -681,8 +796,6 @@ export default function DiscoverCampaigns() {
     setBudgetRange(resolveBudgetRange(selectedBudget, maxBudget));
   }, [maxBudget, selectedBudget]);
 
-  /* ------------------------------ FILTER LOGIC ------------------------------ */
-
   const filteredCampaigns = useMemo(() => {
     const filtered = campaigns.filter((campaign) => {
       const matchesCategory =
@@ -731,8 +844,6 @@ export default function DiscoverCampaigns() {
     sortBy,
     budgetRange,
   ]);
-
-  /* -------------------------------------------------------------------------- */
 
   return (
     <TooltipProvider>
