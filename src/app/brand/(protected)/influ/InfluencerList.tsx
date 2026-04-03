@@ -45,9 +45,21 @@ import { apiGetfetchBulkInfleuncerId } from "@/app/influencer/services/influence
 import ContractSidebarExtracted from "./ContractSidebar";
 import { useInfluencerCounts } from "./InfluencerCountsContext";
 
+const EMAIL_API_BASE = "/emails";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Tab = "all" | "applied" | "active" | "shortlisted" | "undecided" | "rejected";
+
+type CreateThreadResponse = {
+  success: boolean;
+  threadId: string;
+  brandAliasEmail: string;
+  influencerAliasEmail: string;
+  brandDisplayAlias: string;
+  influencerDisplayAlias: string;
+  subject: string;
+};
 
 type ContractMeta = {
   _id: string;
@@ -1556,19 +1568,25 @@ export default function InfluencerList() {
       }
 
       try {
-        const res: any = await post("/emails/threads", {
+        const threadRes = await post<CreateThreadResponse>(`${EMAIL_API_BASE}/threads`, {
           brandId,
           influencerId,
+          campaignId: campaignId || undefined,
           subject: campaignTitle || `Conversation with ${influencerName}`,
         });
 
-        const threadId = res?.threadId || res?.data?.threadId;
+        const threadId =
+          threadRes?.threadId ||
+          null;
 
         if (!threadId) {
           throw new Error("Thread ID not returned from server.");
         }
 
-        router.push(`/brand/inbox/${threadId}`);
+        router.push(
+          `/brand/inbox/${threadId}${campaignId ? `?campaignId=${encodeURIComponent(campaignId)}` : ""
+          }`
+        );
       } catch (e: any) {
         toast({
           icon: "error",
@@ -1581,7 +1599,7 @@ export default function InfluencerList() {
         });
       }
     },
-    [brandId, router, campaignTitle]
+    [brandId, router, campaignId, campaignTitle]
   );
 
   // ── Milestone handlers ─────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { get, post } from "@/lib/api";
+import { get } from "@/lib/api";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/buttonComp";
 import {
   MagnifyingGlass,
   CaretLeft,
@@ -28,12 +27,17 @@ import {
   Star,
   Envelope,
   Check,
-  PencilSimple,
 } from "@phosphor-icons/react";
 
 type FilterOption = {
   id: string;
   name: string;
+};
+
+type CampaignRef = {
+  _id: string | null;
+  title?: string;
+  campaignType?: string;
 };
 
 type InfluencerInboxThread = {
@@ -42,6 +46,7 @@ type InfluencerInboxThread = {
   lastMessageAt: string | null;
   lastMessageDirection: string | null;
   lastMessageSnippet: string;
+  campaign?: CampaignRef | null;
   brand: {
     brandId: string | null;
     name: string;
@@ -222,14 +227,10 @@ export default function InfluencerInboxPage() {
 
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(true);
-  const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState("");
   const [threads, setThreads] = React.useState<InfluencerInboxThread[]>([]);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-
   const [influencerId, setInfluencerId] = React.useState("");
-  const [showCompose, setShowCompose] = React.useState(false);
-  const [composeThread, setComposeThread] = React.useState<InfluencerInboxThread | null>(null);
 
   const fetchThreads = React.useCallback(async () => {
     try {
@@ -278,12 +279,14 @@ export default function InfluencerInboxPage() {
       const brandAlias = item.brand?.aliasEmail?.toLowerCase() || "";
       const subject = item.subject?.toLowerCase() || "";
       const preview = item.lastMessageSnippet?.toLowerCase() || "";
+      const campaignTitle = item.campaign?.title?.toLowerCase() || "";
 
       return (
         brandName.includes(q) ||
         brandAlias.includes(q) ||
         subject.includes(q) ||
-        preview.includes(q)
+        preview.includes(q) ||
+        campaignTitle.includes(q)
       );
     });
   }, [threads, search]);
@@ -386,11 +389,20 @@ export default function InfluencerInboxPage() {
             ) : (
               filteredThreads.map((item) => {
                 const checked = selectedIds.includes(item.threadId);
+                const campaignId = item.campaign?._id || null;
 
                 return (
                   <div
                     key={item.threadId}
-                    onClick={() => router.push(`/influencer/inbox/${item.threadId}`)}
+                    onClick={() =>
+                      router.push(
+                        `/influencer/inbox/${item.threadId}${
+                          campaignId
+                            ? `?campaignId=${encodeURIComponent(campaignId)}`
+                            : ""
+                        }`
+                      )
+                    }
                     className={cn(
                       "grid cursor-pointer grid-cols-[24px_minmax(180px,1.1fr)_minmax(0,4fr)_minmax(120px,140px)] items-center gap-3 border-b border-[#D6D6D6] px-3 py-4 transition-colors hover:bg-[#EDEDED]"
                     )}

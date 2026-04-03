@@ -22,12 +22,19 @@ import {
   Paperclip,
 } from "@phosphor-icons/react";
 
+type CampaignRef = {
+  _id: string | null;
+  title?: string;
+  campaignType?: string;
+};
+
 type BrandThread = {
   threadId: string;
   subject: string;
   lastMessageAt: string | null;
   lastMessageDirection: string | null;
   lastMessageSnippet: string;
+  campaign?: CampaignRef | null;
   influencer: {
     _id?: string | null;
     influencerId: string | null;
@@ -136,9 +143,11 @@ function IconButton({
 
 export default function BrandInboxMailDetailPage() {
   const router = useRouter();
-const params = useParams();
-const threadId =
-  typeof params?.threadId === "string" ? params.threadId : "";
+  const params = useParams();
+  const searchParams = useSearchParams();
+
+  const threadId =
+    typeof params?.threadId === "string" ? params.threadId : "";
 
   const [loading, setLoading] = React.useState(true);
   const [sending, setSending] = React.useState(false);
@@ -149,18 +158,17 @@ const threadId =
   const [messages, setMessages] = React.useState<ThreadMessage[]>([]);
   const [showReply, setShowReply] = React.useState(false);
   const [showCompose, setShowCompose] = React.useState(false);
-  const searchParams = useSearchParams();
 
   React.useEffect(() => {
-  if (searchParams.get("compose") === "true" && thread) {
-    setShowCompose(true);
-  }
-}, [searchParams, thread]); 
+    if (searchParams.get("compose") === "true" && thread) {
+      setShowCompose(true);
+    }
+  }, [searchParams, thread]);
 
-  React.useEffect(() => {
-    console.log("params:", params);
-    console.log("threadId:", threadId);
-  }, [params, threadId]);
+  const currentCampaignId = React.useMemo(
+    () => thread?.campaign?._id || searchParams.get("campaignId") || undefined,
+    [thread, searchParams]
+  );
 
   const fetchThread = React.useCallback(async () => {
     try {
@@ -244,6 +252,7 @@ const threadId =
       await post(`${EMAIL_API_BASE}/brand-to-influencer`, {
         brandId,
         influencerId,
+        campaignId: currentCampaignId,
         subject: payload.subject,
         body: payload.body,
         attachments: payload.attachments,
@@ -279,6 +288,7 @@ const threadId =
       await post(`${EMAIL_API_BASE}/brand-to-influencer`, {
         brandId,
         influencerId,
+        campaignId: currentCampaignId,
         subject: payload.subject,
         body: payload.body,
         attachments: payload.attachments,
@@ -304,7 +314,15 @@ const threadId =
         <div className="flex items-center justify-between border-b border-[#EFEFEF] px-5 py-4">
           <div className="flex items-center gap-1">
             <button
-              onClick={() => router.push("/brand/inbox")}
+              onClick={() =>
+                router.push(
+                  `/brand/inbox${
+                    currentCampaignId
+                      ? `?campaignId=${encodeURIComponent(currentCampaignId)}`
+                      : ""
+                  }`
+                )
+              }
               className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] font-medium text-[#7B7B7B] transition-colors hover:bg-[#F3F4F6] hover:text-[#111111]"
             >
               <ArrowLeft size={12} />
