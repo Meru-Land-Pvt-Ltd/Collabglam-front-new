@@ -68,8 +68,7 @@ export default function AdminLoginPage() {
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
-          err?.message ||
-          "Invalid credentials"
+        "Oops! We couldn't sign you in. Please check your connection and try again."
       );
     } finally {
       setLoading(false);
