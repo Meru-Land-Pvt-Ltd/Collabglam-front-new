@@ -1,18 +1,21 @@
 "use client";
 
-import React, { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { GenderFemale, GenderMale } from "@phosphor-icons/react/dist/ssr";
 import type { FilterState, Platform } from "./filters";
+import {
+  AI_ACCOUNT_TYPE_OPTIONS,
+  AI_CONTENT_TYPE_OPTIONS,
+  AUDIENCE_AGE_OPTIONS,
+  AUDIENCE_GENDER_OPTIONS,
+  INFLUENCER_GENDER_OPTIONS,
+  LANGUAGE_OPTIONS,
+  SEARCH_MODE_OPTIONS,
+} from "./filters";
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
-
-type TierKey = "nano" | "micro" | "mid" | "macro" | "mega";
-type GenderKey = "all" | "male" | "female";
-type AgeKey = "18-24" | "25-34" | "35-44" | "45+";
 
 interface MoreFiltersDropdownProps {
   open: boolean;
@@ -27,84 +30,77 @@ interface MoreFiltersDropdownProps {
   loading?: boolean;
 }
 
-type ApiCountry = {
-  _id: string;
-  countryName: string;
-  countryCode: string;
-  flag?: string;
-};
-
-const COUNTRY_API = "https://api.collabglam.com/country/getAll";
-const AGE_OPTIONS: AgeKey[] = ["18-24", "25-34", "35-44", "45+"];
-const TIER_RANGES: Record<TierKey, { min: number; max?: number }> = {
-  nano: { min: 1000, max: 10000 },
-  micro: { min: 10000, max: 100000 },
-  mid: { min: 100000, max: 500000 },
-  macro: { min: 500000, max: 1000000 },
-  mega: { min: 1000000, max: undefined },
-};
-
-function getTierFromFilters(filters: FilterState): TierKey | null {
-  const selected = Object.values(filters.platform);
-  const mins = new Set(selected.map((item) => item.followersMin).filter((value) => value != null));
-  const maxs = new Set(selected.map((item) => item.followersMax).filter((value) => value != null));
-  if (mins.size !== 1 || maxs.size > 1) return null;
-
-  const min = [...mins][0];
-  const max = [...maxs][0];
-  if (min === 1000 && max === 10000) return "nano";
-  if (min === 10000 && max === 100000) return "micro";
-  if (min === 100000 && max === 500000) return "mid";
-  if (min === 500000 && max === 1000000) return "macro";
-  if (min === 1000000 && max == null) return "mega";
-  return null;
+function toInputValue(value?: number | string) {
+  return value == null ? "" : String(value);
 }
 
-function getAgeFromFilters(filters: FilterState): AgeKey | null {
-  const min = filters.influencer.ageMin;
-  const max = filters.influencer.ageMax;
-  if (min === 18 && max === 24) return "18-24";
-  if (min === 25 && max === 34) return "25-34";
-  if (min === 35 && max === 44) return "35-44";
-  if (min === 45 && (max == null || max >= 45)) return "45+";
-  return null;
+function toOptionalNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function getGenderFromFilters(filters: FilterState): GenderKey {
-  if (filters.influencer.gender === "MALE") return "male";
-  if (filters.influencer.gender === "FEMALE") return "female";
-  return "all";
-}
-
-const RowEl = ({ label, children }: { label: string; children: ReactNode }) => (
-  <div className="flex w-full flex-row items-center justify-between gap-4">
-    <div className="shrink-0 text-[16px] font-semibold text-[#1A1A1A]">{label}</div>
-    <div className="min-w-0 flex-1 flex justify-end">
-      <div className="max-w-full overflow-x-auto scrollbar-none">
-        <div className="w-max">{children}</div>
-      </div>
-    </div>
-  </div>
-);
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <button
-      type="button"
-      aria-pressed={checked}
-      onClick={() => onChange(!checked)}
+    <div className="space-y-1.5">
+      <label className="block text-sm font-semibold text-[#1A1A1A]">{label}</label>
+      {children}
+      {hint ? <p className="text-[11px] text-[#7b7b7b]">{hint}</p> : null}
+    </div>
+  );
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
       className={cn(
-        "relative inline-flex h-[30px] w-[52px] items-center rounded-full transition-colors",
-        checked ? "bg-black" : "bg-[#E8E8E8]",
+        "h-11 w-full rounded-[12px] border border-[#d8d8d8] bg-white px-3 text-sm text-[#222] outline-none focus:border-black",
+        props.className,
       )}
-    >
-      <span
-        className={cn(
-          "absolute h-[24px] w-[24px] rounded-full bg-white shadow-sm transition-transform",
-          checked ? "translate-x-[24px]" : "translate-x-[4px]",
-        )}
+    />
+  );
+}
+
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={cn(
+        "h-11 w-full rounded-[12px] border border-[#d8d8d8] bg-white px-3 text-sm text-[#222] outline-none focus:border-black",
+        props.className,
+      )}
+    />
+  );
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-[12px] border border-[#ece7df] px-3 py-2.5">
+      <span className="text-sm text-[#1A1A1A]">{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4"
       />
-    </button>
+    </label>
   );
 }
 
@@ -118,25 +114,24 @@ export function MoreFiltersDropdown({
   onApply,
   loading,
 }: MoreFiltersDropdownProps) {
-  const filterMenuRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const [tier, setTier] = useState<TierKey | null>(null);
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [age, setAge] = useState<AgeKey | null>(null);
-  const [gender, setGender] = useState<GenderKey>("all");
-  const [country, setCountry] = useState("");
-  const [countries, setCountries] = useState<Array<{ name: string; label: string }>>([]);
-  const [loadingCountries, setLoadingCountries] = useState(false);
-  const [menuWidth, setMenuWidth] = useState(707);
+  const [draft, setDraft] = useState({
+    search: filters.search,
+    influencer: filters.influencer,
+    audience: filters.audience,
+  });
+
+  const [menuWidth, setMenuWidth] = useState(760);
   const [alignRight, setAlignRight] = useState(true);
 
   useEffect(() => {
     if (!open) return;
-    setTier(getTierFromFilters(filters));
-    setVerifiedOnly(!!filters.influencer.isVerified);
-    setAge(getAgeFromFilters(filters));
-    setGender(getGenderFromFilters(filters));
-    setCountry(filters.audience.country || "");
+    setDraft({
+      search: { ...filters.search },
+      influencer: { ...filters.influencer },
+      audience: { ...filters.audience },
+    });
   }, [filters, open]);
 
   useLayoutEffect(() => {
@@ -145,9 +140,11 @@ export function MoreFiltersDropdown({
     const updatePosition = () => {
       const rect = anchorRef.current?.getBoundingClientRect();
       if (!rect) return;
+
       const viewportPadding = 16;
-      const idealWidth = 707;
+      const idealWidth = 760;
       const safeWidth = Math.min(idealWidth, window.innerWidth - viewportPadding * 2);
+
       setMenuWidth(safeWidth);
       setAlignRight(rect.right - safeWidth >= viewportPadding);
     };
@@ -160,37 +157,9 @@ export function MoreFiltersDropdown({
   useEffect(() => {
     if (!open) return;
 
-    const controller = new AbortController();
-    (async () => {
-      try {
-        setLoadingCountries(true);
-        const response = await fetch(COUNTRY_API, { signal: controller.signal });
-        if (!response.ok) throw new Error("Failed to fetch countries");
-        const raw = (await response.json()) as ApiCountry[];
-        const normalized = raw
-          .map((item) => ({
-            name: String(item.countryName || "").trim(),
-            label: `${item.flag ? `${item.flag} ` : ""}${String(item.countryName || "").trim()}${item.countryCode ? ` (${String(item.countryCode).toUpperCase()})` : ""}`,
-          }))
-          .filter((item) => item.name)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setCountries(normalized);
-      } catch {
-        setCountries([]);
-      } finally {
-        setLoadingCountries(false);
-      }
-    })();
-
-    return () => controller.abort();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (filterMenuRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
       if (anchorRef.current?.contains(target)) return;
       onClose();
     };
@@ -207,176 +176,387 @@ export function MoreFiltersDropdown({
     };
   }, [anchorRef, onClose, open]);
 
-  const handleApply = () => {
-    flushSync(() => {
-      if (tier) {
-        Object.keys(filters.platform).forEach((platform) => {
-          updateFilter(`platform.${platform}.followersMin`, TIER_RANGES[tier].min);
-          updateFilter(`platform.${platform}.followersMax`, TIER_RANGES[tier].max);
-        });
-      } else {
-        Object.keys(filters.platform).forEach((platform) => {
-          updateFilter(`platform.${platform}.followersMin`, undefined);
-          updateFilter(`platform.${platform}.followersMax`, undefined);
-        });
-      }
+  if (!open) return null;
 
-      updateFilter("influencer.isVerified", verifiedOnly || undefined);
+  const setSearch = (key: keyof typeof draft.search, value: any) =>
+    setDraft((current) => ({ ...current, search: { ...current.search, [key]: value } }));
 
-      if (age === "18-24") {
-        updateFilter("influencer.ageMin", 18);
-        updateFilter("influencer.ageMax", 24);
-      } else if (age === "25-34") {
-        updateFilter("influencer.ageMin", 25);
-        updateFilter("influencer.ageMax", 34);
-      } else if (age === "35-44") {
-        updateFilter("influencer.ageMin", 35);
-        updateFilter("influencer.ageMax", 44);
-      } else if (age === "45+") {
-        updateFilter("influencer.ageMin", 45);
-        updateFilter("influencer.ageMax", undefined);
-      } else {
-        updateFilter("influencer.ageMin", undefined);
-        updateFilter("influencer.ageMax", undefined);
-      }
+  const setInfluencer = (key: keyof typeof draft.influencer, value: any) =>
+    setDraft((current) => ({ ...current, influencer: { ...current.influencer, [key]: value } }));
 
-      if (gender === "male") updateFilter("influencer.gender", "MALE");
-      else if (gender === "female") updateFilter("influencer.gender", "FEMALE");
-      else updateFilter("influencer.gender", undefined);
+  const setAudience = (key: keyof typeof draft.audience, value: any) =>
+    setDraft((current) => ({ ...current, audience: { ...current.audience, [key]: value } }));
 
-      updateFilter("audience.country", country || undefined);
-    });
+  const applyChanges = () => {
+    updateFilter("search.mode", draft.search.mode);
+    updateFilter("search.aiQuery", draft.search.aiQuery || undefined);
+    updateFilter(
+      "search.exactHandleBoost",
+      draft.search.exactHandleBoost === false ? false : undefined,
+    );
+    updateFilter("search.aiHasEmail", draft.search.aiHasEmail || undefined);
+    updateFilter("search.aiContentType", draft.search.aiContentType || undefined);
+    updateFilter("search.aiMaxPostAgeMonths", draft.search.aiMaxPostAgeMonths || undefined);
+    updateFilter("search.aiUsername", draft.search.aiUsername || undefined);
+    updateFilter("search.aiBrandsText", draft.search.aiBrandsText || undefined);
+    updateFilter("search.aiAccountType", draft.search.aiAccountType || undefined);
+
+    updateFilter("influencer.isVerified", draft.influencer.isVerified || undefined);
+    updateFilter("influencer.ageMin", draft.influencer.ageMin || undefined);
+    updateFilter("influencer.ageMax", draft.influencer.ageMax || undefined);
+    updateFilter("influencer.gender", draft.influencer.gender || undefined);
+
+    updateFilter("audience.country", draft.audience.country || undefined);
+    updateFilter("audience.locationIdsText", draft.audience.locationIdsText || undefined);
+    updateFilter("audience.locationWeight", draft.audience.locationWeight || undefined);
+    updateFilter("audience.languageCode", draft.audience.languageCode || undefined);
+    updateFilter("audience.languageWeight", draft.audience.languageWeight || undefined);
+    updateFilter("audience.gender", draft.audience.gender || undefined);
+    updateFilter("audience.genderWeight", draft.audience.genderWeight || undefined);
+    updateFilter("audience.ageBucket", draft.audience.ageBucket || undefined);
+    updateFilter("audience.ageWeight", draft.audience.ageWeight || undefined);
+    updateFilter("audience.interestsIdsText", draft.audience.interestsIdsText || undefined);
+    updateFilter("audience.interestsWeight", draft.audience.interestsWeight || undefined);
+    updateFilter("audience.credibilityMin", draft.audience.credibilityMin || undefined);
 
     onApply();
     onClose();
   };
 
-  const handleResetAll = () => {
-    setTier(null);
-    setVerifiedOnly(false);
-    setAge(null);
-    setGender("all");
-    setCountry("");
-    flushSync(() => onReset());
+  const handleReset = () => {
+    onReset();
+    onClose();
   };
-
-  if (!open) return null;
-
-  const pillWrap = "inline-flex max-w-full flex-wrap items-center gap-1 rounded-[12px] bg-[#F2F2F2] p-1 md:flex-nowrap";
-  const pillBtn = "inline-flex h-[40px] items-center justify-center rounded-[10px] px-4 text-sm font-medium transition-colors whitespace-nowrap";
-  const active = "bg-black text-white";
-  const inactive = "cursor-pointer text-[#8B8B8B] hover:text-[#1A1A1A]";
 
   return (
     <div
-      ref={filterMenuRef}
-      role="menu"
+      ref={menuRef}
       style={{ width: `${menuWidth}px` }}
       className={cn(
-        "absolute top-[calc(100%+8px)] z-50",
+        "absolute top-[calc(100%+8px)] z-50 max-h-[min(82vh,48rem)] overflow-y-auto rounded-[18px] border border-[#e6e0d7] bg-white shadow-[0_18px_48px_rgba(0,0,0,0.12)]",
         alignRight ? "right-0" : "left-0",
-        "max-h-[min(78vh,42rem)] overflow-y-auto",
-        "flex flex-col items-start gap-[0.8125rem]",
-        "rounded-[1rem] border border-[#F1F3F7] bg-white",
-        "shadow-[0_10px_28px_0_rgba(25,33,61,0.08)]",
-        "px-4 py-5 md:px-[2.3125rem] md:py-[2.0625rem]",
       )}
     >
-      <div className="flex w-full flex-col gap-[0.95rem]">
-        <RowEl label="Verified Influencer Only">
-          <div className="flex justify-start md:justify-end">
-            <Toggle checked={verifiedOnly} onChange={setVerifiedOnly} />
+      <div className="space-y-6 p-4 md:p-5">
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-[17px] font-semibold text-[#1A1A1A]">Search settings</h3>
+            <p className="mt-1 text-xs text-[#777]">
+              Combined runs exact handle lookup + standard search + AI search together.
+            </p>
           </div>
-        </RowEl>
 
-        <RowEl label="Influencer Tier">
-          <div className={pillWrap}>
-            {(["nano", "micro", "mid", "macro", "mega"] as TierKey[]).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={cn(pillBtn, tier === value ? active : inactive)}
-                onClick={() => setTier((current) => (current === value ? null : value))}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field label="Search mode">
+              <Select
+                value={draft.search.mode}
+                onChange={(event) => setSearch("mode", event.target.value)}
               >
-                {value === "mid" ? "Mid-tier" : value.charAt(0).toUpperCase() + value.slice(1)}
-              </button>
-            ))}
-          </div>
-        </RowEl>
+                {SEARCH_MODE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-        <RowEl label="Age">
-          <div className={pillWrap}>
-            {AGE_OPTIONS.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={cn(pillBtn, age === item ? active : inactive)}
-                onClick={() => setAge((current) => (current === item ? null : item))}
+            <Field label="AI query override" hint="Leave empty to reuse the main search box text">
+              <Input
+                value={toInputValue(draft.search.aiQuery)}
+                onChange={(event) => setSearch("aiQuery", event.target.value)}
+                placeholder="woman with curly hair lifting weights"
+              />
+            </Field>
+
+            <Field label="AI username">
+              <Input
+                value={toInputValue(draft.search.aiUsername)}
+                onChange={(event) => setSearch("aiUsername", event.target.value)}
+                placeholder="@creator_handle"
+              />
+            </Field>
+
+            <Field label="AI brand names" hint="Comma separated brand names for AI search">
+              <Input
+                value={toInputValue(draft.search.aiBrandsText)}
+                onChange={(event) => setSearch("aiBrandsText", event.target.value)}
+                placeholder="Nike, Adidas"
+              />
+            </Field>
+
+            <Field label="AI account type">
+              <Select
+                value={toInputValue(draft.search.aiAccountType)}
+                onChange={(event) => setSearch("aiAccountType", event.target.value || undefined)}
               >
-                {item}
-              </button>
-            ))}
-          </div>
-        </RowEl>
+                {AI_ACCOUNT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-        <RowEl label="Gender">
-          <div className={pillWrap}>
-            <button type="button" className={cn(pillBtn, gender === "all" ? active : inactive)} onClick={() => setGender("all")}>
-              All
-            </button>
-            <button
-              type="button"
-              className={cn(pillBtn, "flex items-center gap-2", gender === "male" ? active : inactive)}
-              onClick={() => setGender("male")}
-            >
-              Male <GenderMale size={18} weight="bold" />
-            </button>
-            <button
-              type="button"
-              className={cn(pillBtn, "flex items-center gap-2", gender === "female" ? active : inactive)}
-              onClick={() => setGender("female")}
-            >
-              Female <GenderFemale size={18} weight="bold" />
-            </button>
-          </div>
-        </RowEl>
+            <Field label="AI content type">
+              <Select
+                value={toInputValue(draft.search.aiContentType)}
+                onChange={(event) => setSearch("aiContentType", event.target.value || undefined)}
+              >
+                {AI_CONTENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-        <RowEl label="Country">
-          <div className="w-full md:ml-auto md:w-[320px]">
-            <select
-              value={country}
-              onChange={(event) => setCountry(event.target.value)}
-              disabled={loadingCountries}
-              className="h-[44px] w-full rounded-[12px] border border-[#d6d6d6] bg-white px-3 text-sm shadow-none outline-none focus:border-[#1a1a1a]"
-            >
-              <option value="">{loadingCountries ? "Loading countries..." : "Any country"}</option>
-              {countries.map((item) => (
-                <option key={item.label} value={item.name}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+            <Field label="AI max post age (months)">
+              <Select
+                value={toInputValue(draft.search.aiMaxPostAgeMonths)}
+                onChange={(event) =>
+                  setSearch(
+                    "aiMaxPostAgeMonths",
+                    event.target.value ? Number(event.target.value) : undefined,
+                  )
+                }
+              >
+                <option value="">Any recency</option>
+                <option value="3">3 months</option>
+                <option value="6">6 months</option>
+                <option value="9">9 months</option>
+                <option value="12">12 months</option>
+              </Select>
+            </Field>
           </div>
-        </RowEl>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <ToggleRow
+              label="Boost exact handle / URL matches first"
+              checked={draft.search.exactHandleBoost !== false}
+              onChange={(next) => setSearch("exactHandleBoost", next ? undefined : false)}
+            />
+            <ToggleRow
+              label="AI search: require email"
+              checked={!!draft.search.aiHasEmail}
+              onChange={(next) => setSearch("aiHasEmail", next || undefined)}
+            />
+          </div>
+        </section>
+
+        <section className="space-y-4 border-t border-[#ece7df] pt-5">
+          <h3 className="text-[17px] font-semibold text-[#1A1A1A]">Influencer filters</h3>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Field label="Age min">
+              <Input
+                type="number"
+                value={toInputValue(draft.influencer.ageMin)}
+                onChange={(event) => setInfluencer("ageMin", toOptionalNumber(event.target.value))}
+                placeholder="18"
+              />
+            </Field>
+
+            <Field label="Age max">
+              <Input
+                type="number"
+                value={toInputValue(draft.influencer.ageMax)}
+                onChange={(event) => setInfluencer("ageMax", toOptionalNumber(event.target.value))}
+                placeholder="45"
+              />
+            </Field>
+
+            <Field label="Gender">
+              <Select
+                value={toInputValue(draft.influencer.gender)}
+                onChange={(event) => setInfluencer("gender", event.target.value || undefined)}
+              >
+                {INFLUENCER_GENDER_OPTIONS.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
+          <ToggleRow
+            label="Verified creators only"
+            checked={!!draft.influencer.isVerified}
+            onChange={(next) => setInfluencer("isVerified", next || undefined)}
+          />
+        </section>
+
+        <section className="space-y-4 border-t border-[#ece7df] pt-5">
+          <h3 className="text-[17px] font-semibold text-[#1A1A1A]">Audience filters</h3>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field label="Audience country text" hint="Client-side fallback filter on returned country/location">
+              <Input
+                value={toInputValue(draft.audience.country)}
+                onChange={(event) => setAudience("country", event.target.value)}
+                placeholder="India"
+              />
+            </Field>
+
+            <Field label="Audience location IDs" hint="Comma separated location IDs for weighted API filtering">
+              <Input
+                value={toInputValue(draft.audience.locationIdsText)}
+                onChange={(event) => setAudience("locationIdsText", event.target.value)}
+                placeholder="148838,62149"
+              />
+            </Field>
+
+            <Field label="Location weight">
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={toInputValue(draft.audience.locationWeight)}
+                onChange={(event) =>
+                  setAudience("locationWeight", toOptionalNumber(event.target.value))
+                }
+                placeholder="0.2"
+              />
+            </Field>
+
+            <Field label="Audience language">
+              <Select
+                value={toInputValue(draft.audience.languageCode)}
+                onChange={(event) => setAudience("languageCode", event.target.value || undefined)}
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Language weight">
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={toInputValue(draft.audience.languageWeight)}
+                onChange={(event) =>
+                  setAudience("languageWeight", toOptionalNumber(event.target.value))
+                }
+                placeholder="0.2"
+              />
+            </Field>
+
+            <Field label="Audience gender">
+              <Select
+                value={toInputValue(draft.audience.gender)}
+                onChange={(event) => setAudience("gender", event.target.value || undefined)}
+              >
+                {AUDIENCE_GENDER_OPTIONS.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Gender weight">
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={toInputValue(draft.audience.genderWeight)}
+                onChange={(event) =>
+                  setAudience("genderWeight", toOptionalNumber(event.target.value))
+                }
+                placeholder="0.5"
+              />
+            </Field>
+
+            <Field label="Audience age bucket">
+              <Select
+                value={toInputValue(draft.audience.ageBucket)}
+                onChange={(event) => setAudience("ageBucket", event.target.value || undefined)}
+              >
+                {AUDIENCE_AGE_OPTIONS.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Age weight">
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={toInputValue(draft.audience.ageWeight)}
+                onChange={(event) =>
+                  setAudience("ageWeight", toOptionalNumber(event.target.value))
+                }
+                placeholder="0.3"
+              />
+            </Field>
+
+            <Field label="Audience interests IDs">
+              <Input
+                value={toInputValue(draft.audience.interestsIdsText)}
+                onChange={(event) => setAudience("interestsIdsText", event.target.value)}
+                placeholder="1708,13,3"
+              />
+            </Field>
+
+            <Field label="Interests weight">
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={toInputValue(draft.audience.interestsWeight)}
+                onChange={(event) =>
+                  setAudience("interestsWeight", toOptionalNumber(event.target.value))
+                }
+                placeholder="0.3"
+              />
+            </Field>
+
+            <Field label="Audience credibility min" hint="Useful especially for Instagram audience credibility">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                value={toInputValue(draft.audience.credibilityMin)}
+                onChange={(event) =>
+                  setAudience("credibilityMin", toOptionalNumber(event.target.value))
+                }
+                placeholder="0.75"
+              />
+            </Field>
+          </div>
+        </section>
       </div>
 
-      <div className="flex w-full flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-t border-[#ece7df] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <button
           type="button"
-          onClick={handleResetAll}
-          className="inline-flex h-[42px] items-center justify-center rounded-[12px] px-5 text-sm font-medium text-[#1A1A1A] transition hover:bg-[#F5F5F5]"
+          onClick={handleReset}
+          className="inline-flex h-11 items-center justify-center rounded-[12px] border border-[#e0ddd7] bg-white px-5 text-sm font-semibold text-[#1A1A1A]"
         >
-          Clear
+          Clear all
         </button>
 
         <button
           type="button"
-          onClick={handleApply}
+          onClick={applyChanges}
           disabled={loading}
-          className="inline-flex h-[42px] min-w-[160px] items-center justify-center rounded-[12px] bg-black px-6 text-sm font-medium text-white transition hover:bg-[#111] disabled:opacity-60"
+          className="inline-flex h-11 min-w-[160px] items-center justify-center rounded-[12px] bg-black px-6 text-sm font-semibold text-white disabled:opacity-60"
         >
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Apply
+          Apply filters
         </button>
       </div>
     </div>

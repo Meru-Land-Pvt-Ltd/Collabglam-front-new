@@ -101,7 +101,7 @@ export function InfluencerCard({
   const bio =
     influencer?.bio ||
     influencer?.description ||
-    "Lorem Ipsum is simply dummy text of the printing and typesetting industry dummy text of Lorem Ipsum more...";
+    "";
 
   const avatar =
     influencer?.picture ||
