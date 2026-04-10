@@ -381,7 +381,7 @@ export default function SharedPitchFolderPage() {
     link.id = "pitch-sheet-fonts";
     link.rel = "stylesheet";
     link.href =
-      "https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap";
+      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap";
     document.head.appendChild(link);
   }, []);
 
@@ -389,7 +389,7 @@ export default function SharedPitchFolderPage() {
     return (
       <div
         className="min-h-screen bg-slate-50/50 p-6 md:p-10"
-        style={{ fontFamily: "'DM Sans', sans-serif" }}
+        style={{ fontFamily: "'Inter', sans-serif" }}
       >
         <div className="mx-auto max-w-7xl space-y-6">
           <Skeleton className="h-10 w-48 rounded-xl bg-slate-200/60" />
@@ -458,8 +458,7 @@ export default function SharedPitchFolderPage() {
   return (
     <>
       <style>{`
-        .pitch-sheet-root * { font-family: 'DM Sans', sans-serif; }
-        .pitch-sheet-root h1, .pitch-sheet-root h2 { font-family: 'Syne', sans-serif; }
+        .pitch-sheet-root * { font-family: 'Inter', sans-serif; }
 
         .pitch-sheet-root ::-webkit-scrollbar { height: 6px; width: 6px; }
         .pitch-sheet-root ::-webkit-scrollbar-track { background: transparent; }

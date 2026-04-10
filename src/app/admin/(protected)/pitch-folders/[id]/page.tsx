@@ -263,25 +263,38 @@ function getHandleWithoutAt(handle?: string) {
   return cleanText(handle).replace(/^@+/, '');
 }
 
+function ensureAbsoluteUrl(url?: string | null) {
+  const value = cleanText(url);
+  if (!value) return '';
+
+  if (/^https?:\/\//i.test(value)) return value;
+  return `https://${value}`;
+}
+
 function buildFallbackProfileUrl(provider?: string, handle?: string) {
   const username = getHandleWithoutAt(handle);
   if (!username) return '';
 
   const p = cleanText(provider).toLowerCase();
 
-  if (p === 'youtube') return `https://youtube.com/${username}`;
-  if (p === 'instagram') return `https://instagram.com/${username}`;
-  if (p === 'tiktok') return `https://tiktok.com/@${username}`;
+  if (p === 'youtube') return `https://www.youtube.com/@${username}`;
+  if (p === 'instagram') return `https://www.instagram.com/${username}/`;
+  if (p === 'tiktok') return `https://www.tiktok.com/@${username}`;
 
   return '';
 }
 
 function getProfileUrl(row: FolderItem) {
-  return (
-    cleanText(row.primaryLink) ||
-    (Array.isArray(row.links) && row.links.length ? cleanText(row.links[0]) : '') ||
-    buildFallbackProfileUrl(row.provider, row.handle)
-  );
+  const primary = ensureAbsoluteUrl(row.primaryLink);
+  if (primary) return primary;
+
+  const firstLink =
+    Array.isArray(row.links) && row.links.length
+      ? ensureAbsoluteUrl(row.links[0])
+      : '';
+  if (firstLink) return firstLink;
+
+  return buildFallbackProfileUrl(row.provider, row.handle);
 }
 
 function formatDate(iso?: string | null) {
@@ -1667,21 +1680,21 @@ const InfluencerTableRowMemo = memo(function InfluencerTableRow({
         <div className="flex justify-center">
           <div
             className={`inline-flex h-9 w-9 items-center justify-center rounded-full border ${row.goodFit
-                ? 'border-rose-200 bg-rose-50'
-                : 'border-slate-200 bg-slate-50'
+              ? 'border-rose-200 bg-rose-50'
+              : 'border-slate-200 bg-slate-50'
               }`}
             title={row.goodFit ? 'Good Fit' : 'Not Marked'}
           >
             <Heart
               className={`h-5 w-5 ${row.goodFit
-                  ? 'fill-rose-500 text-rose-500'
-                  : 'text-slate-300'
+                ? 'fill-rose-500 text-rose-500'
+                : 'text-slate-300'
                 }`}
             />
           </div>
         </div>
       </TableCell>
-      
+
       <TableCell className="align-top text-right">
         <div className="flex justify-end gap-2">
           <Button
