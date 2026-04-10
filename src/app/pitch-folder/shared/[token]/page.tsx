@@ -473,7 +473,6 @@ export default function SharedPitchFolderPage() {
             ? `${rateCardRow.name || "Influencer"} - Rate Card`
             : "Rate Card"
         }
-        description="Shared platform pricing for this creator."
         onClose={() => setRateCardItemId("")}
       >
         {rateCardRow ? (
