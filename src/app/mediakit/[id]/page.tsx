@@ -36,7 +36,7 @@ export default function InfluencerDetailPage() {
     const storedAdminId = (localStorage.getItem('adminId') || '').trim();
 
     if (!storedBrandId && !storedAdminId) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      router.replace(`/brand/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
 
