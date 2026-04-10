@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { get, post } from "@/lib/api";
 import {
@@ -8,35 +8,41 @@ import {
   Loader2,
   AlertCircle,
   Users,
-  DollarSign,
-  TrendingUp,
   Heart,
   Globe,
   RefreshCw,
   Sparkles,
-  AtSign,
-  Mail,
-  Layers3,
+  Eye,
+  X,
+  Clock3,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+
+type SharedMediaKitAccess = {
+  hasAdded?: boolean;
+  allowed?: boolean;
+  availableOnRequest?: boolean;
+  requestStatus?: "none" | "requested" | "approved" | "rejected";
+  requestedAt?: string | null;
+  buttonLabel?: string;
+  url?: string;
+};
 
 type SharedRow = {
   _id: string;
   provider?: string;
   name?: string;
-  username?: string;
   handle?: string;
   followers?: number | null;
   primaryLink?: string;
   links?: string[];
   niche?: string[];
   country?: string;
-  additionalInfo?: string;
   selectionReason?: string;
   goodFit?: boolean | null;
-  rateUsd?: number | null;
-  ourFeePct?: number | null;
-  comments?: string;
+  platformRateCard?: string;
+  rateCardCurrency?: string;
+  mediaKitAccess?: SharedMediaKitAccess | null;
 };
 
 type SharedFolderResponse = {
@@ -54,31 +60,79 @@ type SharedFolderResponse = {
   };
 };
 
+const DASH = "--";
+
 function fmtFollowers(n: number | null | undefined): string {
-  if (n == null) return "—";
+  if (n == null) return DASH;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return n.toLocaleString();
 }
 
-const NICHE_PALETTE: Record<string, string> = {
-  fashion: "bg-rose-50 text-rose-600 ring-rose-200",
-  beauty: "bg-pink-50 text-pink-600 ring-pink-200",
-  tech: "bg-sky-50 text-sky-600 ring-sky-200",
-  gaming: "bg-violet-50 text-violet-600 ring-violet-200",
-  fitness: "bg-emerald-50 text-emerald-600 ring-emerald-200",
-  food: "bg-amber-50 text-amber-700 ring-amber-200",
-  travel: "bg-teal-50 text-teal-600 ring-teal-200",
-  lifestyle: "bg-fuchsia-50 text-fuchsia-600 ring-fuchsia-200",
-  youtube: "bg-red-50 text-red-600 ring-red-200",
+function formatDateTime(iso?: string | null) {
+  if (!iso) return DASH;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return DASH;
+
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+function cleanText(value?: string | null) {
+  return String(value || "").trim();
+}
+
+function getNicheText(niche?: string[]) {
+  return Array.isArray(niche) && niche.length ? niche.join(", ") : DASH;
+}
+
+function getHandleWithoutAt(handle?: string) {
+  return cleanText(handle).replace(/^@+/, "");
+}
+
+function buildFallbackProfileUrl(provider?: string, handle?: string) {
+  const username = getHandleWithoutAt(handle);
+  if (!username) return "";
+
+  const p = cleanText(provider).toLowerCase();
+
+  if (p === "youtube") return `https://youtube.com/${username}`;
+  if (p === "instagram") return `https://instagram.com/${username}`;
+  if (p === "tiktok") return `https://tiktok.com/@${username}`;
+
+  return "";
+}
+
+function getProfileUrl(row: SharedRow) {
+  return (
+    cleanText(row.primaryLink) ||
+    (Array.isArray(row.links) && row.links.length ? cleanText(row.links[0]) : "") ||
+    buildFallbackProfileUrl(row.provider, row.handle)
+  );
+}
+
+function shortUrl(url?: string) {
+  const value = cleanText(url);
+  if (!value) return DASH;
+  return value.replace(/^https?:\/\//, "");
+}
+
+const CHIP_STYLES: Record<string, string> = {
   instagram: "bg-pink-50 text-pink-600 ring-pink-200",
+  youtube: "bg-red-50 text-red-600 ring-red-200",
   tiktok: "bg-slate-100 text-slate-700 ring-slate-200",
   default: "bg-slate-100 text-slate-600 ring-slate-200",
 };
 
-function chipClass(tag: string): string {
-  const key = tag.toLowerCase();
-  return NICHE_PALETTE[key] || NICHE_PALETTE.default;
+function providerChip(provider?: string) {
+  const key = String(provider || "").toLowerCase();
+  return CHIP_STYLES[key] || CHIP_STYLES.default;
 }
 
 function StatCard({
@@ -152,12 +206,56 @@ function ProviderBadge({ provider }: { provider?: string }) {
   const value = String(provider || "other");
   return (
     <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${chipClass(
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${providerChip(
         value
       )}`}
     >
       {value}
     </span>
+  );
+}
+
+function ModalShell({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  maxWidthClass = "max-w-4xl",
+}: {
+  open: boolean;
+  title: string;
+  description?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  maxWidthClass?: string;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+      <div className="absolute inset-0" onClick={onClose} />
+      <div
+        className={`relative z-10 flex max-h-[92vh] w-full ${maxWidthClass} flex-col overflow-hidden rounded-3xl bg-white shadow-2xl`}
+      >
+        <div className="flex items-start justify-between gap-4 border-b px-6 py-5">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-950">{title}</h3>
+            {description ? (
+              <p className="mt-1 text-sm text-slate-500">{description}</p>
+            ) : null}
+          </div>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <X className="h-4 w-4" />
+            Close
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto px-6 py-6">{children}</div>
+      </div>
+    </div>
   );
 }
 
@@ -172,6 +270,15 @@ export default function SharedPitchFolderPage() {
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
 
+  const [rateCardItemId, setRateCardItemId] = useState("");
+
+  const reloadSheet = useCallback(async () => {
+    const resp = await get<SharedFolderResponse>(`/pitch-folders/shared/${token}`);
+    setTitle(resp?.data?.title || "Shared Pitch Folder");
+    setDescription(resp?.data?.description || "");
+    setRows(resp?.data?.items || []);
+  }, [token]);
+
   useEffect(() => {
     async function loadSheet() {
       if (!token) return;
@@ -179,12 +286,7 @@ export default function SharedPitchFolderPage() {
       try {
         setLoading(true);
         setError("");
-
-        const resp = await get<SharedFolderResponse>(`/pitch-folders/shared/${token}`);
-
-        setTitle(resp?.data?.title || "Shared Pitch Folder");
-        setDescription(resp?.data?.description || "");
-        setRows(resp?.data?.items || []);
+        await reloadSheet();
       } catch (e: any) {
         setError(
           e?.response?.data?.error || e?.message || "Failed to load shared folder"
@@ -195,7 +297,7 @@ export default function SharedPitchFolderPage() {
     }
 
     loadSheet();
-  }, [token]);
+  }, [token, reloadSheet]);
 
   async function saveGoodFit(id: string, goodFit: boolean) {
     try {
@@ -221,19 +323,53 @@ export default function SharedPitchFolderPage() {
     }
   }
 
+  async function requestMediaKit(id: string) {
+    try {
+      setSavingId(`media-kit-${id}`);
+      setError("");
+
+      await post(`/pitch-folders/shared/${token}/media-kit-request/${id}`, {});
+      await reloadSheet();
+    } catch (e: any) {
+      setError(
+        e?.response?.data?.error || e?.message || "Failed to request media kit"
+      );
+    } finally {
+      setSavingId("");
+    }
+  }
+
+  const handleMediaKitAction = useCallback(
+    async (row: SharedRow) => {
+      const access = row.mediaKitAccess;
+
+      if (access?.allowed && access?.url) {
+        window.open(access.url, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      if (
+        access?.requestStatus !== "requested" &&
+        savingId !== `media-kit-${row._id}`
+      ) {
+        await requestMediaKit(row._id);
+      }
+    },
+    [savingId]
+  );
+
+  const rateCardRow = useMemo(
+    () => rows.find((row) => row._id === rateCardItemId) || null,
+    [rows, rateCardItemId]
+  );
+
   const stats = useMemo(
     () => ({
       total: rows.length,
       goodFit: rows.filter((r) => r.goodFit).length,
       totalReach: rows.reduce((s, r) => s + (r.followers || 0), 0),
-      avgRate: rows.filter((r) => r.rateUsd != null).length
-        ? Math.round(
-            rows.reduce((s, r) => s + (r.rateUsd || 0), 0) /
-              rows.filter((r) => r.rateUsd != null).length
-          )
-        : 0,
-      providers: Array.from(
-        new Set(rows.map((r) => String(r.provider || "").trim()).filter(Boolean))
+      pendingRequests: rows.filter(
+        (r) => r.mediaKitAccess?.requestStatus === "requested"
       ).length,
     }),
     [rows]
@@ -257,12 +393,12 @@ export default function SharedPitchFolderPage() {
       >
         <div className="mx-auto max-w-7xl space-y-6">
           <Skeleton className="h-10 w-48 rounded-xl bg-slate-200/60" />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-            {[...Array(5)].map((_, i) => (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
               <Skeleton key={i} className="h-24 rounded-2xl bg-white shadow-sm" />
             ))}
           </div>
-          <Skeleton className="h-[500px] w-full rounded-2xl bg-white shadow-sm" />
+          <Skeleton className="h-[420px] w-full rounded-2xl bg-white shadow-sm" />
         </div>
       </div>
     );
@@ -292,24 +428,6 @@ export default function SharedPitchFolderPage() {
     );
   }
 
-  const headers = [
-    "Influencer",
-    "Provider",
-    "Username",
-    "Handle",
-    "Followers",
-    "Profile",
-    "Extra Links",
-    "Niche",
-    "Country",
-    "Rate",
-    "Our Fee",
-    "Additional Info",
-    "Selection Reason",
-    "Comments",
-    "Fit",
-  ];
-
   const statCards = [
     {
       icon: Users,
@@ -324,22 +442,16 @@ export default function SharedPitchFolderPage() {
       accentClass: "bg-rose-50 text-rose-500",
     },
     {
-      icon: TrendingUp,
+      icon: Users,
       label: "Total Reach",
       value: fmtFollowers(stats.totalReach),
       accentClass: "bg-sky-50 text-sky-600",
     },
     {
-      icon: DollarSign,
-      label: "Avg. Rate",
-      value: stats.avgRate ? `$${stats.avgRate.toLocaleString()}` : "—",
-      accentClass: "bg-emerald-50 text-emerald-600",
-    },
-    {
-      icon: Layers3,
-      label: "Providers",
-      value: stats.providers,
-      accentClass: "bg-violet-50 text-violet-600",
+      icon: Clock3,
+      label: "Pending Requests",
+      value: stats.pendingRequests,
+      accentClass: "bg-amber-50 text-amber-600",
     },
   ];
 
@@ -353,13 +465,33 @@ export default function SharedPitchFolderPage() {
         .pitch-sheet-root ::-webkit-scrollbar-track { background: transparent; }
         .pitch-sheet-root ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
         .pitch-sheet-root ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        @keyframes rowIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .row-animate { animation: rowIn 0.3s ease-out both; }
       `}</style>
+
+      <ModalShell
+        open={!!rateCardRow}
+        title={
+          rateCardRow
+            ? `${rateCardRow.name || "Influencer"} - Rate Card`
+            : "Rate Card"
+        }
+        description="Shared platform pricing for this creator."
+        onClose={() => setRateCardItemId("")}
+      >
+        {rateCardRow ? (
+          <div className="rounded-2xl border bg-slate-50 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-950">Rate Card</p>
+              <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200">
+                {rateCardRow.rateCardCurrency || "USD"}
+              </span>
+            </div>
+
+            <div className="min-h-[320px] rounded-2xl border bg-white p-4 text-sm leading-7 whitespace-pre-wrap text-slate-700">
+              {rateCardRow.platformRateCard || DASH}
+            </div>
+          </div>
+        ) : null}
+      </ModalShell>
 
       <div className="pitch-sheet-root relative min-h-screen overflow-x-hidden bg-slate-50/50">
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -367,49 +499,25 @@ export default function SharedPitchFolderPage() {
           <div className="absolute -right-32 top-40 h-96 w-96 rounded-full bg-rose-100/30 blur-[120px]" />
         </div>
 
-        <div className="relative z-10 mx-auto max-w-[98rem] px-4 py-8 md:px-8">
+        <div className="relative z-10 mx-auto max-w-[96rem] px-4 py-8 md:px-8">
           <div className="mb-8 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-indigo-600">
-                <Sparkles className="h-3.5 w-3.5 text-indigo-500" /> Shared
-                Pitch Folder
+                <Sparkles className="h-3.5 w-3.5 text-indigo-500" /> Shared Pitch
+                Folder
               </div>
               <h1 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
                 {title}
               </h1>
               <p className="mt-1.5 text-sm text-slate-500">
-                {description || "Open shared review link. Only good-fit can be updated."}
+                {description ||
+                  "Open shared review link. Only good-fit can be updated."}
               </p>
             </div>
-
-            {rows.length > 0 && (
-              <div className="mt-4 flex flex-col items-start gap-2 sm:mt-0 sm:items-end">
-                <span className="text-sm text-slate-500">
-                  <span className="font-semibold text-slate-900">
-                    {stats.goodFit}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-semibold text-slate-900">
-                    {stats.total}
-                  </span>{" "}
-                  shortlisted
-                </span>
-                <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-200">
-                  <div
-                    className="h-full rounded-full bg-indigo-500 transition-all duration-500"
-                    style={{
-                      width: stats.total
-                        ? `${(stats.goodFit / stats.total) * 100}%`
-                        : "0%",
-                    }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {rows.length > 0 && (
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5 lg:gap-4">
+            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
               {statCards.map((card) => (
                 <StatCard
                   key={card.label}
@@ -432,9 +540,7 @@ export default function SharedPitchFolderPage() {
               {rows.length > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-medium text-slate-500">
-                    Live
-                  </span>
+                  <span className="text-xs font-medium text-slate-500">Live</span>
                 </div>
               )}
             </div>
@@ -453,197 +559,178 @@ export default function SharedPitchFolderPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[2100px] border-collapse text-sm bg-white">
+                <table className="w-full min-w-[1500px] border-collapse text-sm bg-white">
                   <thead>
                     <tr className="border-b border-slate-200">
-                      {headers.map((h, i) => (
-                        <th
-                          key={h}
-                          className={`py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500
-                            ${i === 0 ? "pl-6 pr-4" : "px-4"}
-                            ${
-                              h === "Fit"
-                                ? "sticky right-0 bg-white text-center shadow-[-8px_0_15px_-3px_rgba(0,0,0,0.03)]"
-                                : ""
-                            }
-                          `}
-                        >
-                          {h}
-                        </th>
-                      ))}
+                      <th className="px-6 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Name
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Handle
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Profile
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Provider
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Followers
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Country
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Niche
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Selection Reason
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Rate Card
+                      </th>
+                      <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Media Kit
+                      </th>
+                      <th className="px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        Fit
+                      </th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {rows.map((row, i) => (
-                      <tr
-                        key={row._id}
-                        className="row-animate group border-b border-slate-100 transition-colors duration-150 hover:bg-slate-50/80"
-                        style={{ animationDelay: `${i * 30}ms` }}
-                      >
-                        <td className="py-4 pl-6 pr-4 whitespace-nowrap">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-600 ring-1 ring-inset ring-indigo-100/50">
-                              {row.name?.charAt(0)?.toUpperCase() || "?"}
+                    {rows.map((row) => {
+                      const access = row.mediaKitAccess;
+                      const isRequesting = savingId === `media-kit-${row._id}`;
+                      const profileUrl = getProfileUrl(row);
+
+                      const mediaButtonLabel = access?.allowed
+                        ? "Open Media Kit"
+                        : access?.requestStatus === "requested"
+                          ? "Requested"
+                          : "Request";
+
+                      const mediaButtonDisabled =
+                        access?.requestStatus === "requested" || isRequesting;
+
+                      return (
+                        <tr
+                          key={row._id}
+                          className="border-b border-slate-100 transition-colors duration-150 hover:bg-slate-50/80"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap align-top">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-600 ring-1 ring-inset ring-indigo-100/50">
+                                {row.name?.charAt(0)?.toUpperCase() || "?"}
+                              </div>
+                              <span className="font-semibold text-slate-900">
+                                {row.name || DASH}
+                              </span>
                             </div>
-                            <span className="font-semibold text-slate-900">
-                              {row.name || "—"}
-                            </span>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="whitespace-nowrap px-4 py-4">
-                          <ProviderBadge provider={row.provider} />
-                        </td>
+                          <td className="px-4 py-4 text-slate-700 align-top">
+                            {row.handle || DASH}
+                          </td>
 
-                        <td className="whitespace-nowrap px-4 py-4 text-slate-700">
-                          <span className="inline-flex items-center gap-1.5">
-                            <AtSign className="h-3.5 w-3.5 text-slate-400" />
-                            {row.username || "—"}
-                          </span>
-                        </td>
+                          <td className="px-4 py-4 align-top">
+                            {profileUrl ? (
+                              <a
+                                href={profileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-[240px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                              >
+                                <ExternalLink className="h-4 w-4 shrink-0" />
+                                <span className="truncate">Profile Link</span>
+                              </a>
+                            ) : (
+                              <span className="text-slate-400">{DASH}</span>
+                            )}
+                          </td>
 
-                        <td className="whitespace-nowrap px-4 py-4 text-slate-700">
-                          {row.handle || "—"}
-                        </td>
+                          <td className="px-4 py-4 whitespace-nowrap align-top">
+                            <ProviderBadge provider={row.provider} />
+                          </td>
 
-
-                        <td className="whitespace-nowrap px-4 py-4 tabular-nums text-slate-600">
-                          <span className="flex items-center gap-1.5">
-                            <Users className="h-3.5 w-3.5 text-slate-400" />
-                            {fmtFollowers(row.followers)}
-                          </span>
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-4">
-                          {row.primaryLink ? (
-                            <a
-                              href={row.primaryLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                            >
-                              Profile <ExternalLink className="h-3 w-3 text-slate-400" />
-                            </a>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4">
-                          {Array.isArray(row.links) && row.links.length ? (
-                            <div className="flex flex-col gap-1">
-                              {row.links.slice(0, 3).map((link) => (
-                                <a
-                                  key={link}
-                                  href={link}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="truncate text-xs font-medium text-blue-600 hover:underline"
-                                  title={link}
-                                >
-                                  {link}
-                                </a>
-                              ))}
-                              {row.links.length > 3 ? (
-                                <span className="text-xs text-slate-400">
-                                  +{row.links.length - 3} more
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4">
-                          {Array.isArray(row.niche) && row.niche.length ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {row.niche.map((n) => (
-                                <span
-                                  key={n}
-                                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${chipClass(
-                                    n
-                                  )}`}
-                                >
-                                  {n}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-4 text-slate-600">
-                          {row.country ? (
+                          <td className="px-4 py-4 whitespace-nowrap tabular-nums text-slate-600 align-top">
                             <span className="flex items-center gap-1.5">
-                              <Globe className="h-3.5 w-3.5 text-slate-400" />
-                              {row.country}
+                              <Users className="h-3.5 w-3.5 text-slate-400" />
+                              {fmtFollowers(row.followers)}
                             </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
+                          </td>
 
-                        <td className="whitespace-nowrap px-4 py-4 font-medium tabular-nums text-slate-900">
-                          {row.rateUsd != null ? (
-                            <span className="flex items-center gap-1">
-                              <DollarSign className="h-3.5 w-3.5 text-slate-400" />
-                              {row.rateUsd.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-4 text-slate-700">
-                          {row.ourFeePct != null ? `${row.ourFeePct}%` : "—"}
-                        </td>
-
-                        <td className="px-4 py-4 max-w-[240px]">
-                          <p
-                            className="line-clamp-3 text-[13px] leading-relaxed text-slate-600"
-                            title={row.additionalInfo}
-                          >
-                            {row.additionalInfo || (
-                              <span className="text-slate-400">—</span>
+                          <td className="px-4 py-4 whitespace-nowrap text-slate-600 align-top">
+                            {row.country ? (
+                              <span className="flex items-center gap-1.5">
+                                <Globe className="h-3.5 w-3.5 text-slate-400" />
+                                {row.country}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">{DASH}</span>
                             )}
-                          </p>
-                        </td>
+                          </td>
 
-                        <td className="px-4 py-4 max-w-[240px]">
-                          <p
-                            className="line-clamp-3 text-[13px] leading-relaxed text-slate-600"
-                            title={row.selectionReason}
-                          >
-                            {row.selectionReason || (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </p>
-                        </td>
+                          <td className="px-4 py-4 text-slate-700 align-top">
+                            <div className="max-w-[220px] whitespace-pre-wrap break-words">
+                              {getNicheText(row.niche)}
+                            </div>
+                          </td>
 
-                        <td className="px-4 py-4 max-w-[240px]">
-                          <p
-                            className="line-clamp-3 text-[13px] leading-relaxed text-slate-500"
-                            title={row.comments}
-                          >
-                            {row.comments || (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </p>
-                        </td>
+                          <td className="px-4 py-4 text-slate-700 align-top">
+                            <div className="max-w-[320px] whitespace-pre-wrap break-words leading-6">
+                              {cleanText(row.selectionReason) || DASH}
+                            </div>
+                          </td>
 
-                        <td className="sticky right-0 bg-white px-4 py-4 text-center shadow-[-8px_0_15px_-3px_rgba(0,0,0,0.02)] transition-colors group-hover:bg-slate-50/80 after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-slate-100">
-                          <GoodFitButton
-                            checked={!!row.goodFit}
-                            saving={savingId === row._id}
-                            disabled={savingId !== "" && savingId !== row._id}
-                            onToggle={(v) => saveGoodFit(row._id, v)}
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="px-4 py-4 align-top">
+                            <button
+                              onClick={() => setRateCardItemId(row._id)}
+                              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View
+                            </button>
+                          </td>
+
+                          <td className="px-4 py-4 align-top">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => void handleMediaKitAction(row)}
+                                disabled={mediaButtonDisabled}
+                                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isRequesting ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : access?.allowed ? (
+                                  <ExternalLink className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                                {mediaButtonLabel}
+                              </button>
+                            </div>
+
+                            {access?.requestedAt ? (
+                              <p className="mt-2 text-xs text-slate-500">
+                                Requested: {formatDateTime(access.requestedAt)}
+                              </p>
+                            ) : null}
+                          </td>
+
+                          <td className="px-4 py-4 text-center align-top">
+                            <div className="flex justify-center">
+                              <GoodFitButton
+                                checked={!!row.goodFit}
+                                saving={savingId === row._id}
+                                disabled={savingId !== "" && savingId !== row._id}
+                                onToggle={(v) => saveGoodFit(row._id, v)}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -652,7 +739,8 @@ export default function SharedPitchFolderPage() {
 
           {rows.length > 0 && (
             <p className="mt-6 text-center text-sm text-slate-500">
-              Click the <Heart className="inline h-3.5 w-3.5 text-rose-500" /> icon to mark influencers as a good fit.
+              Click the <Heart className="inline h-3.5 w-3.5 text-rose-500" /> icon
+              to mark influencers as a good fit.
             </p>
           )}
         </div>

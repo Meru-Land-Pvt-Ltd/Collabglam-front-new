@@ -1,21 +1,15 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FolderKanban,
   Plus,
   RefreshCw,
   Loader2,
-  UserRound,
-  CalendarDays,
-  ChevronRight,
-  Files,
-  Sparkles,
   Search,
-  Shield,
-  Workflow,
   Link2,
+  X,
 } from 'lucide-react';
 import swal from 'sweetalert';
 
@@ -140,11 +134,7 @@ function prettyText(value?: string | null) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function AdminMeta({
-  admin,
-}: {
-  admin?: AdminMini | null;
-}) {
+function AdminMeta({ admin }: { admin?: AdminMini | null }) {
   if (!admin) {
     return <span className="text-sm text-slate-500">--</span>;
   }
@@ -173,18 +163,12 @@ export default function PitchFoldersPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
+  const [openCreateModal, setOpenCreateModal] = useState(false);
 
   const [form, setForm] = useState({
     title: '',
     description: '',
   });
-
-  const totalFolders = useMemo(() => folders.length, [folders]);
-
-  const sharedFolders = useMemo(
-    () => folders.filter((folder) => !!folder.share?.url).length,
-    [folders]
-  );
 
   async function loadFolders(searchText = search) {
     setLoading(true);
@@ -220,6 +204,7 @@ export default function PitchFoldersPage() {
 
       await showSuccess('Folder created successfully.');
       setForm({ title: '', description: '' });
+      setOpenCreateModal(false);
       await loadFolders();
 
       const id = resp?.data?._id;
@@ -235,89 +220,182 @@ export default function PitchFoldersPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-        <Card className="overflow-hidden rounded-3xl border shadow-sm">
-          <CardContent className="p-0">
-            <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-6 py-7 text-white sm:px-8">
-              <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-                <div className="space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Folder workspace
-                  </div>
+      <div className="mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-6 lg:px-8">
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader className="gap-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  className="rounded-xl"
+                  onClick={() => setOpenCreateModal(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Folder
+                </Button>
 
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
-                      <FolderKanban className="h-7 w-7" />
-                    </div>
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => loadFolders()}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
 
-                    <div>
-                      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                        Pitch Folders
-                      </h1>
-                      <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-white/80">
-                        <span>
-                          Create folders like <b className="text-white">Power Station Review</b>
-                        </span>
-                        <span>See creator designation and hierarchy</span>
-                        <span>Open folder to manage influencers</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3 xl:w-[560px]">
-                  <Card className="rounded-2xl border-white/10 bg-white/10 text-white shadow-none">
-                    <CardContent className="flex items-center justify-between p-5">
-                      <div>
-                        <p className="text-sm text-white/70">Total Folders</p>
-                        <p className="mt-1 text-2xl font-semibold">{totalFolders}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                        <Files className="h-5 w-5" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rounded-2xl border-white/10 bg-white/10 text-white shadow-none">
-                    <CardContent className="flex items-center justify-between p-5">
-                      <div>
-                        <p className="text-sm text-white/70">Shared</p>
-                        <p className="mt-1 text-2xl font-semibold">{sharedFolders}</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                        <Link2 className="h-5 w-5" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="rounded-2xl border-white/10 bg-white/10 text-white shadow-none">
-                    <CardContent className="flex items-center justify-between p-5">
-                      <div>
-                        <p className="text-sm text-white/70">Action</p>
-                        <p className="mt-1 text-base font-semibold">Create & Open</p>
-                      </div>
-                      <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                        <ChevronRight className="h-5 w-5" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+              <div className="relative w-full lg:max-w-sm">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') loadFolders();
+                  }}
+                  placeholder="Search folders"
+                  className="pl-9"
+                />
               </div>
             </div>
+
+            <div>
+              <CardTitle>Pitch Folders</CardTitle>
+              <CardDescription>
+                Full table view. Click anywhere on a row to open that folder.
+              </CardDescription>
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            {loading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+              </div>
+            ) : !folders.length ? (
+              <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+                No folders available for your access level.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1350px] text-sm">
+                    <thead className="bg-slate-50">
+                      <tr className="border-b border-slate-200 text-left">
+                        <th className="px-4 py-3 font-semibold text-slate-700">Folder</th>
+                        <th className="px-4 py-3 font-semibold text-slate-700">Description</th>
+                        <th className="px-4 py-3 font-semibold text-slate-700">Created By</th>
+                        <th className="px-4 py-3 font-semibold text-slate-700">Last Updated By</th>
+                        <th className="px-4 py-3 font-semibold text-slate-700">Created On</th>
+                        <th className="px-4 py-3 font-semibold text-slate-700">Updated On</th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">
+                          Influencers
+                        </th>
+                        <th className="px-4 py-3 text-center font-semibold text-slate-700">
+                          Share
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="bg-white">
+                      {folders.map((folder) => (
+                        <tr
+                          key={folder._id}
+                          onClick={() => router.push(`/admin/pitch-folders/${folder._id}`)}
+                          className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50"
+                        >
+                          <td className="px-4 py-4 align-top">
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                                <FolderKanban className="h-5 w-5" />
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className="max-w-[240px] truncate font-semibold text-slate-900">
+                                  {folder.title}
+                                </p>
+                                {folder.slug ? (
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Slug: {folder.slug}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4 align-top text-slate-600">
+                            <p className="max-w-[260px] whitespace-normal break-words">
+                              {folder.description || 'No description added.'}
+                            </p>
+                          </td>
+
+                          <td className="px-4 py-4 align-top">
+                            <AdminMeta admin={folder.createdBy} />
+                          </td>
+
+                          <td className="px-4 py-4 align-top">
+                            <AdminMeta admin={folder.updatedBy} />
+                          </td>
+
+                          <td className="px-4 py-4 align-top text-slate-700">
+                            {formatDate(folder.createdAt)}
+                          </td>
+
+                          <td className="px-4 py-4 align-top text-slate-700">
+                            {formatDate(folder.updatedAt)}
+                          </td>
+
+                          <td className="px-4 py-4 text-center align-top">
+                            <Badge variant="secondary" className="rounded-full">
+                              {folder.itemCount || 0}
+                            </Badge>
+                          </td>
+
+                          <td className="px-4 py-4 text-center align-top">
+                            {folder.share?.url ? (
+                              <Badge variant="outline" className="rounded-full">
+                                <Link2 className="mr-1 h-3.5 w-3.5" />
+                                Shared
+                              </Badge>
+                            ) : (
+                              <span className="text-sm text-slate-500">--</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
+      </div>
 
-        <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader>
-              <CardTitle>Create Folder</CardTitle>
-              <CardDescription>
-                Create a folder first. Influencers will be managed inside that folder page.
-              </CardDescription>
-            </CardHeader>
+      {openCreateModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Create Folder</h2>
+                <p className="text-sm text-slate-500">
+                  Create a folder and open it immediately after creation.
+                </p>
+              </div>
 
-            <CardContent className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setOpenCreateModal(false)}
+                className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
               <div className="space-y-2">
                 <Label>Folder Name</Label>
                 <Input
@@ -336,150 +414,34 @@ export default function PitchFoldersPage() {
                   placeholder="Optional internal note"
                 />
               </div>
+            </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button className="rounded-xl" onClick={createFolder} disabled={creating}>
-                  {creating ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="mr-2 h-4 w-4" />
-                  )}
-                  Create Folder
-                </Button>
+            <div className="flex flex-wrap justify-end gap-2 border-t px-5 py-4">
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => setOpenCreateModal(false)}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
 
-                <Button variant="outline" className="rounded-xl" onClick={() => loadFolders()}>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Refresh
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <CardTitle>All Folders</CardTitle>
-                <CardDescription>
-                  Visible folders are already filtered by your backend role rules.
-                </CardDescription>
-              </div>
-
-              <div className="relative w-full md:max-w-sm">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') loadFolders();
-                  }}
-                  placeholder="Search folders"
-                  className="pl-9"
-                />
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              {loading ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Skeleton className="h-44 rounded-2xl" />
-                  <Skeleton className="h-44 rounded-2xl" />
-                  <Skeleton className="h-44 rounded-2xl" />
-                  <Skeleton className="h-44 rounded-2xl" />
-                </div>
-              ) : !folders.length ? (
-                <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-                  No folders available for your access level.
-                </div>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                  {folders.map((folder) => (
-                    <button
-                      key={folder._id}
-                      type="button"
-                      onClick={() => router.push(`/admin/pitch-folders/${folder._id}`)}
-                      className="group rounded-3xl border bg-card p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                          <FolderKanban className="h-6 w-6" />
-                        </div>
-
-                        <div className="flex flex-col items-end gap-2">
-                          <Badge variant="secondary">
-                            {folder.itemCount || 0} Influencers
-                          </Badge>
-                          {folder.share?.url ? (
-                            <Badge variant="outline" className="rounded-full">
-                              Shared
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="mt-4">
-                        <h3 className="line-clamp-2 text-lg font-bold text-slate-900 group-hover:text-blue-700">
-                          {folder.title}
-                        </h3>
-                        <p className="mt-2 line-clamp-2 text-sm text-slate-600">
-                          {folder.description || 'No description added.'}
-                        </p>
-                      </div>
-
-                      <div className="mt-5 grid gap-3">
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="mb-2 flex items-center gap-2 text-slate-500">
-                            <UserRound className="h-4 w-4" />
-                            <span className="text-xs font-semibold uppercase tracking-wide">
-                              Created By
-                            </span>
-                          </div>
-                          <AdminMeta admin={folder.createdBy} />
-                          {folder.createdBy?.parentAdmin?.name ? (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                              <Shield className="h-3.5 w-3.5" />
-                              RH: {folder.createdBy.parentAdmin.name}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="mb-2 flex items-center gap-2 text-slate-500">
-                            <Workflow className="h-4 w-4" />
-                            <span className="text-xs font-semibold uppercase tracking-wide">
-                              Last Updated
-                            </span>
-                          </div>
-                          <AdminMeta admin={folder.updatedBy} />
-                        </div>
-
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="mb-2 flex items-center gap-2 text-slate-500">
-                            <CalendarDays className="h-4 w-4" />
-                            <span className="text-xs font-semibold uppercase tracking-wide">
-                              Created On
-                            </span>
-                          </div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {formatDate(folder.createdAt)}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            Updated {formatDate(folder.updatedAt)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4 text-sm font-semibold text-blue-600">
-                        <span>Open Folder</span>
-                        <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              <Button
+                className="rounded-xl"
+                onClick={createFolder}
+                disabled={creating}
+              >
+                {creating ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-2 h-4 w-4" />
+                )}
+                Create Folder
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
