@@ -2340,16 +2340,6 @@ export default function Page() {
                 </label>
 
                 {selectedCount ? (
-                  <button
-                    type="button"
-                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={clearSelection}
-                  >
-                    Clear Selection
-                  </button>
-                ) : null}
-
-                {selectedCount ? (
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       {!folderId ? (
@@ -2475,15 +2465,6 @@ export default function Page() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {selectedCount ? (
-                <button
-                  type="button"
-                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                  onClick={clearSelection}
-                >
-                  Clear Selection
-                </button>
-              ) : null}
 
               {selectedCount ? (
                 <div className="flex flex-wrap items-center gap-2">
