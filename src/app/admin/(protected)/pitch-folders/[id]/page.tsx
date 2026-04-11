@@ -12,6 +12,7 @@ import React, {
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
+  ArrowRightLeft,
   CheckCircle2,
   Clock3,
   Copy,
@@ -19,7 +20,6 @@ import {
   ExternalLink,
   Eye,
   FileText,
-  FolderKanban,
   Heart,
   Link2,
   Loader2,
@@ -28,10 +28,9 @@ import {
   Plus,
   RefreshCw,
   Save,
-  ShieldCheck,
+  Settings2,
   Trash2,
   UploadCloud,
-  Users,
   X,
   XCircle,
   Youtube,
@@ -44,7 +43,6 @@ import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -147,6 +145,7 @@ type FolderItem = {
   rateCardCurrency?: string;
   rateCardHistory?: RateCardHistoryEntry[];
   ourFeePct?: number | null;
+  shippingAddress?: string;
   comments?: string;
   mediaKit?: FolderItemMediaKit | null;
   mediaKitLink?: FolderItemMediaKitLink | null;
@@ -168,6 +167,30 @@ type FolderResponse = {
   items?: FolderItem[];
 };
 
+type TransferMode = 'move' | 'copy';
+
+type TransferItemsResponse = {
+  success?: boolean;
+  data?: {
+    action?: 'copy' | 'move';
+    copiedCount?: number;
+    movedCount?: number;
+    skippedMissingItemIds?: string[];
+    skippedDuplicateItemIds?: string[];
+  };
+};
+
+type FolderListItem = {
+  _id: string;
+  title: string;
+  description?: string;
+};
+
+type FolderListResponse = {
+  success: boolean;
+  data: FolderListItem[];
+};
+
 type DrawerMode = 'create' | 'edit';
 type RateCardTab = 'influencer' | 'admin' | 'history';
 
@@ -185,7 +208,12 @@ type DraftState = {
   platformRateCard: string;
   rateCardCurrency: string;
   ourFeePct: string | number;
-  comments: string;
+  shippingAddress: string;
+};
+
+type DiffToken = {
+  text: string;
+  changed: boolean;
 };
 
 const DASH = '--';
@@ -208,7 +236,7 @@ const DEFAULT_DRAFT: DraftState = {
   platformRateCard: '',
   rateCardCurrency: 'USD',
   ourFeePct: '',
-  comments: '',
+  shippingAddress: '',
 };
 
 function showErr(message: string) {
@@ -266,7 +294,6 @@ function getHandleWithoutAt(handle?: string) {
 function ensureAbsoluteUrl(url?: string | null) {
   const value = cleanText(url);
   if (!value) return '';
-
   if (/^https?:\/\//i.test(value)) return value;
   return `https://${value}`;
 }
@@ -348,6 +375,10 @@ function buildPublicMediaKitUrl(mediaKit?: FolderItemMediaKit | null) {
   return `https://${MEDIAKIT_BUCKET}.s3.${MEDIAKIT_REGION}.amazonaws.com/${encodedKey}`;
 }
 
+function getShippingAddress(row?: FolderItem | null) {
+  return asText(row?.shippingAddress || row?.comments);
+}
+
 function buildPayloadFromDraft(draft: DraftState) {
   return {
     provider: asText(draft.provider).toLowerCase(),
@@ -363,7 +394,7 @@ function buildPayloadFromDraft(draft: DraftState) {
     platformRateCard: asText(draft.platformRateCard),
     rateCardCurrency: asText(draft.rateCardCurrency || 'USD').toUpperCase(),
     ourFeePct: toNullableNumber(draft.ourFeePct),
-    comments: asText(draft.comments),
+    shippingAddress: asText(draft.shippingAddress),
   };
 }
 
@@ -382,20 +413,9 @@ function buildDraftFromRow(row: FolderItem): DraftState {
     platformRateCard: row.platformRateCard || '',
     rateCardCurrency: row.rateCardCurrency || 'USD',
     ourFeePct: row.ourFeePct ?? '',
-    comments: row.comments || '',
+    shippingAddress: getShippingAddress(row),
   };
 }
-
-type DiffToken = {
-  text: string;
-  changed: boolean;
-};
-
-type DiffRow = {
-  previousTokens: DiffToken[];
-  nextTokens: DiffToken[];
-  changed: boolean;
-};
 
 function tokenizeWords(value: string) {
   return String(value || '')
@@ -499,22 +519,16 @@ function buildRowsCsv(rows: FolderItem[]) {
     'Name',
     'Handle',
     'Followers',
+    'Profile Links',
     'Niche',
     'Email',
     'Country',
     'Selection Reason',
-    'Good Fit',
+    'Shipping Address',
     'Influencer Rate Card',
     'Platform Rate Card',
-    'Comments',
-    'Media Kit Added',
-    'Media Kit Allowed To Brand',
-    'Media Kit Visible Source',
-    'Media Kit Request Status',
-    'Media Kit Requested At',
     'Media Kit Link',
-    'Media Kit Link Visible To Brand',
-    'Media Kit PDF Visible To Brand',
+    'Good Fit',
   ];
 
   const csvRows = rows.map((row) => [
@@ -522,28 +536,55 @@ function buildRowsCsv(rows: FolderItem[]) {
     row.name || '',
     row.handle || '',
     row.followers ?? '',
+    getProfileUrl(row),
     Array.isArray(row.niche) ? row.niche.join(', ') : '',
     row.email || '',
     row.country || '',
     row.selectionReason || '',
-    row.goodFit ? 'Yes' : 'No',
+    getShippingAddress(row),
     row.influencerRateCard || '',
     row.platformRateCard || '',
-    row.comments || '',
-    row.mediaKitAccess?.hasAdded ? 'Yes' : 'No',
-    row.mediaKitAccess?.allowed ? 'Yes' : 'No',
-    row.mediaKitAccess?.visibleSource || '',
-    row.mediaKitAccess?.requestStatus || '',
-    row.mediaKitAccess?.requestedAt || '',
     row.mediaKitLink?.url || '',
-    row.mediaKitLink?.showToBrand ? 'Yes' : 'No',
-    row.mediaKit?.showToBrand ? 'Yes' : 'No',
+    row.goodFit ? 'Yes' : 'No',
   ]);
 
   return [headers, ...csvRows]
     .map((line) => line.map(escapeCsvCell).join(','))
     .join('\n');
 }
+
+const SectionHeading = memo(function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <div>
+        {eyebrow ? (
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {eyebrow}
+          </p>
+        ) : null}
+        <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+          {title}
+        </h2>
+        {description ? (
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+    </div>
+  );
+});
 
 const ProviderBadge = memo(function ProviderBadge({
   provider,
@@ -668,33 +709,6 @@ const AccessBadge = memo(function AccessBadge({
   );
 });
 
-const StatCard = memo(function StatCard({
-  title,
-  value,
-  icon,
-  hint,
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <Card className="rounded-2xl border shadow-sm">
-      <CardContent className="flex items-center justify-between p-5">
-        <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
-          {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
-        </div>
-        <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-          {icon}
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
-
 const Field = memo(function Field({
   label,
   children,
@@ -705,8 +719,8 @@ const Field = memo(function Field({
   hint?: string;
 }) {
   return (
-    <div className="space-y-2">
-      <Label className="text-xs font-medium uppercase tracking-wide text-slate-500">
+    <div className="space-y-2.5">
+      <Label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
         {label}
       </Label>
       {children}
@@ -751,6 +765,7 @@ const ModalShell = memo(function ModalShell({
   onClose,
   children,
   maxWidthClass = 'max-w-5xl',
+  zIndexClass = 'z-50',
 }: {
   open: boolean;
   title: string;
@@ -758,16 +773,19 @@ const ModalShell = memo(function ModalShell({
   onClose: () => void;
   children: React.ReactNode;
   maxWidthClass?: string;
+  zIndexClass?: string;
 }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+    <div
+      className={`fixed inset-0 flex items-center justify-center bg-black/55 p-4 ${zIndexClass}`}
+    >
       <div className="absolute inset-0" onClick={onClose} />
       <div
         className={`relative z-10 flex max-h-[92vh] w-full ${maxWidthClass} flex-col overflow-hidden rounded-3xl bg-white shadow-2xl`}
       >
-        <div className="flex items-start justify-between gap-4 border-b px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
           <div>
             <h3 className="text-xl font-semibold text-slate-950">{title}</h3>
             {description ? (
@@ -819,12 +837,12 @@ const RateCardPanel = memo(function RateCardPanel({
 }) {
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border bg-slate-50 px-4 py-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-slate-950">{title}</p>
           <Badge variant="secondary">{currency || 'USD'}</Badge>
         </div>
-        <div className="mt-4 min-h-[340px] rounded-2xl border bg-white p-4 text-sm leading-7 whitespace-pre-wrap text-slate-700">
+        <div className="mt-4 min-h-[340px] rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-7 whitespace-pre-wrap text-slate-700">
           {value || DASH}
         </div>
       </div>
@@ -878,8 +896,8 @@ const HistoryComparisonCard = memo(function HistoryComparisonCard({
   );
 
   return (
-    <div className="rounded-2xl border bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+    <div className="rounded-2xl border border-slate-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-slate-950">
             {entry.field === 'influencerRateCard'
@@ -898,11 +916,11 @@ const HistoryComparisonCard = memo(function HistoryComparisonCard({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Previous
           </p>
-          <div className="overflow-hidden rounded-xl border bg-slate-50">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
             {diffRows.map((row, index) => (
               <div
                 key={`prev-row-${index}`}
-                className={`border-b px-3 py-2 last:border-b-0 ${row.changed ? 'bg-rose-50/60' : 'bg-white'
+                className={`border-b border-slate-200 px-3 py-2 last:border-b-0 ${row.changed ? 'bg-rose-50/60' : 'bg-white'
                   }`}
               >
                 <DiffWordLine
@@ -919,11 +937,11 @@ const HistoryComparisonCard = memo(function HistoryComparisonCard({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
             New
           </p>
-          <div className="overflow-hidden rounded-xl border bg-slate-50">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
             {diffRows.map((row, index) => (
               <div
                 key={`next-row-${index}`}
-                className={`border-b px-3 py-2 last:border-b-0 ${row.changed ? 'bg-emerald-50/60' : 'bg-white'
+                className={`border-b border-slate-200 px-3 py-2 last:border-b-0 ${row.changed ? 'bg-emerald-50/60' : 'bg-white'
                   }`}
               >
                 <DiffWordLine
@@ -968,21 +986,12 @@ const DrawerForm = memo(function DrawerForm({
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/45" onClick={onClose} />
       <div className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-6 py-5">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
           <div>
             <h2 className="text-xl font-semibold text-slate-950">
               {mode === 'create' ? 'Add Influencer' : 'Edit Influencer'}
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {mode === 'create'
-                ? 'Fill all influencer details in the side modal.'
-                : 'Update the influencer details in the side modal.'}
-            </p>
           </div>
-          <Button variant="outline" className="rounded-xl" onClick={onClose}>
-            <X className="mr-2 h-4 w-4" />
-            Close
-          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
@@ -1020,9 +1029,7 @@ const DrawerForm = memo(function DrawerForm({
                 <Input
                   type="number"
                   value={draft.followers}
-                  onChange={(e) =>
-                    onDraftFieldChange('followers', e.target.value)
-                  }
+                  onChange={(e) => onDraftFieldChange('followers', e.target.value)}
                   placeholder="150000"
                 />
               </Field>
@@ -1046,9 +1053,7 @@ const DrawerForm = memo(function DrawerForm({
               <Field label="Country">
                 <Input
                   value={draft.country}
-                  onChange={(e) =>
-                    onDraftFieldChange('country', e.target.value)
-                  }
+                  onChange={(e) => onDraftFieldChange('country', e.target.value)}
                   placeholder="United States"
                 />
               </Field>
@@ -1093,20 +1098,20 @@ const DrawerForm = memo(function DrawerForm({
               </Field>
             </div>
 
-            <Field label="Comments">
+            <Field label="Shipping Address">
               <Textarea
-                value={draft.comments}
+                value={draft.shippingAddress}
                 onChange={(e) =>
-                  onDraftFieldChange('comments', e.target.value)
+                  onDraftFieldChange('shippingAddress', e.target.value)
                 }
                 rows={4}
-                placeholder="Internal comments"
+                placeholder="Shipping address"
               />
             </Field>
           </div>
         </div>
 
-        <div className="border-t px-6 py-4">
+        <div className="border-t border-slate-200 px-6 py-4">
           <div className="flex justify-end gap-2">
             <Button variant="outline" className="rounded-xl" onClick={onClose}>
               Cancel
@@ -1146,6 +1151,7 @@ const PdfViewerModal = memo(function PdfViewerModal({
       description="Previewing uploaded Media Kit PDF"
       onClose={onClose}
       maxWidthClass="max-w-7xl"
+      zIndexClass="z-[80]"
     >
       <div className="mb-4 flex justify-end">
         <Button
@@ -1157,11 +1163,11 @@ const PdfViewerModal = memo(function PdfViewerModal({
           Open in New Tab
         </Button>
       </div>
-      <div className="h-[70vh] rounded-2xl border bg-slate-100 p-3">
+      <div className="h-[70vh] rounded-2xl border border-slate-200 bg-slate-100 p-3">
         <iframe
           src={url}
           title={title || 'Media Kit PDF Preview'}
-          className="h-full w-full rounded-2xl border bg-white"
+          className="h-full w-full rounded-2xl border border-slate-200 bg-white"
         />
       </div>
     </ModalShell>
@@ -1244,7 +1250,7 @@ const RateCardModal = memo(function RateCardModal({
                   />
                 ))
               ) : (
-                <div className="rounded-2xl border border-dashed bg-slate-50 p-10 text-center text-sm text-slate-500">
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm text-slate-500">
                   No rate card history available yet.
                 </div>
               )}
@@ -1300,11 +1306,11 @@ const MediaKitModal = memo(function MediaKitModal({
       description="Manage link, PDF, and the single brand-facing media kit access state."
       onClose={onClose}
       maxWidthClass="max-w-4xl"
+      zIndexClass="z-[60]"
     >
       <div className="space-y-5">
-
-        <div className="rounded-3xl border bg-white shadow-sm">
-          <div className="flex flex-col gap-4 border-b px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-none">
+          <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-lg font-semibold text-slate-950">
                 Media Kit Center
@@ -1347,7 +1353,7 @@ const MediaKitModal = memo(function MediaKitModal({
           </div>
 
           <div className="space-y-5 px-5 py-5">
-            <div className="rounded-2xl border bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">
@@ -1362,7 +1368,7 @@ const MediaKitModal = memo(function MediaKitModal({
 
               {hasLink ? (
                 <div className="mt-4 space-y-4">
-                  <div className="rounded-xl border bg-white p-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <a
                       href={asText(item.mediaKitLink?.url)}
                       target="_blank"
@@ -1380,7 +1386,7 @@ const MediaKitModal = memo(function MediaKitModal({
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
                     <div>
                       <p className="text-sm font-medium text-slate-950">
                         Show Link To Brand
@@ -1409,13 +1415,13 @@ const MediaKitModal = memo(function MediaKitModal({
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 rounded-xl border border-dashed bg-white p-4 text-sm text-slate-500">
+                <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
                   No Media Kit Link generated yet.
                 </div>
               )}
             </div>
 
-            <div className="rounded-2xl border bg-slate-50 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-950">
@@ -1430,7 +1436,7 @@ const MediaKitModal = memo(function MediaKitModal({
 
               {hasPdf ? (
                 <div className="mt-4 space-y-4">
-                  <div className="rounded-xl border bg-white p-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <button
                       type="button"
                       onClick={() => onOpenPdf(item)}
@@ -1444,7 +1450,7 @@ const MediaKitModal = memo(function MediaKitModal({
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
                     <div>
                       <p className="text-sm font-medium text-slate-950">
                         Show PDF To Brand
@@ -1488,10 +1494,23 @@ const MediaKitModal = memo(function MediaKitModal({
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 rounded-xl border border-dashed bg-white p-4 text-sm text-slate-500">
+                <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
                   No Media Kit PDF uploaded yet.
                 </div>
               )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-950">
+                Current Brand Source
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Visible source:{' '}
+                <span className="font-medium">{visibleSourceLabel}</span>
+              </p>
+              <div className="mt-3">
+                <AccessBadge access={access} />
+              </div>
             </div>
           </div>
         </div>
@@ -1500,10 +1519,228 @@ const MediaKitModal = memo(function MediaKitModal({
   );
 });
 
+type BrandViewSettingsModalProps = {
+  open: boolean;
+  onClose: () => void;
+  shareUrl: string;
+  totalItems: number;
+  sharedCountPreview: number;
+  showFullListToBrand: boolean;
+  setShowFullListToBrand: React.Dispatch<React.SetStateAction<boolean>>;
+  folderBrandCount: string;
+  setFolderBrandCount: React.Dispatch<React.SetStateAction<string>>;
+  savingFolderConfig: boolean;
+  onSave: () => Promise<void>;
+};
+
+const BrandViewSettingsModal = memo(function BrandViewSettingsModal({
+  open,
+  onClose,
+  shareUrl,
+  totalItems,
+  sharedCountPreview,
+  showFullListToBrand,
+  setShowFullListToBrand,
+  folderBrandCount,
+  setFolderBrandCount,
+  savingFolderConfig,
+  onSave,
+}: BrandViewSettingsModalProps) {
+  return (
+    <ModalShell
+      open={open}
+      title="Brand View Settings"
+      description="Control how this folder appears on the shared brand-facing page."
+      onClose={onClose}
+      maxWidthClass="max-w-2xl"
+      zIndexClass="z-[55]"
+    >
+      <div className="space-y-5">
+        <Field label="Share Link">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm break-all text-slate-700">
+            {shareUrl || DASH}
+          </div>
+        </Field>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-slate-950">
+                Show Full Influencer List To Brand
+              </p>
+              <p className="text-xs text-slate-500">
+                When enabled, the full influencer list is visible on the shared
+                page.
+              </p>
+            </div>
+            <Toggle
+              checked={showFullListToBrand}
+              onChange={(next) => {
+                setShowFullListToBrand(next);
+                if (next) {
+                  setFolderBrandCount('');
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        <Field
+          label="Brand Visible Count"
+          hint={
+            showFullListToBrand
+              ? 'Disabled because full list is enabled.'
+              : `Leave blank to auto use ${totalItems}`
+          }
+        >
+          <Input
+            type="number"
+            min={0}
+            value={showFullListToBrand ? '' : folderBrandCount}
+            onChange={(e) => setFolderBrandCount(e.target.value)}
+            placeholder={
+              showFullListToBrand
+                ? 'Disabled while full list is enabled'
+                : `Leave blank to auto use ${totalItems}`
+            }
+            disabled={showFullListToBrand}
+          />
+        </Field>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+          <p>
+            Current preview:
+            <span className="ml-2 font-semibold text-slate-950">
+              {sharedCountPreview}
+            </span>
+          </p>
+          <p className="mt-1">
+            Brand list mode:
+            <span className="ml-2 font-semibold text-slate-950">
+              {showFullListToBrand ? 'Full list visible' : 'Count only'}
+            </span>
+          </p>
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            className="rounded-xl"
+            onClick={onSave}
+            disabled={savingFolderConfig}
+          >
+            {savingFolderConfig ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Save Brand Settings
+          </Button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+});
+
+type MoveItemsModalProps = {
+  open: boolean;
+  onClose: () => void;
+  folders: FolderListItem[];
+  selectedCount: number;
+  destinationFolderId: string;
+  setDestinationFolderId: React.Dispatch<React.SetStateAction<string>>;
+  transferMode: TransferMode;
+  setTransferMode: React.Dispatch<React.SetStateAction<TransferMode>>;
+  moving: boolean;
+  onSubmit: () => Promise<void>;
+};
+
+const MoveItemsModal = memo(function MoveItemsModal({
+  open,
+  onClose,
+  folders,
+  selectedCount,
+  destinationFolderId,
+  setDestinationFolderId,
+  transferMode,
+  setTransferMode,
+  moving,
+  onSubmit,
+}: MoveItemsModalProps) {
+  const actionLabel = transferMode === 'copy' ? 'Copy' : 'Move';
+
+  return (
+    <ModalShell
+      open={open}
+      title="Transfer To Another Folder"
+      description={`${actionLabel} ${selectedCount} selected influencer${selectedCount === 1 ? '' : 's'
+        } to another folder.`}
+      onClose={onClose}
+      maxWidthClass="max-w-xl"
+      zIndexClass="z-[58]"
+    >
+      <div className="space-y-5">
+        <Field label="Action">
+          <select
+            value={transferMode}
+            onChange={(e) => setTransferMode(e.target.value as TransferMode)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="move">Direct Move</option>
+            <option value="copy">Copy & Move to another folder</option>
+          </select>
+        </Field>
+
+        <Field label="Destination Folder">
+          <select
+            value={destinationFolderId}
+            onChange={(e) => setDestinationFolderId(e.target.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">Select destination folder</option>
+            {folders.map((folder) => (
+              <option key={folder._id} value={folder._id}>
+                {folder.title}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          <p>
+            Selected influencers:{' '}
+            <span className="font-semibold text-slate-950">{selectedCount}</span>
+          </p>
+          <p className="mt-2">
+            Action:{' '}
+            <span className="font-semibold text-slate-950">{actionLabel}</span>
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" className="rounded-xl" onClick={onClose}>
+            Cancel
+          </Button>
+
+          <Button className="rounded-xl" onClick={onSubmit} disabled={moving}>
+            {moving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowRightLeft className="mr-2 h-4 w-4" />
+            )}
+            {actionLabel} Selected
+          </Button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+});
+
 type InfluencerTableRowProps = {
   row: FolderItem;
+  selected: boolean;
   isLinkToggleLoading: boolean;
   isPdfToggleLoading: boolean;
+  onToggleSelected: (itemId: string) => void;
   onOpenRateCard: (itemId: string) => void;
   onOpenMediaKit: (itemId: string) => void;
   onToggleLink: (row: FolderItem, nextValue: boolean) => Promise<void>;
@@ -1514,8 +1751,10 @@ type InfluencerTableRowProps = {
 
 const InfluencerTableRowMemo = memo(function InfluencerTableRow({
   row,
+  selected,
   isLinkToggleLoading,
   isPdfToggleLoading,
+  onToggleSelected,
   onOpenRateCard,
   onOpenMediaKit,
   onToggleLink,
@@ -1536,7 +1775,18 @@ const InfluencerTableRowMemo = memo(function InfluencerTableRow({
         : DASH;
 
   return (
-    <TableRow>
+    <TableRow className="border-slate-200">
+      <TableCell className="align-top">
+        <div className="flex justify-center pt-1">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelected(row._id)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+        </div>
+      </TableCell>
+
       <TableCell className="align-top">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -1557,10 +1807,11 @@ const InfluencerTableRowMemo = memo(function InfluencerTableRow({
             href={profileUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex max-w-[320px] items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            title={profileUrl}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            <ExternalLink className="mt-0.5 h-4 w-4 shrink-0" />
-            <span className="break-all">{profileUrl}</span>
+            <ExternalLink className="h-4 w-4 shrink-0" />
+            <span>Profile Link</span>
           </a>
         ) : (
           <span className="text-sm text-slate-400">{DASH}</span>
@@ -1569,7 +1820,9 @@ const InfluencerTableRowMemo = memo(function InfluencerTableRow({
 
       <TableCell className="align-top text-sm text-slate-700">
         <div className="max-w-[220px] whitespace-pre-wrap break-words">
-          {Array.isArray(row.niche) && row.niche.length ? row.niche.join(', ') : DASH}
+          {Array.isArray(row.niche) && row.niche.length
+            ? row.niche.join(', ')
+            : DASH}
         </div>
       </TableCell>
 
@@ -1578,8 +1831,14 @@ const InfluencerTableRowMemo = memo(function InfluencerTableRow({
       </TableCell>
 
       <TableCell className="align-top text-sm text-slate-700">
-        <div className="max-w-[320px] whitespace-pre-wrap break-words leading-6">
+        <div className="max-w-[300px] whitespace-pre-wrap break-words leading-6">
           {row.selectionReason || DASH}
+        </div>
+      </TableCell>
+
+      <TableCell className="align-top text-sm text-slate-700">
+        <div className="max-w-[260px] whitespace-pre-wrap break-words leading-6">
+          {getShippingAddress(row) || DASH}
         </div>
       </TableCell>
 
@@ -1600,11 +1859,11 @@ const InfluencerTableRowMemo = memo(function InfluencerTableRow({
       </TableCell>
 
       <TableCell className="align-top">
-        <div className="min-w-[320px] rounded-2xl border bg-slate-50 p-3">
+        <div className="min-w-[320px] rounded-2xl border border-slate-200 bg-slate-50 p-3">
           <div className="mb-3 flex items-start justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-slate-950">
-                Generic Brand Access
+                Media Kit Access
               </p>
               <p className="mt-1 text-[11px] text-slate-500">
                 Source: {visibleSource}
@@ -1725,6 +1984,13 @@ const InfluencerTableRowMemo = memo(function InfluencerTableRow({
 type InfluencerTableProps = {
   loading: boolean;
   rows: FolderItem[];
+  selectedItemIds: string[];
+  selectedCount: number;
+  allVisibleSelected: boolean;
+  onToggleSelectAll: () => void;
+  onToggleSelected: (itemId: string) => void;
+  onOpenMoveModal: () => void;
+  onClearSelection: () => void;
   onOpenCreateDrawer: () => void;
   onDownloadCsv: () => void;
   onOpenRateCard: (itemId: string) => void;
@@ -1741,6 +2007,13 @@ type InfluencerTableProps = {
 const InfluencerTableSection = memo(function InfluencerTableSection({
   loading,
   rows,
+  selectedItemIds,
+  selectedCount,
+  allVisibleSelected,
+  onToggleSelectAll,
+  onToggleSelected,
+  onOpenMoveModal,
+  onClearSelection,
   onOpenCreateDrawer,
   onDownloadCsv,
   onOpenRateCard,
@@ -1754,35 +2027,23 @@ const InfluencerTableSection = memo(function InfluencerTableSection({
   pdfToggleItemId,
 }: InfluencerTableProps) {
   return (
-    <Card className="rounded-2xl shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-lg">Influencers Table</CardTitle>
-        <CardDescription>
-          Generic brand-facing media kit state with separate admin controls for
-          link and PDF.
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        {loading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-14 w-full rounded-xl" />
-            <Skeleton className="h-14 w-full rounded-xl" />
-            <Skeleton className="h-14 w-full rounded-xl" />
-          </div>
-        ) : !rows.length ? (
-          <div className="rounded-2xl border border-dashed bg-slate-50 p-12 text-center">
-            <p className="text-sm font-medium text-slate-700">
-              No influencers found in this folder.
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Add a creator manually or import from YouTube.
-            </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <Button className="rounded-xl" onClick={onOpenCreateDrawer}>
+    <Card className="rounded-2xl border border-slate-200 shadow-none">
+      <CardHeader className="border-b border-slate-200 pb-5">
+        <SectionHeading
+          eyebrow="Workspace"
+          title="Influencer Management"
+          description="Manage creators, rate cards, media kit access, and folder-level actions in one clean table."
+          actions={
+            <>
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                onClick={onOpenCreateDrawer}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Influencer
               </Button>
+
               <Button
                 variant="outline"
                 className="rounded-xl"
@@ -1791,6 +2052,7 @@ const InfluencerTableSection = memo(function InfluencerTableSection({
                 <Youtube className="mr-2 h-4 w-4" />
                 Add from YouTube
               </Button>
+
               <Button
                 variant="outline"
                 className="rounded-xl"
@@ -1799,19 +2061,96 @@ const InfluencerTableSection = memo(function InfluencerTableSection({
                 <Download className="mr-2 h-4 w-4" />
                 Download CSV
               </Button>
+            </>
+          }
+        />
+      </CardHeader>
+
+      <CardContent className="p-0">
+        {selectedCount > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-6 py-4">
+            <p className="text-sm font-medium text-slate-700">
+              {selectedCount} influencer{selectedCount === 1 ? '' : 's'} selected
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                onClick={onClearSelection}
+              >
+                Clear Selection
+              </Button>
+
+              <Button className="rounded-xl" onClick={onOpenMoveModal}>
+                <ArrowRightLeft className="mr-2 h-4 w-4" />
+                Copy / Move
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {loading ? (
+          <div className="space-y-3 p-6">
+            <Skeleton className="h-14 w-full rounded-xl" />
+            <Skeleton className="h-14 w-full rounded-xl" />
+            <Skeleton className="h-14 w-full rounded-xl" />
+          </div>
+        ) : !rows.length ? (
+          <div className="p-8">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-12 text-center">
+              <p className="text-sm font-medium text-slate-700">
+                No influencers found in this folder.
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Add a creator manually or import from YouTube.
+              </p>
+              <div className="mt-4 flex justify-center gap-2">
+                <Button className="rounded-xl" onClick={onOpenCreateDrawer}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Influencer
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={onGoToYoutube}
+                >
+                  <Youtube className="mr-2 h-4 w-4" />
+                  Add from YouTube
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={onDownloadCsv}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download CSV
+                </Button>
+              </div>
             </div>
           </div>
         ) : (
           <div className="w-full overflow-x-auto">
-            <div className="min-w-[1280px]">
+            <div className="min-w-[1540px]">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="border-slate-200">
+                    <TableHead className="w-[56px]">
+                      <div className="flex justify-center">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          onChange={onToggleSelectAll}
+                          className="h-4 w-4 rounded border-slate-300"
+                        />
+                      </div>
+                    </TableHead>
                     <TableHead>Influencer</TableHead>
                     <TableHead>Profile</TableHead>
                     <TableHead>Niche</TableHead>
                     <TableHead>Country</TableHead>
                     <TableHead>Selection Reason</TableHead>
+                    <TableHead>Shipping Address</TableHead>
                     <TableHead>Followers</TableHead>
                     <TableHead>Rate Cards</TableHead>
                     <TableHead>Media Kit Access</TableHead>
@@ -1825,8 +2164,10 @@ const InfluencerTableSection = memo(function InfluencerTableSection({
                     <InfluencerTableRowMemo
                       key={row._id}
                       row={row}
+                      selected={selectedItemIds.includes(row._id)}
                       isLinkToggleLoading={linkToggleItemId === row._id}
                       isPdfToggleLoading={pdfToggleItemId === row._id}
+                      onToggleSelected={onToggleSelected}
                       onOpenRateCard={onOpenRateCard}
                       onOpenMediaKit={onOpenMediaKit}
                       onToggleLink={onToggleLink}
@@ -1866,6 +2207,7 @@ export default function PitchFolderDetailPage() {
 
   const [folderBrandCount, setFolderBrandCount] = useState('');
   const [showFullListToBrand, setShowFullListToBrand] = useState(true);
+  const [brandSettingsOpen, setBrandSettingsOpen] = useState(false);
 
   const [actionLoadingKey, setActionLoadingKey] = useState('');
   const [uploadTargetItemId, setUploadTargetItemId] = useState('');
@@ -1878,6 +2220,15 @@ export default function PitchFolderDetailPage() {
   const [rateCardTab, setRateCardTab] = useState<RateCardTab>('influencer');
 
   const [mediaKitItemId, setMediaKitItemId] = useState('');
+
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
+  const [moveDestinationFolderId, setMoveDestinationFolderId] = useState('');
+  const [moveTransferMode, setMoveTransferMode] = useState<TransferMode>('move');
+  const [moveFolderOptions, setMoveFolderOptions] = useState<FolderListItem[]>(
+    []
+  );
+  const [movingItems, setMovingItems] = useState(false);
 
   const rowMap = useMemo(() => {
     const map = new Map<string, FolderItem>();
@@ -1913,6 +2264,12 @@ export default function PitchFolderDetailPage() {
     const configured = toNullableInteger(folderBrandCount);
     return configured == null ? totalItems : configured;
   }, [folderBrandCount, totalItems]);
+
+  const selectedCount = selectedItemIds.length;
+
+  const allVisibleSelected = useMemo(() => {
+    return rows.length > 0 && rows.every((row) => selectedItemIds.includes(row._id));
+  }, [rows, selectedItemIds]);
 
   const linkToggleItemId = useMemo(() => {
     if (!actionLoadingKey.startsWith('link-toggle:')) return '';
@@ -2033,6 +2390,9 @@ export default function PitchFolderDetailPage() {
 
       setFolder(data);
       setRows(nextRows);
+      setSelectedItemIds((prev) =>
+        prev.filter((id) => nextRows.some((row) => row._id === id))
+      );
       setFolderBrandCount(
         data?.brandVisibleItemCount === null ||
           data?.brandVisibleItemCount === undefined
@@ -2102,6 +2462,7 @@ export default function PitchFolderDetailPage() {
 
       await loadFolder();
       await showSuccess('Brand visibility settings updated successfully.');
+      setBrandSettingsOpen(false);
     } catch (e: any) {
       await showErr(e?.message || 'Failed to save folder settings.');
     } finally {
@@ -2436,14 +2797,132 @@ export default function PitchFolderDetailPage() {
     [folderId, loadFolder, runRowAction]
   );
 
+  const toggleSelectedItem = useCallback((itemId: string) => {
+    setSelectedItemIds((prev) =>
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId]
+    );
+  }, []);
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedItemIds((prev) => {
+      if (rows.length && rows.every((row) => prev.includes(row._id))) {
+        return prev.filter((id) => !rows.some((row) => row._id === id));
+      }
+
+      const next = new Set(prev);
+      rows.forEach((row) => next.add(row._id));
+      return Array.from(next);
+    });
+  }, [rows]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedItemIds([]);
+  }, []);
+
+  const loadMoveFolderOptions = useCallback(async () => {
+    try {
+      const resp = await get<FolderListResponse>('/pitch-folders/list');
+      const options = Array.isArray(resp?.data) ? resp.data : [];
+      setMoveFolderOptions(options.filter((item) => item._id !== folderId));
+    } catch (e: any) {
+      await showErr(e?.message || 'Failed to load destination folders.');
+    }
+  }, [folderId]);
+
+  const openMoveModal = useCallback(async () => {
+    if (!selectedItemIds.length) {
+      await showErr('Please select at least one influencer.');
+      return;
+    }
+
+    await loadMoveFolderOptions();
+    setMoveTransferMode('move');
+    setMoveModalOpen(true);
+  }, [selectedItemIds, loadMoveFolderOptions]);
+
+  const closeMoveModal = useCallback(() => {
+    setMoveModalOpen(false);
+    setMoveDestinationFolderId('');
+    setMoveTransferMode('move');
+  }, []);
+
+  const moveSelectedItems = useCallback(async () => {
+    try {
+      if (!selectedItemIds.length) {
+        await showErr('Please select at least one influencer.');
+        return;
+      }
+
+      if (!moveDestinationFolderId) {
+        await showErr('Please select a destination folder.');
+        return;
+      }
+
+      setMovingItems(true);
+
+      const resp = await post<TransferItemsResponse>('/pitch-folders/items/move', {
+        sourceFolderId: folderId,
+        destinationFolderId: moveDestinationFolderId,
+        itemIds: selectedItemIds,
+        transferType: moveTransferMode,
+      });
+
+      const action = resp?.data?.action === 'copy' ? 'copy' : moveTransferMode;
+      const completedCount =
+        action === 'copy'
+          ? Number(resp?.data?.copiedCount || 0)
+          : Number(resp?.data?.movedCount || 0);
+
+      const skippedDuplicateCount = resp?.data?.skippedDuplicateItemIds?.length || 0;
+      const skippedMissingCount = resp?.data?.skippedMissingItemIds?.length || 0;
+
+      const finalCount =
+        completedCount > 0 ? completedCount : selectedItemIds.length;
+
+      const notes: string[] = [];
+      if (skippedDuplicateCount) {
+        notes.push(`${skippedDuplicateCount} duplicate skipped`);
+      }
+      if (skippedMissingCount) {
+        notes.push(`${skippedMissingCount} missing skipped`);
+      }
+
+      const actionPast = action === 'copy' ? 'copied' : 'moved';
+
+      await showSuccess(
+        `${finalCount} influencer${finalCount === 1 ? '' : 's'} ${actionPast} successfully${notes.length ? `. ${notes.join(', ')}.` : '.'
+        }`
+      );
+
+      closeMoveModal();
+      setSelectedItemIds([]);
+      await loadFolder();
+    } catch (e: any) {
+      await showErr(
+        e?.message ||
+        `Failed to ${moveTransferMode === 'copy' ? 'copy' : 'move'} selected influencers.`
+      );
+    } finally {
+      setMovingItems(false);
+    }
+  }, [
+    folderId,
+    moveDestinationFolderId,
+    moveTransferMode,
+    selectedItemIds,
+    closeMoveModal,
+    loadFolder,
+  ]);
+
   if (!folderId) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-slate-50">
         <div className="mx-auto max-w-4xl px-4 py-12">
-          <Card className="rounded-3xl shadow-sm">
+          <Card className="rounded-3xl shadow-none">
             <CardHeader>
               <CardTitle>Invalid Folder</CardTitle>
-              <CardDescription>Folder id is missing in the URL.</CardDescription>
             </CardHeader>
           </Card>
         </div>
@@ -2488,6 +2967,33 @@ export default function PitchFolderDetailPage() {
         onRemovePdf={removeMediaKit}
       />
 
+      <BrandViewSettingsModal
+        open={brandSettingsOpen}
+        onClose={() => setBrandSettingsOpen(false)}
+        shareUrl={shareUrl}
+        totalItems={totalItems}
+        sharedCountPreview={sharedCountPreview}
+        showFullListToBrand={showFullListToBrand}
+        setShowFullListToBrand={setShowFullListToBrand}
+        folderBrandCount={folderBrandCount}
+        setFolderBrandCount={setFolderBrandCount}
+        savingFolderConfig={savingFolderConfig}
+        onSave={saveFolderBrandSettings}
+      />
+
+      <MoveItemsModal
+        open={moveModalOpen}
+        onClose={closeMoveModal}
+        folders={moveFolderOptions}
+        selectedCount={selectedCount}
+        destinationFolderId={moveDestinationFolderId}
+        setDestinationFolderId={setMoveDestinationFolderId}
+        transferMode={moveTransferMode}
+        setTransferMode={setMoveTransferMode}
+        moving={movingItems}
+        onSubmit={moveSelectedItems}
+      />
+
       <DrawerForm
         open={drawerOpen}
         mode={drawerMode}
@@ -2499,66 +3005,38 @@ export default function PitchFolderDetailPage() {
       />
 
       <div className="mx-auto w-full max-w-[1700px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-        <Card className="overflow-hidden rounded-3xl border-0 shadow-sm">
-          <CardContent className="p-0">
-            <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 px-6 py-8 text-white sm:px-8">
-              <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-                <div className="space-y-4">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
-                    <FolderKanban className="h-3.5 w-3.5" />
-                    Admin Pitch Folder Workspace
-                  </div>
-
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
-                      <FolderKanban className="h-7 w-7" />
-                    </div>
-
-                    <div>
-                      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                        {folder?.title || 'Pitch Folder'}
-                      </h1>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-white/75">
-                        <span>
-                          Created by{' '}
-                          <span className="font-semibold text-white">
-                            {folder?.createdBy?.name ||
-                              folder?.createdBy?.email ||
-                              DASH}
-                          </span>
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {folder?.createdBy?.designation ||
-                            prettyText(folder?.createdBy?.role)}
-                        </span>
-                        <span>•</span>
-                        <span>{formatDate(folder?.createdAt)}</span>
-                      </div>
-
-                      {folder?.description ? (
-                        <p className="mt-3 max-w-4xl text-sm leading-6 text-white/80">
-                          {folder.description}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
+        <Card className="rounded-3xl border border-slate-200 shadow-none">
+          <CardContent className="p-6 sm:p-8">
+            <SectionHeading
+              eyebrow="Pitch Folder"
+              title={folder?.title || 'Pitch Folder'}
+              description={
+                folder?.description ||
+                'Manage brand visibility, influencer access, media kits, and rate cards from one minimal workspace.'
+              }
+              actions={
+                <>
                   <Button
-                    variant="secondary"
+                    variant="outline"
                     className="rounded-xl"
                     onClick={goToFolders}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Folders
+                    Back
                   </Button>
 
                   <Button
                     variant="outline"
-                    className="rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
+                    className="rounded-xl"
+                    onClick={() => setBrandSettingsOpen(true)}
+                  >
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Manage Brand View
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="rounded-xl"
                     onClick={loadFolder}
                     disabled={loading}
                   >
@@ -2571,8 +3049,7 @@ export default function PitchFolderDetailPage() {
                   </Button>
 
                   <Button
-                    variant="outline"
-                    className="rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
+                    className="rounded-xl"
                     onClick={copyShareLink}
                     disabled={sharing}
                   >
@@ -2583,207 +3060,55 @@ export default function PitchFolderDetailPage() {
                     )}
                     Copy Share Link
                   </Button>
-                </div>
+                </>
+              }
+            />
+
+            <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Created By
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-950">
+                  {folder?.createdBy?.name || folder?.createdBy?.email || DASH}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {folder?.createdBy?.designation ||
+                    prettyText(folder?.createdBy?.role)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Created On
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-950">
+                  {formatDate(folder?.createdAt)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Last Updated
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-950">
+                  {formatDate(folder?.updatedAt)}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            title="Total Influencers"
-            value={totalItems}
-            icon={<Users className="h-5 w-5" />}
-            hint="All creators inside this folder"
-          />
-          <StatCard
-            title="Allowed Media Kits"
-            value={visibleMediaAssets}
-            icon={<Eye className="h-5 w-5" />}
-            hint="Generic media kits currently visible to brand"
-          />
-          <StatCard
-            title="Pending Requests"
-            value={pendingMediaKitRequests}
-            icon={<Clock3 className="h-5 w-5" />}
-            hint="Generic media kit requests awaiting action"
-          />
-          <StatCard
-            title="Brand Count Preview"
-            value={sharedCountPreview}
-            icon={<ShieldCheck className="h-5 w-5" />}
-            hint={showFullListToBrand ? 'Full list enabled' : 'Count only'}
-          />
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_2fr]">
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg">Brand View Settings</CardTitle>
-              <CardDescription>
-                Control how this folder appears to the brand on the shared link.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <Field label="Share Link">
-                <div className="rounded-xl border bg-slate-50 px-3 py-2 text-sm break-all text-slate-700">
-                  {shareUrl || DASH}
-                </div>
-              </Field>
-
-              <div className="rounded-2xl border bg-slate-50 px-4 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-slate-950">
-                      Show Full Influencer List To Brand
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      When enabled, the full influencer list is visible on the
-                      shared page.
-                    </p>
-                  </div>
-                  <Toggle
-                    checked={showFullListToBrand}
-                    onChange={(next) => {
-                      setShowFullListToBrand(next);
-                      if (next) {
-                        setFolderBrandCount("");
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-
-              <Field
-                label="Brand Visible Count"
-                hint={
-                  showFullListToBrand
-                    ? "Disabled because full list is enabled."
-                    : `Leave blank to auto use ${totalItems}`
-                }
-              >
-                <Input
-                  type="number"
-                  min={0}
-                  value={showFullListToBrand ? "" : folderBrandCount}
-                  onChange={(e) => setFolderBrandCount(e.target.value)}
-                  placeholder={
-                    showFullListToBrand
-                      ? "Disabled while full list is enabled"
-                      : `Leave blank to auto use ${totalItems}`
-                  }
-                  disabled={showFullListToBrand}
-                />
-              </Field>
-
-              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-                <p>
-                  Current preview:
-                  <span className="ml-2 font-semibold text-slate-950">
-                    {sharedCountPreview}
-                  </span>
-                </p>
-                <p className="mt-1">
-                  Brand list mode:
-                  <span className="ml-2 font-semibold text-slate-950">
-                    {showFullListToBrand ? "Full list visible" : "Count only"}
-                  </span>
-                </p>
-              </div>
-
-              <Button
-                className="rounded-xl"
-                onClick={saveFolderBrandSettings}
-                disabled={savingFolderConfig}
-              >
-                {savingFolderConfig ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
-                Save Brand Settings
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-              <div>
-                <CardTitle className="text-lg">Influencer Management</CardTitle>
-                <CardDescription>
-                  Brand-facing media kit state is now generic, while admin can
-                  still manage link and PDF separately.
-                </CardDescription>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  className="rounded-xl"
-                  onClick={openCreateDrawer}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Influencer
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className="rounded-xl"
-                  onClick={goToYoutube}
-                >
-                  <Youtube className="mr-2 h-4 w-4" />
-                  Add from YouTube
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className="rounded-xl"
-                  onClick={downloadCsv}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download CSV
-                </Button>
-              </div>
-            </CardHeader>
-
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border bg-slate-50 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Share generated on
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-950">
-                    {formatDate(folder?.share?.generatedAt)}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border bg-slate-50 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Shared by
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-950">
-                    {folder?.share?.sharedBy?.name ||
-                      folder?.share?.sharedBy?.email ||
-                      DASH}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border bg-slate-50 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Last updated
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-950">
-                    {formatDate(folder?.updatedAt)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
         <InfluencerTableSection
           loading={loading}
           rows={rows}
+          selectedItemIds={selectedItemIds}
+          selectedCount={selectedCount}
+          allVisibleSelected={allVisibleSelected}
+          onToggleSelectAll={toggleSelectAllVisible}
+          onToggleSelected={toggleSelectedItem}
+          onOpenMoveModal={openMoveModal}
+          onClearSelection={clearSelection}
           onOpenCreateDrawer={openCreateDrawer}
           onDownloadCsv={downloadCsv}
           onOpenRateCard={openRateCardModal}

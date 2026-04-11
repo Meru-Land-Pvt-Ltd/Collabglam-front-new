@@ -102,7 +102,7 @@ function buildFallbackProfileUrl(provider?: string, handle?: string) {
 
   const p = cleanText(provider).toLowerCase();
 
-  if (p === "youtube") return `https://youtube.com/${username}`;
+  if (p === "youtube") return `https://youtube.com/@${username}`;
   if (p === "instagram") return `https://instagram.com/${username}`;
   if (p === "tiktok") return `https://tiktok.com/@${username}`;
 
@@ -115,12 +115,6 @@ function getProfileUrl(row: SharedRow) {
     (Array.isArray(row.links) && row.links.length ? cleanText(row.links[0]) : "") ||
     buildFallbackProfileUrl(row.provider, row.handle)
   );
-}
-
-function shortUrl(url?: string) {
-  const value = cleanText(url);
-  if (!value) return DASH;
-  return value.replace(/^https?:\/\//, "");
 }
 
 const CHIP_STYLES: Record<string, string> = {
@@ -259,6 +253,15 @@ function ModalShell({
   );
 }
 
+function getStickyFitCellClass(isHeader = false) {
+  return [
+    "sticky right-0 z-20",
+    isHeader
+      ? "bg-white shadow-[-1px_0_0_0_rgba(226,232,240,1)]"
+      : "bg-white shadow-[-1px_0_0_0_rgba(241,245,249,1)]",
+  ].join(" ");
+}
+
 export default function SharedPitchFolderPage() {
   const params = useParams();
   const token = String(params?.token || "");
@@ -269,7 +272,6 @@ export default function SharedPitchFolderPage() {
   const [title, setTitle] = useState("Shared Pitch Folder");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
-
   const [rateCardItemId, setRateCardItemId] = useState("");
 
   const reloadSheet = useCallback(async () => {
@@ -332,7 +334,7 @@ export default function SharedPitchFolderPage() {
       await reloadSheet();
     } catch (e: any) {
       setError(
-        e?.response?.data?.error || e?.message || "Failed to request media kit"
+        e?.response?.data?.error || e?.message || "Failed to request demographics"
       );
     } finally {
       setSavingId("");
@@ -588,9 +590,13 @@ export default function SharedPitchFolderPage() {
                         Rate Card
                       </th>
                       <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                        Media Kit
+                        Demographics
                       </th>
-                      <th className="px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                      <th
+                        className={`px-4 py-3.5 text-center text-[11px] font-bold uppercase tracking-widest text-slate-500 ${getStickyFitCellClass(
+                          true
+                        )}`}
+                      >
                         Fit
                       </th>
                     </tr>
@@ -600,13 +606,14 @@ export default function SharedPitchFolderPage() {
                     {rows.map((row) => {
                       const access = row.mediaKitAccess;
                       const isRequesting = savingId === `media-kit-${row._id}`;
+                      const isFitSaving = savingId === row._id;
                       const profileUrl = getProfileUrl(row);
 
                       const mediaButtonLabel = access?.allowed
-                        ? "Open Media Kit"
+                        ? "Open Demographics"
                         : access?.requestStatus === "requested"
-                          ? "Requested"
-                          : "Request";
+                        ? "Requested"
+                        : "Request";
 
                       const mediaButtonDisabled =
                         access?.requestStatus === "requested" || isRequesting;
@@ -614,7 +621,7 @@ export default function SharedPitchFolderPage() {
                       return (
                         <tr
                           key={row._id}
-                          className="border-b border-slate-100 transition-colors duration-150 hover:bg-slate-50/80"
+                          className="group border-b border-slate-100 transition-colors duration-150 hover:bg-slate-50/80"
                         >
                           <td className="px-6 py-4 whitespace-nowrap align-top">
                             <div className="flex items-center gap-3">
@@ -716,12 +723,14 @@ export default function SharedPitchFolderPage() {
                             ) : null}
                           </td>
 
-                          <td className="px-4 py-4 text-center align-top">
+                          <td
+                            className={`px-4 py-4 text-center align-top ${getStickyFitCellClass()} group-hover:bg-slate-50/80`}
+                          >
                             <div className="flex justify-center">
                               <GoodFitButton
                                 checked={!!row.goodFit}
-                                saving={savingId === row._id}
-                                disabled={savingId !== "" && savingId !== row._id}
+                                saving={isFitSaving}
+                                disabled={savingId !== "" && !isFitSaving}
                                 onToggle={(v) => saveGoodFit(row._id, v)}
                               />
                             </div>
