@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   ChevronDown,
   ExternalLink,
@@ -209,6 +209,27 @@ type GlobalSearchResponse = {
   data: GlobalSearchData;
 };
 
+type FolderDetailItem = {
+  handle?: string | null;
+};
+
+type FolderDetailResponse = {
+  success: boolean;
+  data?: {
+    items?: FolderDetailItem[];
+  };
+};
+
+type ImportYoutubeToFolderResponse = {
+  success: boolean;
+  message?: string;
+  added?: number;
+  skipped?: number;
+  alreadyAdded?: string[];
+  total?: number;
+  data?: any;
+};
+
 type SavedSortValue =
   | 'relevance'
   | 'subscribers_desc'
@@ -247,6 +268,13 @@ const SUBSCRIBER_RANGES: SubscriberRangeOption[] = [
   { value: '5m_10m', label: '5M – 10M', min: 5000000, max: 10000000 },
   { value: '10m_plus', label: '10M+', min: 10000000, max: null },
 ];
+
+function normalizeFolderHandle(input?: string | null) {
+  return String(input || '')
+    .replace(/^@/, '')
+    .trim()
+    .toLowerCase();
+}
 
 const COUNTRY_OPTIONS: Array<{ code: string; name: string }> = [
   { code: 'IN', name: 'India' },
@@ -1365,6 +1393,7 @@ function PreviewSidebar({
 
 export default function Page() {
   const router = useRouter();
+  const params = useParams();
 
   const [profiles, setProfiles] = useState<InfluencerProfileDoc[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1417,11 +1446,18 @@ export default function Page() {
 
   const searchParams = useSearchParams();
   const campaignId = (searchParams.get('campaignId') || searchParams.get('id') || '').trim();
-  const folderId = (searchParams.get('folderId') || '').trim();
+  const folderId = String(
+    params?.folderId || searchParams.get('folderId') || ''
+  ).trim();
+
+  const hasFolderId = Boolean(folderId);
 
   const [folders, setFolders] = useState<FolderOption[]>([]);
   const [foldersLoading, setFoldersLoading] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState('');
+
+  const activeTargetFolderId = folderId || selectedFolderId || '';
+  const [activeFolderHandles, setActiveFolderHandles] = useState<string[]>([]);
 
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
 
@@ -1483,6 +1519,54 @@ export default function Page() {
     });
   }
 
+  const selectedYoutubeUsers = useMemo(() => buildSelectedYoutubeUsers(), [profiles, visibleLiveRecommendations, selectedIds]);
+
+  const activeFolderHandleSet = useMemo(() => {
+    return new Set(activeFolderHandles);
+  }, [activeFolderHandles]);
+
+  const selectedAlreadyAddedCount = useMemo(() => {
+    if (!activeTargetFolderId) return 0;
+
+    return selectedYoutubeUsers.filter((user) => {
+      const handle = normalizeFolderHandle(user.handle || user.username);
+      return !!handle && activeFolderHandleSet.has(handle);
+    }).length;
+  }, [activeTargetFolderId, selectedYoutubeUsers, activeFolderHandleSet]);
+
+  const selectedNewCount = useMemo(() => {
+    return Math.max(0, selectedYoutubeUsers.length - selectedAlreadyAddedCount);
+  }, [selectedYoutubeUsers.length, selectedAlreadyAddedCount]);
+
+  const disableAddToFolder = useMemo(() => {
+    return !!activeTargetFolderId && selectedYoutubeUsers.length > 0 && selectedNewCount === 0;
+  }, [activeTargetFolderId, selectedYoutubeUsers.length, selectedNewCount]);
+
+  async function loadActiveFolderHandles(targetFolderId: string) {
+    if (!targetFolderId) {
+      setActiveFolderHandles([]);
+      return;
+    }
+
+    try {
+      const resp = await get<FolderDetailResponse>(`/pitch-folders/${targetFolderId}`);
+
+      const handles = Array.isArray(resp?.data?.items)
+        ? resp.data.items
+          .map((item) => normalizeFolderHandle(item?.handle))
+          .filter(Boolean)
+        : [];
+
+      setActiveFolderHandles(Array.from(new Set(handles)));
+    } catch {
+      setActiveFolderHandles([]);
+    }
+  }
+
+  useEffect(() => {
+    void loadActiveFolderHandles(activeTargetFolderId);
+  }, [activeTargetFolderId]);
+
   function clearAllSaved(list: InfluencerProfileDoc[]) {
     setSelectedIds((prev) => {
       const next = { ...prev };
@@ -1517,10 +1601,8 @@ export default function Page() {
   }, [folderId]);
 
   useEffect(() => {
-    if (!folderId) {
-      loadFolders();
-    }
-  }, [folderId]);
+    loadFolders();
+  }, []);
 
   async function loadFolders() {
     setFoldersLoading(true);
@@ -1589,6 +1671,7 @@ export default function Page() {
       username: String(x.handle || '').replace(/^@/, ''),
       handle: x.handle,
       userId: x.channelId,
+      channelId: x.channelId,
       followers: x.subscriberCount,
       url: ytChannelUrl(x),
       picture: getThumbUrl(x.thumbnails),
@@ -1608,6 +1691,7 @@ export default function Page() {
       username: String(x.handle || '').replace(/^@/, ''),
       handle: x.handle,
       userId: x.channelId,
+      channelId: x.channelId,
       followers: x.subscriberCount,
       url: x.channelUrl || ytChannelUrlFromHandleOrId(x.handle, x.channelId),
       picture: getThumbUrl(x.thumbnails),
@@ -1834,51 +1918,80 @@ export default function Page() {
         return;
       }
 
-      // Case 1: folderId is present in URL
+      const payloadUsers = rawUsers.map((user) => ({
+        ...user,
+        channelId: user.channelId || user.userId || null,
+      }));
+
+      const targetFolderId = folderId || selectedFolderId || '';
+      const targetFolder = folders.find((f) => f._id === targetFolderId);
+      const targetFolderName = targetFolder?.title || activeFolderName || 'folder';
+
+      if (targetFolderId && selectedNewCount === 0) {
+        await swal({
+          title: 'Already Added',
+          text: `All selected creators are already added in ${targetFolderName}.`,
+          icon: 'info',
+        });
+        return;
+      }
+
       if (folderId) {
-        await post(`/pitch-folders/${folderId}/import-youtube`, {
-          rawUsers,
+        const resp = await post<ImportYoutubeToFolderResponse>(`/pitch-folders/${folderId}/import-youtube`, {
+          rawUsers: payloadUsers,
         });
 
-        const activeFolder = folders.find((f) => f._id === folderId);
+        const added = Number(resp?.added || 0);
+        const skipped = Number(resp?.skipped ?? Math.max(0, payloadUsers.length - added));
 
-        swal({
-          title: 'Done',
-          text: `Added to ${activeFolder?.title || 'folder'}.`,
-          icon: 'success',
+        await swal({
+          title: added > 0 ? 'Done' : 'Already Added',
+          text:
+            added > 0 && skipped > 0
+              ? `${added} creator${added === 1 ? '' : 's'} added to ${targetFolderName}. ${skipped} already added.`
+              : added > 0
+                ? `${added} creator${added === 1 ? '' : 's'} added to ${targetFolderName}.`
+                : `${skipped} creator${skipped === 1 ? '' : 's'} already added in ${targetFolderName}.`,
+          icon: added > 0 ? 'success' : 'info',
         });
 
         clearSelection();
+        await loadActiveFolderHandles(folderId);
         return;
       }
 
-      // Case 2: no folderId in URL, but user selected a folder from dropdown
       if (selectedFolderId) {
-        await post(`/pitch-folders/${selectedFolderId}/import-youtube`, {
-          rawUsers,
+        const resp = await post<ImportYoutubeToFolderResponse>(`/pitch-folders/${selectedFolderId}/import-youtube`, {
+          rawUsers: payloadUsers,
         });
 
-        const activeFolder = folders.find((f) => f._id === selectedFolderId);
+        const added = Number(resp?.added || 0);
+        const skipped = Number(resp?.skipped ?? Math.max(0, payloadUsers.length - added));
 
-        swal({
-          title: 'Done',
-          text: `Added to ${activeFolder?.title || 'folder'}.`,
-          icon: 'success',
+        await swal({
+          title: added > 0 ? 'Done' : 'Already Added',
+          text:
+            added > 0 && skipped > 0
+              ? `${added} creator${added === 1 ? '' : 's'} added to ${targetFolderName}. ${skipped} already added.`
+              : added > 0
+                ? `${added} creator${added === 1 ? '' : 's'} added to ${targetFolderName}.`
+                : `${skipped} creator${skipped === 1 ? '' : 's'} already added in ${targetFolderName}.`,
+          icon: added > 0 ? 'success' : 'info',
         });
 
         clearSelection();
+        await loadActiveFolderHandles(selectedFolderId);
         return;
       }
 
-      // Case 3: fallback to campaign outreach
       if (campaignId) {
         await post('/pipeline/bulk-add', {
           campaignId,
           modashIds: [],
-          rawUsers,
+          rawUsers: payloadUsers,
         });
 
-        swal({
+        await swal({
           title: 'Done',
           text: 'Added to outreach pipeline.',
           icon: 'success',
@@ -1907,11 +2020,15 @@ export default function Page() {
   }, [folderId, selectedFolderId, folders]);
 
   const primaryActionLabel = useMemo(() => {
+    if ((folderId || selectedFolderId) && selectedCount > 0 && selectedNewCount === 0) {
+      return 'Already Added';
+    }
+
     if (folderId) return `Add on ${activeFolderName || 'Folder'}`;
     if (selectedFolderId) return `Add on ${activeFolderName || 'Folder'}`;
     if (campaignId) return 'Add to Outreach';
     return 'Apply';
-  }, [folderId, selectedFolderId, campaignId, activeFolderName]);
+  }, [folderId, selectedFolderId, campaignId, activeFolderName, selectedCount, selectedNewCount]);
 
   useEffect(() => {
     loadSaved(1, filtersActive, '');
@@ -2237,23 +2354,35 @@ export default function Page() {
                 ) : null}
 
                 {selectedCount ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {!folderId ? (
-                      <FolderSelect
-                        folders={folders}
-                        value={selectedFolderId}
-                        onChange={setSelectedFolderId}
-                      />
-                    ) : null}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!folderId ? (
+                        <FolderSelect
+                          folders={folders}
+                          value={selectedFolderId}
+                          onChange={setSelectedFolderId}
+                        />
+                      ) : null}
 
-                    <button
-                      type="button"
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                      onClick={handlePrimaryAddAction}
-                      disabled={foldersLoading || (!folderId && !selectedFolderId && !campaignId)}
-                    >
-                      {primaryActionLabel}
-                    </button>
+                      <button
+                        type="button"
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={handlePrimaryAddAction}
+                        disabled={
+                          foldersLoading ||
+                          disableAddToFolder ||
+                          (!folderId && !selectedFolderId && !campaignId)
+                        }
+                      >
+                        {primaryActionLabel}
+                      </button>
+                    </div>
+
+                    {(folderId || selectedFolderId) && selectedAlreadyAddedCount > 0 ? (
+                      <div className="text-xs font-medium text-amber-700">
+                        {selectedAlreadyAddedCount} selected creator{selectedAlreadyAddedCount === 1 ? '' : 's'} already in this folder.
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
