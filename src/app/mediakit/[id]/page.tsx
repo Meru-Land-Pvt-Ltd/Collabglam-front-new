@@ -1,4 +1,3 @@
-// app/mediakit/[id]/page.tsx  (or your InfluencerDetailPage file)
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -16,25 +15,49 @@ export default function InfluencerDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
 
-  // ✅ userId comes from /mediakit/[id]
   const userId = params?.id ? decodeURIComponent(String(params.id)) : '';
 
   const qpPlatform = (searchParams?.get('platform') || '').toLowerCase() as Platform;
-  const platform: Platform = (['youtube', 'instagram', 'tiktok'].includes(qpPlatform) ? qpPlatform : 'youtube');
+  const platform: Platform = ['youtube', 'instagram', 'tiktok'].includes(qpPlatform)
+    ? qpPlatform
+    : 'youtube';
 
   const handleParam = searchParams?.get('handle') || '';
   const handle = handleParam ? String(handleParam) : null;
+
+  const noProfileCredit =
+    searchParams?.get('np') === '1' || searchParams?.get('np') === 'true';
 
   const [brandId, setBrandId] = useState('');
   const [adminId, setAdminId] = useState('');
   const [authChecked, setAuthChecked] = useState(false);
   const [authRole, setAuthRole] = useState<'brand' | 'admin' | ''>('');
 
-  // ✅ Auth gate: allow brandId OR adminId; else go to login
   useEffect(() => {
     const storedBrandId = (localStorage.getItem('brandId') || '').trim();
     const storedAdminId = (localStorage.getItem('adminId') || '').trim();
 
+    // ✅ public/no-credit view
+    if (noProfileCredit) {
+      if (storedBrandId) {
+        setBrandId(storedBrandId);
+        setAdminId('');
+        setAuthRole('brand');
+      } else if (storedAdminId) {
+        setBrandId('');
+        setAdminId(storedAdminId);
+        setAuthRole('admin');
+      } else {
+        setBrandId('');
+        setAdminId('');
+        setAuthRole('');
+      }
+
+      setAuthChecked(true);
+      return;
+    }
+
+    // ✅ normal protected flow
     if (!storedBrandId && !storedAdminId) {
       router.replace(`/brand/login?next=${encodeURIComponent(pathname)}`);
       return;
@@ -51,42 +74,56 @@ export default function InfluencerDetailPage() {
     }
 
     setAuthChecked(true);
-  }, [router, pathname]);
+  }, [router, pathname, noProfileCredit]);
 
   const [calculationMethod, setCalculationMethod] = useState<'median' | 'average'>('average');
 
   const { report, rawReport, loading, error, lastFetchedAt, fetchReport } = useInfluencerReport();
   const { exists: emailExists, checkStatus } = useEmailStatus();
 
-  // ✅ load report
   useEffect(() => {
     if (!authChecked) return;
     if (!userId) return;
 
-    fetchReport(userId, platform, calculationMethod, {
+    const reportOptions: any = {
       brandId: brandId || undefined,
       adminId: adminId || undefined,
-      role: authRole === 'admin' ? 'admin' : 'brand',
-    });
+      np: noProfileCredit ? '1' : undefined,
+      ...(authRole ? { role: authRole } : {}),
+    };
+
+    fetchReport(userId, platform, calculationMethod, reportOptions);
 
     if (handle) {
       const safeHandle = handle.startsWith('@') ? handle : `@${handle}`;
       checkStatus(safeHandle, platform);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authChecked, userId, platform, calculationMethod, handle, brandId, adminId, authRole]);
+  }, [
+    authChecked,
+    userId,
+    platform,
+    calculationMethod,
+    handle,
+    brandId,
+    adminId,
+    authRole,
+    noProfileCredit,
+  ]);
 
-  // ✅ refresh report
   const onRefreshReport = useCallback(async () => {
     if (!userId) return;
 
-    await fetchReport(userId, platform, calculationMethod, {
+    const reportOptions: any = {
       brandId: brandId || undefined,
       adminId: adminId || undefined,
-      role: authRole === 'admin' ? 'admin' : 'brand',
+      np: noProfileCredit ? '1' : undefined,
       forceRefresh: true,
-    });
-  }, [userId, platform, calculationMethod, fetchReport, brandId, adminId, authRole]);
+      ...(authRole ? { role: authRole } : {}),
+    };
+
+    await fetchReport(userId, platform, calculationMethod, reportOptions);
+  }, [userId, platform, calculationMethod, fetchReport, brandId, adminId, authRole, noProfileCredit]);
 
   if (!authChecked) return null;
   if (!userId) return null;
@@ -103,7 +140,7 @@ export default function InfluencerDetailPage() {
       handle={handle}
       lastFetchedAt={lastFetchedAt}
       onRefreshReport={onRefreshReport}
-      viewerRole={authRole} // ✅ PASS ROLE HERE (brand/admin)
+      viewerRole={authRole}
     />
   );
 }

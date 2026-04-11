@@ -9,10 +9,13 @@ type FetchReportOptions = {
   influencerId?: string;
   forceRefresh?: boolean;
 
-  // ✅ auth
+  // auth
   brandId?: string;
   adminId?: string;
-  role?: AuthRole; // optional, can be inferred
+  role?: AuthRole;
+
+  // ✅ skip profile view credit when np=1
+  np?: string | boolean;
 };
 
 interface UseInfluencerReportReturn {
@@ -22,12 +25,10 @@ interface UseInfluencerReportReturn {
   error: string | null;
   lastFetchedAt: string | null;
 
-  // ✅ expose auth info (from localStorage snapshot)
   brandId: string | null;
   adminId: string | null;
   authRole: AuthRole | null;
 
-  // ✅ overloaded function (old + new)
   fetchReport: {
     (
       id: string,
@@ -54,7 +55,6 @@ function cleanId(v: any): string | null {
   return s ? s : null;
 }
 
-// ✅ Read auth from localStorage (brand/admin)
 function getAuthFromStorage(): {
   brandId: string | null;
   adminId: string | null;
@@ -68,7 +68,6 @@ function getAuthFromStorage(): {
     const b = cleanId(window.localStorage.getItem('brandId'));
     const a = cleanId(window.localStorage.getItem('adminId'));
 
-    // prefer brand if both exist
     if (b) return { brandId: b, adminId: null, authRole: 'brand' };
     if (a) return { brandId: null, adminId: a, authRole: 'admin' };
 
@@ -86,11 +85,9 @@ function resolveAuth(
     opts?.role ||
     (opts?.brandId ? 'brand' : opts?.adminId ? 'admin' : storage.authRole);
 
-  // pick ids from opts first, else storage
   const brandId = cleanId(opts?.brandId) || storage.brandId;
   const adminId = cleanId(opts?.adminId) || storage.adminId;
 
-  // enforce only one id based on role
   if (role === 'admin') {
     return { authRole: 'admin' as const, brandId: null, adminId };
   }
@@ -98,7 +95,6 @@ function resolveAuth(
     return { authRole: 'brand' as const, brandId, adminId: null };
   }
 
-  // fallback inference
   if (brandId) return { authRole: 'brand' as const, brandId, adminId: null };
   if (adminId) return { authRole: 'admin' as const, brandId: null, adminId };
   return { authRole: null, brandId: null, adminId: null };
@@ -111,7 +107,6 @@ export function useInfluencerReport(): UseInfluencerReportReturn {
   const [error, setError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
 
-  // ✅ snapshot auth (useful for UI)
   const initialAuth = getAuthFromStorage();
   const [brandId, setBrandId] = useState<string | null>(initialAuth.brandId);
   const [adminId, setAdminId] = useState<string | null>(initialAuth.adminId);
@@ -129,7 +124,6 @@ export function useInfluencerReport(): UseInfluencerReportReturn {
         setLoading(true);
         setError(null);
 
-        // ✅ parse overload
         let opts: FetchReportOptions | undefined;
         if (typeof arg4 === 'string' || arg4 == null) {
           opts = {
@@ -140,11 +134,9 @@ export function useInfluencerReport(): UseInfluencerReportReturn {
           opts = arg4;
         }
 
-        // ✅ resolve auth (opts overrides storage)
         const storageAuth = getAuthFromStorage();
         const resolved = resolveAuth(opts, storageAuth);
 
-        // keep hook state in sync (nice for UI/debug)
         setBrandId(resolved.brandId);
         setAdminId(resolved.adminId);
         setAuthRole(resolved.authRole);
@@ -155,12 +147,16 @@ export function useInfluencerReport(): UseInfluencerReportReturn {
           calculationMethod: calc,
         };
 
-        // ✅ send either brandId OR adminId
         if (resolved.brandId) params.brandId = resolved.brandId;
         if (resolved.adminId) params.adminId = resolved.adminId;
 
         if (opts?.influencerId) params.influencerId = opts.influencerId;
         if (opts?.forceRefresh) params.force = '1';
+
+        // ✅ forward np=1 to backend
+        if (opts?.np === true || opts?.np === '1' || opts?.np === 'true') {
+          params.np = '1';
+        }
 
         const q = new URLSearchParams(params);
         const res = await fetch(`${API_REPORT_ENDPOINT}?${q.toString()}`);
@@ -201,11 +197,9 @@ export function useInfluencerReport(): UseInfluencerReportReturn {
     loading,
     error,
     lastFetchedAt,
-
     brandId,
     adminId,
     authRole,
-
     fetchReport: fetchReport as UseInfluencerReportReturn['fetchReport'],
   };
 }
