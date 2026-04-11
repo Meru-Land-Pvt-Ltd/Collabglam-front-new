@@ -584,10 +584,10 @@ export default function SharedPitchFolderPage() {
                         Niche
                       </th>
                       <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                        Selection Reason
+                        Rate Card
                       </th>
                       <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                        Rate Card
+                        Selection Reason
                       </th>
                       <th className="px-4 py-3.5 text-left text-[11px] font-bold uppercase tracking-widest text-slate-500">
                         Demographics
@@ -682,12 +682,6 @@ export default function SharedPitchFolderPage() {
                             </div>
                           </td>
 
-                          <td className="px-4 py-4 text-slate-700 align-top">
-                            <div className="max-w-[320px] whitespace-pre-wrap break-words leading-6">
-                              {cleanText(row.selectionReason) || DASH}
-                            </div>
-                          </td>
-
                           <td className="px-4 py-4 align-top">
                             <button
                               onClick={() => setRateCardItemId(row._id)}
@@ -696,6 +690,12 @@ export default function SharedPitchFolderPage() {
                               <Eye className="h-4 w-4" />
                               View
                             </button>
+                          </td>
+
+                          <td className="px-4 py-4 text-slate-700 align-top">
+                            <div className="max-w-[320px] whitespace-pre-wrap break-words leading-6">
+                              {cleanText(row.selectionReason) || DASH}
+                            </div>
                           </td>
 
                           <td className="px-4 py-4 align-top">
