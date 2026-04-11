@@ -2020,10 +2020,6 @@ export default function Page() {
   }, [folderId, selectedFolderId, folders]);
 
   const primaryActionLabel = useMemo(() => {
-    if ((folderId || selectedFolderId) && selectedCount > 0 && selectedNewCount === 0) {
-      return 'Already Added';
-    }
-
     if (folderId) return `Add on ${activeFolderName || 'Folder'}`;
     if (selectedFolderId) return `Add on ${activeFolderName || 'Folder'}`;
     if (campaignId) return 'Add to Outreach';
