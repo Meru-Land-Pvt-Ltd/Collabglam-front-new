@@ -433,13 +433,13 @@ export default function SharedPitchFolderPage() {
   const statCards = [
     {
       icon: Users,
-      label: "Total Pitched",
+      label: "Total Creators",
       value: stats.total,
       accentClass: "bg-indigo-50 text-indigo-600",
     },
     {
       icon: Heart,
-      label: "Good Fits",
+      label: "Shortlisted",
       value: stats.goodFit,
       accentClass: "bg-rose-50 text-rose-500",
     },
@@ -448,12 +448,6 @@ export default function SharedPitchFolderPage() {
       label: "Total Reach",
       value: fmtFollowers(stats.totalReach),
       accentClass: "bg-sky-50 text-sky-600",
-    },
-    {
-      icon: Clock3,
-      label: "Pending Requests",
-      value: stats.pendingRequests,
-      accentClass: "bg-amber-50 text-amber-600",
     },
   ];
 
@@ -517,7 +511,7 @@ export default function SharedPitchFolderPage() {
           </div>
 
           {rows.length > 0 && (
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4 lg:gap-4">
+            <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-3 lg:gap-3">
               {statCards.map((card) => (
                 <StatCard
                   key={card.label}
@@ -610,7 +604,7 @@ export default function SharedPitchFolderPage() {
                       const profileUrl = getProfileUrl(row);
 
                       const mediaButtonLabel = access?.allowed
-                        ? "Open Demographics"
+                        ? "Insights"
                         : access?.requestStatus === "requested"
                         ? "Requested"
                         : "Request";
