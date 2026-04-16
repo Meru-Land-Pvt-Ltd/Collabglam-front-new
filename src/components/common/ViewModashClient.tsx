@@ -1754,10 +1754,46 @@ export default function ViewClient() {
 
   const handleCopy = async () => {
     try {
-      const influencerId = localStorage.getItem("influencerId") ?? "";
-      const mediaKitUrl = `${window.location.origin}/influencer/public/media-kit/${influencerId}`;
+      const reportFromMediaKit =
+        mediaKit?.primaryInfluencerReport ??
+        mediaKit?.influencerReports?.[0] ??
+        mediaKit?.socialProfiles?.[0] ??
+        displayedReport ??
+        primaryReport ??
+        null;
+
+      const userId = String(
+        reportFromMediaKit?.modashId ||
+        mediaKit?.influencerId ||
+        ""
+      ).trim();
+
+      const provider = String(
+        reportFromMediaKit?.provider ||
+        mediaKit?.primaryPlatform ||
+        activePlatform ||
+        "instagram"
+      )
+        .trim()
+        .toLowerCase();
+
+      if (!userId) {
+        await Swal.fire({
+          icon: "warning",
+          title: "Missing userId",
+          text: "Could not generate media kit link because userId was not found.",
+        });
+        return;
+      }
+
+      const mediaKitUrl =
+        `${window.location.origin}/mediakit/${encodeURIComponent(userId)}` +
+        (provider ? `?platform=${encodeURIComponent(provider)}` : "");
+
       await navigator.clipboard.writeText(mediaKitUrl);
+
       await Swal.fire({
+        
         icon: "success",
         title: "Copied",
         text: "Media kit link copied to clipboard.",
