@@ -159,6 +159,8 @@ export function useInfluencerReport(): UseInfluencerReportReturn {
         }
 
         const q = new URLSearchParams(params);
+        console.log("${API_REPORT_ENDPOINT}?${q.toString()}", `${API_REPORT_ENDPOINT}?${q.toString()}`)
+        console.log("${q.toString()}", `${q.toString()}`)
         const res = await fetch(`${API_REPORT_ENDPOINT}?${q.toString()}`);
         const raw: ModashReportRaw = await res.json();
 

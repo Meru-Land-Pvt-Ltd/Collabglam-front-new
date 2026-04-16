@@ -1,27 +1,39 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, AlertCircle, BarChart3, Send, Copy, Check } from 'lucide-react';
+import {
+  ArrowLeft,
+  AlertCircle,
+  BarChart3,
+  Check,
+  ChevronDown,
+  Copy,
+  Send,
+} from 'lucide-react';
 import Swal from 'sweetalert2';
 
-import { ProfileHeader } from '../brand/(protected)/browse-influencer/detail-panel/ProfileHeader';
-import { StatsChart } from '../brand/(protected)/browse-influencer/detail-panel/StatsChart';
-import { ContentBreakdown } from '../brand/(protected)/browse-influencer/detail-panel/ContentBreakdown';
-import { PopularPosts } from '../brand/(protected)/browse-influencer/detail-panel/PopularPosts';
-import { AboutSection } from '../brand/(protected)/browse-influencer/detail-panel/AboutSection';
-import { AudienceDistribution } from '../brand/(protected)/browse-influencer/detail-panel/AudienceDistribution';
-import { BrandAffinity } from '../brand/(protected)/browse-influencer/detail-panel/BrandAffinity';
-import { MiniUserSection } from '../brand/(protected)/browse-influencer/detail-panel/MiniUserSection';
-
-import type { ReportResponse, StatHistoryEntry, Platform } from '../brand/(protected)/browse-influencer/types';
+import type { Platform, ReportResponse } from '../brand/(protected)/browse-influencer/types';
 import { post } from '@/lib/api';
+import { Loader } from '@/components/ui/loader';
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+
+import { AuditTrailTable } from '@/components/common/AuditTrailTable';
+import { AudienceIntelligenceCard } from '@/components/common/AudienceIntelligenceCard';
+import { CampaignHighlightsCard } from '@/components/common/CampaignHighlightsCard';
+import { ContactManagementCard } from '@/components/common/ContactManagementCard';
+import { CreatorHeader } from '@/components/common/CreatorHeader';
+import { LookalikeCreatorsPanel } from '@/components/common/LookalikeCreatorsPanel';
+import { MetricsGrid } from '@/components/common/MetricsGrid';
+import { PerformanceTrendCard } from '@/components/common/PerformanceTrendCard';
+import { PopularContentPanel } from '@/components/common/PopularContentPanel';
+import { RecentPostsTable } from '@/components/common/RecentPostsTable';
+import { RiskComplianceCard } from '@/components/common/RiskComplienceCard';
 
 type Props = {
   loading: boolean;
@@ -34,20 +46,667 @@ type Props = {
   lastFetchedAt?: string | null;
   onRefreshReport?: () => Promise<void> | void;
   onChangeCalc: (calc: 'median' | 'average') => void;
-
   viewerRole?: 'brand' | 'admin' | '';
 };
 
 type StoreInvitationResponse =
   | {
-      status: 'success';
-      message?: string;
-      requested?: number;
-      stored?: number;
-      missingCampaigns?: string[];
-      invitations?: any[];
-    }
+    status: 'success';
+    message?: string;
+    requested?: number;
+    stored?: number;
+    missingCampaigns?: string[];
+    invitations?: any[];
+  }
   | { status: 'error'; message?: string };
+
+type SupportedPlatform = 'instagram' | 'tiktok' | 'youtube';
+
+type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'enterprise';
+
+type SocialPost = {
+  likes?: number | string;
+  views?: number | string;
+  text?: string;
+  type?: string;
+  url?: string;
+  image?: string;
+  thumbnail?: string;
+  sponsors?: Array<{ name?: string }>;
+  createdAt?: string;
+  publishedAt?: string;
+  postedAt?: string;
+  date?: string;
+  created?: string;
+  plays?: number;
+  comments?: number;
+};
+
+type AudienceAge = {
+  code: string;
+  weight: number;
+};
+
+type AudienceGender = {
+  code: string;
+  weight: number;
+};
+
+type AudienceCountry = {
+  name: string;
+  weight: number;
+};
+
+type ModashStatHistory = {
+  month: string;
+  followers: number;
+  avgLikes: number;
+  following: number;
+  avgComments: number;
+  avgViews: number;
+};
+
+type ModashLookalike = {
+  userId: string;
+  username: string;
+  picture?: string;
+  fullname?: string;
+  url?: string;
+  followers: number;
+  engagements: number;
+  isVerified?: boolean;
+};
+
+type InfluencerReportShape = {
+  modashId?: string;
+  _id?: string;
+  provider?: string;
+  url?: string;
+  name?: string;
+  fullname?: string;
+  picture?: string;
+  bio?: string;
+  username?: string;
+  handle?: string;
+  followers?: number | string;
+  subscribers?: number | string;
+  engagementRate?: number | string;
+  country?: string;
+  language?: { name?: string };
+  hashtags?: Array<{ tag: string }>;
+  popularPosts?: SocialPost[];
+  recentPosts?: SocialPost[];
+  sponsoredPosts?: SocialPost[];
+  stats?: {
+    avgLikes?: { value?: number | string; compared?: number | string };
+    avgViews?: { value?: number | string; compared?: number | string };
+    avgComments?: { value?: number | string; compared?: number | string };
+    followers?: { value?: number | string; compared?: number | string };
+    paidPostPerformance?: number | string;
+  };
+  avgLikes?: number | string;
+  avgComments?: number | string;
+  avgViews?: number | string;
+  avgReelsPlays?: number | string;
+  audience?: {
+    geoCountries?: AudienceCountry[];
+    ages?: AudienceAge[];
+    genders?: AudienceGender[];
+    languages?: Array<{ code: string; weight: number }>;
+    interests?: Array<{ name: string; weight: number }>;
+    credibility?: number;
+    brandAffinity?: Array<{ name?: string; weight?: number }>;
+    notableUsers?: ModashLookalike[];
+  };
+  isPrivate?: boolean;
+  isVerified?: boolean;
+  accountType?: string;
+  postsCount?: number;
+  statHistory?: ModashStatHistory[];
+  lookalikes?: ModashLookalike[];
+  followersRange?: { leftNumber?: number; rightNumber?: number };
+};
+
+type MediaKitShape = {
+  _id?: string;
+  mediaKitId?: string;
+  influencerId?: string;
+  primaryPlatform?: string | null;
+  primaryInfluencerReport?: InfluencerReportShape;
+  influencerReports?: InfluencerReportShape[];
+  socialProfiles?: InfluencerReportShape[];
+  name?: string;
+  country?: string;
+  languages?: Array<{ name?: string }>;
+  email?: string;
+  phone?: string;
+  additionalNotes?: string;
+  updatedAt?: string;
+};
+
+type DashboardMetric = {
+  key: string;
+  label: string;
+  value: string;
+  delta?: string;
+};
+
+type CampaignHighlight = {
+  label: string;
+  value: string;
+  meta: string;
+  tone?: 'default' | 'accent';
+};
+
+type LookalikeCreator = {
+  id: string;
+  name: string;
+  handle: string;
+  followers: string;
+  engagement: string;
+  avatar?: string;
+  url?: string;
+};
+
+type AuditItem = {
+  id: string;
+  date: string;
+  action: string;
+  actor: string;
+  status: string;
+};
+
+const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function toNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function average(values: number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, item) => sum + item, 0) / values.length;
+}
+
+function formatCompactNumber(value: number | string | null | undefined): string {
+  if (value === undefined || value === null || value === '') return '—';
+  if (typeof value === 'string' && value.trim() !== '' && Number.isNaN(Number(value))) return value;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '—';
+  if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)}B`;
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return `${Math.round(num)}`;
+}
+
+function formatPercent(value: number | string | null | undefined, multiplyBy100 = false): string {
+  if (value === undefined || value === null || value === '') return '—';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return typeof value === 'string' ? value : '—';
+  const finalValue = multiplyBy100 ? num * 100 : num;
+  return `${finalValue.toFixed(1)}%`;
+}
+
+function normaliseTrend(source: Array<number | string>, points = 12): number[] {
+  const numeric = source.map((item) => toNumber(item)).filter((item) => item >= 0);
+  if (!numeric.length) return Array.from({ length: points }, () => 0);
+  if (numeric.length >= points) return numeric.slice(-points);
+  const fallback = Math.max(average(numeric), numeric[numeric.length - 1] || 0);
+  const pad = Array.from({ length: points - numeric.length }, () => fallback);
+  return [...pad, ...numeric];
+}
+
+function stripHandlePrefix(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value.replace(/^@/, '').trim();
+  return cleaned || undefined;
+}
+
+function normalisePlatform(raw?: string | null): SupportedPlatform {
+  const value = String(raw ?? '').toLowerCase();
+  if (value.includes('tiktok')) return 'tiktok';
+  if (value.includes('youtube')) return 'youtube';
+  return 'instagram';
+}
+
+function normalizePost(post: any): SocialPost {
+  return {
+    text: post?.text ?? post?.caption ?? post?.title,
+    type: post?.type,
+    url: post?.url,
+    image: post?.image ?? post?.thumbnail ?? post?.cover,
+    thumbnail: post?.thumbnail ?? post?.image ?? post?.cover,
+    likes: post?.likes,
+    views: post?.views ?? post?.plays,
+    plays: post?.plays,
+    comments: post?.comments,
+    sponsors: Array.isArray(post?.sponsors)
+      ? post.sponsors.map((s: any) => ({ name: s?.name ?? s?.username }))
+      : [],
+    createdAt:
+      post?.createdAt ??
+      post?.created ??
+      post?.publishedAt ??
+      post?.postedAt ??
+      post?.date,
+    publishedAt:
+      post?.publishedAt ??
+      post?.createdAt ??
+      post?.created ??
+      post?.postedAt ??
+      post?.date,
+    postedAt:
+      post?.postedAt ??
+      post?.publishedAt ??
+      post?.createdAt ??
+      post?.created ??
+      post?.date,
+    date:
+      post?.date ??
+      post?.publishedAt ??
+      post?.createdAt ??
+      post?.created ??
+      post?.postedAt,
+    created:
+      post?.created ??
+      post?.createdAt ??
+      post?.publishedAt ??
+      post?.postedAt ??
+      post?.date,
+  };
+}
+
+function toNormalizedPosts(input: unknown): SocialPost[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((post) => normalizePost(post))
+    .filter(
+      (post) =>
+        Boolean(
+          post?.url ||
+          post?.text ||
+          post?.image ||
+          post?.thumbnail ||
+          post?.createdAt ||
+          post?.publishedAt ||
+          post?.postedAt ||
+          post?.date ||
+          post?.created
+        )
+    );
+}
+
+function getPostTimestamp(post: SocialPost): number {
+  const rawDate =
+    post.createdAt ??
+    post.publishedAt ??
+    post.postedAt ??
+    post.date ??
+    post.created;
+
+  const ts = rawDate ? new Date(rawDate).getTime() : 0;
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function dedupeAndSortPosts(posts: SocialPost[]): SocialPost[] {
+  const map = new Map<string, SocialPost>();
+
+  for (const post of posts) {
+    const key =
+      post.url ||
+      [
+        post.createdAt ?? post.publishedAt ?? post.postedAt ?? post.date ?? post.created ?? "no-date",
+        post.text ?? "",
+        post.image ?? post.thumbnail ?? "",
+      ].join("__");
+
+    if (!map.has(key)) {
+      map.set(key, post);
+    }
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => getPostTimestamp(b) - getPostTimestamp(a)
+  );
+}
+
+function resolveRecentPostsForTable(params: {
+  displayedReport: InfluencerReportShape | null;
+  primaryReport: InfluencerReportShape | null;
+  data: ReportResponse | null;
+  raw: any;
+  connectedProfiles: InfluencerReportShape[];
+}): SocialPost[] {
+  const { displayedReport, primaryReport, data, raw, connectedProfiles } = params;
+
+  const reportProfile = ((data?.profile as any) ?? {}) as Record<string, any>;
+  const nestedReportProfile = ((reportProfile?.profile as any) ?? {}) as Record<string, any>;
+
+  const directRecent = dedupeAndSortPosts([
+    ...(displayedReport?.recentPosts ?? []),
+    ...(primaryReport?.recentPosts ?? []),
+
+    ...toNormalizedPosts(reportProfile?.recentPosts),
+    ...toNormalizedPosts(nestedReportProfile?.recentPosts),
+    ...toNormalizedPosts(reportProfile?.posts),
+    ...toNormalizedPosts(nestedReportProfile?.posts),
+
+    ...toNormalizedPosts(raw?.recentPosts),
+    ...toNormalizedPosts(raw?.posts),
+
+    ...toNormalizedPosts(raw?.profile?.recentPosts),
+    ...toNormalizedPosts(raw?.profile?.profile?.recentPosts),
+    ...toNormalizedPosts(raw?.profile?.posts),
+    ...toNormalizedPosts(raw?.profile?.profile?.posts),
+
+    ...toNormalizedPosts(raw?.providerRaw?.recentPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.recentPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.posts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.posts),
+
+    ...toNormalizedPosts(raw?.mediaKit?.recentPosts),
+    ...toNormalizedPosts(raw?.mediaKit?.posts),
+
+    ...(raw?.socialProfiles ?? []).flatMap((profile: any) =>
+      toNormalizedPosts(profile?.recentPosts ?? profile?.posts)
+    ),
+    ...(raw?.mediaKit?.socialProfiles ?? []).flatMap((profile: any) =>
+      toNormalizedPosts(profile?.recentPosts ?? profile?.posts)
+    ),
+
+    ...connectedProfiles.flatMap((profile) => profile?.recentPosts ?? []),
+  ]);
+
+  if (directRecent.length > 0) {
+    return directRecent;
+  }
+
+  return dedupeAndSortPosts([
+    ...(displayedReport?.popularPosts ?? []),
+    ...(primaryReport?.popularPosts ?? []),
+    ...(displayedReport?.sponsoredPosts ?? []),
+    ...(primaryReport?.sponsoredPosts ?? []),
+
+    ...toNormalizedPosts(reportProfile?.popularPosts),
+    ...toNormalizedPosts(reportProfile?.sponsoredPosts),
+    ...toNormalizedPosts(reportProfile?.posts),
+
+    ...toNormalizedPosts(nestedReportProfile?.popularPosts),
+    ...toNormalizedPosts(nestedReportProfile?.sponsoredPosts),
+    ...toNormalizedPosts(nestedReportProfile?.posts),
+
+    ...toNormalizedPosts(raw?.popularPosts),
+    ...toNormalizedPosts(raw?.sponsoredPosts),
+    ...toNormalizedPosts(raw?.posts),
+
+    ...toNormalizedPosts(raw?.profile?.popularPosts),
+    ...toNormalizedPosts(raw?.profile?.sponsoredPosts),
+    ...toNormalizedPosts(raw?.profile?.posts),
+
+    ...toNormalizedPosts(raw?.providerRaw?.popularPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.sponsoredPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.posts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.popularPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.sponsoredPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.posts),
+
+    ...toNormalizedPosts(raw?.mediaKit?.popularPosts),
+    ...toNormalizedPosts(raw?.mediaKit?.sponsoredPosts),
+    ...toNormalizedPosts(raw?.mediaKit?.posts),
+
+    ...(raw?.socialProfiles ?? []).flatMap((profile: any) =>
+      toNormalizedPosts(
+        profile?.popularPosts ?? profile?.sponsoredPosts ?? profile?.posts
+      )
+    ),
+    ...(raw?.mediaKit?.socialProfiles ?? []).flatMap((profile: any) =>
+      toNormalizedPosts(
+        profile?.popularPosts ?? profile?.sponsoredPosts ?? profile?.posts
+      )
+    ),
+
+    ...connectedProfiles.flatMap((profile) => profile?.popularPosts ?? []),
+    ...connectedProfiles.flatMap((profile) => profile?.sponsoredPosts ?? []),
+  ]);
+}
+function normalizeHistoryPoint(point: any, fallbackFollowers = 0): ModashStatHistory {
+  return {
+    month: String(point?.month ?? ''),
+    followers: toNumber(point?.followers ?? fallbackFollowers),
+    avgLikes: toNumber(point?.avgLikes ?? point?.avg_likes),
+    following: toNumber(point?.following),
+    avgComments: toNumber(point?.avgComments ?? point?.avg_comments),
+    avgViews: toNumber(point?.avgViews ?? point?.avg_views),
+  };
+}
+
+function transformLookalikes(lookalikes: ModashLookalike[], engagementRate: number): LookalikeCreator[] {
+  return lookalikes.slice(0, 6).map((l) => ({
+    id: l.userId || l.username,
+    name: l.fullname ?? l.username,
+    handle: l.username ? `@${stripHandlePrefix(l.username)}` : '',
+    followers: formatCompactNumber(l.followers),
+    engagement:
+      l.followers > 0
+        ? formatPercent((toNumber(l.engagements) / toNumber(l.followers)) * 100)
+        : formatPercent(engagementRate, true),
+    avatar: l.picture,
+    url: l.url,
+  }));
+}
+
+function toInfluencerReportShape(
+  source: any,
+  fallbackPlatform: SupportedPlatform
+): InfluencerReportShape {
+  const root = source?.profile?.profile ?? source?.profile ?? source ?? {};
+
+  const stats =
+    source?.stats ??
+    source?.profile?.stats ??
+    root?.stats ??
+    {};
+
+  const audience =
+    source?.audience ??
+    source?.profile?.audience ??
+    root?.audience ??
+    {};
+
+  const rawHistory =
+    source?.statsByContentType?.all?.statHistory ??
+    source?.statHistory ??
+    source?.profile?.statHistory ??
+    root?.statHistory ??
+    [];
+
+  const username =
+    stripHandlePrefix(root?.username) ??
+    stripHandlePrefix(source?.username) ??
+    stripHandlePrefix(root?.handle) ??
+    stripHandlePrefix(source?.handle);
+
+  const handle =
+    root?.handle ??
+    source?.handle ??
+    (username ? `@${username}` : undefined);
+
+  const avgLikes =
+    stats?.avgLikes?.value ??
+    source?.avgLikes ??
+    root?.avgLikes;
+
+  const avgComments =
+    stats?.avgComments?.value ??
+    source?.avgComments ??
+    root?.avgComments;
+
+  const avgViews =
+    stats?.avgViews?.value ??
+    source?.avgViews ??
+    source?.avgReelsPlays ??
+    root?.averageViews ??
+    root?.avgViews;
+
+  const followers =
+    root?.followers ??
+    source?.followers ??
+    stats?.followers?.value ??
+    source?.subscribers;
+
+  const resolvedPopularPosts =
+    Array.isArray(source?.popularPosts)
+      ? source.popularPosts
+      : Array.isArray(root?.popularPosts)
+        ? root.popularPosts
+        : [];
+
+  const resolvedRecentPosts =
+    Array.isArray(source?.recentPosts)
+      ? source.recentPosts
+      : Array.isArray(root?.recentPosts)
+        ? root.recentPosts
+        : Array.isArray(source?.posts)
+          ? source.posts
+          : Array.isArray(root?.posts)
+            ? root.posts
+            : [];
+
+  const resolvedSponsoredPosts =
+    Array.isArray(source?.sponsoredPosts)
+      ? source.sponsoredPosts
+      : Array.isArray(root?.sponsoredPosts)
+        ? root.sponsoredPosts
+        : [];
+
+  const resolvedLookalikes =
+    Array.isArray(source?.lookalikes)
+      ? source.lookalikes
+      : Array.isArray(root?.lookalikes)
+        ? root.lookalikes
+        : [];
+
+  const resolvedFollowersRange =
+    source?.audienceExtra?.followersRange ??
+    root?.audienceExtra?.followersRange;
+
+  return {
+    modashId: String(
+      source?.userId ??
+      source?.modashId ??
+      source?._id ??
+      root?.userId ??
+      ''
+    ),
+    _id: source?._id ?? root?._id,
+    provider: source?.provider ?? source?.platform ?? root?.provider ?? fallbackPlatform,
+    url: root?.url ?? source?.url,
+    name: root?.fullname ?? source?.name ?? root?.username,
+    fullname: root?.fullname ?? source?.fullname ?? root?.username,
+    picture: root?.picture ?? source?.picture,
+    bio: source?.bio ?? root?.bio,
+    username,
+    handle,
+    followers,
+    subscribers: source?.subscribers ?? root?.subscribers,
+    engagementRate: root?.engagementRate ?? source?.engagementRate,
+    country: source?.country ?? root?.country,
+    language:
+      typeof source?.language === 'string'
+        ? { name: source.language }
+        : source?.language?.name
+          ? { name: source.language.name }
+          : typeof root?.language === 'string'
+            ? { name: root.language }
+            : root?.language?.name
+              ? { name: root.language.name }
+              : undefined,
+    hashtags: Array.isArray(source?.hashtags)
+      ? source.hashtags.map((item: any) => ({ tag: item?.tag }))
+      : Array.isArray(root?.hashtags)
+        ? root.hashtags.map((item: any) => ({ tag: item?.tag }))
+        : [],
+    popularPosts: resolvedPopularPosts.map(normalizePost),
+    recentPosts: resolvedRecentPosts.map(normalizePost),
+    sponsoredPosts: resolvedSponsoredPosts.map(normalizePost),
+    stats: {
+      avgLikes: {
+        value: avgLikes,
+        compared: stats?.avgLikes?.compared,
+      },
+      avgViews: {
+        value: avgViews,
+        compared: stats?.avgViews?.compared,
+      },
+      avgComments: {
+        value: avgComments,
+        compared: stats?.avgComments?.compared,
+      },
+      followers: {
+        value: followers,
+        compared: stats?.followers?.compared,
+      },
+      paidPostPerformance: stats?.paidPostPerformance,
+    },
+    avgLikes,
+    avgComments,
+    avgViews,
+    avgReelsPlays: source?.avgReelsPlays ?? root?.avgReelsPlays,
+    audience: audience
+      ? {
+        geoCountries: Array.isArray(audience?.geoCountries)
+          ? audience.geoCountries.map((c: any) => ({
+            name: c?.name,
+            weight: toNumber(c?.weight),
+          }))
+          : [],
+        ages: Array.isArray(audience?.ages)
+          ? audience.ages.map((a: any) => ({
+            code: a?.code,
+            weight: toNumber(a?.weight),
+          }))
+          : [],
+        genders: Array.isArray(audience?.genders)
+          ? audience.genders.map((g: any) => ({
+            code: g?.code,
+            weight: toNumber(g?.weight),
+          }))
+          : [],
+        languages: Array.isArray(audience?.languages)
+          ? audience.languages.map((l: any) => ({
+            code: l?.name ?? l?.code ?? '',
+            weight: toNumber(l?.weight),
+          }))
+          : [],
+        interests: Array.isArray(audience?.interests)
+          ? audience.interests.map((i: any) => ({
+            name: i?.name ?? '',
+            weight: toNumber(i?.weight),
+          }))
+          : [],
+        credibility: audience?.credibility,
+        brandAffinity: Array.isArray(audience?.brandAffinity)
+          ? audience.brandAffinity
+          : [],
+        notableUsers: Array.isArray(audience?.notableUsers)
+          ? audience.notableUsers
+          : [],
+      }
+      : undefined,
+    isPrivate: root?.isPrivate ?? source?.isPrivate,
+    isVerified: root?.isVerified ?? source?.isVerified,
+    accountType: root?.accountType ?? source?.accountType,
+    postsCount: root?.postsCount ?? source?.postsCount,
+    statHistory: Array.isArray(rawHistory)
+      ? rawHistory.map((item: any) =>
+        normalizeHistoryPoint(item, toNumber(followers))
+      )
+      : [],
+    lookalikes: resolvedLookalikes,
+    followersRange: resolvedFollowersRange,
+  };
+}
 
 export default function InfluencerDetailFullPage({
   loading,
@@ -55,6 +714,7 @@ export default function InfluencerDetailFullPage({
   data,
   raw,
   platform,
+  emailExists,
   handle,
   lastFetchedAt,
   onRefreshReport,
@@ -65,12 +725,32 @@ export default function InfluencerDetailFullPage({
   const searchParams = useSearchParams();
   const campaignId = searchParams?.get('campaignId') || '';
 
-  // ✅ if np=1, hide Close / Refresh / Share media kit
-  const noProfileCredit =
-    searchParams?.get('np') === '1' || searchParams?.get('np') === 'true';
-
   const [brandId, setBrandId] = useState('');
   const [adminId, setAdminId] = useState('');
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [campaigns, setCampaigns] = useState<{ campaignsId: string; campaignTitle?: string }[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>(campaignId ? [campaignId] : []);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(lastFetchedAt || null);
+  const [calculationMethod, setCalculationMethod] = useState<'median' | 'average'>('average');
+  const [activePlatform, setActivePlatform] = useState<SupportedPlatform>(normalisePlatform(platform));
+  const [activeReport, setActiveReport] = useState<InfluencerReportShape | null>(null);
+  const showContactManagementCard = useMemo(() => {
+    const hasBrandId = Boolean((brandId || '').trim());
+    const hasAdminId = Boolean((adminId || '').trim());
+
+    const hasInfluencerId =
+      typeof window !== 'undefined' &&
+      Boolean((localStorage.getItem('influencerId') || '').trim());
+
+    return hasAdminId || (!hasBrandId && hasInfluencerId);
+  }, [brandId, adminId]);
+
+  const showLookalikeCreators = useMemo(() => {
+    return Boolean((adminId || '').trim());
+  }, [adminId]);
 
   useEffect(() => {
     const b = (localStorage.getItem('brandId') || '').trim();
@@ -79,33 +759,325 @@ export default function InfluencerDetailFullPage({
     setAdminId(a);
   }, []);
 
-  const [sendingInvite, setSendingInvite] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  useEffect(() => {
+    setLastUpdatedAt(lastFetchedAt || null);
+  }, [lastFetchedAt]);
 
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(lastFetchedAt || null);
-  useEffect(() => setLastUpdatedAt(lastFetchedAt || null), [lastFetchedAt]);
+  const primaryReport = useMemo<InfluencerReportShape | null>(() => {
+    const source = raw?.profile ?? data?.profile;
+    if (!source) return null;
+    return toInfluencerReportShape(source, normalisePlatform(platform));
+  }, [raw, data, platform]);
 
+  const connectedProfiles = useMemo<InfluencerReportShape[]>(() => {
+    const rawProfiles =
+      raw?.socialProfiles ??
+      raw?.influencerReports ??
+      raw?.mediaKit?.socialProfiles ??
+      raw?.mediaKit?.influencerReports ??
+      [];
+
+    if (Array.isArray(rawProfiles) && rawProfiles.length) {
+      const mapped = rawProfiles.map((item: any) =>
+        toInfluencerReportShape(item, normalisePlatform(item?.provider ?? platform))
+      );
+      return Array.from(
+        new Map(
+          mapped
+            .filter((item) => item?.provider)
+            .map((item) => [String(item.provider).toLowerCase(), item])
+        ).values()
+      );
+    }
+
+    return primaryReport ? [primaryReport] : [];
+  }, [raw, primaryReport, platform]);
+
+  useEffect(() => {
+    const initial =
+      connectedProfiles.find(
+        (item) => normalisePlatform(item.provider) === normalisePlatform(platform)
+      ) ??
+      primaryReport ??
+      connectedProfiles[0] ??
+      null;
+
+    setActiveReport(initial);
+    setActivePlatform(normalisePlatform(initial?.provider ?? platform));
+  }, [connectedProfiles, primaryReport, platform]);
+
+  const displayedReport = activeReport ?? primaryReport ?? null;
+
+  const mediaKit = useMemo<MediaKitShape>(() => {
+    return {
+      _id: raw?._id ?? raw?.mediaKit?._id,
+      mediaKitId: raw?.mediaKitId ?? raw?.mediaKit?.mediaKitId,
+      influencerId: raw?.influencerId ?? data?.profile?.userId,
+      primaryPlatform: displayedReport?.provider ?? platform,
+      primaryInfluencerReport: displayedReport ?? undefined,
+      influencerReports: connectedProfiles,
+      socialProfiles: connectedProfiles,
+      name: displayedReport?.fullname ?? displayedReport?.name,
+      country: displayedReport?.country,
+      languages: displayedReport?.language?.name ? [{ name: displayedReport.language.name }] : [],
+      email: raw?.email ?? raw?.mediaKit?.email,
+      phone: raw?.phone ?? raw?.mediaKit?.phone,
+      additionalNotes: raw?.additionalNotes ?? raw?.mediaKit?.additionalNotes,
+      updatedAt: lastFetchedAt ?? raw?.updatedAt ?? raw?.mediaKit?.updatedAt,
+    };
+  }, [raw, data, connectedProfiles, displayedReport, platform, lastFetchedAt]);
+
+  const canAct = Boolean(displayedReport?.modashId) && !loading && !sendingInvite && !refreshing;
   const formattedLastUpdated = lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : 'Not fetched yet';
 
-  const statHistory = useMemo<StatHistoryEntry[]>(() => {
-    const hist = data?.profile?.statsByContentType?.all?.statHistory || [];
-    return hist?.slice(-12);
-  }, [data]);
+  const recentPosts = displayedReport?.recentPosts ?? [];
+  const sponsoredPosts = displayedReport?.sponsoredPosts ?? [];
+  const popularPosts = displayedReport?.popularPosts ?? [];
 
-  const hasUserId = Boolean(data?.profile?.userId);
-  const canAct = hasUserId && !loading && !sendingInvite && !refreshing;
+  const recentPostsForTable = useMemo(() => {
+    const rawProfileRecent = Array.isArray(raw?.profile?.recentPosts)
+      ? raw.profile.recentPosts.map((post: any) => normalizePost(post))
+      : [];
 
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+    if (rawProfileRecent.length > 0) {
+      return dedupeAndSortPosts(rawProfileRecent);
+    }
 
-  const [campaigns, setCampaigns] = useState<{ campaignsId: string; campaignTitle?: string }[]>([]);
-  const [campaignsLoading, setCampaignsLoading] = useState(false);
-  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>(campaignId ? [campaignId] : []);
+    const rawProfilePosts = Array.isArray(raw?.profile?.posts)
+      ? raw.profile.posts.map((post: any) => normalizePost(post))
+      : [];
 
-  const toggleCampaign = (id: string, checked: boolean) => {
-    setSelectedCampaignIds((prev) =>
-      checked ? Array.from(new Set([...prev, id])) : prev.filter((p) => p !== id)
+    if (rawProfilePosts.length > 0) {
+      return dedupeAndSortPosts(rawProfilePosts);
+    }
+
+    const rawProfilePopular = Array.isArray(raw?.profile?.popularPosts)
+      ? raw.profile.popularPosts.map((post: any) => normalizePost(post))
+      : [];
+
+    if (rawProfilePopular.length > 0) {
+      return dedupeAndSortPosts(rawProfilePopular);
+    }
+
+    return resolveRecentPostsForTable({
+      displayedReport,
+      primaryReport,
+      data,
+      raw,
+      connectedProfiles,
+    });
+  }, [displayedReport, primaryReport, data, raw, connectedProfiles]);
+
+  const credibilityScore = useMemo(() => {
+    const rawCredibility = displayedReport?.audience?.credibility;
+    if (rawCredibility !== undefined && rawCredibility !== null && Number.isFinite(Number(rawCredibility))) {
+      const num = Number(rawCredibility);
+      return num <= 1 ? Math.round(num * 100) : Math.round(num);
+    }
+    return 0;
+  }, [displayedReport]);
+
+  const totalReach = useMemo(() => {
+    if (!connectedProfiles.length) return toNumber(displayedReport?.followers ?? displayedReport?.subscribers);
+    return connectedProfiles.reduce(
+      (sum, item) => sum + toNumber(item.followers ?? item.subscribers),
+      0
     );
-  };
+  }, [connectedProfiles, displayedReport]);
+
+  const { organicTrend, sponsoredTrend, trendLabels } = useMemo(() => {
+    const history = displayedReport?.statHistory ?? [];
+
+    if (history.length > 0) {
+      const sorted = [...history].sort((a, b) => a.month.localeCompare(b.month));
+      const labels = sorted.map((h) => {
+        const [year, month] = String(h.month).split('-');
+        const monthLabel = monthLabels[Math.max(0, Number(month) - 1)] ?? month;
+        return year ? `${monthLabel} ${String(year).slice(2)}` : monthLabel;
+      });
+
+      return {
+        organicTrend: normaliseTrend(sorted.map((h) => h.avgLikes), sorted.length),
+        sponsoredTrend: normaliseTrend(sorted.map((h) => h.avgViews || h.followers), sorted.length),
+        trendLabels: labels,
+      };
+    }
+
+    return {
+      organicTrend: normaliseTrend(recentPosts.map((p) => p.views ?? p.likes ?? 0)),
+      sponsoredTrend: normaliseTrend(sponsoredPosts.map((p) => p.views ?? p.likes ?? 0)),
+      trendLabels: undefined as string[] | undefined,
+    };
+  }, [displayedReport, recentPosts, sponsoredPosts]);
+
+  const avgLikes = toNumber(displayedReport?.stats?.avgLikes?.value ?? displayedReport?.avgLikes);
+  const avgViews = toNumber(
+    displayedReport?.stats?.avgViews?.value ??
+    displayedReport?.avgViews ??
+    displayedReport?.avgReelsPlays ??
+    average(recentPosts.map((p) => toNumber(p.views ?? p.likes)))
+  );
+  const engagementRate = toNumber(displayedReport?.engagementRate);
+
+  const metricCards = useMemo<DashboardMetric[]>(() => {
+    const followerCompared = toNumber(displayedReport?.stats?.followers?.compared);
+    const likesCompared = toNumber(displayedReport?.stats?.avgLikes?.compared);
+    const commentsCompared = toNumber(displayedReport?.stats?.avgComments?.compared);
+
+    return [
+      {
+        key: 'followers',
+        label: 'Followers',
+        value: formatCompactNumber(displayedReport?.followers ?? displayedReport?.subscribers),
+        delta: followerCompared ? `${(followerCompared * 100).toFixed(1)}%` : undefined,
+      },
+      {
+        key: 'engagement',
+        label: 'Avg. engagement rate',
+        value: formatPercent(displayedReport?.engagementRate, true),
+      },
+      {
+        key: 'likes',
+        label: 'Average likes',
+        value: formatCompactNumber(avgLikes),
+        delta: likesCompared ? `${(likesCompared * 100).toFixed(1)}%` : undefined,
+      },
+      {
+        key: 'views',
+        label: 'Average views',
+        value: formatCompactNumber(avgViews),
+      },
+      {
+        key: 'comments',
+        label: 'Average comments',
+        value: formatCompactNumber(displayedReport?.stats?.avgComments?.value ?? displayedReport?.avgComments),
+        delta: commentsCompared ? `${(commentsCompared * 100).toFixed(1)}%` : undefined,
+      },
+      {
+        key: 'reach',
+        label: 'Total reach',
+        value: formatCompactNumber(totalReach),
+      },
+    ];
+  }, [displayedReport, avgLikes, avgViews, totalReach]);
+
+  const followerRangeLabel = useMemo(() => {
+    const range = displayedReport?.followersRange;
+    if (range?.leftNumber || range?.rightNumber) {
+      const left = range?.leftNumber?.toLocaleString?.() ?? range?.leftNumber ?? 0;
+      const right = range?.rightNumber?.toLocaleString?.() ?? range?.rightNumber ?? 0;
+      return `${left} - ${right}`;
+    }
+    return formatCompactNumber(displayedReport?.followers ?? displayedReport?.subscribers);
+  }, [displayedReport]);
+
+  const campaignHighlights = useMemo<CampaignHighlight[]>(() => {
+    const sponsoredAvgLikes = average(sponsoredPosts.map((p) => toNumber(p.likes)));
+    const organicAvgLikes = average(recentPosts.map((p) => toNumber(p.likes)));
+    const topPostLikes = Math.max(...popularPosts.map((p) => toNumber(p.likes)), 0);
+
+    return [
+      {
+        label: sponsoredPosts.length ? 'Sponsored avg likes' : 'Top post likes',
+        value: formatCompactNumber(sponsoredPosts.length ? sponsoredAvgLikes : topPostLikes),
+        meta: sponsoredPosts.length
+          ? `Across ${sponsoredPosts.length} sponsored posts`
+          : `Best result from ${popularPosts.length} popular posts`,
+        tone: 'accent',
+      },
+      {
+        label: 'Organic avg likes',
+        value: formatCompactNumber(organicAvgLikes),
+        meta: `Across ${recentPosts.length} recent posts`,
+      },
+      {
+        label: 'Follower range',
+        value: followerRangeLabel,
+        meta: 'Current creator bucket',
+      },
+      {
+        label: 'Campaigns selected',
+        value: formatCompactNumber(selectedCampaignIds.length),
+        meta: 'Ready for invite workflow',
+      },
+    ];
+  }, [sponsoredPosts, recentPosts, popularPosts, followerRangeLabel, selectedCampaignIds.length]);
+
+  const audienceAge =
+    displayedReport?.audience?.ages?.map((item) => ({
+      label: item.code,
+      value: Number((item.weight || 0) * 100),
+    })) ?? [];
+
+  const audienceGender =
+    displayedReport?.audience?.genders?.map((item) => ({
+      label:
+        item.code === 'MALE'
+          ? 'Male'
+          : item.code === 'FEMALE'
+            ? 'Female'
+            : item.code,
+      value: Number((item.weight || 0) * 100),
+    })) ?? [];
+
+  const topCountries =
+    displayedReport?.audience?.geoCountries?.slice(0, 4).map((item) => ({
+      name: item.name,
+      value: Number((item.weight || 0) * 100),
+    })) ?? [];
+
+  const topLanguages =
+    displayedReport?.audience?.languages?.slice(0, 4).map((item) => ({
+      label: item.code,
+      value: Number((item.weight || 0) * 100),
+    })) ?? [];
+
+  const lookalikeCreators = useMemo<LookalikeCreator[]>(() => {
+    const merged = [
+      ...(displayedReport?.lookalikes ?? []),
+      ...(((data as any)?.profile?.audienceLookalikes as ModashLookalike[]) ?? []),
+      ...(((data as any)?.profile?.lookalikesByTopics as ModashLookalike[]) ?? []),
+    ];
+
+    if (merged.length) {
+      const uniq = Array.from(
+        new Map(
+          merged.map((item) => [item?.userId || item?.username, item])
+        ).values()
+      ) as ModashLookalike[];
+
+      return transformLookalikes(uniq, engagementRate);
+    }
+
+    return [];
+  }, [displayedReport, data, engagementRate]);
+
+  const auditItems = useMemo<AuditItem[]>(() => {
+    const lastSync = lastFetchedAt?.slice(0, 16).replace('T', ' ') || '—';
+    return [
+      {
+        id: '1',
+        date: lastSync,
+        action: 'Influencer report sync',
+        actor: 'System',
+        status: 'Success',
+      },
+      {
+        id: '2',
+        date: lastSync,
+        action: 'Media kit viewed',
+        actor: viewerRole === 'admin' ? 'Admin' : 'Brand',
+        status: 'Success',
+      },
+      {
+        id: '3',
+        date: lastSync,
+        action: 'Audience analysis loaded',
+        actor: 'Dashboard',
+        status: 'Success',
+      },
+    ];
+  }, [lastFetchedAt, viewerRole]);
 
   useEffect(() => {
     const bId = (brandId || '').trim();
@@ -131,7 +1103,7 @@ export default function InfluencerDetailFullPage({
           }))
         );
       } catch {
-        // optional
+        setCampaigns([]);
       } finally {
         if (!cancelled) setCampaignsLoading(false);
       }
@@ -142,21 +1114,79 @@ export default function InfluencerDetailFullPage({
     };
   }, [brandId, adminId]);
 
-  const handleSendFromDropdown = async () => {
-    setDropdownOpen(false);
-    await sendInvitationsForCampaigns(selectedCampaignIds);
+  const toggleCampaign = (id: string, checked: boolean) => {
+    setSelectedCampaignIds((prev) =>
+      checked ? Array.from(new Set([...prev, id])) : prev.filter((p) => p !== id)
+    );
+  };
+
+  const handlePlatformSelect = (profile: InfluencerReportShape) => {
+    setActivePlatform(normalisePlatform(profile.provider));
+    setActiveReport(profile);
+  };
+
+  const handleRefreshData = async () => {
+    if (!onRefreshReport || refreshing) return;
+
+    try {
+      setRefreshing(true);
+      await onRefreshReport();
+    } catch (err: any) {
+      await Swal.fire('Refresh failed', err?.message || 'Failed to refresh data', 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleMediaKit = async () => {
+    const url = window.location.href;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Link copied!',
+        text: 'Media kit link copied to clipboard.',
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '0';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Link copied!',
+          text: 'Media kit link copied to clipboard.',
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Copy failed',
+          text: 'Could not copy the link. Please copy it manually from the address bar.',
+        });
+      }
+    }
   };
 
   const sendInvitationsForCampaigns = async (campaignIds: string[]) => {
     if (!canAct || sendingInvite) return;
 
-    const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
-    if (!['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)) {
-      await Swal.fire('Invalid platform', 'Platform must be youtube/instagram/tiktok', 'warning');
-      return;
-    }
+    const normalizedPlatform = normalisePlatform(displayedReport?.provider ?? platform);
+    const modashUserId = String(displayedReport?.modashId || data?.profile?.userId || '').trim();
 
-    const modashUserId = String(data?.profile?.userId || '').trim();
     if (!modashUserId) {
       await Swal.fire('Missing userId', 'Modash userId not found in report.', 'warning');
       return;
@@ -170,6 +1200,7 @@ export default function InfluencerDetailFullPage({
 
     const bId = (brandId || '').trim();
     const aId = (adminId || '').trim();
+
     if (!bId && !aId) {
       await Swal.fire('Login required', 'brandId or adminId missing. Please login again.', 'warning');
       return;
@@ -221,290 +1252,267 @@ export default function InfluencerDetailFullPage({
     }
   };
 
-  const headerProfile = data?.profile?.profile;
-  const displayName =
-    headerProfile?.fullname || headerProfile?.username || headerProfile?.handle || handle || 'Creator profile';
-
-  const displayHandle =
-    headerProfile?.handle ||
-    headerProfile?.username ||
-    (handle && (handle.startsWith('@') ? handle : `@${handle}`)) ||
-    '';
-
-  const handleRefreshData = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!onRefreshReport || refreshing) return;
-
-    try {
-      setRefreshing(true);
-      await onRefreshReport();
-    } catch (err: any) {
-      await Swal.fire('Refresh failed', err?.message || 'Failed to refresh data', 'error');
-    } finally {
-      setRefreshing(false);
-    }
+  const handleSendFromDropdown = async () => {
+    setDropdownOpen(false);
+    await sendInvitationsForCampaigns(selectedCampaignIds);
   };
 
-  const handleMediaKit = async () => {
-    const url = window.location.href;
-
-    try {
-      await navigator.clipboard.writeText(url);
-      Swal.fire({
-        icon: 'success',
-        title: 'Link copied!',
-        text: 'Media kit link copied to clipboard.',
-        timer: 1500,
-        showConfirmButton: false,
-      });
-    } catch {
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = url;
-        ta.style.position = 'fixed';
-        ta.style.top = '0';
-        ta.style.left = '0';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.focus();
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Link copied!',
-          text: 'Media kit link copied to clipboard.',
-          timer: 1500,
-          showConfirmButton: false,
-        });
-      } catch {
-        Swal.fire({
-          icon: 'error',
-          title: 'Copy failed',
-          text: 'Could not copy the link. Please copy it manually from the address bar.',
-        });
-      }
-    }
+  const handleCalcChange = (value: 'median' | 'average') => {
+    setCalculationMethod(value);
+    onChangeCalc(value);
   };
 
-  const showRefreshButton = Boolean(onRefreshReport) && !noProfileCredit;
-  const showCloseButton = !noProfileCredit;
-  const showShareButton = !noProfileCredit;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#fbf8f3]">
+        <Loader logoSrc="/logo.png" />
+      </div>
+    );
+  }
 
-  const profile = data?.profile;
+  if (error) {
+    const isLimitError = error.toLowerCase().includes('limit') || error.toLowerCase().includes('quota');
 
-  const popularPosts = profile?.popularPosts ?? [];
-  const notableUsers = profile?.notableUsers ?? [];
-  const lookalikes = profile?.lookalikes ?? [];
-  const lookalikesByTopics = profile?.lookalikesByTopics ?? [];
-  const audienceLookalikes = profile?.audienceLookalikes ?? [];
-  const brandAffinity = profile?.brandAffinity ?? [];
+    return (
+      <div className="min-h-screen bg-[#fbf8f3] p-6">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5" />
+            <div>
+              <div className="font-semibold">{isLimitError ? 'Limit Reached' : 'Error'}</div>
+              <div className="mt-1 text-sm">{error}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const isAdminViewer = viewerRole === 'admin';
+  if (!displayedReport) {
+    return (
+      <div className="min-h-screen bg-[#fbf8f3] p-6">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-600">
+          No report data yet. Try refreshing data or selecting another creator.
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="w-full">
-        <div className="bg-white overflow-hidden">
-          <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
-            {showCloseButton && (
-              <button
-                onClick={() => router.back()}
-                className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors flex-shrink-0"
-              >
-                <ArrowLeft className="h-4 w-4" /> Close
-              </button>
-            )}
+    <div className="min-h-screen  text-[#1f1f1f]">
+      {/* <div className="sticky top-0 z-20 border-b border-[#ebe4d8] bg-[#fbf8f3]/90 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 lg:px-6 xl:px-8">
+          <button
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#e7ddd0] bg-white px-3 py-2 text-sm font-medium text-[#2b2b2b] transition hover:bg-[#f7f2ea]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Close
+          </button>
 
-            <div className="min-w-0 flex flex-col gap-0.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-semibold text-gray-900 truncate">{displayName}</span>
-                {displayHandle && <span className="text-xs text-gray-500 truncate">{displayHandle}</span>}
-              </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-[#1f1f1f]">
+              {displayedReport.fullname || displayedReport.name || displayedReport.username || 'Creator profile'}
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[#6a6258]">
+              {(displayedReport.handle || handle) && (
+                <span>{displayedReport.handle || (handle?.startsWith('@') ? handle : `@${handle}`)}</span>
+              )}
+              <span className="rounded-full border border-[#e7ddd0] bg-white px-2 py-0.5 uppercase tracking-wide">
+                {activePlatform}
+              </span>
+              {emailExists ? (
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">
+                  Email available
+                </span>
+              ) : null}
+            </div>
+          </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {platform && (
-                  <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-700">
-                    {platform}
-                  </span>
-                )}
-              </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <div className="hidden rounded-xl border border-[#e7ddd0] bg-white px-3 py-2 text-right md:block">
+              <div className="text-[10px] uppercase tracking-wide text-[#8a8177]">Latest data</div>
+              <div className="text-xs text-[#2b2b2b]">{formattedLastUpdated}</div>
             </div>
 
-            <div className="ml-auto flex flex-col items-end gap-1 sm:flex-row sm:items-center">
-              <div className="flex flex-col items-end gap-1 sm:items-end sm:ml-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] uppercase tracking-wide text-gray-500">Latest data</span>
-                    <span className="text-xs text-gray-700">{formattedLastUpdated}</span>
-                  </div>
+            <select
+              value={calculationMethod}
+              onChange={(e) => handleCalcChange(e.target.value as 'median' | 'average')}
+              className="rounded-xl border border-[#e7ddd0] bg-white px-3 py-2 text-sm text-[#2b2b2b] outline-none"
+            >
+              <option value="average">Average</option>
+              <option value="median">Median</option>
+            </select>
 
-                  {showRefreshButton && (
-                    <button
-                      type="button"
-                      onClick={handleRefreshData}
-                      disabled={refreshing || loading}
-                      className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                    >
-                      <BarChart3 className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-                      {refreshing ? 'Refreshing…' : 'Refresh data'}
-                    </button>
+            {onRefreshReport ? (
+              <button
+                type="button"
+                onClick={handleRefreshData}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#e7ddd0] bg-white px-3 py-2 text-sm font-medium text-[#2b2b2b] transition hover:bg-[#f7f2ea] disabled:opacity-60"
+              >
+                <BarChart3 className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+            ) : null}
+
+            <button
+              onClick={handleMediaKit}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#FFA135] to-[#FF7236] px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:opacity-90"
+            >
+              <Copy className="h-4 w-4" />
+              Share media kit
+            </button>
+
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#e7ddd0] bg-white px-3 py-2 text-sm font-medium text-[#2b2b2b] transition hover:bg-[#f7f2ea]"
+                >
+                  <Send className="h-4 w-4" />
+                  Campaigns
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent align="end" className="w-80 bg-white ring-1 ring-gray-200 shadow-lg">
+                <DropdownMenuLabel>Campaigns</DropdownMenuLabel>
+
+                <div className="max-h-64 space-y-1 overflow-auto py-1">
+                  {campaigns.length === 0 && !campaignsLoading && (
+                    <div className="px-2 text-xs text-gray-500">No campaigns</div>
                   )}
-                </div>
 
-                <div className="flex items-center gap-2">
-                  {showShareButton && (
-                    <button
-                      onClick={handleMediaKit}
-                      className="bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90 inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm"
-                    >
-                      <Copy className="h-4 w-4" />
-                      <span>Share media kit</span>
-                    </button>
+                  {campaignsLoading && (
+                    <div className="px-2 text-xs text-gray-500">Loading campaigns…</div>
                   )}
 
-                  <DropdownMenu open={dropdownOpen} onOpenChange={(v) => setDropdownOpen(v)}>
-                    <DropdownMenuContent align="end" className="w-72 bg-white ring-1 ring-gray-200 shadow-lg">
-                      <DropdownMenuLabel>Campaigns</DropdownMenuLabel>
+                  {campaigns.map((c) => {
+                    const checked = selectedCampaignIds.includes(c.campaignsId);
 
-                      <div className="space-y-1 max-h-56 overflow-auto py-1">
-                        {campaigns.length === 0 && !campaignsLoading && (
-                          <div className="px-2 text-xs text-gray-500">No campaigns</div>
-                        )}
-                        {campaignsLoading && <div className="px-2 text-xs text-gray-500">Loading campaigns…</div>}
-
-                        {campaigns.map((c) => {
-                          const checked = selectedCampaignIds.includes(c.campaignsId);
-                          return (
-                            <div
-                              key={c.campaignsId}
-                              role="menuitem"
-                              className="relative pl-10 text-sm cursor-pointer select-none flex items-center gap-2 py-1"
-                              onClick={() => toggleCampaign(c.campaignsId, !checked)}
-                            >
-                              <span
-                                className={`absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 flex items-center justify-center rounded ${
-                                  checked
-                                    ? 'border border-orange-400 bg-orange-50 text-orange-500'
-                                    : 'border border-gray-200 bg-white text-transparent'
-                                }`}
-                              >
-                                {checked ? <Check className="h-3 w-3" /> : null}
-                              </span>
-
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) => toggleCampaign(c.campaignsId, e.target.checked)}
-                                className="sr-only"
-                              />
-
-                              <span>{c.campaignTitle || c.campaignsId}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="mt-3 flex justify-end gap-2 px-1">
-                        <button
-                          type="button"
-                          onClick={() => setDropdownOpen(false)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleSendFromDropdown}
-                          disabled={!canAct}
-                          className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
-                            ${
-                              canAct
-                                ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
-                                : 'bg-gray-300 cursor-not-allowed opacity-70'
+                    return (
+                      <div
+                        key={c.campaignsId}
+                        role="menuitem"
+                        className="relative flex cursor-pointer items-center gap-2 py-2 pl-10 pr-2 text-sm select-none"
+                        onClick={() => toggleCampaign(c.campaignsId, !checked)}
+                      >
+                        <span
+                          className={`absolute left-2 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded ${checked
+                            ? 'border border-orange-400 bg-orange-50 text-orange-500'
+                            : 'border border-gray-200 bg-white text-transparent'
                             }`}
                         >
-                          {sendingInvite ? 'Sending…' : 'Send Invite'}
-                        </button>
+                          {checked ? <Check className="h-3 w-3" /> : null}
+                        </span>
+
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => toggleCampaign(c.campaignsId, e.target.checked)}
+                          className="sr-only"
+                        />
+
+                        <span>{c.campaignTitle || c.campaignsId}</span>
                       </div>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    );
+                  })}
                 </div>
-              </div>
-            </div>
+
+                <div className="mt-3 flex justify-end gap-2 px-1 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setDropdownOpen(false)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendFromDropdown}
+                    disabled={!canAct}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white shadow-sm ${canAct
+                      ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
+                      : 'cursor-not-allowed bg-gray-300 opacity-70'
+                      }`}
+                  >
+                    {sendingInvite ? 'Sending…' : 'Send Invite'}
+                  </button>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div> */}
+
+      <div className="w-full px-4 py-5 lg:px-6 xl:px-8">
+        <CreatorHeader
+          primaryReport={displayedReport as any}
+          mediaKit={mediaKit as any}
+          activePlan={'pro' as SubscriptionPlan}
+          isVerified={displayedReport.isVerified}
+          accountType={displayedReport.accountType}
+          postsCount={displayedReport.postsCount}
+        />
+
+        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="space-y-6">
+
+            {showContactManagementCard ? (
+              <ContactManagementCard
+                primaryReport={displayedReport as any}
+                mediaKit={mediaKit as any}
+                onCopy={handleMediaKit}
+                connectedProfiles={connectedProfiles as any}
+                activePlatform={activePlatform}
+                onPlatformSelect={handlePlatformSelect as any}
+              />
+            ) : null}
+
+            <RiskComplianceCard
+              credibilityScore={credibilityScore}
+              isPrivate={displayedReport.isPrivate}
+            />
           </div>
 
-          <div className="p-5">
-            {loading && <LoadingState />}
-            {error && <ErrorState error={error} />}
+          <div className="space-y-6">
+            <MetricsGrid metrics={metricCards} />
 
-            {!loading && !error && !data && (
-              <div className="mb-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-xs text-gray-600">
-                No report data yet. Try refreshing data or selecting another creator.
-              </div>
-            )}
-
-            {data && (
-              <div className="space-y-6">
-                <ProfileHeader profile={data.profile} platform={platform} />
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-6">
-                    <StatsChart statHistory={statHistory} />
-                    <ContentBreakdown data={data} platform={platform} />
-
-                    {popularPosts.length > 0 && <PopularPosts posts={popularPosts.slice(0, 12)} />}
-                    {notableUsers.length > 0 && <MiniUserSection title="Notable followers" users={notableUsers} />}
-                    {lookalikes.length > 0 && <MiniUserSection title="Lookalikes" users={lookalikes} />}
-                    {lookalikesByTopics.length > 0 && (
-                      <MiniUserSection title="Lookalikes by topic" users={lookalikesByTopics} />
-                    )}
-                    {audienceLookalikes.length > 0 && (
-                      <MiniUserSection title="Audience lookalikes" users={audienceLookalikes} />
-                    )}
-                  </div>
-
-                  <div className="space-y-6">
-                    {isAdminViewer && <AboutSection profile={data.profile} />}
-
-                    <AudienceDistribution audience={data.profile.audience} />
-                    {brandAffinity.length > 0 && <BrandAffinity items={brandAffinity} />}
-                  </div>
-                </div>
-              </div>
-            )}
+            <PerformanceTrendCard
+              organicTrend={organicTrend}
+              sponsoredTrend={sponsoredTrend}
+              trendLabels={trendLabels}
+            />
           </div>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <CampaignHighlightsCard items={campaignHighlights} />
+
+          <AudienceIntelligenceCard
+            ageData={audienceAge}
+            genderData={audienceGender}
+            topCountries={topCountries}
+            credibilityScore={credibilityScore}
+            topLanguages={topLanguages}
+          />
+
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_420px]">
+            <RecentPostsTable posts={recentPostsForTable.slice(0, 5) as any} />
+            <PopularContentPanel posts={popularPosts.slice(0, 2) as any} />
+          </div>
+
+          {showLookalikeCreators && lookalikeCreators.length > 0 ? (
+            <LookalikeCreatorsPanel items={lookalikeCreators} />
+          ) : null}
+
+          {viewerRole === 'admin' ? (
+            <AuditTrailTable items={auditItems} />
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
-
-const LoadingState: React.FC = () => (
-  <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-600">
-    <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-      <BarChart3 className="h-8 w-8 text-orange-600 animate-pulse" />
-    </div>
-    <div className="text-lg font-semibold">Fetching report…</div>
-  </div>
-);
-
-const ErrorState: React.FC<{ error: string }> = ({ error }) => {
-  const isLimitError =
-    error.toLowerCase().includes('limit') ||
-    error.toLowerCase().includes('quota');
-
-  return (
-    <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 text-sm flex items-start gap-2">
-      <AlertCircle className="h-5 w-5 mt-0.5" />
-      <div>
-        <div className="font-semibold">
-          {isLimitError ? 'Limit Reached' : 'Error'}
-        </div>
-        <div>{error}</div>
-      </div>
-    </div>
-  );
-};

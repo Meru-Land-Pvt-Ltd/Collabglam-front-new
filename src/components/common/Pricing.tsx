@@ -658,8 +658,8 @@ const Pricing: React.FC = () => {
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
-          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900">Simple, Transparent Pricing</h2>
-          <p className="text-lg text-gray-600 mt-3">No monthly software fees. You only pay per campaing.</p>
+          <h2 className="text-4xl lg:text-5xl font-bold text-gray-900">Pricing</h2>
+          <p className="text-lg text-gray-600 mt-3">Simple, transparent pricing. Start free, upgrade as you grow.</p>
 
           {/* Toggles */}
           <div className="mt-8">

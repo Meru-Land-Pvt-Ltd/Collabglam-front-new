@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Menu, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import Link from "next/link";
 
 const Header: React.FC = () => {
   const router = useRouter();
@@ -16,11 +17,11 @@ const Header: React.FC = () => {
 
   const navLinks = [
     { label: 'How It Works', href: '/#how-it-works' },
+    { label: 'Features', href: '/#features' },
+    { label: 'Success Stories', href: '/#success-stories' },
     { label: 'Pricing', href: '/#pricing' },
-    { label: 'Testimonials', href: '/#testimonials' },
-    { label: 'FAQ', href: '/#faq' },
-    { label: 'About', href: '/about-us' },
-    { label: 'Contact', href: '/contact-us' },
+    { label: 'About Us', href: '/about-us' },
+    { label: 'Contact Us', href: '/contact-us' },
   ];
 
   const navigate = (path: string) => {
@@ -30,16 +31,15 @@ const Header: React.FC = () => {
 
   return (
     <header
-      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 font-lexend ${
-        isScrolled ? 'bg-white/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
-      }`}
+      className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 font-lexend ${isScrolled ? 'bg-white/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
+        }`}
     >
       <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
-          {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2 shrink-0">
+
+          <Link href="/" className="flex items-center space-x-2">
             <img
-              src="/logo.png"
+              src="./logo.png"
               alt="Collabglam Logo"
               width={50}
               height={50}
@@ -48,38 +48,68 @@ const Header: React.FC = () => {
             <span className="ml-3 text-2xl font-bold">CollabGlam</span>
           </Link>
 
-          {/* Right Side Desktop Content */}
-          <div className="hidden lg:flex items-center ml-auto space-x-8">
-            <nav className="flex items-center space-x-8">
-              {navLinks.map((link) => (
-                <a
-                  key={link.label}
-                  href={link.href}
-                  className="font-medium text-gray-700 transition-colors duration-200 hover:text-transparent hover:bg-gradient-to-r hover:from-[#FFA135] hover:to-[#FF7236] hover:bg-clip-text"
-                >
-                  {link.label}
-                </a>
-              ))}
-            </nav>
+          {/* Logo */}
+          {/* <div className="flex items-center space-x-2">
+            <img
+              src="./logo.png"
+              alt="Collabglam Logo"
+              width={50}
+              height={50}
+              className="rounded-lg"
+            />
+            <span className="text-xl font-bold text-gray-900">CollabGlam</span>
+          </div> */}
 
+          {/* Desktop Navigation */}
+          <nav className="hidden lg:flex items-center space-x-8">
+            {navLinks.map(link => (
+              <a
+                key={link.label}
+                href={link.href}
+                className="
+    font-medium text-gray-700
+    transition-colors duration-200
+    hover:text-transparent
+    hover:bg-gradient-to-r
+    hover:from-[#FFA135]
+    hover:to-[#FF7236]
+    hover:bg-clip-text
+  "
+              >
+                {link.label}
+              </a>
+
+            ))}
+          </nav>
+
+          {/* Desktop CTAs */}
+          <div className="hidden lg:flex items-center space-x-4">
             <button
               onClick={() => navigate('/brand/login')}
-              className="px-6 py-2 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white font-medium rounded-lg transition-all transform hover:from-[#FFA236] hover:to-[#FF7456] hover:shadow-lg hover:scale-105 cursor-pointer"
+              className="
+    px-6 py-2
+    bg-gradient-to-r from-[#FFA135] to-[#FF7236]
+    text-white font-medium rounded-lg
+    transition-all transform
+    hover:bg-gradient-to-r
+    hover:from-[#FFA236] hover:to-[#FF7456]
+    hover:shadow-lg
+    hover:scale-105
+    cursor-pointer
+  "
             >
               <strong>Get Started</strong>
             </button>
+
+
           </div>
 
           {/* Mobile Menu Toggle */}
           <button
-            onClick={() => setIsMobileMenuOpen((open) => !open)}
-            className="lg:hidden p-2 text-gray-700 ml-auto"
+            onClick={() => setIsMobileMenuOpen(open => !open)}
+            className="lg:hidden p-2 text-gray-700"
           >
-            {isMobileMenuOpen ? (
-              <X className="h-6 w-6" />
-            ) : (
-              <Menu className="h-6 w-6" />
-            )}
+            {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
         </div>
       </div>
@@ -88,21 +118,24 @@ const Header: React.FC = () => {
       {isMobileMenuOpen && (
         <div className="lg:hidden bg-white border-t shadow-lg">
           <div className="px-4 py-6 space-y-4">
-            {navLinks.map((link) => (
+            {navLinks.map(link => (
               <a
                 key={link.label}
                 href={link.href}
-                className="block py-2 font-medium hover:text-transparent hover:bg-gradient-to-r hover:from-[#FFA135] hover:to-[#FF7236] hover:bg-clip-text transition-colors"
+                className="block py-2 font-medium hover:text-transparent
+    hover:bg-gradient-to-r
+    hover:from-[#FFA135]
+    hover:to-[#FF7236]
+    hover:bg-clip-text transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 {link.label}
               </a>
             ))}
-
             <div className="pt-4 space-y-3">
               <button
                 onClick={() => navigate('/brand/login')}
-                className="w-full py-3 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white font-medium rounded-lg transition"
+                className="w-full py-3 bg-gradient-to-r from-[#FFA135] to-[#FF7236] text-white font-medium rounded-lg hover:bg-[#c21f4f] transition"
               >
                 Get Started
               </button>

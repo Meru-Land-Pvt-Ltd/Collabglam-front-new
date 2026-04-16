@@ -47,14 +47,12 @@ export default function ModashDashboard() {
 
   const onViewProfile = useCallback(
     (influencer: any) => {
-      const inferredPlatform: ReportPlatform =
-        (influencer?.platform as ReportPlatform) ||
-        (platforms[0] as unknown as ReportPlatform) ||
-        "youtube";
+      const inferredPlatform = influencer?.platform as ReportPlatform | undefined;
+      if (!inferredPlatform) return;
 
       const idCandidate =
-        influencer?.id ||
         influencer?.userId ||
+        influencer?.id ||
         influencer?.username ||
         influencer?.handle ||
         influencer?.url;
@@ -78,7 +76,7 @@ export default function ModashDashboard() {
         checkStatus(safeHandle, inferredPlatform);
       }
     },
-    [calculationMethod, checkStatus, fetchReport, platforms],
+    [calculationMethod, checkStatus, fetchReport],
   );
 
   const handleRefreshReport = useCallback(async () => {

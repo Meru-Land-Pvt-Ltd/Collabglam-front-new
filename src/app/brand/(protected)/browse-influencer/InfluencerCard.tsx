@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import type { Platform } from "./filters";
 import {
   BookmarkSimple,
-  CheckCircle,
+  SealCheckIcon,
   DotsThreeOutline,
   GlobeHemisphereWest,
   InstagramLogo,
@@ -13,7 +13,6 @@ import {
   XLogo,
   YoutubeLogo,
 } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/buttonComp";
 
 interface InfluencerCardProps {
   platform: Platform;
@@ -21,8 +20,22 @@ interface InfluencerCardProps {
   onViewProfile?: (influencer: any) => void;
 }
 
+function normalizePlatform(value: any): string {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    return value.trim().toLowerCase();
+  }
+
+  return String(
+    value?.platform || value?.name || value?.type || ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
 function getPlatformIcon(platform?: string, size = 13) {
-  const key = String(platform || "").toLowerCase();
+  const key = normalizePlatform(platform);
 
   switch (key) {
     case "instagram":
@@ -98,10 +111,7 @@ export function InfluencerCard({
     influencer?.stats?.views ??
     0;
 
-  const bio =
-    influencer?.bio ||
-    influencer?.description ||
-    "";
+  const bio = influencer?.bio || influencer?.description || "";
 
   const avatar =
     influencer?.picture ||
@@ -171,9 +181,21 @@ export function InfluencerCard({
     openExternalProfile();
   };
 
-  const visiblePlatforms = Array.isArray(influencer?.platforms)
-    ? influencer.platforms.slice(0, 3)
-    : [platformKey];
+  const visiblePlatforms = useMemo(() => {
+    const rawPlatforms = [
+      influencer?.platform,
+      ...(Array.isArray(influencer?.platforms) ? influencer.platforms : []),
+      platform,
+    ];
+
+    return Array.from(
+      new Set(
+        rawPlatforms
+          .map((item) => normalizePlatform(item))
+          .filter(Boolean)
+      )
+    ).slice(0, 3);
+  }, [influencer, platform]);
 
   return (
     <div className="group relative isolate w-full max-w-[380px] overflow-hidden rounded-[28px] bg-[#ddd1bb] shadow-[0_20px_50px_rgba(0,0,0,0.16)]">
@@ -190,9 +212,17 @@ export function InfluencerCard({
         <div className="absolute inset-0 bg-gradient-to-br from-[#efe7d7] via-[#dcc7af] to-[#b99a7d]" />
       )}
 
-      {/* Warm overlays */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,248,235,0.18),rgba(120,75,35,0.08)_35%,rgba(92,56,30,0.18)_70%,rgba(70,42,20,0.34))]" />
-      <div className="absolute inset-0 backdrop-blur-[1.5px]" />
+      {/* Base tone */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,248,235,0.14),rgba(120,75,35,0.06)_34%,rgba(92,56,30,0.10)_62%,rgba(70,42,20,0.18))]" />
+
+      {/* Strong frosted blur only at bottom */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[54%] bg-white/8 backdrop-blur-[14px] [mask-image:linear-gradient(to_top,black_72%,transparent_100%)]" />
+
+      {/* Bottom dark blend for text readability */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[60%] bg-[linear-gradient(to_top,rgba(34,20,10,0.78),rgba(34,20,10,0.46)_38%,rgba(34,20,10,0.16)_68%,transparent)]" />
+
+      {/* Soft glass edge like Figma */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[52%] rounded-t-[30px] bg-white/[0.03]" />
 
       {/* Content */}
       <div className="relative flex min-h-[520px] flex-col justify-between p-4 sm:p-5">
@@ -217,7 +247,7 @@ export function InfluencerCard({
         </div>
 
         {/* Middle / Bottom */}
-        <div className="mt-auto pt-10 text-white">
+        <div className="relative z-10 mt-auto pt-10 text-white">
           <div className="mx-auto max-w-[88%] text-center">
             <div className="flex items-center justify-center gap-1.5">
               <h3 className="text-[24px] font-semibold tracking-tight sm:text-[26px]">
@@ -225,13 +255,7 @@ export function InfluencerCard({
               </h3>
 
               {isVerified && (
-                <span
-                  className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#2196f3] text-white shadow"
-                  aria-label="Verified account"
-                  title="Verified account"
-                >
-                  <CheckCircle size={12} weight="fill" />
-                </span>
+                <SealCheckIcon size={20} weight="fill" color="#2196F3" />
               )}
             </div>
 
@@ -277,20 +301,20 @@ export function InfluencerCard({
             </div>
 
             <div className="justify-self-end text-right">
-              <div className="flex justify-end -space-x-1.5">
-                {visiblePlatforms.map((item: any, index: number) => (
+              <div className="flex justify-end gap-1.5">
+                {visiblePlatforms.map((item, index) => (
                   <span
                     key={`${item}-${index}`}
                     className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/50 bg-white/85 text-zinc-900 shadow-sm"
+                    title={item}
                   >
-                    {getPlatformIcon(
-                      typeof item === "string" ? item : item?.name || platformKey,
-                      11
-                    )}
+                    {getPlatformIcon(item, 11)}
                   </span>
                 ))}
               </div>
-              <p className="mt-1 text-[12px] text-white/80">Platforms</p>
+              <p className="mt-1 text-[12px] text-white/80">
+                {visiblePlatforms.length > 1 ? "Platforms" : "Platform"}
+              </p>
             </div>
           </div>
 
@@ -299,7 +323,7 @@ export function InfluencerCard({
             <button
               type="button"
               onClick={handlePrimaryAction}
-              className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-[#111111] px-5 text-[15px] font-semibold text-white shadow-[0_12px_24px_rgba(0,0,0,0.22)] transition hover:translate-y-[-1px] hover:bg-black"
+              className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-[#111111] px-5 text-[15px] font-semibold text-white shadow-[0_12px_24px_rgba(0,0,0,0.22)] transition hover:translate-y-[-1px] hover:bg-black"
             >
               <PaperPlaneTilt size={18} weight="regular" />
               <span>Send an Invite</span>

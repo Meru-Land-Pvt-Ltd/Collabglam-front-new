@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -10,16 +10,46 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { ProfileHeader } from './detail-panel/ProfileHeader';
-import { StatsChart } from './detail-panel/StatsChart';
-import { ContentBreakdown } from './detail-panel/ContentBreakdown';
-import { PopularPosts } from './detail-panel/PopularPosts';
-import { AboutSection } from './detail-panel/AboutSection';
-import { AudienceDistribution } from './detail-panel/AudienceDistribution';
-import { BrandAffinity } from './detail-panel/BrandAffinity';
-import { MiniUserSection } from './detail-panel/MiniUserSection';
-import type { ReportResponse, StatHistoryEntry, Platform } from './types';
+import type { ReportResponse, Platform } from './types';
 import { post, post2 } from '@/lib/api';
+
+import { AuditTrailTable } from '@/components/common/AuditTrailTable';
+import { AudienceIntelligenceCard } from '@/components/common/AudienceIntelligenceCard';
+import { CampaignHighlightsCard } from '@/components/common/CampaignHighlightsCard';
+import { ContactManagementCard } from '@/components/common/ContactManagementCard';
+import { CreatorHeader } from '@/components/common/CreatorHeader';
+import { FeatureLockedCard } from '@/components/common/FeatureLockedCard';
+import { LookalikeCreatorsPanel } from '@/components/common/LookalikeCreatorsPanel';
+import { MetricsGrid } from '@/components/common/MetricsGrid';
+import { PastCollaborationsTable } from '@/components/common/PastCollaborations';
+import { PerformanceTrendCard } from '@/components/common/PerformanceTrendCard';
+import { PopularContentPanel } from '@/components/common/PopularContentPanel';
+import { RecentPostsTable } from '@/components/common/RecentPostsTable';
+import { RiskComplianceCard } from '@/components/common/RiskComplienceCard';
+
+import {
+  type AuditItem,
+  type CampaignHighlight,
+  type DashboardMetric,
+  type InfluencerReport,
+  type LookalikeCreator,
+  type MediaKit,
+  type ModashLookalike,
+  SectionKey,
+  type SocialPost,
+  type SubscriptionPlan,
+  type UserRole,
+  average,
+  canAccessSection,
+  enrichPostImages,
+  formatCompactNumber,
+  formatPercent,
+  getSubscriptionPlan,
+  getUserRole,
+  normaliseTrend,
+  pickPostImage,
+  toNumber,
+} from '@/components/common/ViewModashClient';
 
 interface DetailPanelProps {
   open: boolean;
@@ -37,7 +67,6 @@ interface DetailPanelProps {
   onRefreshReport?: () => Promise<void> | void;
 }
 
-/** /email/status response shape */
 type EmailStatusResponse =
   | {
       status: 0 | 1;
@@ -47,7 +76,6 @@ type EmailStatusResponse =
     }
   | { status: 'error'; message?: string };
 
-/** /emails/invitation response shape */
 type InvitationResponse =
   | {
       status: 'success';
@@ -64,14 +92,13 @@ type InvitationResponse =
         subject: string;
         campaignId: string | null;
       };
-      // no roomId here anymore – no chat room creation
     }
   | {
       status: 'success';
       message: string;
       isExistingInfluencer: false;
       brandName: string;
-      invitationId: string; // still useful if you want to open /brand/email
+      invitationId: string;
       emailSent: boolean;
       emailMeta?: {
         recipientEmail: string;
@@ -87,7 +114,6 @@ type InvitationResponse =
       message: string;
     };
 
-/** /admin/checkstatus response shape */
 type AdminCheckStatusResponse = {
   status: 0 | 1;
   handle?: string;
@@ -96,7 +122,6 @@ type AdminCheckStatusResponse = {
   message?: string;
 };
 
-/** /invitation/create response shape */
 type InvitationCreateResp = {
   status: 'saved' | 'exists';
   data?: {
@@ -112,7 +137,6 @@ type InvitationCreateResp = {
   message?: string;
 };
 
-/** /missing/create response shape */
 type CreateMissingResp = {
   status: 'saved' | 'exists';
   data: {
@@ -126,6 +150,208 @@ type CreateMissingResp = {
   message?: string;
 };
 
+const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function normalizePlatform(platform: Platform | null): 'instagram' | 'tiktok' | 'youtube' {
+  const value = String(platform ?? '').toLowerCase();
+  if (value.includes('tiktok')) return 'tiktok';
+  if (value.includes('youtube')) return 'youtube';
+  return 'instagram';
+}
+
+function mapReportPost(post: Record<string, any>): SocialPost {
+  const resolvedImage = pickPostImage(post);
+
+  return {
+    text: post?.text ?? post?.caption ?? post?.title,
+    type: post?.type ?? post?.contentType,
+    url: post?.url,
+    image: resolvedImage,
+    thumbnail: resolvedImage,
+    likes: post?.likes,
+    views: post?.views ?? post?.plays ?? post?.videoViews ?? post?.likes,
+    plays: post?.plays ?? post?.videoViews,
+    comments: post?.comments,
+    sponsors: Array.isArray(post?.sponsors)
+      ? post.sponsors.map((s: Record<string, any>) => ({
+          name: s?.name ?? s?.username,
+        }))
+      : [],
+    createdAt: post?.created ?? post?.createdAt ?? post?.publishedAt,
+    publishedAt: post?.publishedAt ?? post?.created ?? post?.createdAt,
+    postedAt: post?.postedAt ?? post?.created ?? post?.createdAt,
+    date: post?.date ?? post?.created ?? post?.createdAt,
+    created: post?.created ?? post?.createdAt,
+  };
+}
+
+function parseMonthLabel(value: string, index: number): string {
+  if (!value) return monthLabels[index % 12];
+  const parts = value.split('-');
+  if (parts.length >= 2) {
+    const year = parts[0];
+    const month = Number(parts[1]);
+    if (month >= 1 && month <= 12) {
+      return `${monthLabels[month - 1]} ${year.slice(2)}`;
+    }
+  }
+  return value;
+}
+
+function transformPanelLookalikes(
+  lookalikes: ModashLookalike[] = [],
+  engagementRate: number
+): LookalikeCreator[] {
+  return lookalikes.slice(0, 4).map((item) => ({
+    id: item.userId,
+    name: item.fullname ?? item.username,
+    handle: `@${item.username}`,
+    followers: formatCompactNumber(item.followers),
+    engagement:
+      item.followers > 0
+        ? formatPercent((item.engagements / item.followers) * 100)
+        : formatPercent(engagementRate, true),
+    avatar: item.picture,
+    url: item.url,
+  }));
+}
+
+function buildPrimaryReport(
+  data: ReportResponse | null,
+  raw: any,
+  platform: Platform | null,
+  handle: string | null
+): InfluencerReport | null {
+  const source = raw?.profile ?? data?.profile;
+  if (!source) return null;
+
+  const profileRoot = source?.profile ?? {};
+  const audience = source?.audience ?? {};
+  const normalizedPlatform = normalizePlatform(platform);
+
+  const username =
+    profileRoot?.username ??
+    profileRoot?.handle ??
+    source?.username ??
+    source?.handle ??
+    (handle ? handle.replace(/^@/, '') : undefined);
+
+  const mapPosts = (items: any[] | undefined) =>
+    Array.isArray(items) ? items.map(mapReportPost) : [];
+
+  const recentPosts =
+    mapPosts(source?.recentPosts).length > 0
+      ? mapPosts(source?.recentPosts)
+      : mapPosts(source?.posts).length > 0
+        ? mapPosts(source?.posts)
+        : mapPosts(profileRoot?.recentPosts).length > 0
+          ? mapPosts(profileRoot?.recentPosts)
+          : mapPosts(profileRoot?.posts);
+
+  return {
+    modashId: source?.userId ?? source?.modashId,
+    provider: normalizedPlatform,
+    url: profileRoot?.url ?? source?.url,
+    name: profileRoot?.fullname ?? source?.name ?? profileRoot?.username ?? username,
+    fullname: profileRoot?.fullname ?? source?.fullname,
+    picture: profileRoot?.picture ?? source?.picture,
+    bio: source?.bio,
+    username,
+    handle: username ? `@${String(username).replace(/^@/, '')}` : undefined,
+    followers: profileRoot?.followers ?? source?.followers ?? source?.subscribers,
+    engagementRate: profileRoot?.engagementRate ?? source?.engagementRate,
+    country: source?.country,
+    language:
+      typeof source?.language === 'string'
+        ? { name: source.language }
+        : source?.language?.name
+          ? { name: source.language.name }
+          : Array.isArray(audience?.languages) && audience.languages.length
+            ? { name: audience.languages[0]?.name ?? audience.languages[0]?.code }
+            : undefined,
+    hashtags: Array.isArray(source?.hashtags)
+      ? source.hashtags.map((item: Record<string, any>) => ({ tag: item?.tag }))
+      : [],
+    popularPosts:
+      mapPosts(source?.popularPosts).length > 0
+        ? mapPosts(source?.popularPosts)
+        : mapPosts(profileRoot?.popularPosts),
+    recentPosts,
+    sponsoredPosts:
+      mapPosts(source?.sponsoredPosts).length > 0
+        ? mapPosts(source?.sponsoredPosts)
+        : mapPosts(profileRoot?.sponsoredPosts),
+    stats: {
+      avgLikes: {
+        value: source?.avgLikes ?? profileRoot?.avgLikes ?? source?.stats?.avgLikes?.value,
+      },
+      avgViews: {
+        value:
+          profileRoot?.averageViews ??
+          source?.avgViews ??
+          source?.avgReelsPlays ??
+          source?.stats?.avgViews?.value,
+      },
+      avgComments: {
+        value: source?.avgComments ?? profileRoot?.avgComments ?? source?.stats?.avgComments?.value,
+      },
+      followers: {
+        value: profileRoot?.followers ?? source?.followers ?? source?.stats?.followers?.value,
+      },
+    },
+    avgLikes: source?.avgLikes ?? profileRoot?.avgLikes,
+    avgComments: source?.avgComments ?? profileRoot?.avgComments,
+    avgViews:
+      profileRoot?.averageViews ??
+      source?.avgViews ??
+      source?.avgReelsPlays,
+    avgReelsPlays: source?.avgReelsPlays ?? profileRoot?.averageViews,
+    audience: {
+      geoCountries: Array.isArray(audience?.geoCountries)
+        ? audience.geoCountries.map((item: Record<string, any>) => ({
+            name: item?.name ?? '',
+            weight: item?.weight ?? 0,
+          }))
+        : [],
+      ages: Array.isArray(audience?.ages)
+        ? audience.ages.map((item: Record<string, any>) => ({
+            code: item?.code ?? '',
+            weight: item?.weight ?? 0,
+          }))
+        : [],
+      genders: Array.isArray(audience?.genders)
+        ? audience.genders.map((item: Record<string, any>) => ({
+            code: item?.code ?? '',
+            weight: item?.weight ?? 0,
+          }))
+        : [],
+      languages: Array.isArray(audience?.languages)
+        ? audience.languages.map((item: Record<string, any>) => ({
+            code: item?.name ?? item?.code ?? '',
+            weight: item?.weight ?? 0,
+          }))
+        : [],
+      interests: Array.isArray(audience?.interests)
+        ? audience.interests.map((item: Record<string, any>) => ({
+            name: item?.name ?? '',
+            weight: item?.weight ?? 0,
+          }))
+        : [],
+      credibility: audience?.credibility,
+    },
+    isPrivate: source?.isPrivate,
+    isVerified: source?.isVerified,
+    accountType: source?.accountType,
+    postsCount: source?.postsCount ?? profileRoot?.postsCount,
+    statHistory: Array.isArray(source?.statHistory)
+      ? source.statHistory
+      : Array.isArray(source?.statsByContentType?.all?.statHistory)
+        ? source.statsByContentType.all.statHistory
+        : [],
+    lookalikes: Array.isArray(source?.lookalikes) ? source.lookalikes : [],
+  };
+}
+
 export const DetailPanel = React.memo<DetailPanelProps>(
   ({
     open,
@@ -136,7 +362,7 @@ export const DetailPanel = React.memo<DetailPanelProps>(
     raw,
     platform,
     emailExists,
-    onChangeCalc,
+    onChangeCalc: _onChangeCalc,
     brandId,
     handle,
     lastFetchedAt,
@@ -145,22 +371,28 @@ export const DetailPanel = React.memo<DetailPanelProps>(
     const router = useRouter();
     const searchParams = useSearchParams();
     const campaignId = searchParams?.get('campaignId') || '';
-    // used for both "Message Now" + "Send Invitation" actions
+
     const [sendingInvite, setSendingInvite] = useState(false);
-
-    // refresh state
     const [refreshing, setRefreshing] = useState(false);
-
-    // local copy of last updated time (ISO string)
     const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(
       lastFetchedAt || null
     );
-
-    // NEW: combined email presence from /email/status + /admin/checkstatus
     const [hasAnyEmail, setHasAnyEmail] = useState<boolean | null>(null);
     const [checkingEmail, setCheckingEmail] = useState(false);
+    const [plan, setPlan] = useState<SubscriptionPlan>('pro');
+    const [role, setRole] = useState<UserRole>('viewer');
+    const shouldLockFields = false;
 
-    // keep in sync with parent when prop changes
+    const hasSectionAccess = (_section: SectionKey) => {
+      if (!shouldLockFields) return true;
+      return canAccessSection(role, plan, _section);
+    };
+
+    useEffect(() => {
+      setPlan(getSubscriptionPlan());
+      setRole(getUserRole());
+    }, []);
+
     useEffect(() => {
       setLastUpdatedAt(lastFetchedAt || null);
     }, [lastFetchedAt]);
@@ -169,16 +401,273 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       ? new Date(lastUpdatedAt).toLocaleString()
       : 'Not fetched yet';
 
-    const statHistory = useMemo<StatHistoryEntry[]>(() => {
-      const hist = data?.profile?.statsByContentType?.all?.statHistory || [];
-      return hist?.slice(-12);
+    const primaryReport = useMemo(
+      () => buildPrimaryReport(data, raw, platform, handle),
+      [data, raw, platform, handle]
+    );
+
+    const panelMediaKit = useMemo<MediaKit | null>(() => {
+      if (!primaryReport) return null;
+      return {
+        name: primaryReport.name,
+        country: primaryReport.country,
+        influencerReports: [primaryReport],
+        socialProfiles: [primaryReport],
+        primaryInfluencerReport: primaryReport,
+      };
+    }, [primaryReport]);
+
+    const popularPosts = useMemo(() => {
+      const base =
+        Array.isArray(raw?.profile?.popularPosts) && raw.profile.popularPosts.length
+          ? raw.profile.popularPosts.map(mapReportPost)
+          : primaryReport?.popularPosts ?? [];
+
+      return enrichPostImages(base, [
+        ...(primaryReport?.recentPosts ?? []),
+        ...(primaryReport?.sponsoredPosts ?? []),
+      ]);
+    }, [raw, primaryReport]);
+
+    const sponsoredPosts = useMemo(() => {
+      const base =
+        Array.isArray(raw?.profile?.sponsoredPosts) && raw.profile.sponsoredPosts.length
+          ? raw.profile.sponsoredPosts.map(mapReportPost)
+          : primaryReport?.sponsoredPosts ?? [];
+
+      return enrichPostImages(base, [
+        ...(primaryReport?.recentPosts ?? []),
+        ...(primaryReport?.popularPosts ?? []),
+      ]);
+    }, [raw, primaryReport]);
+
+    const recentPosts = useMemo(() => {
+      const base =
+        Array.isArray(raw?.profile?.recentPosts) && raw.profile.recentPosts.length
+          ? raw.profile.recentPosts.map(mapReportPost)
+          : Array.isArray(raw?.profile?.posts) && raw.profile.posts.length
+            ? raw.profile.posts.map(mapReportPost)
+            : primaryReport?.recentPosts ?? [];
+
+      return enrichPostImages(base, [
+        ...(Array.isArray(raw?.profile?.popularPosts)
+          ? raw.profile.popularPosts.map(mapReportPost)
+          : []),
+        ...(Array.isArray(raw?.profile?.sponsoredPosts)
+          ? raw.profile.sponsoredPosts.map(mapReportPost)
+          : []),
+        ...(primaryReport?.popularPosts ?? []),
+        ...(primaryReport?.sponsoredPosts ?? []),
+      ]);
+    }, [raw, primaryReport]);
+
+    const statHistorySource = useMemo(() => {
+      const history =
+        (data?.profile as any)?.statsByContentType?.all?.statHistory ??
+        (data?.profile as any)?.statHistory ??
+        primaryReport?.statHistory ??
+        [];
+      return Array.isArray(history) ? history : [];
+    }, [data, primaryReport]);
+
+    const { organicTrend, sponsoredTrend, trendLabels } = useMemo(() => {
+      if (statHistorySource.length) {
+        const labels = statHistorySource.map((item: Record<string, any>, index: number) =>
+          parseMonthLabel(String(item?.month ?? ''), index)
+        );
+
+        const organic = normaliseTrend(
+          statHistorySource.map((item: Record<string, any>) =>
+            toNumber(item?.avgLikes ?? item?.likes ?? item?.engagements)
+          ),
+          statHistorySource.length
+        );
+
+        const sponsored = normaliseTrend(
+          statHistorySource.map((item: Record<string, any>) =>
+            toNumber(item?.avgViews ?? item?.views ?? item?.followers)
+          ),
+          statHistorySource.length
+        );
+
+        return { organicTrend: organic, sponsoredTrend: sponsored, trendLabels: labels };
+      }
+
+      return {
+        organicTrend: normaliseTrend(recentPosts.map((p) => p.views ?? p.likes ?? 0)),
+        sponsoredTrend: normaliseTrend(sponsoredPosts.map((p) => p.views ?? p.likes ?? 0)),
+        trendLabels: undefined,
+      };
+    }, [statHistorySource, recentPosts, sponsoredPosts]);
+
+    const avgLikes = toNumber(
+      (data?.profile as any)?.avgLikes ??
+        primaryReport?.stats?.avgLikes?.value ??
+        primaryReport?.avgLikes
+    );
+
+    const avgViews = toNumber(
+      (data?.profile as any)?.profile?.averageViews ??
+        (data?.profile as any)?.avgReelsPlays ??
+        primaryReport?.stats?.avgViews?.value ??
+        average(recentPosts.map((p) => toNumber(p.views ?? p.likes)))
+    );
+
+    const engagementRate = toNumber(
+      primaryReport?.engagementRate ?? (data?.profile as any)?.profile?.engagementRate
+    );
+
+    const credibilityScore = useMemo(() => {
+      const rawCredibility =
+        (data?.profile as any)?.audience?.credibility ??
+        primaryReport?.audience?.credibility;
+
+      if (rawCredibility !== undefined && rawCredibility !== null) {
+        return Math.round(Number(rawCredibility) * 100);
+      }
+
+      return Math.max(0, Math.min(97, Math.round(engagementRate * 100 || 67)));
+    }, [data, primaryReport, engagementRate]);
+
+    const metricCards = useMemo<DashboardMetric[]>(() => {
+      return [
+        {
+          key: 'followers',
+          label: 'Followers',
+          value: formatCompactNumber(primaryReport?.followers),
+        },
+        {
+          key: 'engagement',
+          label: 'Avg. engagement rate',
+          value: formatPercent(primaryReport?.engagementRate, true),
+        },
+        {
+          key: 'likes',
+          label: 'Average likes',
+          value: formatCompactNumber(avgLikes),
+        },
+        {
+          key: 'views',
+          label: 'Avg. views',
+          value: formatCompactNumber(avgViews),
+        },
+        {
+          key: 'posts',
+          label: 'Total posts',
+          value: formatCompactNumber(primaryReport?.postsCount ?? recentPosts.length),
+        },
+        {
+          key: 'reach',
+          label: 'Estimated reach',
+          value: formatCompactNumber(primaryReport?.followers),
+        },
+      ];
+    }, [primaryReport, avgLikes, avgViews, recentPosts.length]);
+
+    const campaignHighlights = useMemo<CampaignHighlight[]>(() => {
+      const sponsoredAvgLikes = average(sponsoredPosts.map((p) => toNumber(p.likes)));
+      const organicAvgLikes = average(recentPosts.map((p) => toNumber(p.likes)));
+      const topPostLikes = Math.max(...popularPosts.map((p) => toNumber(p.likes)), 0);
+
+      return [
+        {
+          label: sponsoredPosts.length ? 'Sponsored median likes' : 'Top post likes',
+          value: formatCompactNumber(sponsoredPosts.length ? sponsoredAvgLikes : topPostLikes),
+          meta: sponsoredPosts.length
+            ? `Across ${sponsoredPosts.length} sponsored posts`
+            : `Best result from ${popularPosts.length} popular posts`,
+          tone: 'accent',
+        },
+        {
+          label: 'Organic median likes',
+          value: formatCompactNumber(organicAvgLikes),
+          meta: `Across ${recentPosts.length} recent posts`,
+        },
+        {
+          label: 'Total posts',
+          value: formatCompactNumber(primaryReport?.postsCount ?? recentPosts.length),
+          meta: 'Current creator activity volume',
+        },
+        {
+          label: 'Audience credibility',
+          value: `${credibilityScore}%`,
+          meta: 'Estimated quality score',
+        },
+      ];
+    }, [sponsoredPosts, recentPosts, popularPosts, primaryReport, credibilityScore]);
+
+    const audienceAge = (primaryReport?.audience?.ages ?? []).map((item) => ({
+      label: item.code,
+      value: Number((item.weight || 0) * 100),
+    }));
+
+    const audienceGender = (primaryReport?.audience?.genders ?? []).map((item) => ({
+      label:
+        item.code === 'MALE'
+          ? 'Male'
+          : item.code === 'FEMALE'
+            ? 'Female'
+            : item.code,
+      value: Number((item.weight || 0) * 100),
+    }));
+
+    const topCountries = (primaryReport?.audience?.geoCountries ?? [])
+      .slice(0, 4)
+      .map((item) => ({
+        name: item.name,
+        value: Number((item.weight || 0) * 100),
+      }));
+
+    const topLanguages = (primaryReport?.audience?.languages ?? [])
+      .slice(0, 4)
+      .map((item) => ({
+        label: item.code,
+        value: Number((item.weight || 0) * 100),
+      }));
+
+    const lookalikeCreators = useMemo<LookalikeCreator[]>(() => {
+      if (primaryReport?.lookalikes?.length) {
+        return transformPanelLookalikes(primaryReport.lookalikes, engagementRate);
+      }
+      return [];
+    }, [primaryReport, engagementRate]);
+
+    const auditItems = useMemo<AuditItem[]>(
+      () => [
+        {
+          id: '1',
+          date: formattedLastUpdated,
+          action: 'Creator profile detail opened',
+          actor: 'Brand user',
+          status: 'Success',
+        },
+        {
+          id: '2',
+          date: formattedLastUpdated,
+          action: 'Latest report sync',
+          actor: 'System',
+          status: loading ? 'Running' : 'Success',
+        },
+      ],
+      [formattedLastUpdated, loading]
+    );
+
+    const contractedCampaigns = useMemo(() => {
+      const source = Array.isArray((data?.profile as any)?.pastCollaborations)
+        ? (data?.profile as any).pastCollaborations
+        : [];
+      return source.map((item: Record<string, any>) => ({
+        _id: item?._id,
+        company: item?.company ?? item?.brandName ?? '—',
+        brief: item?.brief ?? item?.campaignTitle ?? '—',
+        rate: item?.rate ?? item?.budget ?? '—',
+        status: item?.status ?? '—',
+        payout: item?.payout ?? item?.paymentType ?? '—',
+        category: item?.category ?? 'Lifestyle',
+        raw: item,
+      }));
     }, [data]);
 
-    /* ------------------------------------------------------------------ */
-    /*                    Helpers for email resolution                    */
-    /* ------------------------------------------------------------------ */
-
-    // type guard for /email/status success branch
     const isEmailStatusSuccess = (
       resp: EmailStatusResponse
     ): resp is {
@@ -190,11 +679,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       return typeof (resp as any)?.status === 'number';
     };
 
-    /**
-     * resolveCreatorEmail
-     * - Calls BOTH /email/status (post2) and /admin/checkstatus (post) in parallel
-     * - Returns the best email we can find + info where it came from
-     */
     const resolveCreatorEmail = async (
       safeHandle: string,
       normalizedPlatform: Platform
@@ -213,20 +697,26 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       let emailFromStatus: string | null = null;
       let emailFromAdmin: string | null = null;
 
-      // /email/status result
       if (statusResult.status === 'fulfilled') {
         const statusResp = statusResult.value;
-        if (isEmailStatusSuccess(statusResp) && statusResp.status === 1 && statusResp.email) {
+        if (
+          isEmailStatusSuccess(statusResp) &&
+          statusResp.status === 1 &&
+          statusResp.email
+        ) {
           emailFromStatus = statusResp.email;
         }
       } else {
         console.error('Error calling /email/status:', statusResult.reason);
       }
 
-      // /admin/checkstatus result
       if (adminResult.status === 'fulfilled') {
         const adminResp = adminResult.value;
-        if (typeof adminResp.status === 'number' && adminResp.status === 1 && adminResp.email) {
+        if (
+          typeof adminResp.status === 'number' &&
+          adminResp.status === 1 &&
+          adminResp.email
+        ) {
           emailFromAdmin = adminResp.email;
         }
       } else {
@@ -236,33 +726,19 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       if (emailFromStatus && emailFromAdmin && emailFromStatus === emailFromAdmin) {
         return { email: emailFromStatus, source: 'both' };
       }
-
-      if (emailFromStatus) {
-        return { email: emailFromStatus, source: 'status' };
-      }
-
-      if (emailFromAdmin) {
-        return { email: emailFromAdmin, source: 'admin' };
-      }
-
+      if (emailFromStatus) return { email: emailFromStatus, source: 'status' };
+      if (emailFromAdmin) return { email: emailFromAdmin, source: 'admin' };
       return { email: null, source: 'none' };
     };
 
-    /* ------------------------------------------------------------------ */
-    /*           Pre-check: is this handle present in ANY email DB?       */
-    /* ------------------------------------------------------------------ */
     useEffect(() => {
-      // don't run when panel closed
       if (!open) {
         setHasAnyEmail(null);
         return;
       }
 
       const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
-      if (
-        !normalizedPlatform ||
-        !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)
-      ) {
+      if (!normalizedPlatform || !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)) {
         setHasAnyEmail(null);
         return;
       }
@@ -283,35 +759,25 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       (async () => {
         try {
           const { email } = await resolveCreatorEmail(safeHandle, normalizedPlatform);
-          if (!cancelled) {
-            setHasAnyEmail(!!email); // true if ANY status api returns email
-          }
+          if (!cancelled) setHasAnyEmail(!!email);
         } catch (err) {
           console.error('Failed to pre-check email status', err);
-          if (!cancelled) {
-            setHasAnyEmail(null);
-          }
+          if (!cancelled) setHasAnyEmail(null);
         } finally {
-          if (!cancelled) {
-            setCheckingEmail(false);
-          }
+          if (!cancelled) setCheckingEmail(false);
         }
       })();
 
       return () => {
         cancelled = true;
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, handle, platform]); // we intentionally don't include resolveCreatorEmail to avoid re-creating loop
+    }, [open, handle, platform]);
 
     if (!open) return null;
 
-    const hasUserId = Boolean(data?.profile?.userId);
+    const hasUserId = Boolean((data?.profile as any)?.userId);
     const canAct = hasUserId && !loading && !sendingInvite && !refreshing;
-
-    // ✅ use merged knowledge: if ANY status api says email present, treat as "has email"
-    const effectiveHasEmail =
-      hasAnyEmail !== null ? hasAnyEmail : emailExists === true;
+    const effectiveHasEmail = hasAnyEmail !== null ? hasAnyEmail : emailExists === true;
 
     const ctaTitle = hasUserId
       ? effectiveHasEmail
@@ -319,23 +785,18 @@ export const DetailPanel = React.memo<DetailPanelProps>(
         : 'Send invitation to collect email'
       : 'Profile not ready';
 
-    const headerProfile = data?.profile?.profile;
     const displayName =
-      headerProfile?.fullname ||
-      headerProfile?.username ||
-      headerProfile?.handle ||
-      handle ||
+      primaryReport?.name ??
+      primaryReport?.fullname ??
+      primaryReport?.username ??
+      handle ??
       'Creator profile';
 
     const displayHandle =
-      headerProfile?.handle ||
-      headerProfile?.username ||
-      (handle && (handle.startsWith('@') ? handle : `@${handle}`)) ||
+      primaryReport?.handle ??
+      (handle && (handle.startsWith('@') ? handle : `@${handle}`)) ??
       '';
 
-    /* ------------------------------------------------------------------ */
-    /*                          Refresh Modash data                       */
-    /* ------------------------------------------------------------------ */
     const handleRefreshData = async (e: React.MouseEvent) => {
       e.preventDefault();
       if (!onRefreshReport || refreshing) return;
@@ -369,15 +830,8 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       }
 
       const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
-      if (
-        !normalizedPlatform ||
-        !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)
-      ) {
-        await Swal.fire(
-          'Unsupported platform',
-          'Unsupported or missing platform.',
-          'warning'
-        );
+      if (!normalizedPlatform || !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)) {
+        await Swal.fire('Unsupported platform', 'Unsupported or missing platform.', 'warning');
         return;
       }
 
@@ -398,7 +852,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       try {
         setSendingInvite(true);
 
-        // 1) Resolve email from both DBs
         const { email: creatorEmail } = await resolveCreatorEmail(
           safeHandle,
           normalizedPlatform
@@ -413,7 +866,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
           return;
         }
 
-        // 2) Call /emails/invitation → backend now ONLY sends email (no chat room)
         const resp = await post<InvitationResponse>('/emails/invitation', {
           email: creatorEmail,
           brandId,
@@ -431,16 +883,12 @@ export const DetailPanel = React.memo<DetailPanelProps>(
           return;
         }
 
-        // 3) Handle error branch from backend
         if (resp.status === 'error') {
           await Swal.fire('Error', resp.message || 'Failed to send email.', 'error');
           return;
         }
 
-        // 4) Success → friendly, high-level messages only
-        const successTitle = resp.isExistingInfluencer
-          ? 'Message sent'
-          : 'Invitation sent';
+        const successTitle = resp.isExistingInfluencer ? 'Message sent' : 'Invitation sent';
 
         const successText = resp.isExistingInfluencer
           ? 'We’ve emailed this creator. They can reply directly and continue the conversation with your brand.'
@@ -461,10 +909,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       }
     };
 
-    /* ------------------------------------------------------------------ */
-    /*                Send Invitation (no email anywhere)                 */
-    /*      → NOW also writes to /invitation/create (status=invited)      */
-    /* ------------------------------------------------------------------ */
     const handleSendInvitation = async (e: React.MouseEvent) => {
       e.preventDefault();
       if (!canAct || sendingInvite) return;
@@ -484,18 +928,13 @@ export const DetailPanel = React.memo<DetailPanelProps>(
         );
         return;
       }
+
       const normalizedPlatform = (platform ?? '').toLowerCase() as Platform;
-      if (
-        !normalizedPlatform ||
-        !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)
-      ) {
-        await Swal.fire(
-          'Unsupported platform',
-          'Unsupported or missing platform.',
-          'warning'
-        );
+      if (!normalizedPlatform || !['youtube', 'instagram', 'tiktok'].includes(normalizedPlatform)) {
+        await Swal.fire('Unsupported platform', 'Unsupported or missing platform.', 'warning');
         return;
       }
+
       if (!safeHandle || !/^[A-Za-z0-9._-]+$/.test(safeHandle.replace(/^@/, ''))) {
         await Swal.fire(
           'Invalid handle',
@@ -522,7 +961,7 @@ export const DetailPanel = React.memo<DetailPanelProps>(
         };
 
         if (campaignId) {
-          invitationPayload.campaignId = campaignId; // ⬅️ only send if present
+          invitationPayload.campaignId = campaignId;
         }
 
         const [missingResult, invitationResult] = await Promise.allSettled([
@@ -534,26 +973,19 @@ export const DetailPanel = React.memo<DetailPanelProps>(
           post<InvitationCreateResp>('/newinvitations/create', invitationPayload),
         ]);
 
-        // Log /missing/create outcome but don't surface "Missing" to the brand
-        if (missingResult.status === 'fulfilled') {
-          console.log('Missing/create result', missingResult.value);
-        } else {
+        if (missingResult.status !== 'fulfilled') {
           console.error('Missing/create failed', missingResult.reason);
         }
 
-        // Handle /invitation/create outcome in a user-friendly way
         let invitationStatus: InvitationCreateResp['status'] | 'error' = 'error';
 
         if (invitationResult.status === 'fulfilled') {
           const resp = invitationResult.value;
           if (resp?.status === 'saved' || resp?.status === 'exists') {
             invitationStatus = resp.status;
-          } else {
-            invitationStatus = 'error';
           }
         } else {
           console.error('Invitation/create failed', invitationResult.reason);
-          invitationStatus = 'error';
         }
 
         if (invitationStatus === 'error') {
@@ -572,7 +1004,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
             'success'
           );
         } else {
-          // status === 'exists'
           await Swal.fire(
             'Already invited',
             'You’ve already sent an invitation to this creator. They’ll be able to reply once they see it.',
@@ -580,7 +1011,6 @@ export const DetailPanel = React.memo<DetailPanelProps>(
           );
         }
 
-        // After clicking OK (or closing), redirect to brand/invited
         router.push('/brand/invited');
       } catch (err: any) {
         const msg =
@@ -594,46 +1024,69 @@ export const DetailPanel = React.memo<DetailPanelProps>(
       }
     };
 
+    const handleCopy = async () => {
+      try {
+        const urlToCopy =
+          primaryReport?.url ||
+          `${window.location.origin}${window.location.pathname}${window.location.search}`;
+        await navigator.clipboard.writeText(urlToCopy);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Copied',
+          text: 'Creator profile link copied to clipboard.',
+          timer: 1600,
+          showConfirmButton: false,
+        });
+      } catch (copyError) {
+        console.error('Failed to copy profile link:', copyError);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Copy failed',
+          text: 'Unable to copy the profile link.',
+        });
+      }
+    };
+
     const showRefreshButton = Boolean(onRefreshReport);
 
     return (
       <div className="fixed inset-0 z-[90]">
         <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-        <div className="absolute top-0 right-0 h-full w-full md:w-[50vw] bg-white shadow-2xl border-l rounded-none md:rounded-l-3xl overflow-y-auto">
-          {/* Top Bar */}
-          <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b flex items-center gap-3 px-4 py-3">
-            {/* Left: Close + creator summary */}
-            <button
-              onClick={onClose}
-              className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm hover:bg-gray-50 transition-colors flex-shrink-0"
-            >
-              <ArrowLeft className="h-4 w-4" /> Close
-            </button>
+        <div className="absolute right-0 top-0 h-full w-full overflow-y-auto border-l bg-white shadow-2xl md:w-[72vw] xl:w-[64vw] rounded-none md:rounded-l-3xl">
+          <div className="sticky top-0 z-10 border-b bg-white/90 px-4 py-3 backdrop-blur">
+            <div className="flex items-start gap-3">
+              <button
+                onClick={onClose}
+                className="inline-flex flex-shrink-0 items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm transition-colors hover:bg-gray-50"
+              >
+                <ArrowLeft className="h-4 w-4" /> Close
+              </button>
 
-            <div className="min-w-0 flex flex-col gap-0.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-semibold text-gray-900 truncate">
-                  {displayName}
-                </span>
-                {displayHandle && (
-                  <span className="text-xs text-gray-500 truncate">
-                    {displayHandle}
+              <div className="min-w-0 flex flex-col gap-0.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-gray-900">
+                    {displayName}
                   </span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {platform && (
-                  <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-700">
-                    {platform}
-                  </span>
-                )}
-              </div>
-            </div>
+                  {displayHandle ? (
+                    <span className="truncate text-xs text-gray-500">
+                      {displayHandle}
+                    </span>
+                  ) : null}
+                </div>
 
-            {/* Right: controls */}
-            <div className="ml-auto flex flex-col items-end gap-1 sm:flex-row sm:items-center">
-              {/* last updated + refresh + CTA */}
-              <div className="flex flex-col items-end gap-1 sm:items-end sm:ml-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {platform ? (
+                    <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-700">
+                      {platform}
+                    </span>
+                  ) : null}
+                  {checkingEmail ? (
+                    <span className="text-[11px] text-gray-500">Checking email…</span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="ml-auto flex flex-col items-end gap-2">
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col items-end">
                     <span className="text-[10px] uppercase tracking-wide text-gray-500">
@@ -644,7 +1097,7 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                     </span>
                   </div>
 
-                  {showRefreshButton && (
+                  {showRefreshButton ? (
                     <button
                       type="button"
                       onClick={handleRefreshData}
@@ -656,22 +1109,20 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                       />
                       {refreshing ? 'Refreshing…' : 'Refresh data'}
                     </button>
-                  )}
+                  ) : null}
                 </div>
 
-                {/* CTA row */}
                 <div className="flex items-center gap-2">
                   {effectiveHasEmail ? (
                     <button
                       onClick={handleMessageNow}
                       disabled={!canAct}
                       title={ctaTitle}
-                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
-                        ${
-                          canAct
-                            ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
-                            : 'bg-gray-300 cursor-not-allowed opacity-70'
-                        }`}
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-opacity ${
+                        canAct
+                          ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
+                          : 'cursor-not-allowed bg-gray-300 opacity-70'
+                      }`}
                     >
                       {sendingInvite ? (
                         <>
@@ -690,12 +1141,11 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                       onClick={handleSendInvitation}
                       disabled={!canAct}
                       title={ctaTitle}
-                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white transition-opacity shadow-sm
-                        ${
-                          canAct
-                            ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
-                            : 'bg-gray-300 cursor-not-allowed opacity-70'
-                        }`}
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-opacity ${
+                        canAct
+                          ? 'bg-gradient-to-r from-[#FFA135] to-[#FF7236] hover:opacity-90'
+                          : 'cursor-not-allowed bg-gray-300 opacity-70'
+                      }`}
                     >
                       {sendingInvite ? (
                         <>
@@ -715,77 +1165,124 @@ export const DetailPanel = React.memo<DetailPanelProps>(
             </div>
           </div>
 
-          {/* Body */}
           <div className="p-5">
-            {loading && <LoadingState />}
-            {error && <ErrorState error={error} />}
+            {loading ? <LoadingState /> : null}
+            {error ? <ErrorState error={error} /> : null}
 
-            {!loading && !error && !data && (
+            {!loading && !error && !primaryReport ? (
               <div className="mb-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-xs text-gray-600">
-                No report data yet. Try refreshing data or selecting another
-                creator.
+                No report data yet. Try refreshing data or selecting another creator.
               </div>
-            )}
+            ) : null}
 
-            {data && (
+            {!loading && !error && primaryReport ? (
               <div className="space-y-6">
-                <ProfileHeader profile={data.profile} platform={platform} />
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Left Column */}
-                  <div className="lg:col-span-2 space-y-6">
-                    <StatsChart statHistory={statHistory} />
-                    <ContentBreakdown data={data} platform={platform} />
-                    {data.profile.popularPosts &&
-                      data.profile.popularPosts.length > 0 && (
-                        <PopularPosts
-                          posts={data.profile.popularPosts.slice(0, 12)}
-                        />
-                      )}
-                    {data.profile.notableUsers &&
-                      data.profile.notableUsers.length > 0 && (
-                        <MiniUserSection
-                          title="Notable followers"
-                          users={data.profile.notableUsers}
-                        />
-                      )}
+                <CreatorHeader
+                  primaryReport={primaryReport}
+                  mediaKit={panelMediaKit}
+                  activePlan={plan}
+                  isVerified={primaryReport.isVerified}
+                  accountType={primaryReport.accountType}
+                  postsCount={primaryReport.postsCount}
+                />
 
-                    {data.profile.lookalikes &&
-                      data.profile.lookalikes.length > 0 && (
-                        <MiniUserSection
-                          title="Lookalikes"
-                          users={data.profile.lookalikes}
-                        />
-                      )}
+                <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+                  <div className="space-y-6">
+                    {hasSectionAccess('contactManagement') ? (
+                      <ContactManagementCard
+                        primaryReport={primaryReport}
+                        mediaKit={panelMediaKit}
+                        onCopy={handleCopy}
+                      />
+                    ) : null}
 
-                    {data.profile.lookalikesByTopics &&
-                      data.profile.lookalikesByTopics.length > 0 && (
-                        <MiniUserSection
-                          title="Lookalikes by topic"
-                          users={data.profile.lookalikesByTopics}
-                        />
-                      )}
-
-                    {data.profile.audienceLookalikes &&
-                      data.profile.audienceLookalikes.length > 0 && (
-                        <MiniUserSection
-                          title="Audience lookalikes"
-                          users={data.profile.audienceLookalikes}
-                        />
-                      )}
+                    {hasSectionAccess('riskCompliance') ? (
+                      <RiskComplianceCard
+                        credibilityScore={credibilityScore}
+                        isPrivate={primaryReport.isPrivate}
+                      />
+                    ) : (
+                      <FeatureLockedCard
+                        title="Risk & Compliance Monitoring"
+                        plan="starter"
+                      />
+                    )}
                   </div>
 
-                  {/* Right Column */}
                   <div className="space-y-6">
-                    <AboutSection profile={data.profile} />
-                    <AudienceDistribution audience={data.profile.audience} />
-                    {data.profile.brandAffinity &&
-                      data.profile.brandAffinity.length > 0 && (
-                        <BrandAffinity items={data.profile.brandAffinity} />
-                      )}
+                    {hasSectionAccess('metricGrid') ? (
+                      <MetricsGrid metrics={metricCards} />
+                    ) : null}
+
+                    {hasSectionAccess('performanceTrend') ? (
+                      <PerformanceTrendCard
+                        organicTrend={organicTrend}
+                        sponsoredTrend={sponsoredTrend}
+                        trendLabels={trendLabels}
+                      />
+                    ) : (
+                      <FeatureLockedCard title="Performance Trend" plan="starter" />
+                    )}
                   </div>
                 </div>
+
+                <div className="space-y-6">
+                  {hasSectionAccess('campaignHighlights') ? (
+                    <CampaignHighlightsCard items={campaignHighlights} />
+                  ) : (
+                    <FeatureLockedCard
+                      title="Campaign Performance Highlights"
+                      plan="pro"
+                    />
+                  )}
+
+                  {hasSectionAccess('audienceIntelligence') ? (
+                    <AudienceIntelligenceCard
+                      ageData={audienceAge}
+                      genderData={audienceGender}
+                      topCountries={topCountries}
+                      credibilityScore={credibilityScore}
+                      topLanguages={topLanguages}
+                    />
+                  ) : (
+                    <FeatureLockedCard title="Audience Intelligence" plan="pro" />
+                  )}
+
+                  <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_420px]">
+                    {hasSectionAccess('recentPosts') ? (
+                      <RecentPostsTable posts={recentPosts.slice(0, 4)} />
+                    ) : (
+                      <FeatureLockedCard
+                        title="Recent Posts Performance"
+                        plan="free"
+                      />
+                    )}
+
+                    {hasSectionAccess('popularContent') ? (
+                      <PopularContentPanel posts={popularPosts.slice(0, 2)} />
+                    ) : (
+                      <FeatureLockedCard title="Popular Content" plan="starter" />
+                    )}
+                  </div>
+
+                  {contractedCampaigns.length ? (
+                    <PastCollaborationsTable items={contractedCampaigns} />
+                  ) : null}
+
+                  {hasSectionAccess('lookalikeCreators') ? (
+                    <LookalikeCreatorsPanel items={lookalikeCreators} />
+                  ) : (
+                    <FeatureLockedCard title="Lookalike Creators" plan="pro" />
+                  )}
+
+                  {hasSectionAccess('auditTrail') ? (
+                    <AuditTrailTable items={auditItems} />
+                  ) : (
+                    <FeatureLockedCard title="Audit Trail" plan="enterprise" />
+                  )}
+                </div>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -798,15 +1295,15 @@ DetailPanel.displayName = 'DetailPanel';
 const LoadingState: React.FC = () => (
   <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-600">
     <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-      <BarChart3 className="h-8 w-8 text-orange-600 animate-pulse" />
+      <BarChart3 className="h-8 w-8 animate-pulse text-orange-600" />
     </div>
     <div className="text-lg font-semibold">Fetching report…</div>
   </div>
 );
 
 const ErrorState: React.FC<{ error: string }> = ({ error }) => (
-  <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700 text-sm flex items-start gap-2">
-    <AlertCircle className="h-5 w-5 mt-0.5" />
+  <div className="mb-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+    <AlertCircle className="mt-0.5 h-5 w-5" />
     <div>
       <div className="font-semibold">Limit Reached</div>
       <div>{error}</div>

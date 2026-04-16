@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 
 import InfluencerDetailFullPage from '../InfluencerDetailFullPage';
 import { useInfluencerReport } from '@/app/brand/(protected)/browse-influencer/useInfluencerReport';
@@ -9,90 +9,66 @@ import { useEmailStatus } from '@/app/brand/(protected)/browse-influencer/useEma
 import type { Platform } from '@/app/brand/(protected)/browse-influencer/types';
 
 export default function InfluencerDetailPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
 
+  // userId comes from /mediakit/[id]
   const userId = params?.id ? decodeURIComponent(String(params.id)) : '';
 
   const qpPlatform = (searchParams?.get('platform') || '').toLowerCase() as Platform;
-  const platform: Platform = ['youtube', 'instagram', 'tiktok'].includes(qpPlatform)
-    ? qpPlatform
-    : 'youtube';
+  const platform: Platform =
+    ['youtube', 'instagram', 'tiktok'].includes(qpPlatform) ? qpPlatform : 'youtube';
 
   const handleParam = searchParams?.get('handle') || '';
   const handle = handleParam ? String(handleParam) : null;
-
-  const noProfileCredit =
-    searchParams?.get('np') === '1' || searchParams?.get('np') === 'true';
 
   const [brandId, setBrandId] = useState('');
   const [adminId, setAdminId] = useState('');
   const [authChecked, setAuthChecked] = useState(false);
   const [authRole, setAuthRole] = useState<'brand' | 'admin' | ''>('');
 
+  // Allow public mediakit view.
+  // If brandId/adminId exists, use it.
+  // If not, continue without auth and send np=1 while fetching report.
   useEffect(() => {
     const storedBrandId = (localStorage.getItem('brandId') || '').trim();
     const storedAdminId = (localStorage.getItem('adminId') || '').trim();
-
-    // ✅ public/no-credit view
-    if (noProfileCredit) {
-      if (storedBrandId) {
-        setBrandId(storedBrandId);
-        setAdminId('');
-        setAuthRole('brand');
-      } else if (storedAdminId) {
-        setBrandId('');
-        setAdminId(storedAdminId);
-        setAuthRole('admin');
-      } else {
-        setBrandId('');
-        setAdminId('');
-        setAuthRole('');
-      }
-
-      setAuthChecked(true);
-      return;
-    }
-
-    // ✅ normal protected flow
-    if (!storedBrandId && !storedAdminId) {
-      router.replace(`/brand/login?next=${encodeURIComponent(pathname)}`);
-      return;
-    }
 
     if (storedBrandId) {
       setBrandId(storedBrandId);
       setAdminId('');
       setAuthRole('brand');
-    } else {
+    } else if (storedAdminId) {
       setBrandId('');
       setAdminId(storedAdminId);
       setAuthRole('admin');
+    } else {
+      setBrandId('');
+      setAdminId('');
+      setAuthRole('');
     }
 
     setAuthChecked(true);
-  }, [router, pathname, noProfileCredit]);
+  }, []);
 
   const [calculationMethod, setCalculationMethod] = useState<'median' | 'average'>('average');
 
   const { report, rawReport, loading, error, lastFetchedAt, fetchReport } = useInfluencerReport();
   const { exists: emailExists, checkStatus } = useEmailStatus();
 
+  const shouldSendNp = !brandId && !adminId;
+
+  // load report
   useEffect(() => {
     if (!authChecked) return;
     if (!userId) return;
 
-    const reportOptions: any = {
+    fetchReport(userId, platform, calculationMethod, {
       brandId: brandId || undefined,
       adminId: adminId || undefined,
-      np: noProfileCredit ? '1' : undefined,
-      ...(authRole ? { role: authRole } : {}),
-    };
-
-    fetchReport(userId, platform, calculationMethod, reportOptions);
+      role: authRole === 'admin' ? 'admin' : authRole === 'brand' ? 'brand' : undefined,
+      np: shouldSendNp ? '1' : undefined,
+    });
 
     if (handle) {
       const safeHandle = handle.startsWith('@') ? handle : `@${handle}`;
@@ -108,22 +84,21 @@ export default function InfluencerDetailPage() {
     brandId,
     adminId,
     authRole,
-    noProfileCredit,
+    shouldSendNp,
   ]);
 
+  // refresh report
   const onRefreshReport = useCallback(async () => {
     if (!userId) return;
 
-    const reportOptions: any = {
+    await fetchReport(userId, platform, calculationMethod, {
       brandId: brandId || undefined,
       adminId: adminId || undefined,
-      np: noProfileCredit ? '1' : undefined,
+      role: authRole === 'admin' ? 'admin' : authRole === 'brand' ? 'brand' : undefined,
       forceRefresh: true,
-      ...(authRole ? { role: authRole } : {}),
-    };
-
-    await fetchReport(userId, platform, calculationMethod, reportOptions);
-  }, [userId, platform, calculationMethod, fetchReport, brandId, adminId, authRole, noProfileCredit]);
+      np: shouldSendNp ? '1' : undefined,
+    });
+  }, [userId, platform, calculationMethod, fetchReport, brandId, adminId, authRole, shouldSendNp]);
 
   if (!authChecked) return null;
   if (!userId) return null;
