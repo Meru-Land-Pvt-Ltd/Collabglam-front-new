@@ -5,7 +5,7 @@ export function RiskComplianceCard({
   credibilityScore,
   isPrivate,
 }: {
-  credibilityScore: number;
+  credibilityScore: number | null;
   isPrivate?: boolean;
 }) {
   return (
