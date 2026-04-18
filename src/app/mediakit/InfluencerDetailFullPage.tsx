@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   AlertCircle,
@@ -12,6 +12,7 @@ import {
   Send,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { LockKeyOpenIcon } from '@phosphor-icons/react';
 
 import type { Platform, ReportResponse } from '../brand/(protected)/browse-influencer/types';
 import { post } from '@/lib/api';
@@ -316,6 +317,28 @@ function normalizePost(post: any): SocialPost {
   };
 }
 
+function isSponsoredContentPost(post: SocialPost): boolean {
+  const text = String(post?.text ?? '').toLowerCase();
+  const sponsorNames = (post?.sponsors ?? [])
+    .map((s) => String(s?.name ?? '').toLowerCase())
+    .join(' ');
+  const haystack = `${text} ${sponsorNames}`;
+
+  return [
+    '#ad',
+    '#ads',
+    '#sponsored',
+    '#invited',
+    '#gifted',
+    '#partner',
+    'paid partnership',
+    'sponsored by',
+    'partner',
+    'invited',
+    'gifted',
+  ].some((marker) => haystack.includes(marker));
+}
+
 function toNormalizedPosts(input: unknown): SocialPost[] {
   if (!Array.isArray(input)) return [];
 
@@ -496,6 +519,18 @@ function transformLookalikes(lookalikes: ModashLookalike[], engagementRate: numb
   }));
 }
 
+function hasAudienceInsights(report?: InfluencerReportShape | null): boolean {
+  if (!report?.audience) return false;
+
+  return Boolean(
+    report.audience.ages?.length ||
+    report.audience.genders?.length ||
+    report.audience.geoCountries?.length ||
+    report.audience.languages?.length ||
+    report.audience.credibility !== undefined
+  );
+}
+
 function toInfluencerReportShape(
   source: any,
   fallbackPlatform: SupportedPlatform
@@ -652,7 +687,13 @@ function toInfluencerReportShape(
     avgLikes,
     avgComments,
     avgViews,
-    avgReelsPlays: source?.avgReelsPlays ?? root?.avgReelsPlays,
+    avgReelsPlays:
+      source?.avgReelsPlays ??
+      root?.avgReelsPlays ??
+      source?.avgViews ??
+      root?.averageViews ??
+      root?.avgViews ??
+      stats?.avgViews?.value,
     audience: audience
       ? {
         geoCountries: Array.isArray(audience?.geoCountries)
@@ -708,6 +749,89 @@ function toInfluencerReportShape(
   };
 }
 
+
+function AccessBlurSection({
+  unlocked,
+  showPrompt = false,
+  title = 'Unlock the complete profile',
+  subtitle = 'Log in to explore the full creator profile, premium analytics, and private collaboration details.',
+  onUnlock,
+  children,
+}: {
+  unlocked: boolean;
+  showPrompt?: boolean;
+  title?: string;
+  subtitle?: string;
+  onUnlock?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <div
+        className={
+          unlocked
+            ? ''
+            : 'pointer-events-none select-none overflow-hidden rounded-[28px]'
+        }
+      >
+        <div className={unlocked ? '' : 'blur-[10px] opacity-75 saturate-[0.9]'}>
+          {children}
+        </div>
+      </div>
+
+      {!unlocked ? (
+        <div className="absolute inset-0 z-10 rounded-[28px] bg-[#fff8e8]/38 backdrop-blur-[2px]">
+          {showPrompt ? (
+            <div className="flex h-full items-center justify-center">
+              <div
+                className="mx-6 max-w-sm rounded-[28px] border border-[#ead28a] px-7 py-6 text-center shadow-[0_24px_70px_rgba(183,145,35,0.14)]"
+                style={{
+                  background:
+                    'linear-gradient(156.55deg, #FFFBF04D 0%, #FBFAF9FF 50%, #FDF2FC33 100%)',
+                }}
+              >
+                <div className="mb-4 flex justify-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#e6c968] bg-gradient-to-b from-[#fff4c7] to-[#f1d05d] shadow-[0_8px_24px_rgba(212,173,58,0.18)]">
+                    <LockKeyOpenIcon
+                      size={26}
+                      weight="duotone"
+                      className="text-[#a97c00]"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-2 text-[28px] font-semibold leading-tight text-[#b88300]">
+                  {title}
+                </div>
+
+                <div className="mx-auto max-w-[300px] text-sm leading-6 text-[#7d6b45]">
+                  {subtitle}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onUnlock}
+                  className="mt-5 inline-flex items-center justify-center rounded-full border border-[#e3c14e] bg-gradient-to-r from-[#f2d15b] to-[#e7bf43] px-5 py-2.5 text-sm font-medium text-[#5e470f] shadow-[0_10px_28px_rgba(212,173,58,0.22)]"
+                >
+                  Log in to unlock
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="absolute inset-0 rounded-[28px] bg-gradient-to-b from-white/10 via-transparent to-white/18" />
+              <div className="absolute right-5 top-5 inline-flex items-center gap-2 rounded-full border border-[#ead28a] bg-white/78 px-3 py-1.5 text-xs font-medium text-[#8c6a10] shadow-sm backdrop-blur-md">
+                <LockKeyOpenIcon size={14} weight="duotone" />
+                Premium preview
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function InfluencerDetailFullPage({
   loading,
   error,
@@ -722,11 +846,15 @@ export default function InfluencerDetailFullPage({
   viewerRole,
 }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const campaignId = searchParams?.get('campaignId') || '';
+  const accessParam = (searchParams?.get('access') || '').trim().toLowerCase();
+  const hasAdminAccess = accessParam === 'admin';
 
   const [brandId, setBrandId] = useState('');
   const [adminId, setAdminId] = useState('');
+  const [influencerId, setInfluencerId] = useState('');
   const [sendingInvite, setSendingInvite] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -737,6 +865,19 @@ export default function InfluencerDetailFullPage({
   const [calculationMethod, setCalculationMethod] = useState<'median' | 'average'>('average');
   const [activePlatform, setActivePlatform] = useState<SupportedPlatform>(normalisePlatform(platform));
   const [activeReport, setActiveReport] = useState<InfluencerReportShape | null>(null);
+  const effectiveViewerRole: 'brand' | 'admin' | '' = hasAdminAccess ? 'admin' : (viewerRole ?? '');
+
+  const hasBrandAccess = Boolean((brandId || '').trim());
+  const hasAdminStoredAccess = Boolean((adminId || '').trim());
+  const hasInfluencerAccess = Boolean((influencerId || '').trim());
+
+  const canViewRestrictedSections =
+    hasAdminAccess ||
+    hasAdminStoredAccess ||
+    hasBrandAccess ||
+    hasInfluencerAccess ||
+    effectiveViewerRole === 'admin' ||
+    effectiveViewerRole === 'brand';
   const showContactManagementCard = useMemo(() => {
     const hasBrandId = Boolean((brandId || '').trim());
     const hasAdminId = Boolean((adminId || '').trim());
@@ -745,18 +886,25 @@ export default function InfluencerDetailFullPage({
       typeof window !== 'undefined' &&
       Boolean((localStorage.getItem('influencerId') || '').trim());
 
-    return hasAdminId || (!hasBrandId && hasInfluencerId);
-  }, [brandId, adminId]);
+    return hasAdminAccess || hasAdminId || (!hasBrandId && hasInfluencerId);
+  }, [brandId, adminId, hasAdminAccess]);
 
   const showLookalikeCreators = useMemo(() => {
-    return Boolean((adminId || '').trim());
-  }, [adminId]);
+    return (
+      hasAdminAccess ||
+      Boolean((adminId || '').trim()) ||
+      Boolean((brandId || '').trim())
+    );
+  }, [brandId, adminId, hasAdminAccess]);
 
   useEffect(() => {
     const b = (localStorage.getItem('brandId') || '').trim();
     const a = (localStorage.getItem('adminId') || '').trim();
+    const i = (localStorage.getItem('influencerId') || '').trim();
+
     setBrandId(b);
     setAdminId(a);
+    setInfluencerId(i);
   }, []);
 
   useEffect(() => {
@@ -764,7 +912,7 @@ export default function InfluencerDetailFullPage({
   }, [lastFetchedAt]);
 
   const primaryReport = useMemo<InfluencerReportShape | null>(() => {
-    const source = raw?.profile ?? data?.profile;
+    const source = raw ?? data?.profile;
     if (!source) return null;
     return toInfluencerReportShape(source, normalisePlatform(platform));
   }, [raw, data, platform]);
@@ -807,6 +955,13 @@ export default function InfluencerDetailFullPage({
   }, [connectedProfiles, primaryReport, platform]);
 
   const displayedReport = activeReport ?? primaryReport ?? null;
+  const audienceReport = useMemo<InfluencerReportShape | null>(() => {
+    if (hasAudienceInsights(activeReport)) return activeReport;
+    if (hasAudienceInsights(primaryReport)) return primaryReport;
+
+    const firstProfileWithAudience = connectedProfiles.find((item) => hasAudienceInsights(item));
+    return firstProfileWithAudience ?? displayedReport;
+  }, [activeReport, primaryReport, connectedProfiles, displayedReport]);
 
   const mediaKit = useMemo<MediaKitShape>(() => {
     return {
@@ -869,13 +1024,13 @@ export default function InfluencerDetailFullPage({
   }, [displayedReport, primaryReport, data, raw, connectedProfiles]);
 
   const credibilityScore = useMemo(() => {
-    const rawCredibility = displayedReport?.audience?.credibility;
+    const rawCredibility = audienceReport?.audience?.credibility;
     if (rawCredibility !== undefined && rawCredibility !== null && Number.isFinite(Number(rawCredibility))) {
       const num = Number(rawCredibility);
       return num <= 1 ? Math.round(num * 100) : Math.round(num);
     }
     return 0;
-  }, [displayedReport]);
+  }, [audienceReport]);
 
   const totalReach = useMemo(() => {
     if (!connectedProfiles.length) return toNumber(displayedReport?.followers ?? displayedReport?.subscribers);
@@ -963,54 +1118,129 @@ export default function InfluencerDetailFullPage({
 
   const followerRangeLabel = useMemo(() => {
     const range = displayedReport?.followersRange;
-    if (range?.leftNumber || range?.rightNumber) {
-      const left = range?.leftNumber?.toLocaleString?.() ?? range?.leftNumber ?? 0;
-      const right = range?.rightNumber?.toLocaleString?.() ?? range?.rightNumber ?? 0;
-      return `${left} - ${right}`;
+    const left = Number(range?.leftNumber ?? 0);
+    const right = Number(range?.rightNumber ?? 0);
+    const followers = displayedReport?.followers ?? displayedReport?.subscribers;
+
+    if (left > 0 && right > left) {
+      return `${left.toLocaleString()} - ${right.toLocaleString()}`;
     }
-    return formatCompactNumber(displayedReport?.followers ?? displayedReport?.subscribers);
+
+    if (left > 0) {
+      return `${left.toLocaleString()}+`;
+    }
+
+    return formatCompactNumber(followers);
   }, [displayedReport]);
 
   const campaignHighlights = useMemo<CampaignHighlight[]>(() => {
-    const sponsoredAvgLikes = average(sponsoredPosts.map((p) => toNumber(p.likes)));
-    const organicAvgLikes = average(recentPosts.map((p) => toNumber(p.likes)));
-    const topPostLikes = Math.max(...popularPosts.map((p) => toNumber(p.likes)), 0);
+    const highlightPosts = recentPostsForTable.length
+      ? recentPostsForTable
+      : dedupeAndSortPosts([
+        ...recentPosts,
+        ...popularPosts,
+        ...sponsoredPosts,
+      ]);
+
+    const detectedSponsoredPosts = dedupeAndSortPosts([
+      ...sponsoredPosts,
+      ...highlightPosts.filter((post) => isSponsoredContentPost(post)),
+    ]);
+
+    const organicPosts = highlightPosts.filter(
+      (post) => !isSponsoredContentPost(post)
+    );
+
+    const fallbackAvgLikes =
+      displayedReport?.stats?.avgLikes?.value ??
+      displayedReport?.avgLikes ??
+      raw?.stats?.avgLikes?.value ??
+      raw?.avgLikes ??
+      raw?.profile?.stats?.avgLikes?.value ??
+      raw?.profile?.avgLikes ??
+      raw?.profile?.profile?.avgLikes ??
+      (data as any)?.profile?.stats?.avgLikes?.value ??
+      (data as any)?.profile?.avgLikes ??
+      (data as any)?.profile?.profile?.avgLikes;
+
+    const sponsoredAvgLikes = detectedSponsoredPosts.length
+      ? average(detectedSponsoredPosts.map((p) => toNumber(p.likes)))
+      : toNumber(fallbackAvgLikes);
+
+    const organicAvgLikes = organicPosts.length
+      ? average(organicPosts.map((p) => toNumber(p.likes)))
+      : highlightPosts.length
+        ? average(highlightPosts.map((p) => toNumber(p.likes)))
+        : toNumber(fallbackAvgLikes);
+
+    const avgVideoReachValue =
+      displayedReport?.avgReelsPlays ??
+      displayedReport?.avgViews ??
+      displayedReport?.stats?.avgViews?.value ??
+      raw?.avgReelsPlays ??
+      raw?.avgViews ??
+      raw?.stats?.avgViews?.value ??
+      raw?.profile?.avgReelsPlays ??
+      raw?.profile?.avgViews ??
+      raw?.profile?.stats?.avgViews?.value ??
+      raw?.profile?.profile?.averageViews ??
+      (data as any)?.profile?.avgReelsPlays ??
+      (data as any)?.profile?.avgViews ??
+      (data as any)?.profile?.stats?.avgViews?.value ??
+      (data as any)?.profile?.profile?.averageViews;
 
     return [
       {
-        label: sponsoredPosts.length ? 'Sponsored avg likes' : 'Top post likes',
-        value: formatCompactNumber(sponsoredPosts.length ? sponsoredAvgLikes : topPostLikes),
-        meta: sponsoredPosts.length
-          ? `Across ${sponsoredPosts.length} sponsored posts`
-          : `Best result from ${popularPosts.length} popular posts`,
+        label: 'Sponsored avg likes',
+        value: formatCompactNumber(sponsoredAvgLikes),
+        meta: detectedSponsoredPosts.length
+          ? `Across ${detectedSponsoredPosts.length} sponsored posts`
+          : 'Fallback to creator average likes',
         tone: 'accent',
       },
       {
         label: 'Organic avg likes',
         value: formatCompactNumber(organicAvgLikes),
-        meta: `Across ${recentPosts.length} recent posts`,
+        meta: organicPosts.length
+          ? `Across ${organicPosts.length} recent posts`
+          : highlightPosts.length
+            ? `Across ${highlightPosts.length} recent posts`
+            : 'Fallback to creator average likes',
       },
       {
-        label: 'Follower range',
+        label: 'Audience size',
         value: followerRangeLabel,
-        meta: 'Current creator bucket',
+        meta: 'Estimated creator bucket',
       },
       {
-        label: 'Campaigns selected',
-        value: formatCompactNumber(selectedCampaignIds.length),
-        meta: 'Ready for invite workflow',
+        label: activePlatform === 'tiktok' ? 'Avg video views' : 'Avg reel plays',
+        value: formatCompactNumber(avgVideoReachValue),
+        meta:
+          activePlatform === 'tiktok'
+            ? 'Average TikTok video reach'
+            : 'Average reel/video reach',
       },
     ];
-  }, [sponsoredPosts, recentPosts, popularPosts, followerRangeLabel, selectedCampaignIds.length]);
+  }, [
+    sponsoredPosts,
+    recentPosts,
+    recentPostsForTable,
+    popularPosts,
+    followerRangeLabel,
+    displayedReport,
+    raw,
+    data,
+    activePlatform,
+  ]);
 
   const audienceAge =
-    displayedReport?.audience?.ages?.map((item) => ({
+    audienceReport?.audience?.ages?.map((item) => ({
       label: item.code,
       value: Number((item.weight || 0) * 100),
     })) ?? [];
 
   const audienceGender =
-    displayedReport?.audience?.genders?.map((item) => ({
+    audienceReport?.audience?.genders?.map((item) => ({
       label:
         item.code === 'MALE'
           ? 'Male'
@@ -1021,13 +1251,13 @@ export default function InfluencerDetailFullPage({
     })) ?? [];
 
   const topCountries =
-    displayedReport?.audience?.geoCountries?.slice(0, 4).map((item) => ({
+    audienceReport?.audience?.geoCountries?.slice(0, 4).map((item) => ({
       name: item.name,
       value: Number((item.weight || 0) * 100),
     })) ?? [];
 
   const topLanguages =
-    displayedReport?.audience?.languages?.slice(0, 4).map((item) => ({
+    audienceReport?.audience?.languages?.slice(0, 4).map((item) => ({
       label: item.code,
       value: Number((item.weight || 0) * 100),
     })) ?? [];
@@ -1066,7 +1296,7 @@ export default function InfluencerDetailFullPage({
         id: '2',
         date: lastSync,
         action: 'Media kit viewed',
-        actor: viewerRole === 'admin' ? 'Admin' : 'Brand',
+        actor: effectiveViewerRole === 'admin' ? 'Admin' : 'Brand',
         status: 'Success',
       },
       {
@@ -1077,12 +1307,12 @@ export default function InfluencerDetailFullPage({
         status: 'Success',
       },
     ];
-  }, [lastFetchedAt, viewerRole]);
+  }, [lastFetchedAt, effectiveViewerRole]);
 
   useEffect(() => {
     const bId = (brandId || '').trim();
     const aId = (adminId || '').trim();
-    if (!aId && !bId) return;
+    if (!hasAdminAccess && !aId && !bId) return;
 
     let cancelled = false;
 
@@ -1090,7 +1320,11 @@ export default function InfluencerDetailFullPage({
       try {
         setCampaignsLoading(true);
 
-        const payload: any = aId ? { adminId: aId } : { brandId: bId };
+        const payload: any = hasAdminAccess
+          ? { access: 'admin', ...(aId ? { adminId: aId } : {}), ...(bId ? { brandId: bId } : {}) }
+          : aId
+            ? { adminId: aId }
+            : { brandId: bId };
         const resp: any = await post('/admins/campaign/lite', payload);
 
         if (cancelled) return;
@@ -1112,7 +1346,7 @@ export default function InfluencerDetailFullPage({
     return () => {
       cancelled = true;
     };
-  }, [brandId, adminId]);
+  }, [brandId, adminId, hasAdminAccess]);
 
   const toggleCampaign = (id: string, checked: boolean) => {
     setSelectedCampaignIds((prev) =>
@@ -1201,7 +1435,7 @@ export default function InfluencerDetailFullPage({
     const bId = (brandId || '').trim();
     const aId = (adminId || '').trim();
 
-    if (!bId && !aId) {
+    if (!hasAdminAccess && !bId && !aId) {
       await Swal.fire('Login required', 'brandId or adminId missing. Please login again.', 'warning');
       return;
     }
@@ -1215,8 +1449,9 @@ export default function InfluencerDetailFullPage({
         campaignsIds: ids,
       };
 
+      if (hasAdminAccess) payload.access = 'admin';
       if (aId) payload.adminId = aId;
-      else payload.brandId = bId;
+      else if (bId) payload.brandId = bId;
 
       const resp = await post<StoreInvitationResponse>('/admin-invitations/send', payload);
 
@@ -1260,6 +1495,15 @@ export default function InfluencerDetailFullPage({
   const handleCalcChange = (value: 'median' | 'average') => {
     setCalculationMethod(value);
     onChangeCalc(value);
+  };
+
+  const currentReturnUrl = useMemo(() => {
+    const qs = searchParams?.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  }, [pathname, searchParams]);
+
+  const handleUnlockLogin = () => {
+    router.push(`/brand/login?returnUrl=${encodeURIComponent(currentReturnUrl)}`);
   };
 
   if (loading) {
@@ -1457,10 +1701,17 @@ export default function InfluencerDetailFullPage({
           postsCount={displayedReport.postsCount}
         />
 
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="space-y-6">
+        <div className="mt-6 space-y-6">
+          <MetricsGrid metrics={metricCards} />
 
-            {showContactManagementCard ? (
+          <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] xl:items-start">
+            <AccessBlurSection
+              unlocked={canViewRestrictedSections}
+              showPrompt={!canViewRestrictedSections}
+              title="Unlock the complete profile"
+              subtitle="Log in to access creator contact details, outreach information, and private profile access."
+              onUnlock={handleUnlockLogin}
+            >
               <ContactManagementCard
                 primaryReport={displayedReport as any}
                 mediaKit={mediaKit as any}
@@ -1469,48 +1720,71 @@ export default function InfluencerDetailFullPage({
                 activePlatform={activePlatform}
                 onPlatformSelect={handlePlatformSelect as any}
               />
-            ) : null}
+            </AccessBlurSection>
 
-            <RiskComplianceCard
-              credibilityScore={credibilityScore}
-              isPrivate={displayedReport.isPrivate}
-            />
+            <AccessBlurSection
+              unlocked={canViewRestrictedSections}
+              showPrompt={false}
+              title="Unlock the complete profile"
+              subtitle="Log in to view trend analysis, premium performance history, and deeper creator insights."
+            >
+              <PerformanceTrendCard
+                organicTrend={organicTrend}
+                sponsoredTrend={sponsoredTrend}
+                trendLabels={trendLabels}
+              />
+            </AccessBlurSection>
           </div>
 
-          <div className="space-y-6">
-            <MetricsGrid metrics={metricCards} />
-
-            <PerformanceTrendCard
-              organicTrend={organicTrend}
-              sponsoredTrend={sponsoredTrend}
-              trendLabels={trendLabels}
-            />
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-6">
           <CampaignHighlightsCard items={campaignHighlights} />
-
-          <AudienceIntelligenceCard
-            ageData={audienceAge}
-            genderData={audienceGender}
-            topCountries={topCountries}
-            credibilityScore={credibilityScore}
-            topLanguages={topLanguages}
-          />
-
+          <AccessBlurSection
+            unlocked={canViewRestrictedSections}
+            showPrompt={false}
+            title="Unlock the complete profile"
+            subtitle="Log in to explore recent post performance, post-level metrics, and content history."
+          >
+            {credibilityScore ? (
+              <AudienceIntelligenceCard
+                ageData={audienceAge}
+                genderData={audienceGender}
+                topCountries={topCountries}
+                credibilityScore={credibilityScore}
+                topLanguages={topLanguages}
+              />
+            ) : null}
+          </AccessBlurSection>
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_420px]">
-            <RecentPostsTable posts={recentPostsForTable.slice(0, 5) as any} />
+            <AccessBlurSection
+              unlocked={canViewRestrictedSections}
+              showPrompt={false}
+              title="Unlock the complete profile"
+              subtitle="Log in to explore recent post performance, post-level metrics, and content history."
+            >
+              <RecentPostsTable posts={recentPostsForTable.slice(0, 5) as any} />
+            </AccessBlurSection>
+
             <PopularContentPanel posts={popularPosts.slice(0, 2) as any} />
           </div>
 
-          {showLookalikeCreators && lookalikeCreators.length > 0 ? (
-            <LookalikeCreatorsPanel items={lookalikeCreators} />
+          {(showLookalikeCreators || !canViewRestrictedSections) && lookalikeCreators.length > 0 ? (
+            <AccessBlurSection
+              unlocked={canViewRestrictedSections}
+              showPrompt={false}
+              title="Unlock the complete profile"
+              subtitle="Log in to discover similar creators, affinity overlaps, and advanced recommendation insights."
+            >
+              <LookalikeCreatorsPanel items={lookalikeCreators} />
+            </AccessBlurSection>
           ) : null}
 
-          {viewerRole === 'admin' ? (
+          <AccessBlurSection
+            unlocked={canViewRestrictedSections}
+            showPrompt={false}
+            title="Unlock the complete profile"
+            subtitle="Log in to review activity history, profile actions, and detailed audit information."
+          >
             <AuditTrailTable items={auditItems} />
-          ) : null}
+          </AccessBlurSection>
         </div>
       </div>
     </div>

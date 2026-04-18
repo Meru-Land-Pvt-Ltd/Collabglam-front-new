@@ -14,30 +14,37 @@ export function AudienceIntelligenceCard({
   ageData: Array<{ label: string; value: number }>;
   genderData: Array<{ label: string; value: number }>;
   topCountries: Array<{ name: string; value: number }>;
-  credibilityScore: number;
+  credibilityScore?: number | null;
   topLanguages: Array<{ label: string; value: number }>;
 }) {
-  console.log("credibilityScore",credibilityScore)
+  const hasCredibilityScore =
+    credibilityScore !== null &&
+    credibilityScore !== undefined &&
+    Number.isFinite(Number(credibilityScore));
+
+  if (!hasCredibilityScore) {
+    return null;
+  }
+
   const pieSeries = genderData.length
     ? genderData.map((item, index) => ({
-        id: item.label,
-        value: item.value,
-        label: item.label,
-        color: ["#d65db1", "#f0a52d", "#f5d58f"][index % 3],
-      }))
+      id: item.label,
+      value: item.value,
+      label: item.label,
+      color: ["#d65db1", "#f0a52d", "#f5d58f"][index % 3],
+    }))
     : [{ id: "empty", value: 1, label: "No data", color: "#ede7dc" }];
 
   return (
     <SectionCard title="Audience Intelligence" eyebrow="Demographics, geography, credibility">
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1fr_0.8fr]">
-        {/* Gender & Age */}
         <div className="rounded-[20px] border border-[#efe8dd] bg-[#fffdfa] p-4">
           <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ab9f8e]">
             Gender &amp; age
           </div>
 
           <div className="space-y-5">
-            <div className="flex flex-col items-center rounded-[20px]  p-4">
+            <div className="flex flex-col items-center rounded-[20px] p-4">
               <PieChart
                 width={220}
                 height={180}
@@ -49,6 +56,7 @@ export function AudienceIntelligenceCard({
                     data: pieSeries,
                     paddingAngle: 2,
                     cornerRadius: 4,
+                    valueFormatter: (item) => `${Math.round(Number(item.value ?? 0))}%`,
                   },
                 ]}
               />
@@ -87,7 +95,6 @@ export function AudienceIntelligenceCard({
           </div>
         </div>
 
-        {/* Geography */}
         <div className="rounded-[20px] border border-[#efe8dd] bg-[#fffdfa] p-4">
           <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ab9f8e]">
             Geography
@@ -116,7 +123,11 @@ export function AudienceIntelligenceCard({
                     },
                   ]}
                   series={[
-                    { data: topCountries.map((item) => item.value), color: "#e0a421" },
+                    {
+                      data: topCountries.map((item) => Math.round(item.value)),
+                      color: "#e0a421",
+                      valueFormatter: (value) => `${Math.round(Number(value ?? 0))}%`,
+                    },
                   ]}
                   margin={{ top: 0, bottom: 0, left: 96, right: 12 }}
                   sx={{
@@ -173,7 +184,6 @@ export function AudienceIntelligenceCard({
           </div>
         </div>
 
-        {/* Audience Credibility */}
         <div className="rounded-[20px] border border-[#efe8dd] bg-[#fffdfa] p-4">
           <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ab9f8e]">
             Audience credibility

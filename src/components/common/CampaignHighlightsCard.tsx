@@ -4,7 +4,7 @@ import type { CampaignHighlight } from "./viewModashShared";
 
 export function CampaignHighlightsCard({ items }: { items: CampaignHighlight[] }) {
   return (
-    <SectionCard title="Campaign Performance Highlights" eyebrow="Collaboration snapshot">
+    <SectionCard title="Total sponsored content or post" eyebrow="Collaboration snapshot">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
           <div

@@ -13,6 +13,7 @@ type FetchReportOptions = {
   brandId?: string;
   adminId?: string;
   role?: AuthRole;
+  access?: 'admin' | string;
 
   // ✅ skip profile view credit when np=1
   np?: string | boolean;
@@ -81,9 +82,13 @@ function resolveAuth(
   opts: FetchReportOptions | undefined,
   storage: ReturnType<typeof getAuthFromStorage>
 ) {
+  const hasAdminAccess = String(opts?.access || '').trim().toLowerCase() === 'admin';
+
   const role: AuthRole | null =
-    opts?.role ||
-    (opts?.brandId ? 'brand' : opts?.adminId ? 'admin' : storage.authRole);
+    hasAdminAccess
+      ? 'admin'
+      : opts?.role ||
+        (opts?.brandId ? 'brand' : opts?.adminId ? 'admin' : storage.authRole);
 
   const brandId = cleanId(opts?.brandId) || storage.brandId;
   const adminId = cleanId(opts?.adminId) || storage.adminId;
@@ -153,14 +158,16 @@ export function useInfluencerReport(): UseInfluencerReportReturn {
         if (opts?.influencerId) params.influencerId = opts.influencerId;
         if (opts?.forceRefresh) params.force = '1';
 
+        if (String(opts?.access || '').trim().toLowerCase() === 'admin') {
+          params.access = 'admin';
+        }
+
         // ✅ forward np=1 to backend
         if (opts?.np === true || opts?.np === '1' || opts?.np === 'true') {
           params.np = '1';
         }
 
         const q = new URLSearchParams(params);
-        console.log("${API_REPORT_ENDPOINT}?${q.toString()}", `${API_REPORT_ENDPOINT}?${q.toString()}`)
-        console.log("${q.toString()}", `${q.toString()}`)
         const res = await fetch(`${API_REPORT_ENDPOINT}?${q.toString()}`);
         const raw: ModashReportRaw = await res.json();
 

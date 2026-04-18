@@ -216,96 +216,196 @@ function transformPanelLookalikes(
   }));
 }
 
+function pickFirstArray(...candidates: any[]): any[] {
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length) return candidate;
+  }
+  return [];
+}
+
+function pickReportRoot(raw: any, data: ReportResponse | null): any {
+  const candidates = [raw, raw?.profile, data, (data as any)?.profile];
+
+  const isRichRoot = (value: any) =>
+    value &&
+    typeof value === 'object' &&
+    (
+      Array.isArray(value?.recentPosts) ||
+      Array.isArray(value?.popularPosts) ||
+      Array.isArray(value?.sponsoredPosts) ||
+      value?.audience ||
+      value?.statsByContentType ||
+      value?.stats ||
+      value?.avgReelsPlays !== undefined ||
+      value?.avgViews !== undefined ||
+      value?.lookalikes ||
+      value?.audienceExtra
+    );
+
+  for (const candidate of candidates) {
+    if (isRichRoot(candidate)) return candidate;
+  }
+
+  return raw?.profile ?? raw ?? (data as any)?.profile ?? data;
+}
+
 function buildPrimaryReport(
   data: ReportResponse | null,
   raw: any,
   platform: Platform | null,
   handle: string | null
 ): InfluencerReport | null {
-  const source = raw?.profile ?? data?.profile;
-  if (!source) return null;
+  const root = pickReportRoot(raw, data);
+  if (!root) return null;
 
-  const profileRoot = source?.profile ?? {};
-  const audience = source?.audience ?? {};
+  const profileRoot = root?.profile && typeof root.profile === 'object' ? root.profile : root;
+  const audience = root?.audience ?? profileRoot?.audience ?? {};
+  const stats = root?.stats ?? profileRoot?.stats ?? {};
+  const statsByContentType = root?.statsByContentType ?? profileRoot?.statsByContentType ?? {};
   const normalizedPlatform = normalizePlatform(platform);
 
   const username =
     profileRoot?.username ??
     profileRoot?.handle ??
-    source?.username ??
-    source?.handle ??
+    root?.username ??
+    root?.handle ??
     (handle ? handle.replace(/^@/, '') : undefined);
 
-  const mapPosts = (items: any[] | undefined) =>
+  const mapPosts = (items: any) =>
     Array.isArray(items) ? items.map(mapReportPost) : [];
 
-  const recentPosts =
-    mapPosts(source?.recentPosts).length > 0
-      ? mapPosts(source?.recentPosts)
-      : mapPosts(source?.posts).length > 0
-        ? mapPosts(source?.posts)
-        : mapPosts(profileRoot?.recentPosts).length > 0
-          ? mapPosts(profileRoot?.recentPosts)
-          : mapPosts(profileRoot?.posts);
+  const recentPosts = mapPosts(
+    pickFirstArray(
+      root?.recentPosts,
+      profileRoot?.recentPosts,
+      root?.posts,
+      profileRoot?.posts,
+    )
+  );
+
+  const popularPosts = mapPosts(
+    pickFirstArray(root?.popularPosts, profileRoot?.popularPosts)
+  );
+
+  const sponsoredPosts = mapPosts(
+    pickFirstArray(root?.sponsoredPosts, profileRoot?.sponsoredPosts)
+  );
+
+  const followers =
+    profileRoot?.followers ??
+    root?.followers ??
+    stats?.followers?.value ??
+    root?.subscribers ??
+    profileRoot?.subscribers;
+
+  const avgLikes =
+    root?.avgLikes ??
+    profileRoot?.avgLikes ??
+    stats?.avgLikes?.value ??
+    statsByContentType?.all?.avgLikes ??
+    statsByContentType?.reels?.avgLikes;
+
+  const avgComments =
+    root?.avgComments ??
+    profileRoot?.avgComments ??
+    stats?.avgComments?.value ??
+    statsByContentType?.all?.avgComments ??
+    statsByContentType?.reels?.avgComments;
+
+  const avgViews =
+    profileRoot?.averageViews ??
+    root?.avgViews ??
+    root?.avgReelsPlays ??
+    stats?.avgViews?.value ??
+    statsByContentType?.all?.avgViews ??
+    statsByContentType?.reels?.avgViews ??
+    statsByContentType?.reels?.avgReelsPlays;
+
+  const avgReelsPlays =
+    root?.avgReelsPlays ??
+    profileRoot?.avgReelsPlays ??
+    statsByContentType?.reels?.avgReelsPlays ??
+    profileRoot?.averageViews ??
+    root?.avgViews;
+
+  const statHistory = Array.isArray(root?.statHistory)
+    ? root.statHistory
+    : Array.isArray(profileRoot?.statHistory)
+      ? profileRoot.statHistory
+      : Array.isArray(statsByContentType?.all?.statHistory)
+        ? statsByContentType.all.statHistory
+        : Array.isArray(statsByContentType?.reels?.statHistory)
+          ? statsByContentType.reels.statHistory
+          : [];
+
+  const lookalikes = Array.isArray(root?.lookalikes)
+    ? root.lookalikes
+    : Array.isArray(profileRoot?.lookalikes)
+      ? profileRoot.lookalikes
+      : Array.isArray(audience?.audienceLookalikes)
+        ? audience.audienceLookalikes
+        : [];
 
   return {
-    modashId: source?.userId ?? source?.modashId,
+    modashId:
+      root?.userId ??
+      root?.modashId ??
+      profileRoot?.userId ??
+      profileRoot?.modashId,
     provider: normalizedPlatform,
-    url: profileRoot?.url ?? source?.url,
-    name: profileRoot?.fullname ?? source?.name ?? profileRoot?.username ?? username,
-    fullname: profileRoot?.fullname ?? source?.fullname,
-    picture: profileRoot?.picture ?? source?.picture,
-    bio: source?.bio,
+    url: profileRoot?.url ?? root?.url,
+    name: profileRoot?.fullname ?? root?.fullname ?? root?.name ?? profileRoot?.username ?? username,
+    fullname: profileRoot?.fullname ?? root?.fullname,
+    picture: profileRoot?.picture ?? root?.picture,
+    bio: root?.bio ?? profileRoot?.bio,
     username,
     handle: username ? `@${String(username).replace(/^@/, '')}` : undefined,
-    followers: profileRoot?.followers ?? source?.followers ?? source?.subscribers,
-    engagementRate: profileRoot?.engagementRate ?? source?.engagementRate,
-    country: source?.country,
+    followers,
+    engagementRate: profileRoot?.engagementRate ?? root?.engagementRate,
+    country: root?.country ?? profileRoot?.country,
     language:
-      typeof source?.language === 'string'
-        ? { name: source.language }
-        : source?.language?.name
-          ? { name: source.language.name }
-          : Array.isArray(audience?.languages) && audience.languages.length
-            ? { name: audience.languages[0]?.name ?? audience.languages[0]?.code }
-            : undefined,
-    hashtags: Array.isArray(source?.hashtags)
-      ? source.hashtags.map((item: Record<string, any>) => ({ tag: item?.tag }))
-      : [],
-    popularPosts:
-      mapPosts(source?.popularPosts).length > 0
-        ? mapPosts(source?.popularPosts)
-        : mapPosts(profileRoot?.popularPosts),
+      typeof root?.language === 'string'
+        ? { name: root.language }
+        : root?.language?.name
+          ? { name: root.language.name }
+          : typeof profileRoot?.language === 'string'
+            ? { name: profileRoot.language }
+            : profileRoot?.language?.name
+              ? { name: profileRoot.language.name }
+              : Array.isArray(audience?.languages) && audience.languages.length
+                ? { name: audience.languages[0]?.name ?? audience.languages[0]?.code }
+                : undefined,
+    hashtags: Array.isArray(root?.hashtags)
+      ? root.hashtags.map((item: Record<string, any>) => ({ tag: item?.tag }))
+      : Array.isArray(profileRoot?.hashtags)
+        ? profileRoot.hashtags.map((item: Record<string, any>) => ({ tag: item?.tag }))
+        : [],
+    popularPosts,
     recentPosts,
-    sponsoredPosts:
-      mapPosts(source?.sponsoredPosts).length > 0
-        ? mapPosts(source?.sponsoredPosts)
-        : mapPosts(profileRoot?.sponsoredPosts),
+    sponsoredPosts,
     stats: {
       avgLikes: {
-        value: source?.avgLikes ?? profileRoot?.avgLikes ?? source?.stats?.avgLikes?.value,
+        value: avgLikes,
+        compared: stats?.avgLikes?.compared,
       },
       avgViews: {
-        value:
-          profileRoot?.averageViews ??
-          source?.avgViews ??
-          source?.avgReelsPlays ??
-          source?.stats?.avgViews?.value,
+        value: avgViews,
+        compared: stats?.avgViews?.compared,
       },
       avgComments: {
-        value: source?.avgComments ?? profileRoot?.avgComments ?? source?.stats?.avgComments?.value,
+        value: avgComments,
+        compared: stats?.avgComments?.compared,
       },
       followers: {
-        value: profileRoot?.followers ?? source?.followers ?? source?.stats?.followers?.value,
+        value: followers,
+        compared: stats?.followers?.compared,
       },
+      paidPostPerformance: stats?.paidPostPerformance,
     },
-    avgLikes: source?.avgLikes ?? profileRoot?.avgLikes,
-    avgComments: source?.avgComments ?? profileRoot?.avgComments,
-    avgViews:
-      profileRoot?.averageViews ??
-      source?.avgViews ??
-      source?.avgReelsPlays,
-    avgReelsPlays: source?.avgReelsPlays ?? profileRoot?.averageViews,
+    avgLikes,
+    avgComments,
+    avgViews,
+    avgReelsPlays,
     audience: {
       geoCountries: Array.isArray(audience?.geoCountries)
         ? audience.geoCountries.map((item: Record<string, any>) => ({
@@ -339,16 +439,16 @@ function buildPrimaryReport(
         : [],
       credibility: audience?.credibility,
     },
-    isPrivate: source?.isPrivate,
-    isVerified: source?.isVerified,
-    accountType: source?.accountType,
-    postsCount: source?.postsCount ?? profileRoot?.postsCount,
-    statHistory: Array.isArray(source?.statHistory)
-      ? source.statHistory
-      : Array.isArray(source?.statsByContentType?.all?.statHistory)
-        ? source.statsByContentType.all.statHistory
-        : [],
-    lookalikes: Array.isArray(source?.lookalikes) ? source.lookalikes : [],
+    isPrivate: root?.isPrivate ?? profileRoot?.isPrivate,
+    isVerified: root?.isVerified ?? profileRoot?.isVerified,
+    accountType: root?.accountType ?? profileRoot?.accountType,
+    postsCount:
+      root?.postsCount ??
+      root?.postsCounts ??
+      profileRoot?.postsCount ??
+      profileRoot?.postsCounts,
+    statHistory,
+    lookalikes,
   };
 }
 

@@ -1302,34 +1302,22 @@ export default function ViewClient() {
   }, [mediaKit, connectedProfiles]);
 
   useEffect(() => {
-    if (primaryReport) {
-      const initialPlatform = normalisePlatform(
-        primaryReport.provider ?? mediaKit?.primaryPlatform ?? "instagram"
-      );
-
-      setActivePlatform(initialPlatform);
-      setActiveReport(primaryReport);
-      setPlatformReportCache((prev) => ({
-        ...prev,
-        [initialPlatform]: primaryReport,
-      }));
-      return;
-    }
-
-    if (!initialPrimaryProfile) return;
     if (activeReport) return;
 
-    const initialPlatform = normalisePlatform(
-      initialPrimaryProfile.provider ?? mediaKit?.primaryPlatform ?? "instagram"
+    const seedReport = initialPrimaryProfile ?? primaryReport ?? null;
+    if (!seedReport) return;
+
+    const seedPlatform = normalisePlatform(
+      seedReport.provider ?? mediaKit?.primaryPlatform ?? "instagram"
     );
 
-    setActivePlatform(initialPlatform);
-    setActiveReport(initialPrimaryProfile);
+    setActivePlatform(seedPlatform);
+    setActiveReport(seedReport);
     setPlatformReportCache((prev) => ({
       ...prev,
-      [initialPlatform]: initialPrimaryProfile,
+      [seedPlatform]: seedReport,
     }));
-  }, [primaryReport, initialPrimaryProfile, activeReport, mediaKit]);
+  }, [activeReport, initialPrimaryProfile, primaryReport, mediaKit]);
 
 
   const handlePlatformSelect = async (profile: InfluencerReport) => {
@@ -1530,13 +1518,14 @@ export default function ViewClient() {
 
   const credibilityScore = useMemo(() => {
     const raw =
-      modashData?.profile?.audience?.credibility ?? primaryReport?.audience?.credibility;
+      modashData?.profile?.audience?.credibility ??
+      primaryReport?.audience?.credibility;
 
-    if (raw !== undefined && raw !== null && Number.isFinite(Number(raw))) {
-      return Math.round(Number(raw) * 100);
+    if (raw === undefined || raw === null || !Number.isFinite(Number(raw))) {
+      return null;
     }
-    console.log("raw", raw)
-    return 0;
+
+    return Math.round(Number(raw) * 100);
   }, [modashData, primaryReport]);
 
   const followerRangeLabel = useMemo(() => {
@@ -1754,24 +1743,26 @@ export default function ViewClient() {
 
   const handleCopy = async () => {
     try {
-      const reportFromMediaKit =
+      const selectedReport =
+        displayedReport ??
+        activeReport ??
+        primaryReport ??
         mediaKit?.primaryInfluencerReport ??
         mediaKit?.influencerReports?.[0] ??
         mediaKit?.socialProfiles?.[0] ??
-        displayedReport ??
-        primaryReport ??
         null;
 
       const userId = String(
-        reportFromMediaKit?.modashId ||
+        selectedReport?.modashId ||
+        selectedReport?._id ||
         mediaKit?.influencerId ||
         ""
       ).trim();
 
       const provider = String(
-        reportFromMediaKit?.provider ||
-        mediaKit?.primaryPlatform ||
         activePlatform ||
+        selectedReport?.provider ||
+        mediaKit?.primaryPlatform ||
         "instagram"
       )
         .trim()
@@ -1788,18 +1779,40 @@ export default function ViewClient() {
 
       const mediaKitUrl =
         `${window.location.origin}/mediakit/${encodeURIComponent(userId)}` +
-        (provider ? `?platform=${encodeURIComponent(provider)}` : "");
+        `?platform=${encodeURIComponent(provider)}`;
 
-      await navigator.clipboard.writeText(mediaKitUrl);
+      try {
+        if (window.isSecureContext && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(mediaKitUrl);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = mediaKitUrl;
+          ta.style.position = "fixed";
+          ta.style.top = "0";
+          ta.style.left = "0";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
 
-      await Swal.fire({
-        
-        icon: "success",
-        title: "Copied",
-        text: "Media kit link copied to clipboard.",
-        timer: 1600,
-        showConfirmButton: false,
-      });
+        await Swal.fire({
+          icon: "success",
+          title: "Copied",
+          text: "Media kit link copied to clipboard.",
+          timer: 1600,
+          showConfirmButton: false,
+        });
+      } catch (copyErr) {
+        console.error("Clipboard copy failed:", copyErr);
+        await Swal.fire({
+          icon: "error",
+          title: "Copy failed",
+          text: "Could not copy the link. Please copy it manually from the address bar.",
+        });
+      }
     } catch (error) {
       console.error("Failed to copy media kit link:", error);
       await Swal.fire({
@@ -1818,13 +1831,19 @@ export default function ViewClient() {
     );
   }
 
+  const canShowAudienceIntelligence =
+    hasSectionAccess("audienceIntelligence") &&
+    credibilityScore !== null &&
+    credibilityScore !== undefined &&
+    credibilityScore !== 0;
+
   return (
     <div className="min-h-screen text-[#1f1f1f]">
       <div className="w-full px-4 py-5 lg:px-6 xl:px-8">
         {/* <DashboardTopBar plan={plan} /> */}
 
         <CreatorHeader
-          primaryReport={primaryReport}
+          primaryReport={displayedReport}
           mediaKit={mediaKit}
           activePlan={plan}
           isVerified={modashData?.profile?.isVerified ?? primaryReport?.isVerified}
@@ -1889,7 +1908,7 @@ export default function ViewClient() {
             />
           )}
 
-          {hasSectionAccess("audienceIntelligence") ? (
+          {canShowAudienceIntelligence ? (
             <AudienceIntelligenceCard
               ageData={audienceAge}
               genderData={audienceGender}
@@ -1897,10 +1916,9 @@ export default function ViewClient() {
               credibilityScore={credibilityScore}
               topLanguages={topLanguages}
             />
-          ) : (
+          ) : hasSectionAccess("audienceIntelligence") ? null : (
             <FeatureLockedCard title="Audience Intelligence" plan="pro" />
           )}
-
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_420px]">
             {hasSectionAccess("recentPosts") ? (
               <RecentPostsTable posts={recentPostsForTable.slice(0, 5)} />
