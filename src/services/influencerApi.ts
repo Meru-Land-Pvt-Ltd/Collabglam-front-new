@@ -219,8 +219,8 @@ export async function apiSendInfluencerSignupOtp(input: {
     Array.isArray(input.categoryIds) && input.categoryIds.length > 0
       ? input.categoryIds
       : input.categoryId
-      ? [input.categoryId]
-      : [];
+        ? [input.categoryId]
+        : [];
 
   const payload: AnyObj = {
     name: input.creatorName?.trim(),
@@ -311,21 +311,31 @@ export async function apiSaveInfluencerOnboarding(
  *  ✅ FORGOT PASSWORD
  *  ------------------------*/
 export async function apiSendOtpForgotInfluencer(email: string) {
-  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/send-otp-forgot`, { email });
+  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/sendOtp`, { email });
 }
 
 export async function apiVerifyOtpForgotInfluencer(email: string, otp: string) {
-  return apiPost<{ message: string; resetToken: string }>(`${INFLUENCER_BASE}/verify-otp-forgot`, {
-    email,
-    otp,
-  });
+  return apiPost<{ message: string; resetToken: string }>(
+    `${INFLUENCER_BASE}/verifyOtp`,
+    {
+      email: email.trim(),
+      otp: otp.trim(),
+    }
+  );
 }
 
-export async function apiUpdateInfluencerPasswordWithResetToken(resetToken: string, newPassword: string) {
+export async function apiUpdateInfluencerPasswordWithResetToken(
+  resetToken: string,
+  newPassword: string,
+  confirmPassword: string
+) {
   return apiPost<{ message: string }>(
-    `${INFLUENCER_BASE}/update-password`,
-    { newPassword },
-    { headers: { Authorization: `Bearer ${resetToken}` } }
+    `${INFLUENCER_BASE}/updatePassword`,
+    {
+      resetToken: resetToken.trim(),
+      newPassword,
+      confirmPassword,
+    }
   );
 }
 
@@ -399,8 +409,8 @@ export async function apiGetAllActiveCampaigns(body: GetAllActiveCampaignsBody, 
     Array.isArray(body.categoryIds) && body.categoryIds.length > 0
       ? body.categoryIds
       : body.categoryId
-      ? [body.categoryId]
-      : [];
+        ? [body.categoryId]
+        : [];
 
   const payload: AnyObj = {
     ...body,

@@ -447,7 +447,7 @@ export default function BrandSignupPage() {
       <ToastStyles />
 
       {/* Header */}
-      <header className="w-full bg-white border-y border-[color:var(--Border-Primary,#B3B3B3)]">
+      <header className="w-full bg-white border-b border-bd-primary">
         <div
           className={cn(
             "mx-auto flex flex-wrap items-center justify-between content-center",
@@ -465,12 +465,15 @@ export default function BrandSignupPage() {
             </span>
           </Link>
 
-          <Button
-            onClick={() => router.push("/influencer/login")}
-            variant="outline"
+          <Link
+            href="/brand/login"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "!my-0 rounded-m px-l border border-bd-primary text-tx-primary !shadow-none"
+            )}
           >
             Join as a Creator
-          </Button>
+          </Link>
         </div>
       </header>
 

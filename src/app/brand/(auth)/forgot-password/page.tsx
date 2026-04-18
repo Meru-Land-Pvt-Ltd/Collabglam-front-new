@@ -188,7 +188,7 @@ export default function ForgotPassword() {
       try {
         const res = await apiVerifyOtpForgot(email.trim(), otp.trim());
         console.log(res.resetToken);
-        
+
         setResetToken(res.resetToken);
         setStep("new_password");
 
@@ -237,7 +237,7 @@ export default function ForgotPassword() {
       setIsUpdatingPw(true);
       try {
         console.log(resetToken);
-        
+
         await apiUpdatePasswordWithResetToken(resetToken, password);
 
         toast({
@@ -297,7 +297,7 @@ export default function ForgotPassword() {
       <ToastStyles />
 
       {/* Header */}
-      <header className="w-full bg-white border-y border-[color:var(--Border-Primary,#B3B3B3)]">
+      <header className="w-full bg-white border-b border-bd-primary">
         <div
           className="
             mx-auto flex flex-wrap items-center justify-between content-center
@@ -318,7 +318,7 @@ export default function ForgotPassword() {
             href="/brand/login"
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "!my-0 rounded-m px-l border-[color:var(--Border-Primary,#B3B3B3)] text-neutral-600"
+              "!my-0 rounded-m px-l border border-bd-primary text-tx-primary !shadow-none"
             )}
           >
             Login as Brand

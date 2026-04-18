@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { InstagramLogo } from "@phosphor-icons/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
@@ -12,6 +12,7 @@ import { VggCardStack } from "@/components/ui/brand/VggAnimatedCard";
 
 import { apiSignInBrand, getApiErrorMessage } from "../../services/brandApi";
 import { toast, ToastStyles } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 
 type ErrorKind =
   | "EMAIL_NOT_REGISTERED"
@@ -71,10 +72,10 @@ function prettifyRateLimitMessage(msg: string) {
       unitRaw === "second"
         ? "seconds"
         : unitRaw === "minute"
-        ? "minutes"
-        : unitRaw === "hour"
-        ? "hours"
-        : unitRaw;
+          ? "minutes"
+          : unitRaw === "hour"
+            ? "hours"
+            : unitRaw;
 
     return `Too many failed login attempts. Please try again in ${n} ${unit}.`;
   }
@@ -151,8 +152,9 @@ function mapLoginError(d: ApiErrDetails): { kind: ErrorKind; title: string; text
   };
 }
 
-export default function BrandLoginPage() {
+function BrandLoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -163,6 +165,28 @@ export default function BrandLoginPage() {
   const emailInvalid = !!emailError;
   const passwordInvalid = !!passwordError;
   const emailTrimmed = email.trim();
+
+  const getSafeReturnUrl = () => {
+    const returnUrl = searchParams.get("returnUrl");
+
+    if (!returnUrl) return "/brand/dashboard";
+
+    try {
+      const decoded = decodeURIComponent(returnUrl);
+
+      if (
+        decoded.startsWith("/") &&
+        !decoded.startsWith("//") &&
+        !decoded.includes("://")
+      ) {
+        return decoded;
+      }
+    } catch {
+      return "/brand/dashboard";
+    }
+
+    return "/brand/dashboard";
+  };
 
   const clearEmailOnFocus = () => {
     if (emailError) setEmailError("");
@@ -209,7 +233,7 @@ export default function BrandLoginPage() {
         body: JSON.stringify({ token: res.token }),
       });
 
-      router.replace("/brand/dashboard");
+      router.replace(getSafeReturnUrl());
     } catch (err) {
       const fallback = getApiErrorMessage(err, "Login failed");
       const details = getApiErrorDetails(err, fallback);
@@ -226,7 +250,7 @@ export default function BrandLoginPage() {
       <ToastStyles />
 
       {/* Header */}
-      <header className="w-full bg-white border-y border-[color:var(--Border-Primary,#B3B3B3)]">
+      <header className="w-full bg-white border-b border-bd-primary">
         <div
           className="
             mx-auto flex flex-wrap items-center justify-between content-center
@@ -252,12 +276,15 @@ export default function BrandLoginPage() {
             </span>
           </Link>
 
-          <Button
-            onClick={() => router.push("/influencer/login")}
-            variant="outline"
+          <Link
+            href="/influencer/login"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "!my-0 rounded-m px-l border border-bd-primary text-tx-primary !shadow-none"
+            )}
           >
             Join as a Creator
-          </Button>
+          </Link>
         </div>
       </header>
 
@@ -279,7 +306,6 @@ export default function BrandLoginPage() {
                     "var(--Gradient-Brand-Primary-Radial, radial-gradient(100% 100% at 50% 0%, #FF8C01 0%, #FFBF00 37.94%, #FFF 90.87%))",
                 }}
               >
-                {/* ✅ Dynamic testimonial card (changes on refresh + every route change) */}
                 <div className="absolute inset-0 flex items-center justify-center p-[1.125rem] sm:p-[1.75rem] lg:p-[3.125rem]">
                   <VggCardStack className="w-full max-w-[35rem]" />
                 </div>
@@ -295,26 +321,6 @@ export default function BrandLoginPage() {
               <p className="mt-m cg-description">
                 Enter your registered details to access your dashboard and ongoing work.
               </p>
-
-              {/* <div className="mt-2xl">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full !my-0 rounded-m"
-                  leftIcon={<InstagramLogo size={18} />}
-                  onClick={() => console.log("instagram oauth")}
-                >
-                  Continue With Instagram
-                </Button>
-              </div>
-
-              <div className="mt-2xl flex h-[1.5rem] w-full items-center justify-center">
-                <div className="h-0 w-[12rem] border-t border-bd-subtle opacity-100" />
-                <span className="mx-[0.5rem] flex h-[1.5rem] items-center justify-center cg-ts text-tx-tertiary">
-                  or
-                </span>
-                <div className="h-0 w-[12rem] border-t border-bd-subtle opacity-100" />
-              </div> */}
 
               <form onSubmit={onSubmit} className="space-y-m mt-2xl">
                 <FloatingInput
@@ -383,5 +389,13 @@ export default function BrandLoginPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function BrandLoginPage() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <BrandLoginContent />
+    </React.Suspense>
   );
 }

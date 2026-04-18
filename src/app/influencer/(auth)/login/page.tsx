@@ -90,9 +90,9 @@ function setCookie(name: string, value: string, opts: CookieOptions = {}) {
     path = "/",
     sameSite = "Lax",
     secure =
-      typeof window !== "undefined"
-        ? window.location.protocol === "https:"
-        : false,
+    typeof window !== "undefined"
+      ? window.location.protocol === "https:"
+      : false,
   } = opts;
 
   const maxAge = days * 24 * 60 * 60;
@@ -137,10 +137,10 @@ function prettifyRateLimitMessage(msg: string) {
       unitRaw === "second"
         ? "seconds"
         : unitRaw === "minute"
-        ? "minutes"
-        : unitRaw === "hour"
-        ? "hours"
-        : unitRaw;
+          ? "minutes"
+          : unitRaw === "hour"
+            ? "hours"
+            : unitRaw;
 
     return `Too many failed login attempts. Please try again in ${n} ${unit}.`;
   }
@@ -337,7 +337,7 @@ export default function InfluencerLoginPage() {
     <div className="min-h-screen bg-background text-foreground">
       <ToastStyles />
 
-      <header className="w-full bg-white border-y border-[color:var(--Border-Primary,#B3B3B3)]">
+      <header className="w-full bg-white border-b border-bd-primary">
         <div
           className="
             mx-auto flex flex-wrap items-center justify-between content-center
@@ -370,7 +370,7 @@ export default function InfluencerLoginPage() {
             href="/brand/login"
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
-              "!my-0 rounded-m px-l border-[color:var(--Border-Primary,#B3B3B3)] text-neutral-600"
+              "!my-0 rounded-m px-l border border-bd-primary text-tx-primary !shadow-none"
             )}
           >
             Join as a Brand

@@ -2,32 +2,35 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import axios from "axios";
+import { CaretLeft } from "@phosphor-icons/react";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { cn } from "@/lib/utils";
-import { CaretLeft } from "@phosphor-icons/react";
 import { CountdownTicker } from "@/components/ui/countdown-ticker";
+import { toast, ToastStyles } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
+
+import {
+    apiSendOtpForgotInfluencer,
+    apiUpdateInfluencerPasswordWithResetToken,
+    apiVerifyOtpForgotInfluencer,
+    getApiErrorMessage,
+} from "@/services/influencerApi";
 
 type Step = "email" | "otp" | "new_password";
 
 const isValidEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
-/** ✅ Responsive typography (mobile -> desktop token) */
 const TITLE_CLASS = cn(
     "text-[color:var(--Text-Primary,#1A1A1A)]",
     "[font-family:var(--Font-Family-Inter,Inter)]",
     "font-semibold",
-    // mobile
     "text-[28px] leading-[36px] tracking-[-0.5px]",
-    // md+ (your spec)
     "md:[font-size:var(--Font-Size-32,32px)] md:[line-height:var(--Line-Height-40,40px)] md:[letter-spacing:var(--Letter-Spacing--1,-1px)]"
 );
 
@@ -35,9 +38,7 @@ const SUBTITLE_CLASS = cn(
     "text-[color:var(--Light-Text-Tertiary,#B8B8B8)]",
     "[font-family:var(--Font-Family-Inter,Inter)]",
     "font-medium",
-    // mobile
     "text-[14px] leading-[20px] tracking-[0px]",
-    // md+ (your spec)
     "md:[font-size:var(--Font-Size-16,16px)] md:[line-height:var(--Line-Height-24,24px)] md:[letter-spacing:var(--Letter-Spacing-0,0)]"
 );
 
@@ -46,9 +47,7 @@ const BACK_CLASS = cn(
     "text-[color:var(--Light-Icon-Primary,#1A1A1A)]",
     "[font-family:var(--Font-Family-Inter,Inter)]",
     "font-medium",
-    // mobile
     "text-[14px] leading-[20px]",
-    // md+ (your spec)
     "md:[font-size:var(--Font-Size-16,16px)] md:[line-height:var(--Line-Height-24,24px)] md:[letter-spacing:var(--Letter-Spacing-0,0)]",
     "cursor-pointer hover:underline"
 );
@@ -60,13 +59,26 @@ const STEP_COPY: Record<Step, { title: string; subtitle: string }> = {
     },
     otp: {
         title: "Enter OTP",
-        subtitle: "We've sent a 6-digit code to your email. Enter it here to continue.",
+        subtitle:
+            "We've sent a 6-digit code to your email. Enter it here to continue.",
     },
     new_password: {
         title: "Create a new password",
-        subtitle: "Enter your email and password so we can take you back to your dashboard and ongoing work.",
+        subtitle:
+            "Enter your email and password so we can take you back to your dashboard and ongoing work.",
     },
 };
+
+
+async function sendForgotPasswordOtp(email: string) {
+    try {
+        return await apiSendOtpForgotInfluencer(email.trim());
+    } catch (err) {
+        throw new Error(
+            getApiErrorMessage(err, "Unable to send verification code right now.")
+        );
+    }
+}
 
 export default function ForgotPassword() {
     const router = useRouter();
@@ -75,6 +87,7 @@ export default function ForgotPassword() {
 
     const [email, setEmail] = React.useState("");
     const [otp, setOtp] = React.useState("");
+    const [resetToken, setResetToken] = React.useState("");
 
     const [password, setPassword] = React.useState("");
     const [confirmPassword, setConfirmPassword] = React.useState("");
@@ -85,12 +98,14 @@ export default function ForgotPassword() {
     const [confirmError, setConfirmError] = React.useState<string | undefined>();
 
     const [pwValid, setPwValid] = React.useState(false);
+    const [sendingOtp, setSendingOtp] = React.useState(false);
+    const [resendingOtp, setResendingOtp] = React.useState(false);
+    const [verifyingOtp, setVerifyingOtp] = React.useState(false);
+    const [updatingPassword, setUpdatingPassword] = React.useState(false);
 
-    // OTP timer
     const OTP_SECONDS = 60;
     const [secondsLeft, setSecondsLeft] = React.useState(OTP_SECONDS);
 
-    // Reset errors + OTP timer only when step changes
     React.useEffect(() => {
         setEmailError(undefined);
         setOtpError(undefined);
@@ -100,23 +115,30 @@ export default function ForgotPassword() {
         if (step !== "otp") return;
 
         setSecondsLeft(OTP_SECONDS);
-        const t = setInterval(() => {
+        const timer = setInterval(() => {
             setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
         }, 1000);
 
-        return () => clearInterval(t);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        return () => clearInterval(timer);
     }, [step]);
 
     const handleBack = () => {
-        // ✅ Always go back to Email step from OTP + Password step
-        if (step === "otp" || step === "new_password") {
-            setStep("email");
-            setOtp("");
+        if (step === "new_password") {
+            setStep("otp");
             setPassword("");
             setConfirmPassword("");
+            setPasswordError(undefined);
+            setConfirmError(undefined);
             return;
         }
+
+        if (step === "otp") {
+            setStep("email");
+            setOtp("");
+            setResetToken("");
+            return;
+        }
+
         router.push("/influencer/login");
     };
 
@@ -131,8 +153,32 @@ export default function ForgotPassword() {
                 setEmailError("Please enter a valid email.");
                 return;
             }
-            // TODO: call API to send OTP
-            setStep("otp");
+
+            try {
+                setSendingOtp(true);
+                await sendForgotPasswordOtp(email);
+
+                setOtp("");
+                setResetToken("");
+
+                toast({
+                    icon: "success",
+                    title: "OTP sent",
+                    text: "We’ve sent a verification code to your email.",
+                });
+
+                setStep("otp");
+            } catch (error: any) {
+                toast({
+                    icon: "error",
+                    title: "Unable to send OTP",
+                    text:
+                        error?.message || "Unable to send verification code right now.",
+                });
+            } finally {
+                setSendingOtp(false);
+            }
+
             return;
         }
 
@@ -141,41 +187,130 @@ export default function ForgotPassword() {
                 setOtpError("Please enter the 6-digit OTP.");
                 return;
             }
-            // TODO: call API to verify OTP
-            setStep("new_password");
+
+            try {
+                setVerifyingOtp(true);
+
+                const resp = await apiVerifyOtpForgotInfluencer(email, otp);
+                const token = resp?.resetToken || "";
+
+                if (!token) {
+                    throw new Error("Reset token was not returned by the server.");
+                }
+
+                setResetToken(token);
+
+                toast({
+                    icon: "success",
+                    title: "OTP verified",
+                    text:
+                        resp?.message ||
+                        "Your OTP has been verified successfully.",
+                });
+
+                setStep("new_password");
+            } catch (error: any) {
+                setOtpError(error?.message || "Unable to verify OTP right now.");
+            } finally {
+                setVerifyingOtp(false);
+            }
+
             return;
         }
 
         if (step === "new_password") {
             if (!pwValid) {
-                setPasswordError("Password must include Numbers, Uppercase, and a Special character.");
+                setPasswordError(
+                    "Password must include Numbers, Uppercase, and a Special character."
+                );
                 return;
             }
+
             if (!confirmPassword) {
                 setConfirmError("Please confirm your password.");
                 return;
             }
+
             if (password !== confirmPassword) {
                 setConfirmError("Passwords do not match.");
                 return;
             }
 
-            // TODO: call API to reset password (email + otp + password)
+            if (!resetToken.trim()) {
+                setConfirmError(
+                    "Your reset session has expired. Please request a new OTP."
+                );
+                return;
+            }
+
+            try {
+                setUpdatingPassword(true);
+
+                const resp = await apiUpdateInfluencerPasswordWithResetToken(
+                    resetToken,
+                    password,
+                    confirmPassword
+                );
+
+                toast({
+                    icon: "success",
+                    title: "Password updated",
+                    text:
+                        resp?.message ||
+                        "Your password has been updated successfully.",
+                });
+
+                router.replace("/influencer/login");
+            } catch (error: any) {
+                toast({
+                    icon: "error",
+                    title: "Unable to update password",
+                    text: error?.message || "Unable to update password right now.",
+                });
+            } finally {
+                setUpdatingPassword(false);
+            }
         }
     };
 
     const onResend = async () => {
-        if (secondsLeft > 0) return;
-        // TODO: call API to resend OTP
-        setSecondsLeft(OTP_SECONDS);
+        if (secondsLeft > 0 || resendingOtp) return;
+
+        setOtpError(undefined);
+        setEmailError(undefined);
+
+        try {
+            setResendingOtp(true);
+            await sendForgotPasswordOtp(email);
+
+            setOtp("");
+            setResetToken("");
+            setSecondsLeft(OTP_SECONDS);
+
+            toast({
+                icon: "success",
+                title: "OTP resent",
+                text: "A new verification code has been sent to your email.",
+            });
+        } catch (error: any) {
+            toast({
+                icon: "error",
+                title: "Unable to resend OTP",
+                text:
+                    error?.message || "Unable to resend the verification code right now.",
+            });
+        } finally {
+            setResendingOtp(false);
+        }
     };
 
     const header = STEP_COPY[step];
 
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col">
-            {/* Header */}
-            <header className="w-full bg-white border-y border-[color:var(--Border-Primary,#B3B3B3)]">
+            <ToastStyles />
+
+            <header className="w-full bg-white border-b border-bd-primary">
                 <div
                     className="
             mx-auto flex flex-wrap items-center justify-between content-center
@@ -193,7 +328,9 @@ export default function ForgotPassword() {
                             className="object-contain"
                         />
                         <span className="leading-tight">
-                            <span className="block text-[20px] font-bold text-tx-primary">CollabGlam</span>
+                            <span className="block text-[20px] font-bold text-tx-primary">
+                                CollabGlam
+                            </span>
                             <span className="block text-[10px] leading-[12px] text-tx-tertiary -mt-[2px]">
                                 For Influencers
                             </span>
@@ -204,15 +341,14 @@ export default function ForgotPassword() {
                         href="/influencer/login"
                         className={cn(
                             buttonVariants({ variant: "outline", size: "sm" }),
-                            "!my-0 rounded-m px-l border-[color:var(--Border-Primary,#B3B3B3)] text-neutral-600"
+                            "!my-0 rounded-m px-l !font-inter !border !border-bd-primary !text-tx-primary hover:!bg-neutral-50 !shadow-none p-4.5"
                         )}
                     >
-                        Login as Influencer
+                        Login as Creator
                     </Link>
                 </div>
             </header>
 
-            {/* Body */}
             <main className="flex-1 flex justify-center">
                 <div
                     className={cn(
@@ -221,19 +357,20 @@ export default function ForgotPassword() {
                         "py-[48px] sm:py-[60px] md:py-[80px] xl:py-[100px] 2xl:py-[120px]"
                     )}
                 >
-                    {/* Back Button */}
-                    <button type="button" onClick={handleBack} className={cn(BACK_CLASS, "mb-[14px] md:mb-[16px]")}>
+                    <button
+                        type="button"
+                        onClick={handleBack}
+                        className={cn(BACK_CLASS, "mb-[14px] md:mb-[16px]")}
+                    >
                         <CaretLeft className="size-5" weight="bold" />
                         Back
                     </button>
 
-                    {/* Title */}
                     <div className="text-left">
                         <h1 className={TITLE_CLASS}>{header.title}</h1>
                         <p className={cn("mt-2", SUBTITLE_CLASS)}>{header.subtitle}</p>
                     </div>
 
-                    {/* Form */}
                     <div className="mt-[24px] md:mt-[34px] w-full">
                         {step === "email" && (
                             <div className="space-y-[18px]">
@@ -249,10 +386,11 @@ export default function ForgotPassword() {
                                 />
 
                                 <Button
-                                    className="w-full h-[52px] rounded-[12px] bg-neutral-900 text-white hover:bg-neutral-900/90"
+                                    className="w-full h-[52px] rounded-[12px] bg-neutral-900 text-white hover:bg-neutral-900/90 mt-4"
                                     onClick={onContinue}
+                                    disabled={sendingOtp}
                                 >
-                                    Continue
+                                    {sendingOtp ? "Sending code..." : "Continue"}
                                 </Button>
                             </div>
                         )}
@@ -271,40 +409,60 @@ export default function ForgotPassword() {
                                     >
                                         <InputOTPGroup>
                                             {Array.from({ length: 6 }).map((_, i) => (
-                                                <InputOTPSlot key={i} index={i} aria-invalid={!!otpError} />
+                                                <InputOTPSlot
+                                                    key={i}
+                                                    index={i}
+                                                    aria-invalid={!!otpError}
+                                                />
                                             ))}
                                         </InputOTPGroup>
                                     </InputOTP>
                                 </div>
 
                                 {otpError ? (
-                                    <p className="text-left text-[14px] leading-[20px] text-error-500">{otpError}</p>
+                                    <p className="text-left text-[14px] leading-[20px] text-error-500">
+                                        {otpError}
+                                    </p>
                                 ) : null}
 
                                 <div className="space-y-[20px]">
                                     <Button
                                         className="w-full h-[52px] rounded-[12px] bg-neutral-900 text-white hover:bg-neutral-900/90"
                                         onClick={onContinue}
+                                        disabled={verifyingOtp}
                                     >
-                                        Continue
+                                        {verifyingOtp ? "Verifying OTP..." : "Continue"}
                                     </Button>
 
-                                    <div className={cn(SUBTITLE_CLASS, "flex items-center justify-center gap-1")}>
-                                        <span className="leading-[20px]">Didn&apos;t Received an OTP?</span>
+                                    <div
+                                        className={cn(
+                                            SUBTITLE_CLASS,
+                                            "flex items-center justify-center gap-1"
+                                        )}
+                                    >
+                                        <span className="leading-[20px]">
+                                            Didn&apos;t Received an OTP?
+                                        </span>
                                         <button
                                             type="button"
                                             onClick={onResend}
-                                            disabled={secondsLeft > 0}
+                                            disabled={secondsLeft > 0 || resendingOtp}
                                             className={cn(
                                                 "font-semibold text-[color:var(--Text-Primary,#1A1A1A)]",
                                                 "inline-flex items-center justify-center",
                                                 "leading-[20px]",
                                                 "cursor-pointer",
-                                                secondsLeft > 0 && "cursor-not-allowed opacity-60"
+                                                (secondsLeft > 0 || resendingOtp) &&
+                                                "cursor-not-allowed opacity-60"
                                             )}
                                         >
-                                            {secondsLeft > 0 ? (
-                                                <CountdownTicker seconds={secondsLeft} className="leading-none -translate-y-[-2px]" />
+                                            {resendingOtp ? (
+                                                "Sending..."
+                                            ) : secondsLeft > 0 ? (
+                                                <CountdownTicker
+                                                    seconds={secondsLeft}
+                                                    className="leading-none -translate-y-[-2px]"
+                                                />
                                             ) : (
                                                 "Resend"
                                             )}
@@ -313,7 +471,6 @@ export default function ForgotPassword() {
                                 </div>
                             </div>
                         )}
-
 
                         {step === "new_password" && (
                             <div className="space-y-[14px]">
@@ -343,8 +500,9 @@ export default function ForgotPassword() {
                                 <Button
                                     className="w-full h-[52px] rounded-[12px] bg-neutral-900 text-white hover:bg-neutral-900/90 mt-[6px]"
                                     onClick={onContinue}
+                                    disabled={updatingPassword}
                                 >
-                                    Continue
+                                    {updatingPassword ? "Updating password..." : "Continue"}
                                 </Button>
                             </div>
                         )}

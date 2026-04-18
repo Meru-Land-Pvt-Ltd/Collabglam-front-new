@@ -127,7 +127,9 @@ function withAt(value: string) {
   return v ? `@${v}` : "";
 }
 
-function isValidStepParam(value: string | null | undefined): value is OnboardingStepParam {
+function isValidStepParam(
+  value: string | null | undefined
+): value is OnboardingStepParam {
   return value === "page1" || value === "page2" || value === "page3";
 }
 
@@ -210,6 +212,52 @@ function getPlatformProfileUrl(platformKey: string, username: string) {
   }
 
   return "";
+}
+
+function getResolveProfileUserMessage(error: any, platform: string) {
+  const status = Number(error?.response?.status ?? 0);
+
+  const rawMessage = String(
+    error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      ""
+  ).trim();
+
+  const lower = rawMessage.toLowerCase();
+
+  if (
+    lower.includes("profile already exists") ||
+    lower.includes("same handle and provider") ||
+    lower.includes("already exists")
+  ) {
+    return `This ${platform} profile is already connected to an existing account. Try another handle or sign in to that profile.`;
+  }
+
+  if (status === 400 || status === 404) {
+    return `We couldn’t find that ${platform} profile. Please check the handle and try again.`;
+  }
+
+  if (
+    status >= 500 ||
+    lower.includes("internal server error") ||
+    lower.includes("valid api token") ||
+    lower.includes("developer section") ||
+    lower.includes("resolve-profile") ||
+    lower.includes("modash")
+  ) {
+    return `We couldn’t verify your ${platform} handle right now. Please try again in a few minutes.`;
+  }
+
+  if (
+    lower.includes("network") ||
+    lower.includes("failed to fetch") ||
+    lower.includes("timeout")
+  ) {
+    return `We’re having trouble reaching the server. Please check your internet connection and try again.`;
+  }
+
+  return `Unable to verify your ${platform} handle right now. Please try again.`;
 }
 
 function getPlatformPreview(
@@ -399,6 +447,7 @@ function PlatformRow({
   onToggle,
   onMakePrimary,
   onHandleChange,
+  onResolveHandle,
 }: {
   platformKey: string;
   label: string;
@@ -413,9 +462,15 @@ function PlatformRow({
   onToggle: () => void;
   onMakePrimary: () => void;
   onHandleChange: (value: string) => void;
+  onResolveHandle: () => void;
 }) {
   const radioId = `primary-${platformKey}`;
   const preview = getPlatformPreview(platformKey, status);
+
+  const hasTypedHandle = Boolean(stripAt(handleValue));
+  const isResolvedForCurrentHandle =
+    Boolean(status?.resolved) &&
+    stripAt(status?.handle || "") === stripAt(handleValue || "");
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -531,17 +586,45 @@ function PlatformRow({
             {inputLabel}
           </label>
 
-          <input
-            value={handleValue}
-            onChange={(e) => onHandleChange(e.target.value)}
-            placeholder={placeholder}
-            className={cn(
-              "h-[46px] w-full rounded-[12px] border bg-white px-3",
-              "text-[14px] text-neutral-900",
-              "outline-none focus:outline-none",
-              status?.error ? "border-red-300" : "border-neutral-200"
-            )}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              value={handleValue}
+              onChange={(e) => onHandleChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && hasTypedHandle && !status?.loading) {
+                  e.preventDefault();
+                  onResolveHandle();
+                }
+              }}
+              placeholder={placeholder}
+              className={cn(
+                "h-[46px] flex-1 rounded-[12px] border bg-white px-3",
+                "text-[14px] text-neutral-900",
+                "outline-none focus:outline-none",
+                status?.error ? "border-red-300" : "border-neutral-200"
+              )}
+            />
+
+            <button
+              type="button"
+              onClick={onResolveHandle}
+              disabled={
+                !hasTypedHandle || status?.loading || isResolvedForCurrentHandle
+              }
+              className={cn(
+                "h-[46px] shrink-0 rounded-[12px] px-4 text-[13px] font-semibold transition",
+                !hasTypedHandle || status?.loading || isResolvedForCurrentHandle
+                  ? "cursor-not-allowed bg-neutral-200 text-neutral-400"
+                  : "bg-neutral-900 text-white hover:bg-neutral-800"
+              )}
+            >
+              {status?.loading
+                ? "Verifying..."
+                : isResolvedForCurrentHandle
+                ? "Verified"
+                : "Verify"}
+            </button>
+          </div>
 
           <div className="mt-2 min-h-[20px] text-[12px]">
             {status?.loading ? (
@@ -554,6 +637,10 @@ function PlatformRow({
               </span>
             ) : status?.error ? (
               <span className="text-red-500">{status.error}</span>
+            ) : hasTypedHandle ? (
+              <span className="text-neutral-500">
+                Click Verify to check this handle.
+              </span>
             ) : (
               <span className="text-neutral-400">
                 Enter a handle to continue
@@ -653,9 +740,6 @@ export default function InfluencerOnboardingPage() {
     Record<string, PlatformState>
   >({});
 
-  const resolveTimersRef = React.useRef<
-    Record<string, ReturnType<typeof setTimeout> | undefined>
-  >({});
   const resolveSeqRef = React.useRef<Record<string, number>>({});
 
   const setStepWithRoute = React.useCallback(
@@ -696,14 +780,6 @@ export default function InfluencerOnboardingPage() {
       router.replace(`/influencer/onboarding?step=${nextStepParam}`);
     }
   }, [router, getToken, searchParams]);
-
-  React.useEffect(() => {
-    return () => {
-      Object.values(resolveTimersRef.current).forEach((timer) => {
-        if (timer) clearTimeout(timer);
-      });
-    };
-  }, []);
 
   const progressPct = ((onboardStep + 1) / TOTAL_STEPS) * 100;
 
@@ -861,7 +937,7 @@ export default function InfluencerOnboardingPage() {
       } catch (e) {
         if (resolveSeqRef.current[platform] !== seq) return;
 
-        const msg = getApiErrorMessage(e, `Unable to resolve ${platform} handle`);
+        const msg = getResolveProfileUserMessage(e, platform);
 
         setPlatformStates((prev) => ({
           ...prev,
@@ -888,35 +964,17 @@ export default function InfluencerOnboardingPage() {
         handle: value,
         username: "",
         resolvedData: undefined,
-        loading: !!stripAt(value),
+        loading: false,
         resolved: false,
         error: undefined,
       },
     }));
+  };
 
-    if (resolveTimersRef.current[provider]) {
-      clearTimeout(resolveTimersRef.current[provider]);
-    }
-
-    if (!stripAt(value)) {
-      setPlatformStates((prev) => ({
-        ...prev,
-        [provider]: {
-          ...prev[provider],
-          handle: value,
-          username: "",
-          resolvedData: undefined,
-          loading: false,
-          resolved: false,
-          error: undefined,
-        },
-      }));
-      return;
-    }
-
-    resolveTimersRef.current[provider] = setTimeout(() => {
-      resolvePlatformHandle(provider, value);
-    }, 500);
+  const onVerifyHandle = (provider: string) => {
+    const rawHandle = platformStates[provider]?.handle || "";
+    if (!stripAt(rawHandle)) return;
+    resolvePlatformHandle(provider, rawHandle);
   };
 
   async function saveCurrentStep(stepIndex: number) {
@@ -1041,7 +1099,7 @@ export default function InfluencerOnboardingPage() {
       clearStoredOnboardingStep();
       const msg = getBackendMessage(resp);
       setRedirectToast({ icon: "success", title: "Success", text: msg });
-      router.push("/influencer/dashboards");
+      router.replace("/influencer/dashboards");
     } catch (e) {
       const msg = getApiErrorMessage(e, "Failed to save onboarding step");
       setFormError(msg);
@@ -1104,7 +1162,7 @@ export default function InfluencerOnboardingPage() {
 
   const subtitle =
     onboardStep === 0
-      ? "Select platforms, enter handles, and wait for verification before continuing."
+      ? "Select platforms, enter handles, and verify each one before continuing."
       : onboardStep === 1
       ? "Tell us what you create and how you prefer to get paid."
       : "Pick your industries, project types, and delivery preferences.";
@@ -1185,8 +1243,7 @@ export default function InfluencerOnboardingPage() {
                   </button>
 
                   <div className="cg-black-description">
-                    <span style={{ fontWeight: 500 }}>{onboardStep + 1}</span> of{" "}
-                    {TOTAL_STEPS} steps
+                    <span style={{ fontWeight: 500 }}>{onboardStep + 1}</span> of {TOTAL_STEPS} steps
                   </div>
                 </div>
 
@@ -1219,6 +1276,7 @@ export default function InfluencerOnboardingPage() {
                             onToggle={() => togglePlatform(p.key)}
                             onMakePrimary={() => makePrimary(p.key)}
                             onHandleChange={(value) => onHandleChange(p.key, value)}
+                            onResolveHandle={() => onVerifyHandle(p.key)}
                           />
                         );
                       })}
@@ -1247,6 +1305,7 @@ export default function InfluencerOnboardingPage() {
                           setData((p) => ({ ...p, projectLength: v }))
                         }
                         icon
+                        searchable={false}
                       >
                         {PROJECT_LENGTHS.map((opt) => (
                           <SelectItem key={opt} value={opt}>
@@ -1373,6 +1432,7 @@ export default function InfluencerOnboardingPage() {
                         }
                         icon
                         includeAll={false}
+                        searchable={false}
                       />
                     </div>
                   )}
@@ -1399,7 +1459,7 @@ export default function InfluencerOnboardingPage() {
                   {isLoading
                     ? "Saving..."
                     : onboardStep === 0 && page1Resolving
-                    ? "Resolving handle..."
+                    ? "Verifying handle..."
                     : "Continue"}
                 </Button>
 

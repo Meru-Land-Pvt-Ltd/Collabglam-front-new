@@ -222,7 +222,7 @@ export async function apiSendInfluencerSignupOtp(input: {
   email: string;
   password: string;
   countryId: string;
-  languageId?: string;
+  languageId?: string[];
   categoryIds?: string[];
   categoryId?: string;
 }) {
@@ -238,7 +238,7 @@ export async function apiSendInfluencerSignupOtp(input: {
     name: input.creatorName?.trim(),
     password: input.password,
     countryId: input.countryId,
-    languageIds: input.languageId ? [input.languageId] : [],
+    languageIds: input.languageId ? input.languageId : [],
     categoryIds: normalizedCategoryIds,
   };
 
@@ -316,7 +316,7 @@ export async function apiSaveInfluencerOnboarding(
  *  ✅ FORGOT PASSWORD
  *  ------------------------*/
 export async function apiSendOtpForgotInfluencer(email: string) {
-  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/send-otp-forgot`, {
+  return apiPost<{ message: string; email: string }>(`${INFLUENCER_BASE}/sendOtp`, {
     email,
   });
 }
