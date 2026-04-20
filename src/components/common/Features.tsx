@@ -1,61 +1,75 @@
 import React from 'react';
-import * as Icons from 'lucide-react';
-import { ArrowRight } from 'lucide-react';
-import { featuresData } from '../data/content';
+import { ClipboardList, Rocket, UsersRound } from 'lucide-react';
 
-const Features = () => (
-  <section id="features" className="py-20 bg-gray-50 font-lexend">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="text-center mb-16">
-        <h2 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-          Powerful Features
-        </h2>
-        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-          Everything you need to grow and scale
-        </p>
-      </div>
+const processSteps = [
+  {
+    id: '01',
+    icon: ClipboardList,
+    title: 'Submit Your Product & Budget',
+    description:
+      'Tell us what you are selling and how much you want to spend. It takes less than 60 seconds.',
+  },
+  {
+    id: '02',
+    icon: UsersRound,
+    title: 'Receive Creator Matches (48–72 Hours)',
+    description:
+      'We send you 3 to 5 hand-picked YouTube creator profiles, complete with their confirmed rates and audience data.',
+  },
+  {
+    id: '03',
+    icon: Rocket,
+    title: 'Pick Your Creator & We Manage the Rest',
+    description:
+      'You choose the creator you like best. We handle the product shipping, video briefing, and ensure the video is published on time.',
+  },
+];
 
-      <div className="space-y-20">
-        {featuresData.map(({ icon, title, description, image }, i) => {
-          const Icon = Icons[icon as keyof typeof Icons] as React.ElementType;
-          const reverse = i % 2 === 1;
-          return (
-            <div
-              key={title}
-              className={`flex flex-col lg:flex-row items-center gap-12 ${
-                reverse ? 'lg:flex-row-reverse' : ''
-              }`}
-            >
-              {/* Text */}
-              <div className="flex-1 lg:max-w-xl">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFA135] to-[#FF7236] flex items-center justify-center mb-6">
-                  <Icon className="h-7 w-7 text-white" />
-                </div>
-                <h3 className="text-3xl font-bold text-gray-900 mb-4">
-                  {title}
-                </h3>
-                <p className="text-lg text-gray-600 mb-6 leading-relaxed">
-                  {description}
+const Features = () => {
+  return (
+    <section id="features" className="bg-[#f7f4f4] py-24 font-lexend sm:py-28">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* Heading */}
+        <div className="mx-auto max-w-6xl text-center">
+          <div className="inline-flex items-center rounded-full bg-[#f6eadb] px-6 py-2 text-sm font-bold uppercase tracking-wide text-[#f59b00]">
+            Simple Process
+          </div>
+
+          <h2 className="mt-8 text-4xl font-extrabold leading-tight tracking-[-0.03em] text-[#0d1633] sm:text-5xl lg:text-[72px]">
+            Launch Your Campaign in{' '}
+            <span className="text-[#f59b00]">3 Simple Steps</span>
+          </h2>
+        </div>
+
+        {/* Steps */}
+        <div className="mt-20 grid gap-14 md:grid-cols-3 md:gap-10 lg:mt-24 lg:gap-14">
+          {processSteps.map((step) => {
+            const Icon = step.icon;
+
+            return (
+              <div key={step.id} className="text-center">
+                <div className="relative mx-auto mb-10 flex h-[108px] w-[108px] items-center justify-center rounded-full border-2 border-[#f3d5a9] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.08)]">
+                  <Icon className="h-10 w-10 text-[#f59b00]" strokeWidth={2.2} />
+
+                  <div className="absolute right-0 top-0 flex h-10 w-10 translate-x-[10%] -translate-y-[8%] items-center justify-center rounded-full bg-[#ffa000] text-sm font-extrabold text-white shadow-md">
+                    {step.id}
+                  </div>
+</div>
+
+                <h3 className="mx-auto max-w-md text-2xl font-extrabold leading-snug text-[#11182f] sm:text-[26px]">
+                  {step.title}
+</h3>
+
+                <p className="mx-auto mt-5 max-w-md text-lg leading-9 text-[#465466]">
+                  {step.description}
                 </p>
-              </div>
-
-              {/* Image */}
-              <div className="flex-1 lg:max-w-xl">
-                <div className="relative">
-                  <img
-                    src={image}
-                    alt={title}
-                    className="w-full h-80 object-cover rounded-2xl shadow-2xl"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent rounded-2xl" />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  </section>
-);
+</div>
+            );
+          })}
+        </div>
+</div>
+    </section>
+  );
+};
 
 export default Features;
