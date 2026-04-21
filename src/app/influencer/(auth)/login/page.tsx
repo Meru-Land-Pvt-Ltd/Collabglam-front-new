@@ -56,7 +56,7 @@ type CookieOptions = {
 };
 
 const ONBOARDING_RESUME_KEY = "cg_influencer_onboarding_resume_step";
-
+const Login_S3_Image = "https://collaglam-campaign.s3.us-east-1.amazonaws.com/influencer6.jpg"
 function getApiErrorDetails(
   err: any,
   fallbackMsg = "Login failed"
@@ -361,7 +361,7 @@ export default function InfluencerLoginPage() {
                 CollabGlam
               </span>
               <span className="block text-[10px] leading-[12px] text-tx-tertiary -mt-[2px]">
-                For Influencers
+                For Creators
               </span>
             </span>
           </Link>
@@ -396,7 +396,7 @@ export default function InfluencerLoginPage() {
                 <div
                   className="absolute inset-0 z-[1]"
                   style={{
-                    background: `lightgray url(/images/login_1.png) 50% / cover no-repeat`,
+                    background: `lightgray url(${Login_S3_Image}) 50% / cover no-repeat`,
                     mixBlendMode: "luminosity",
                   }}
                 />

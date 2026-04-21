@@ -2,15 +2,18 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { CaretLeft, LockKeyOpenIcon } from "@phosphor-icons/react";
+import {
+  GoogleReCaptchaProvider,
+  useGoogleReCaptcha,
+} from "react-google-recaptcha-v3";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { cn } from "@/lib/utils";
-import { CaretLeft } from "@phosphor-icons/react";
 
 import {
   apiSendOtpForgot,
@@ -19,8 +22,6 @@ import {
   getApiErrorMessage,
 } from "../../services/brandApi";
 import { CountdownTicker } from "@/components/ui/countdown-ticker";
-
-// ✅ Toast
 import { toast, ToastStyles } from "@/components/ui/toast";
 
 type Step = "email" | "otp" | "new_password";
@@ -82,33 +83,104 @@ type FieldErrors = {
   confirm?: string;
 };
 
-export default function ForgotPassword() {
+type VerifyRecaptchaResponse = {
+  success?: boolean;
+  score?: number;
+  action?: string;
+};
+
+async function verifyRecaptchaToken(
+  token: string,
+  action: string
+): Promise<VerifyRecaptchaResponse> {
+  /**
+   * Replace this mock with your real backend verification endpoint.
+   */
+  console.warn("verifyRecaptchaToken() is using a local mock. Replace it with your real backend call.");
+  return { success: true, score: 0.9, action };
+}
+
+function SecurityCheckOverlay({
+  checking,
+  onRetry,
+}: {
+  checking: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[200] bg-[#fbf8f3]/90 backdrop-blur-sm">
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <div
+          className="w-full max-w-md rounded-[28px] border border-[#ead28a] px-7 py-8 text-center shadow-[0_24px_70px_rgba(183,145,35,0.14)]"
+          style={{
+            background:
+              "linear-gradient(156.55deg, #FFFBF04D 0%, #FBFAF9FF 50%, #FDF2FC33 100%)",
+          }}
+        >
+          <div className="mb-4 flex justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#e6c968] bg-gradient-to-b from-[#fff4c7] to-[#f1d05d] shadow-[0_8px_24px_rgba(212,173,58,0.18)]">
+              <LockKeyOpenIcon size={26} weight="duotone" className="text-[#a97c00]" />
+            </div>
+          </div>
+
+          <div className="mb-2 text-[28px] font-semibold leading-tight text-[#b88300]">
+            Security check required
+          </div>
+
+          <div className="mx-auto max-w-[320px] text-sm leading-6 text-[#7d6b45]">
+            You refreshed this page 3 times. We’re running an invisible security
+            verification before continuing.
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <div className="text-sm leading-6 text-[#7d6b45]">
+              {checking
+                ? "Running invisible security verification..."
+                : "Verification did not complete. Please try again."}
+            </div>
+
+            {!checking ? (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center justify-center rounded-full border border-[#e3c14e] bg-gradient-to-r from-[#f2d15b] to-[#e7bf43] px-5 py-2.5 text-sm font-medium text-[#5e470f] shadow-[0_10px_28px_rgba(212,173,58,0.22)]"
+              >
+                Try again
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForgotPasswordInner() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const [step, setStep] = React.useState<Step>("email");
-
   const [email, setEmail] = React.useState("");
   const [otp, setOtp] = React.useState("");
-
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
-
   const [pwValid, setPwValid] = React.useState(false);
   const [resetToken, setResetToken] = React.useState<string>("");
-
-  // ✅ loaders
   const [isSendingOtp, setIsSendingOtp] = React.useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = React.useState(false);
   const [isUpdatingPw, setIsUpdatingPw] = React.useState(false);
-
-  // ✅ frontend-only errors (inline + red state). Backend errors = toast only.
   const [fieldErr, setFieldErr] = React.useState<FieldErrors>({});
-
-  // OTP timer
   const OTP_SECONDS = 60;
   const [secondsLeft, setSecondsLeft] = React.useState(OTP_SECONDS);
 
-  // Reset frontend errors + otp timer only when step changes
+  const [refreshCount, setRefreshCount] = React.useState(0);
+  const [captchaRequired, setCaptchaRequired] = React.useState(false);
+  const [captchaVerified, setCaptchaVerified] = React.useState(false);
+  const [captchaChecking, setCaptchaChecking] = React.useState(false);
+  const [captchaAttempt, setCaptchaAttempt] = React.useState(0);
+  const actionName = React.useMemo(() => "brand_forgot_password_refresh_gate", []);
+
   React.useEffect(() => {
     setFieldErr({});
 
@@ -120,8 +192,101 @@ export default function ForgotPassword() {
     }, 1000);
 
     return () => window.clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const countKey = `cg-refresh-count:${pathname}`;
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+
+    const navEntry = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+
+    const isReload =
+      navEntry?.type === "reload" ||
+      (typeof performance !== "undefined" &&
+        typeof (performance as any).navigation !== "undefined" &&
+        (performance as any).navigation.type === 1);
+
+    const previousCount = Number(sessionStorage.getItem(countKey) || "0");
+    const nextCount = isReload ? previousCount + 1 : 0;
+
+    sessionStorage.setItem(countKey, String(nextCount));
+    setRefreshCount(nextCount);
+
+    const alreadyVerified = sessionStorage.getItem(verifiedKey) === "1";
+    setCaptchaVerified(alreadyVerified);
+    setCaptchaRequired(nextCount >= 3 && !alreadyVerified);
+  }, [pathname]);
+
+  const markCaptchaPassed = React.useCallback(() => {
+    const countKey = `cg-refresh-count:${pathname}`;
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+
+    sessionStorage.setItem(countKey, "0");
+    sessionStorage.setItem(verifiedKey, "1");
+
+    setRefreshCount(0);
+    setCaptchaVerified(true);
+    setCaptchaRequired(false);
+  }, [pathname]);
+
+  const markCaptchaFailed = React.useCallback(() => {
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+    sessionStorage.removeItem(verifiedKey);
+
+    setCaptchaVerified(false);
+    setCaptchaRequired(true);
+  }, [pathname]);
+
+  React.useEffect(() => {
+    if (!captchaRequired || captchaVerified) return;
+    if (!executeRecaptcha) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setCaptchaChecking(true);
+
+        const token = await executeRecaptcha(actionName);
+        const resp = await verifyRecaptchaToken(token, actionName);
+
+        if (cancelled) return;
+
+        const success = Boolean(resp?.success);
+        const score = Number(resp?.score ?? 0);
+        const actionMatches = !resp?.action || resp.action === actionName;
+
+        if (success && actionMatches && score >= 0.5) {
+          markCaptchaPassed();
+        } else {
+          markCaptchaFailed();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("reCAPTCHA v3 verification failed:", error);
+          markCaptchaFailed();
+        }
+      } finally {
+        if (!cancelled) setCaptchaChecking(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    captchaRequired,
+    captchaVerified,
+    executeRecaptcha,
+    actionName,
+    captchaAttempt,
+    markCaptchaFailed,
+    markCaptchaPassed,
+  ]);
 
   const handleBack = () => {
     if (step === "otp" || step === "new_password") {
@@ -146,10 +311,17 @@ export default function ForgotPassword() {
   };
 
   const onContinue = async () => {
-    // ✅ clear previous frontend errors (fresh validation per click)
+    if (captchaRequired && !captchaVerified) {
+      toast({
+        icon: "error",
+        title: "Security check in progress",
+        text: "Please complete the invisible verification before continuing.",
+      });
+      return;
+    }
+
     setFieldErr({});
 
-    // ---------------- email step ----------------
     if (step === "email") {
       if (!email.trim()) {
         setFieldErr({ email: "Recovery email is required." });
@@ -168,7 +340,6 @@ export default function ForgotPassword() {
 
         toast({ icon: "success", title: "OTP sent", text: `We sent a 6-digit code to ${email.trim()}` });
       } catch (e) {
-        // ✅ backend error = toast only
         const msg = getApiErrorMessage(e, "Failed to send OTP");
         toast({ icon: "error", title: "Failed to send OTP", text: msg });
       } finally {
@@ -177,7 +348,6 @@ export default function ForgotPassword() {
       return;
     }
 
-    // ---------------- otp step ----------------
     if (step === "otp") {
       if (otp.trim().length !== 6) {
         setFieldErr({ otp: "Please enter the 6-digit OTP." });
@@ -187,14 +357,11 @@ export default function ForgotPassword() {
       setIsVerifyingOtp(true);
       try {
         const res = await apiVerifyOtpForgot(email.trim(), otp.trim());
-        console.log(res.resetToken);
-
         setResetToken(res.resetToken);
         setStep("new_password");
 
         toast({ icon: "success", title: "OTP verified", text: "Now create your new password." });
       } catch (e) {
-        // ✅ backend error = toast only (no red state / no inline)
         const msg = getApiErrorMessage(e, "OTP verification failed");
         toast({ icon: "error", title: "OTP verification failed", text: msg });
       } finally {
@@ -203,7 +370,6 @@ export default function ForgotPassword() {
       return;
     }
 
-    // ---------------- new password step ----------------
     if (step === "new_password") {
       let pwdErr = "";
       let confErr = "";
@@ -236,8 +402,6 @@ export default function ForgotPassword() {
 
       setIsUpdatingPw(true);
       try {
-        console.log(resetToken);
-
         await apiUpdatePasswordWithResetToken(resetToken, password);
 
         toast({
@@ -249,7 +413,6 @@ export default function ForgotPassword() {
 
         window.setTimeout(() => router.push("/brand/login"), 700);
       } catch (e) {
-        // ✅ backend error = toast only (no red state / no inline)
         const msg = getApiErrorMessage(e, "Failed to update password");
         toast({ icon: "error", title: "Failed to update password", text: msg });
       } finally {
@@ -258,8 +421,16 @@ export default function ForgotPassword() {
     }
   };
 
-  // ✅ RESEND: backend error toast only; invalid email -> go back + inline error
   const onResend = async () => {
+    if (captchaRequired && !captchaVerified) {
+      toast({
+        icon: "error",
+        title: "Security check in progress",
+        text: "Please complete the invisible verification before requesting another OTP.",
+      });
+      return;
+    }
+
     if (secondsLeft > 0 || isSendingOtp) return;
 
     if (!isValidEmail(email)) {
@@ -293,10 +464,16 @@ export default function ForgotPassword() {
   const confirmInvalid = !!fieldErr.confirm;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col relative">
       <ToastStyles />
 
-      {/* Header */}
+      {captchaRequired && !captchaVerified ? (
+        <SecurityCheckOverlay
+          checking={captchaChecking}
+          onRetry={() => setCaptchaAttempt((x) => x + 1)}
+        />
+      ) : null}
+
       <header className="w-full bg-white border-b border-bd-primary">
         <div
           className="
@@ -326,7 +503,6 @@ export default function ForgotPassword() {
         </div>
       </header>
 
-      {/* Body */}
       <main className="flex-1 flex justify-center">
         <div
           className={cn(
@@ -335,19 +511,16 @@ export default function ForgotPassword() {
             "py-[48px] sm:py-[60px] md:py-[80px] xl:py-[100px] 2xl:py-[120px]"
           )}
         >
-          {/* Back Button */}
           <button type="button" onClick={handleBack} className={cn(BACK_CLASS, "mb-[14px] md:mb-[16px]")}>
             <CaretLeft className="size-5" weight="bold" />
             Back
           </button>
 
-          {/* Title */}
           <div className="text-left">
             <h1 className={TITLE_CLASS}>{header.title}</h1>
             <p className={cn("mt-2", SUBTITLE_CLASS)}>{header.subtitle}</p>
           </div>
 
-          {/* Form */}
           <div className="mt-[24px] md:mt-[34px] w-full">
             {step === "email" && (
               <div className="space-y-[18px]">
@@ -370,7 +543,7 @@ export default function ForgotPassword() {
                     isSendingOtp && "opacity-60"
                   )}
                   onClick={onContinue}
-                  disabled={isSendingOtp}
+                  disabled={isSendingOtp || (captchaRequired && !captchaVerified)}
                 >
                   {isSendingOtp ? "Sending OTP..." : "Continue"}
                 </Button>
@@ -405,7 +578,6 @@ export default function ForgotPassword() {
                   </InputOTP>
                 </div>
 
-                {/* ✅ Inline OTP error text */}
                 {fieldErr.otp ? (
                   <p className="text-[14px] leading-[20px] text-[color:var(--Errors-500,#E35141)] text-center">
                     {fieldErr.otp}
@@ -419,7 +591,7 @@ export default function ForgotPassword() {
                       (isVerifyingOtp || isSendingOtp) && "opacity-60"
                     )}
                     onClick={onContinue}
-                    disabled={isVerifyingOtp || isSendingOtp}
+                    disabled={isVerifyingOtp || isSendingOtp || (captchaRequired && !captchaVerified)}
                   >
                     {isVerifyingOtp ? "Verifying..." : "Continue"}
                   </Button>
@@ -429,13 +601,14 @@ export default function ForgotPassword() {
                     <button
                       type="button"
                       onClick={onResend}
-                      disabled={secondsLeft > 0 || isSendingOtp}
+                      disabled={secondsLeft > 0 || isSendingOtp || (captchaRequired && !captchaVerified)}
                       className={cn(
                         "font-semibold text-[color:var(--Text-Primary,#1A1A1A)]",
                         "inline-flex items-center justify-center",
                         "leading-[20px]",
                         "cursor-pointer",
-                        (secondsLeft > 0 || isSendingOtp) && "cursor-not-allowed opacity-60"
+                        (secondsLeft > 0 || isSendingOtp || (captchaRequired && !captchaVerified)) &&
+                          "cursor-not-allowed opacity-60"
                       )}
                     >
                       {isSendingOtp ? (
@@ -486,7 +659,7 @@ export default function ForgotPassword() {
                     isUpdatingPw && "opacity-60"
                   )}
                   onClick={onContinue}
-                  disabled={isUpdatingPw}
+                  disabled={isUpdatingPw || (captchaRequired && !captchaVerified)}
                 >
                   {isUpdatingPw ? "Updating..." : "Continue"}
                 </Button>
@@ -496,5 +669,28 @@ export default function ForgotPassword() {
         </div>
       </main>
     </div>
+  );
+}
+
+function ForgotPasswordContent() {
+  return (
+    <GoogleReCaptchaProvider
+      reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+      scriptProps={{
+        async: true,
+        defer: true,
+        appendTo: "head",
+      }}
+    >
+      <ForgotPasswordInner />
+    </GoogleReCaptchaProvider>
+  );
+}
+
+export default function ForgotPassword() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <ForgotPasswordContent />
+    </React.Suspense>
   );
 }

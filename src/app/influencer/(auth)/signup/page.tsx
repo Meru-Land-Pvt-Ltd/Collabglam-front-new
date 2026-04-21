@@ -470,7 +470,7 @@ export default function InfluencerSignupPage() {
                 CollabGlam
               </span>
               <span className="block text-[10px] leading-[12px] text-tx-tertiary -mt-[2px]">
-                For Influencers
+                For Creators
               </span>
             </span>
           </Link>

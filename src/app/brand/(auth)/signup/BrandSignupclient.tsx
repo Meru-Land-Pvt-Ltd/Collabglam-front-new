@@ -1,8 +1,9 @@
-// app/brand/signup/page.tsx
 "use client";
 
 import * as React from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { GoogleReCaptchaProvider, useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
@@ -11,23 +12,17 @@ import { cn } from "@/lib/utils";
 import { FloatingSelect, SelectItem } from "@/components/ui/selectComp";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
-import { useRouter } from "next/navigation";
-
 import { VggCardStack } from "@/components/ui/brand/VggAnimatedCard";
 
 import { apiSendSignupOtp, apiVerifyOtpSignup, getApiErrorMessage } from "../../services/brandApi";
 
 import { CountdownTicker } from "@/components/ui/countdown-ticker";
-import { Checkbox } from "@/components/animate-ui/components/radix/checkbox"; // ✅ updated path
+import { Checkbox } from "@/components/animate-ui/components/radix/checkbox";
 import { PasswordInput } from "@/components/ui/password";
-import { CaretLeft } from "@phosphor-icons/react";
+import { CaretLeft, LockKeyOpenIcon } from "@phosphor-icons/react";
 
-// ✅ Toast (SweetAlert2)
 import { toast, ToastStyles } from "@/components/ui/toast";
 
-/** =========================
- *  SVG LIBRARY
- *  ========================= */
 type SvgProps = { className?: string };
 
 function SvgTriangle({ className }: SvgProps) {
@@ -155,14 +150,82 @@ const INDUSTRY_OPTIONS = [
   "Other",
 ];
 
-export default function BrandSignupPage() {
+type VerifyRecaptchaResponse = {
+  success?: boolean;
+  score?: number;
+  action?: string;
+};
+
+async function verifyRecaptchaToken(token: string, action: string): Promise<VerifyRecaptchaResponse> {
+  /**
+   * Replace this mock with your real backend verification endpoint.
+   */
+  console.warn("verifyRecaptchaToken() is using a local mock. Replace it with your real backend call.");
+  return { success: true, score: 0.9, action };
+}
+
+function SecurityCheckOverlay({
+  checking,
+  onRetry,
+}: {
+  checking: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[200] bg-[#fbf8f3]/90 backdrop-blur-sm">
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <div
+          className="w-full max-w-md rounded-[28px] border border-[#ead28a] px-7 py-8 text-center shadow-[0_24px_70px_rgba(183,145,35,0.14)]"
+          style={{
+            background:
+              "linear-gradient(156.55deg, #FFFBF04D 0%, #FBFAF9FF 50%, #FDF2FC33 100%)",
+          }}
+        >
+          <div className="mb-4 flex justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#e6c968] bg-gradient-to-b from-[#fff4c7] to-[#f1d05d] shadow-[0_8px_24px_rgba(212,173,58,0.18)]">
+              <LockKeyOpenIcon size={26} weight="duotone" className="text-[#a97c00]" />
+            </div>
+          </div>
+
+          <div className="mb-2 text-[28px] font-semibold leading-tight text-[#b88300]">
+            Security check required
+          </div>
+
+          <div className="mx-auto max-w-[320px] text-sm leading-6 text-[#7d6b45]">
+            You refreshed this page 3 times. We’re running an invisible security
+            verification before continuing.
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <div className="text-sm leading-6 text-[#7d6b45]">
+              {checking
+                ? "Running invisible security verification..."
+                : "Verification did not complete. Please try again."}
+            </div>
+
+            {!checking ? (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center justify-center rounded-full border border-[#e3c14e] bg-gradient-to-r from-[#f2d15b] to-[#e7bf43] px-5 py-2.5 text-sm font-medium text-[#5e470f] shadow-[0_10px_28px_rgba(212,173,58,0.22)]"
+              >
+                Try again
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandSignupInner() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   type Step = "form" | "otp";
 
-  /** -------------------------
-   * Form state
-   * ------------------------*/
   const [brandName, setBrandName] = React.useState("");
   const [pocName, setPocName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -195,35 +258,33 @@ export default function BrandSignupPage() {
     });
   };
 
-  /** -------------------------
-   * OTP state
-   * ------------------------*/
   const [step, setStep] = React.useState<Step>("form");
   const [otp, setOtp] = React.useState("");
   const [otpError, setOtpError] = React.useState<string | undefined>(undefined);
   const [secondsLeft, setSecondsLeft] = React.useState(0);
-
-  // ✅ split loaders: send/resend vs verify
   const [isSendingOtp, setIsSendingOtp] = React.useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = React.useState(false);
   const [passwordValid, setPasswordValid] = React.useState(false);
 
-  /** -------------------------
-   * Validation (match backend)
-   * ------------------------*/
+  const [refreshCount, setRefreshCount] = React.useState(0);
+  const [captchaRequired, setCaptchaRequired] = React.useState(false);
+  const [captchaVerified, setCaptchaVerified] = React.useState(false);
+  const [captchaChecking, setCaptchaChecking] = React.useState(false);
+  const [captchaAttempt, setCaptchaAttempt] = React.useState(0);
+  const actionName = React.useMemo(() => "brand_signup_refresh_gate", []);
+
   const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
-  // ✅ per your current requirement: 8–16 chars
   const pwOk = (p: string) => {
     const value = (p ?? "").trim();
 
     return (
       value.length >= 8 &&
       value.length <= 16 &&
-      /\d/.test(value) &&           // number
-      /[A-Z]/.test(value) &&        // uppercase
-      /[a-z]/.test(value) &&        // lowercase
-      /[^A-Za-z0-9]/.test(value)    // special character
+      /\d/.test(value) &&
+      /[A-Z]/.test(value) &&
+      /[a-z]/.test(value) &&
+      /[^A-Za-z0-9]/.test(value)
     );
   };
 
@@ -266,18 +327,9 @@ export default function BrandSignupPage() {
   const passwordInvalid = !!passwordError;
   const agreedInvalid = !!agreedError;
 
-  const hasAnyError =
-    brandNameInvalid || emailInvalid || industryInvalid || passwordInvalid || agreedInvalid;
-
-  /** -------------------------
-   * Left card svg swap
-   * ------------------------*/
   const svgIndex = useRandomSvgSwap(8000, SVG_LIBRARY.length);
   const CardSvg = SVG_LIBRARY[svgIndex];
 
-  /** -------------------------
-   * Countdown (OTP resend)
-   * ------------------------*/
   React.useEffect(() => {
     if (step !== "otp") return;
     if (secondsLeft <= 0) return;
@@ -289,9 +341,100 @@ export default function BrandSignupPage() {
     return () => window.clearInterval(id);
   }, [secondsLeft, step]);
 
-  /** -------------------------
-   * APIs
-   * ------------------------*/
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const countKey = `cg-refresh-count:${pathname}`;
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+
+    const navEntry = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+
+    const isReload =
+      navEntry?.type === "reload" ||
+      (typeof performance !== "undefined" &&
+        typeof (performance as any).navigation !== "undefined" &&
+        (performance as any).navigation.type === 1);
+
+    const previousCount = Number(sessionStorage.getItem(countKey) || "0");
+    const nextCount = isReload ? previousCount + 1 : 0;
+
+    sessionStorage.setItem(countKey, String(nextCount));
+    setRefreshCount(nextCount);
+
+    const alreadyVerified = sessionStorage.getItem(verifiedKey) === "1";
+    setCaptchaVerified(alreadyVerified);
+    setCaptchaRequired(nextCount >= 3 && !alreadyVerified);
+  }, [pathname]);
+
+  const markCaptchaPassed = React.useCallback(() => {
+    const countKey = `cg-refresh-count:${pathname}`;
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+
+    sessionStorage.setItem(countKey, "0");
+    sessionStorage.setItem(verifiedKey, "1");
+
+    setRefreshCount(0);
+    setCaptchaVerified(true);
+    setCaptchaRequired(false);
+  }, [pathname]);
+
+  const markCaptchaFailed = React.useCallback(() => {
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+    sessionStorage.removeItem(verifiedKey);
+
+    setCaptchaVerified(false);
+    setCaptchaRequired(true);
+  }, [pathname]);
+
+  React.useEffect(() => {
+    if (!captchaRequired || captchaVerified) return;
+    if (!executeRecaptcha) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setCaptchaChecking(true);
+
+        const token = await executeRecaptcha(actionName);
+        const resp = await verifyRecaptchaToken(token, actionName);
+
+        if (cancelled) return;
+
+        const success = Boolean(resp?.success);
+        const score = Number(resp?.score ?? 0);
+        const actionMatches = !resp?.action || resp.action === actionName;
+
+        if (success && actionMatches && score >= 0.5) {
+          markCaptchaPassed();
+        } else {
+          markCaptchaFailed();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("reCAPTCHA v3 verification failed:", error);
+          markCaptchaFailed();
+        }
+      } finally {
+        if (!cancelled) setCaptchaChecking(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    captchaRequired,
+    captchaVerified,
+    executeRecaptcha,
+    actionName,
+    captchaAttempt,
+    markCaptchaFailed,
+    markCaptchaPassed,
+  ]);
+
   const sendOtp = async () => {
     await apiSendSignupOtp({
       brandName: brandName.trim(),
@@ -334,17 +477,21 @@ export default function BrandSignupPage() {
     return res;
   };
 
-  /** -------------------------
-   * Actions
-   * ------------------------*/
   const handleContinueFromForm = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // show errors in UI
+    if (captchaRequired && !captchaVerified) {
+      toast({
+        icon: "error",
+        title: "Security check in progress",
+        text: "Please complete the invisible verification before continuing.",
+      });
+      return;
+    }
+
     resetClearedOnSubmit();
     setAttemptedSubmit(true);
 
-    // ✅ validate immediately (same rules you expect)
     const hasAnyErrorNow =
       !brandName.trim() ||
       !email.trim() ||
@@ -381,7 +528,15 @@ export default function BrandSignupPage() {
   };
 
   const handleVerifyOtp = async () => {
-    // ✅ Frontend validation: error state only (NO toast)
+    if (captchaRequired && !captchaVerified) {
+      toast({
+        icon: "error",
+        title: "Security check in progress",
+        text: "Please complete the invisible verification before continuing.",
+      });
+      return;
+    }
+
     if (otp.length !== 6) {
       setOtpError("Please enter the 6-digit OTP.");
       return;
@@ -399,7 +554,6 @@ export default function BrandSignupPage() {
 
       router.replace("/brand/onboarding");
     } catch (err) {
-      // ✅ Backend error: toast only (NO otpError / no red state)
       const msg = getApiErrorMessage(err, "OTP verification failed");
       toast({ icon: "error", title: "OTP verification failed", text: msg });
     } finally {
@@ -408,6 +562,15 @@ export default function BrandSignupPage() {
   };
 
   const handleResendOtp = async () => {
+    if (captchaRequired && !captchaVerified) {
+      toast({
+        icon: "error",
+        title: "Security check in progress",
+        text: "Please complete the invisible verification before requesting another OTP.",
+      });
+      return;
+    }
+
     if (secondsLeft > 0 || isSendingOtp) return;
 
     setOtp("");
@@ -439,14 +602,17 @@ export default function BrandSignupPage() {
     setStep("form");
   };
 
-  /** -------------------------
-   * Render
-   * ------------------------*/
   return (
-    <div className="min-h-[100svh] bg-background text-foreground flex flex-col overflow-x-hidden">
+    <div className="min-h-[100svh] bg-background text-foreground flex flex-col overflow-x-hidden relative">
       <ToastStyles />
 
-      {/* Header */}
+      {captchaRequired && !captchaVerified ? (
+        <SecurityCheckOverlay
+          checking={captchaChecking}
+          onRetry={() => setCaptchaAttempt((x) => x + 1)}
+        />
+      ) : null}
+
       <header className="w-full bg-white border-b border-bd-primary">
         <div
           className={cn(
@@ -477,10 +643,8 @@ export default function BrandSignupPage() {
         </div>
       </header>
 
-      {/* Body */}
       <main className={cn("max-w-full flex-1 min-h-0 overflow-y-auto", "py-[20px]")}>
         <div className={cn("grid min-h-0", "h-full items-stretch lg:grid-cols-2")}>
-          {/* LEFT */}
           <section className="order-1 lg:h-full">
             <div className="flex w-full lg:h-full lg:items-stretch pr-[20px]">
               <div
@@ -508,7 +672,6 @@ export default function BrandSignupPage() {
             </div>
           </section>
 
-          {/* RIGHT ✅ updated alignment for OTP */}
           <section
             className={cn(
               "order-2 flex px-[20px] justify-center w-full items-start",
@@ -517,7 +680,6 @@ export default function BrandSignupPage() {
             )}
           >
             <div className={cn("w-full max-w-[520px]")}>
-              {/* FORM */}
               {step === "form" && (
                 <>
                   <h1 className="cg-heading">Create an Account</h1>
@@ -541,7 +703,6 @@ export default function BrandSignupPage() {
                     />
 
                     <FloatingInput label="Name" type="text" value={pocName} onValueChange={(v) => setPocName(v)} icon={false} size="small" />
-
 
                     <FloatingInput
                       label="Work Email"
@@ -651,7 +812,7 @@ export default function BrandSignupPage() {
                       variant="solid"
                       size="lg"
                       className={cn("w-full rounded-m mt-2xl", isSendingOtp && "opacity-60")}
-                      disabled={isSendingOtp}
+                      disabled={isSendingOtp || (captchaRequired && !captchaVerified)}
                     >
                       {isSendingOtp ? "Sending OTP..." : "Continue"}
                     </Button>
@@ -666,7 +827,6 @@ export default function BrandSignupPage() {
                 </>
               )}
 
-              {/* OTP ✅ reduced top spacing */}
               {step === "otp" && (
                 <>
                   <div className="flex items-center gap-2">
@@ -707,7 +867,7 @@ export default function BrandSignupPage() {
                         variant="solid"
                         className={cn("w-full h-[72px] rounded-[12px]", (isVerifyingOtp || isSendingOtp) && "opacity-60")}
                         onClick={handleVerifyOtp}
-                        disabled={isVerifyingOtp || isSendingOtp}
+                        disabled={isVerifyingOtp || isSendingOtp || (captchaRequired && !captchaVerified)}
                       >
                         {isVerifyingOtp ? "Verifying..." : "Continue"}
                       </Button>
@@ -717,13 +877,13 @@ export default function BrandSignupPage() {
                         <button
                           type="button"
                           onClick={handleResendOtp}
-                          disabled={secondsLeft > 0 || isSendingOtp}
+                          disabled={secondsLeft > 0 || isSendingOtp || (captchaRequired && !captchaVerified)}
                           className={cn(
                             "font-semibold text-[color:var(--Text-Primary,#1A1A1A)]",
                             "inline-flex items-center justify-center",
                             "leading-[20px]",
                             "cursor-pointer",
-                            (secondsLeft > 0 || isSendingOtp) && "cursor-not-allowed opacity-60"
+                            (secondsLeft > 0 || isSendingOtp || (captchaRequired && !captchaVerified)) && "cursor-not-allowed opacity-60"
                           )}
                         >
                           {isSendingOtp ? "Sending..." : secondsLeft > 0 ? <CountdownTicker seconds={secondsLeft} className="leading-none -translate-y-[-2px]" /> : "Resend"}
@@ -738,5 +898,28 @@ export default function BrandSignupPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+function BrandSignupContent() {
+  return (
+    <GoogleReCaptchaProvider
+      reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+      scriptProps={{
+        async: true,
+        defer: true,
+        appendTo: "head",
+      }}
+    >
+      <BrandSignupInner />
+    </GoogleReCaptchaProvider>
+  );
+}
+
+export default function BrandSignupPage() {
+  return (
+    <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <BrandSignupContent />
+    </React.Suspense>
   );
 }

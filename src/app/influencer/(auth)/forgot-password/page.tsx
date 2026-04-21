@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import axios from "axios";
 import { CaretLeft } from "@phosphor-icons/react";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
@@ -68,7 +67,6 @@ const STEP_COPY: Record<Step, { title: string; subtitle: string }> = {
             "Enter your email and password so we can take you back to your dashboard and ongoing work.",
     },
 };
-
 
 async function sendForgotPasswordOtp(email: string) {
     try {
@@ -168,12 +166,14 @@ export default function ForgotPassword() {
                 });
 
                 setStep("otp");
-            } catch (error: any) {
+            } catch (error) {
                 toast({
                     icon: "error",
                     title: "Unable to send OTP",
-                    text:
-                        error?.message || "Unable to send verification code right now.",
+                    text: getApiErrorMessage(
+                        error,
+                        "Unable to send verification code right now."
+                    ),
                 });
             } finally {
                 setSendingOtp(false);
@@ -203,14 +203,16 @@ export default function ForgotPassword() {
                 toast({
                     icon: "success",
                     title: "OTP verified",
-                    text:
-                        resp?.message ||
-                        "Your OTP has been verified successfully.",
+                    text: resp?.message || "Your OTP has been verified successfully.",
                 });
 
                 setStep("new_password");
-            } catch (error: any) {
-                setOtpError(error?.message || "Unable to verify OTP right now.");
+            } catch (error) {
+                toast({
+                    icon: "error",
+                    title: "OTP verification failed",
+                    text: getApiErrorMessage(error, "Unable to verify OTP right now."),
+                });
             } finally {
                 setVerifyingOtp(false);
             }
@@ -256,16 +258,18 @@ export default function ForgotPassword() {
                     icon: "success",
                     title: "Password updated",
                     text:
-                        resp?.message ||
-                        "Your password has been updated successfully.",
+                        resp?.message || "Your password has been updated successfully.",
                 });
 
                 router.replace("/influencer/login");
-            } catch (error: any) {
+            } catch (error) {
                 toast({
                     icon: "error",
                     title: "Unable to update password",
-                    text: error?.message || "Unable to update password right now.",
+                    text: getApiErrorMessage(
+                        error,
+                        "Unable to update password right now."
+                    ),
                 });
             } finally {
                 setUpdatingPassword(false);
@@ -292,12 +296,14 @@ export default function ForgotPassword() {
                 title: "OTP resent",
                 text: "A new verification code has been sent to your email.",
             });
-        } catch (error: any) {
+        } catch (error) {
             toast({
                 icon: "error",
                 title: "Unable to resend OTP",
-                text:
-                    error?.message || "Unable to resend the verification code right now.",
+                text: getApiErrorMessage(
+                    error,
+                    "Unable to resend the verification code right now."
+                ),
             });
         } finally {
             setResendingOtp(false);
