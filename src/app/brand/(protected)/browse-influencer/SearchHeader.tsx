@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Loader2, Search, SlidersHorizontal } from "lucide-react";
+import { Loader2, Search, SlidersHorizontal } from "lucide-react";
 import { CaretDown } from "@phosphor-icons/react";
 import type { FilterState, Platform } from "./filters";
 import { platformTheme } from "./utils/platform";
@@ -35,27 +35,34 @@ export function SearchHeader({
   onApplyFilters,
   activeFilterCount = 0,
 }: SearchHeaderProps) {
-  const [platformMenuOpen, setPlatformMenuOpen] = useState(false);
+  const [isPlatformOpen, setIsPlatformOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const platformMenuRef = useRef<HTMLDivElement | null>(null);
+  const platformAnchorRef = useRef<HTMLDivElement | null>(null);
   const filterAnchorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      if (platformMenuRef.current && !platformMenuRef.current.contains(target)) {
-        setPlatformMenuOpen(false);
+      if (
+        platformAnchorRef.current &&
+        !platformAnchorRef.current.contains(target)
+      ) {
+        setIsPlatformOpen(false);
       }
-      if (filterAnchorRef.current && !filterAnchorRef.current.contains(target)) {
+
+      if (
+        filterAnchorRef.current &&
+        !filterAnchorRef.current.contains(target)
+      ) {
         setIsFilterOpen(false);
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setPlatformMenuOpen(false);
+        setIsPlatformOpen(false);
         setIsFilterOpen(false);
       }
     };
@@ -71,14 +78,10 @@ export function SearchHeader({
 
   const selectedPlatformsLabel = useMemo(() => {
     if (platforms.length === 3) return "All platforms";
-    return platforms.map((platform) => platformTheme[platform]?.label || platform).join(", ");
+    return platforms
+      .map((platform) => platformTheme[platform]?.label || platform)
+      .join(", ");
   }, [platforms]);
-
-  const modeLabel = useMemo(() => {
-    if (filters.search.mode === "ai") return "AI only";
-    if (filters.search.mode === "standard") return "Standard only";
-    return "Combined";
-  }, [filters.search.mode]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -95,7 +98,7 @@ export function SearchHeader({
               type="text"
               value={queryText}
               onChange={(event) => setQueryText(event.target.value)}
-              placeholder="Search handles, keywords, bios, or visual intent"
+              placeholder="Search creators, keywords, bios, mentions, hashtags, or topics"
               className="h-12 w-full rounded-[14px] border border-[#ddd8cf] pl-11 pr-12 text-sm text-[#222] outline-none transition placeholder:text-[#8c8c8c] focus:border-[#bcb5aa] focus:bg-white"
             />
             {loading ? (
@@ -104,40 +107,48 @@ export function SearchHeader({
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap xl:w-auto xl:flex-nowrap">
-            <div className="relative w-full shrink-0 sm:w-auto" ref={platformMenuRef}>
+            <div
+              className="relative w-full shrink-0 sm:w-auto"
+              ref={platformAnchorRef}
+            >
               <button
                 type="button"
                 onClick={() => {
-                  setPlatformMenuOpen((open) => !open);
+                  setIsPlatformOpen((open) => !open);
                   setIsFilterOpen(false);
                 }}
-                className="inline-flex h-12 w-full items-center justify-between rounded-[14px] border border-[#ddd8cf] px-4 text-sm font-medium text-[#2a2a2a] transition hover:bg-white sm:min-w-[200px] sm:w-auto"
+                className="inline-flex h-12 w-full items-center justify-between rounded-[14px] border border-[#ddd8cf] px-4 text-sm font-medium text-[#2a2a2a] transition hover:bg-white sm:min-w-[180px] sm:w-auto"
               >
-                <span className="truncate">{selectedPlatformsLabel || "Filter platforms"}</span>
-                <ChevronDown className="ml-3 h-4 w-4 text-[#767676]" />
+                <span className="flex items-center gap-2">
+                  <span>Filter platform</span>
+                </span>
+                <CaretDown className="h-4 w-4 text-[#767676]" />
               </button>
 
-              {platformMenuOpen ? (
+              {isPlatformOpen ? (
                 <PlatformFiltersDropdown
-                  anchorRef={platformMenuRef}
+                  anchorRef={platformAnchorRef}
                   platforms={platforms}
                   setPlatforms={setPlatforms}
                   filters={filters}
                   updateFilter={updateFilter}
                   onApply={onApplyFilters}
-                  onClose={() => setPlatformMenuOpen(false)}
+                  onClose={() => setIsPlatformOpen(false)}
                 />
               ) : null}
             </div>
 
-            <div className="relative w-full shrink-0 sm:w-auto" ref={filterAnchorRef}>
+            <div
+              className="relative w-full shrink-0 sm:w-auto"
+              ref={filterAnchorRef}
+            >
               <button
                 type="button"
                 onClick={() => {
                   setIsFilterOpen((open) => !open);
-                  setPlatformMenuOpen(false);
+                  setIsPlatformOpen(false);
                 }}
-                className="inline-flex h-12 w-full items-center justify-between rounded-[14px] border border-[#ddd8cf] px-4 text-sm font-medium text-[#2a2a2a] transition hover:bg-white sm:min-w-[180px] sm:w-auto"
+                className="inline-flex h-12 w-full items-center justify-between rounded-[14px] border border-[#ddd8cf] px-4 text-sm font-medium text-[#2a2a2a] transition hover:bg-white sm:min-w-[190px] sm:w-auto"
               >
                 <span className="flex items-center gap-2">
                   <SlidersHorizontal className="h-4 w-4 text-[#666]" />
@@ -180,20 +191,8 @@ export function SearchHeader({
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-[#666]">
           <span className="rounded-full border border-[#e5e0d6] bg-[#faf8f4] px-3 py-1">
-            Mode: {modeLabel}
+            Platforms: {selectedPlatformsLabel}
           </span>
-
-          {filters.search.aiQuery ? (
-            <span className="rounded-full border border-[#e5e0d6] bg-[#faf8f4] px-3 py-1">
-              AI override active
-            </span>
-          ) : null}
-
-          {filters.search.exactHandleBoost === false ? (
-            <span className="rounded-full border border-[#e5e0d6] bg-[#faf8f4] px-3 py-1">
-              Exact handle boost off
-            </span>
-          ) : null}
         </div>
       </form>
     </div>

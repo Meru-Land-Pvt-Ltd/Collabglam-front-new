@@ -388,6 +388,32 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const keepOnDashboard = () => {
+      window.history.pushState(
+        { dashboardLock: true, path: "/influencer/dashboards" },
+        "",
+        "/influencer/dashboards"
+      );
+    };
+
+    keepOnDashboard();
+
+    const handlePopState = () => {
+      keepOnDashboard();
+      router.replace("/influencer/dashboards");
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [router]);
+
+
+  useEffect(() => {
     if (!influencerId) {
       setCampaigns([]);
       setInvitations([]);

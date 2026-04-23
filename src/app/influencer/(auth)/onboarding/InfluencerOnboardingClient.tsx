@@ -809,11 +809,11 @@ export default function InfluencerOnboardingPage() {
     }
 
     if (onboardStep === 1) {
-      return data.formats.length >= 1;
+      return data.formats.length >= 1 && Boolean(data.budgetRange);
     }
 
     if (onboardStep === 2) {
-      return data.industries.length >= 1;
+      return data.campaignGoals.length >= 1 && data.industries.length >= 1;
     }
 
     return false;
@@ -1287,6 +1287,7 @@ export default function InfluencerOnboardingPage() {
                     <div className="flex flex-col gap-4">
                       <FloatingMultiSelect
                         label="Which formats do you create?"
+                        required
                         size="small"
                         options={FORMAT_CHIPS}
                         value={data.formats}
@@ -1298,7 +1299,7 @@ export default function InfluencerOnboardingPage() {
                       />
 
                       <FloatingSelect
-                        label="Preferred project length? (optional)"
+                        label="Preferred project length?"
                         size="small"
                         value={data.projectLength}
                         onValueChange={(v) =>
@@ -1316,6 +1317,7 @@ export default function InfluencerOnboardingPage() {
 
                       <FloatingSelect
                         label="What is your typical budget range?"
+                        required
                         size="small"
                         value={data.budgetRange}
                         onValueChange={(v) =>
@@ -1331,7 +1333,7 @@ export default function InfluencerOnboardingPage() {
                       </FloatingSelect>
 
                       <FloatingMultiSelect
-                        label="Choose compensation types you want (optional)"
+                        label="Choose compensation types you want"
                         size="small"
                         options={COMP_TYPES}
                         value={data.compensationTypes}
@@ -1348,6 +1350,7 @@ export default function InfluencerOnboardingPage() {
                     <div className="flex flex-col gap-4">
                       <FloatingMultiSelect
                         label="Campaign goals you like"
+                        required
                         size="small"
                         options={CAMPAIGN_GOAL_CHIPS}
                         value={data.campaignGoals}
@@ -1393,7 +1396,7 @@ export default function InfluencerOnboardingPage() {
                       ) : null}
 
                       <FloatingMultiSelect
-                        label="Preferred project type? (optional)"
+                        label="Preferred project type?"
                         size="small"
                         options={PROJECT_TYPES}
                         value={data.preferredProjectType}
@@ -1409,6 +1412,7 @@ export default function InfluencerOnboardingPage() {
 
                       <FloatingMultiSelect
                         label="Industries you want to work with"
+                        required
                         size="small"
                         options={INDUSTRY_CHIPS}
                         value={data.industries}
@@ -1420,7 +1424,7 @@ export default function InfluencerOnboardingPage() {
                       />
 
                       <FloatingMultiSelect
-                        label="Which type of delivery you prefer? (optional)"
+                        label="Which type of delivery you prefer?"
                         size="small"
                         options={DELIVERY_PREFS}
                         value={data.deliveryPreference}

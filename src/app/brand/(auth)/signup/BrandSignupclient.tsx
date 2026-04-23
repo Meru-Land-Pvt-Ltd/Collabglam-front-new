@@ -632,7 +632,7 @@ function BrandSignupInner() {
           </Link>
 
           <Link
-            href="/brand/login"
+            href="/influencer/login"
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
               "!my-0 rounded-m px-l border border-bd-primary text-tx-primary !shadow-none"
@@ -643,7 +643,7 @@ function BrandSignupInner() {
         </div>
       </header>
 
-      <main className={cn("max-w-full flex-1 min-h-0 overflow-y-auto", "py-[20px]")}>
+      <main className={cn("max-w-full flex-1 min-h-0 overflow-y-auto", "pt-[10px]")}>
         <div className={cn("grid min-h-0", "h-full items-stretch lg:grid-cols-2")}>
           <section className="order-1 lg:h-full">
             <div className="flex w-full lg:h-full lg:items-stretch pr-[20px]">
@@ -675,7 +675,7 @@ function BrandSignupInner() {
           <section
             className={cn(
               "order-2 flex px-[20px] justify-center w-full items-start",
-              step === "form" || step === "otp" ? "pt-[84px]" : "",
+              step === "form" || step === "otp" ? "pt-[40px]" : "",
               "lg:min-h-[calc(100svh-114px)]"
             )}
           >

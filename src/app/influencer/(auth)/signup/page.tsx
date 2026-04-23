@@ -3,12 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  GoogleReCaptchaProvider,
+  useGoogleReCaptcha,
+} from "react-google-recaptcha-v3";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
 import {
   FloatingMultiSelect,
   FloatingSelect,
-  SelectItem,
+  SelectItem
 } from "@/components/ui/selectComp";
 import { PasswordInput } from "@/components/ui/password";
 import { Button, buttonVariants } from "@/components/ui/buttonComp";
@@ -48,10 +52,8 @@ const SUBTITLE_CLASS =
 const ERROR_TEXT_CLASS =
   "mt-1 text-[12px] leading-[16px] text-[color:var(--Errors-500,#E35141)]";
 
-// simple option type for FloatingMultiSelect
 type Chip = { label: string; value: string };
 
-// local normalizer
 const normalizeArray = <T,>(x: any): T[] => {
   if (Array.isArray(x)) return x as T[];
   if (Array.isArray(x?.data)) return x.data as T[];
@@ -60,7 +62,6 @@ const normalizeArray = <T,>(x: any): T[] => {
   return [];
 };
 
-// render flag as image
 const emojiToCodePoint = (emoji: string) =>
   Array.from(emoji)
     .map((ch) => ch.codePointAt(0)!.toString(16))
@@ -71,14 +72,29 @@ const twemojiSvgUrl = (emoji: string) =>
     emoji
   )}.svg`;
 
-export default function InfluencerSignupPage() {
+async function runRecaptchaCheck(
+  executeRecaptcha: ((action: string) => Promise<string>) | undefined,
+  action: string
+) {
+  if (!executeRecaptcha) {
+    throw new Error("Security check is still loading. Please try again.");
+  }
+
+  const token = await executeRecaptcha(action);
+
+  if (!token) {
+    throw new Error("Security verification failed. Please try again.");
+  }
+
+  return token;
+}
+
+function InfluencerSignupContent() {
   const router = useRouter();
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   type Step = "form" | "otp";
 
-  // -------------------------
-  // Dropdown data
-  // -------------------------
   const [countries, setCountries] = React.useState<CountryRow[]>([]);
   const [languagesList, setLanguagesList] = React.useState<LangRow[]>([]);
   const [categoriesList, setCategoriesList] = React.useState<CategoryRow[]>([]);
@@ -118,7 +134,6 @@ export default function InfluencerSignupPage() {
     };
   }, []);
 
-  // build multi-select options for languages + categories
   const languageOptions: Chip[] = React.useMemo(() => {
     return languagesList
       .filter((l) => !!(l._id ?? l.id))
@@ -134,35 +149,24 @@ export default function InfluencerSignupPage() {
       .map((c) => ({ label: c.name ?? "Category", value: String(c.id) }));
   }, [categoriesList]);
 
-  // -------------------------
-  // Form state (IDs)
-  // -------------------------
   const [creatorName, setCreatorName] = React.useState("");
   const [email, setEmail] = React.useState("");
-
-  // store selected IDs
-  const [countryId, setCountryId] = React.useState(""); // required
-  const [languageIds, setLanguageIds] = React.useState<string[]>([]); // optional multi-select
-
-  // categories is multi + required
-  const [categoryIds, setCategoryIds] = React.useState<string[]>([]); // required
-
+  const [countryId, setCountryId] = React.useState("");
+  // const [countrySearch, setCountrySearch] = React.useState("");
+  const [languageIds, setLanguageIds] = React.useState<string[]>([]);
+  const [categoryIds, setCategoryIds] = React.useState<string[]>([]);
   const [password, setPassword] = React.useState("");
   const [agreed, setAgreed] = React.useState(false);
 
   const [attemptedSubmit, setAttemptedSubmit] = React.useState(false);
-
-  // Step handling
   const [step, setStep] = React.useState<Step>("form");
 
-  // OTP state
   const [otp, setOtp] = React.useState("");
   const [otpError, setOtpError] = React.useState<string | undefined>(
     undefined
   );
   const [secondsLeft, setSecondsLeft] = React.useState(0);
 
-  // split loaders
   const [isSendingOtp, setIsSendingOtp] = React.useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = React.useState(false);
 
@@ -190,18 +194,28 @@ export default function InfluencerSignupPage() {
     });
   };
 
-  // -------------------------
-  // Validation
-  // -------------------------
+  // const filteredCountries = React.useMemo(() => {
+  //   const q = countrySearch.trim().toLowerCase();
+
+  //   return countries
+  //     .filter((c) => !!(c._id ?? c.id))
+  //     .filter((c) => {
+  //       if (!q) return true;
+
+  //       const name = String(
+  //         (c as any)?.countryName ?? c.countryNameEn ?? ""
+  //       ).toLowerCase();
+
+  //       return name.includes(q);
+  //     });
+  // }, [countries, countrySearch]);
+
   const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
-  // creator name sanitize + validation (no special chars)
-  // Allowed: letters (any language), spaces, dot, apostrophe, hyphen
   const sanitizeCreatorName = (v: string) => v.replace(/[^\p{L}\s.'-]/gu, "");
   const creatorNameOk = (v: string) =>
     /^[\p{L}][\p{L}\s.'-]*$/u.test(v.trim());
 
-  // password must include BOTH uppercase + lowercase + number, length 8–16
   const pwOk = (p: string) => {
     const s = (p ?? "").trim();
     if (s.length < 8 || s.length > 16) return false;
@@ -253,9 +267,6 @@ export default function InfluencerSignupPage() {
       ? "Please accept Terms of Service and Privacy Policy."
       : "";
 
-  // -------------------------
-  // OTP countdown
-  // -------------------------
   React.useEffect(() => {
     if (step !== "otp") return;
     if (secondsLeft <= 0) return;
@@ -267,9 +278,6 @@ export default function InfluencerSignupPage() {
     return () => window.clearInterval(id);
   }, [secondsLeft, step]);
 
-  // -------------------------
-  // API helpers
-  // -------------------------
   const sendOtp = async () => {
     await apiSendInfluencerSignupOtp({
       creatorName: creatorName.trim(),
@@ -289,10 +297,9 @@ export default function InfluencerSignupPage() {
       otp: code,
     });
 
-    // store token with the SAME key onboarding expects (only if present)
     if ((res as any)?.token) {
       localStorage.setItem("influencerToken", (res as any).token);
-      localStorage.setItem("token", (res as any).token); // optional compatibility
+      localStorage.setItem("token", (res as any).token);
     }
     if ((res as any)?.influencerId) {
       localStorage.setItem("influencerId", (res as any).influencerId);
@@ -330,13 +337,9 @@ export default function InfluencerSignupPage() {
       })
     );
 
-    // Do not call /api-1/influencer-auth here.
     return res;
   };
 
-  // -------------------------
-  // Actions
-  // -------------------------
   const handleContinueFromForm = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -357,6 +360,7 @@ export default function InfluencerSignupPage() {
 
     setIsSendingOtp(true);
     try {
+      await runRecaptchaCheck(executeRecaptcha, "influencer_signup_send_otp");
       await sendOtp();
 
       setStep("otp");
@@ -380,7 +384,6 @@ export default function InfluencerSignupPage() {
   };
 
   const handleVerifyOtp = async () => {
-    // inline validation
     if (otp.length !== 6) {
       setOtpError("Please enter the 6-digit OTP.");
       return;
@@ -388,6 +391,7 @@ export default function InfluencerSignupPage() {
 
     setIsVerifyingOtp(true);
     try {
+      await runRecaptchaCheck(executeRecaptcha, "influencer_signup_verify_otp");
       await verifyOtp(otp);
 
       toast({
@@ -396,7 +400,6 @@ export default function InfluencerSignupPage() {
         text: "Redirecting to onboarding…",
       });
 
-      // Redirect to onboarding
       router.replace("/influencer/onboarding");
       router.refresh();
     } catch (err) {
@@ -418,6 +421,7 @@ export default function InfluencerSignupPage() {
 
     setIsSendingOtp(true);
     try {
+      await runRecaptchaCheck(executeRecaptcha, "influencer_signup_resend_otp");
       await sendOtp();
       toast({
         icon: "success",
@@ -446,7 +450,6 @@ export default function InfluencerSignupPage() {
     <div className="min-h-[100svh] bg-background text-foreground flex flex-col overflow-x-hidden">
       <ToastStyles />
 
-      {/* Header */}
       <header className="w-full bg-white border-b border-bd-primary">
         <div
           className={cn(
@@ -487,7 +490,6 @@ export default function InfluencerSignupPage() {
         </div>
       </header>
 
-      {/* Body */}
       <main
         className={cn(
           "max-w-full flex-1 min-h-0 overflow-y-auto",
@@ -500,7 +502,6 @@ export default function InfluencerSignupPage() {
             "lg:grid-cols-2 lg:min-h-[calc(100svh-114px)]"
           )}
         >
-          {/* LEFT */}
           <section className="order-1 lg:h-full">
             <div className="flex w-full lg:h-full lg:items-stretch pr-[20px]">
               <div
@@ -515,16 +516,14 @@ export default function InfluencerSignupPage() {
             </div>
           </section>
 
-          {/* RIGHT */}
           <section
             className={cn(
               "order-2 flex px-[20px] justify-center w-full items-start",
-              step === "form" || step === "otp" ? "pt-[60px]" : "",
+              step === "form" || step === "otp" ? "pt-[10px]" : "",
               "lg:min-h-[calc(100svh-114px)]"
             )}
           >
             <div className={cn("w-full max-w-[520px]")}>
-              {/* FORM */}
               {step === "form" && (
                 <>
                   <h1 className="cg-heading">Get Your Profile Started</h1>
@@ -536,7 +535,6 @@ export default function InfluencerSignupPage() {
                     onSubmit={handleContinueFromForm}
                     className="mt-2xl space-y-[16px]"
                   >
-                    {/* Creator Name */}
                     <div>
                       <FloatingInput
                         label="Creator Name"
@@ -560,7 +558,6 @@ export default function InfluencerSignupPage() {
                       ) : null}
                     </div>
 
-                    {/* Work Email */}
                     <div>
                       <FloatingInput
                         label="Work Email"
@@ -581,15 +578,14 @@ export default function InfluencerSignupPage() {
                       ) : null}
                     </div>
 
-                    {/* Location */}
                     <div>
                       <FloatingSelect
-                        label={
-                          listsLoading ? "Location (loading...)" : "Location"
-                        }
+                        label={listsLoading ? "Location (loading...)" : "Location"}
                         size="small"
                         required
                         value={countryId}
+                        searchable
+                        searchPlaceholder="Search location..."
                         onValueChange={(v) => {
                           setCountryId(v);
                           if (countryError) clearFieldOnFocus("countryId");
@@ -612,7 +608,11 @@ export default function InfluencerSignupPage() {
                             const flagEmoji = c.flag ?? "";
 
                             return (
-                              <SelectItem key={id} value={id}>
+                              <SelectItem
+                                key={id}
+                                value={id}
+                                textValue={name || "Country"}
+                              >
                                 <span className="inline-flex items-center gap-2">
                                   {flagEmoji ? (
                                     <img
@@ -621,9 +621,7 @@ export default function InfluencerSignupPage() {
                                       className="w-4 h-4"
                                       loading="lazy"
                                       onError={(e) => {
-                                        (
-                                          e.currentTarget as HTMLImageElement
-                                        ).style.display = "none";
+                                        (e.currentTarget as HTMLImageElement).style.display = "none";
                                       }}
                                     />
                                   ) : null}
@@ -632,6 +630,10 @@ export default function InfluencerSignupPage() {
                               </SelectItem>
                             );
                           })}
+
+                        <SelectItem value="__no_results__" disabled textValue="No results">
+                          No results
+                        </SelectItem>
                       </FloatingSelect>
 
                       {countryError ? (
@@ -640,7 +642,6 @@ export default function InfluencerSignupPage() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-[16px] md:grid-cols-2">
-                      {/* Languages */}
                       <FloatingMultiSelect
                         label={
                           listsLoading
@@ -655,7 +656,6 @@ export default function InfluencerSignupPage() {
                         includeAll={false}
                       />
 
-                      {/* Categories */}
                       <div
                         onClick={() => {
                           if (categoryError) clearFieldOnFocus("categoryIds");
@@ -688,7 +688,6 @@ export default function InfluencerSignupPage() {
                       </div>
                     </div>
 
-                    {/* Password */}
                     <div>
                       <PasswordInput
                         label="Password"
@@ -710,15 +709,15 @@ export default function InfluencerSignupPage() {
                       ) : null}
                     </div>
 
-                    {/* Terms */}
                     <div className="mt-xl">
+                      {/*
+                        FIX: Checkbox error is indicated ONLY by the red border on the
+                        checkbox itself. The label text no longer changes to red, which
+                        was the redundant "additional error message" described in the bug.
+                        No separate <p> error text is rendered below the checkbox.
+                      */}
                       <label
-                        className={cn(
-                          "flex items-center gap-[10px] text-center text-[12px] leading-[16px]",
-                          agreedError
-                            ? "text-[color:var(--Errors-500,#E35141)]"
-                            : "text-[#7A7A7A]"
-                        )}
+                        className="flex items-center gap-[10px] text-center text-[12px] leading-[16px] text-[#7A7A7A]"
                       >
                         <Checkbox
                           checked={agreed}
@@ -755,10 +754,7 @@ export default function InfluencerSignupPage() {
                           </Link>
                         </span>
                       </label>
-
-                      {agreedError ? (
-                        <p className={ERROR_TEXT_CLASS}>{agreedError}</p>
-                      ) : null}
+                      {/* No <p> error text here — the red border on the checkbox is sufficient */}
                     </div>
 
                     <Button
@@ -787,7 +783,6 @@ export default function InfluencerSignupPage() {
                 </>
               )}
 
-              {/* OTP */}
               {step === "otp" && (
                 <>
                   <div className="flex items-center gap-2">
@@ -916,5 +911,20 @@ export default function InfluencerSignupPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function InfluencerSignupPage() {
+  return (
+    <GoogleReCaptchaProvider
+      reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""}
+      scriptProps={{
+        async: true,
+        defer: true,
+        appendTo: "head",
+      }}
+    >
+      <InfluencerSignupContent />
+    </GoogleReCaptchaProvider>
   );
 }

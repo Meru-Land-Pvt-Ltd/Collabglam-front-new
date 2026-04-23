@@ -1,17 +1,14 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
-import type { FilterState, Platform } from "./filters";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import {
-  AI_ACCOUNT_TYPE_OPTIONS,
-  AI_CONTENT_TYPE_OPTIONS,
-  AUDIENCE_AGE_OPTIONS,
-  AUDIENCE_GENDER_OPTIONS,
-  INFLUENCER_GENDER_OPTIONS,
-  LANGUAGE_OPTIONS,
-  SEARCH_MODE_OPTIONS,
-} from "./filters";
+  InstagramLogo,
+  TiktokLogo,
+  YoutubeLogo,
+} from "@phosphor-icons/react";
+import type { FilterState, Platform } from "./filters";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -30,77 +27,187 @@ interface MoreFiltersDropdownProps {
   loading?: boolean;
 }
 
-function toInputValue(value?: number | string) {
-  return value == null ? "" : String(value);
+type SearchModeOption = "ai" | "standard" | "combined";
+type TierOption = "nano" | "micro" | "mini" | "macro" | null;
+type AgePreset = "18-24" | "25-34" | "35-44" | "45+" | null;
+type GenderPreset = "all" | "male" | "female";
+
+const PLATFORM_ORDER: Platform[] = ["instagram", "youtube", "tiktok"];
+
+const platformConfig: Record<
+  Platform,
+  { label: string; icon: React.ReactNode; accent: string }
+> = {
+  youtube: {
+    label: "YouTube",
+    icon: <YoutubeLogo size={16} weight="fill" />,
+    accent: "#FF3B30",
+  },
+  instagram: {
+    label: "Instagram",
+    icon: <InstagramLogo size={16} weight="fill" />,
+    accent: "#C13584",
+  },
+  tiktok: {
+    label: "TikTok",
+    icon: <TiktokLogo size={16} weight="fill" />,
+    accent: "#111111",
+  },
+};
+
+const SEARCH_MODE_OPTIONS: Array<{ label: string; value: SearchModeOption }> = [
+  { label: "AI", value: "ai" },
+  { label: "Standard", value: "standard" },
+  { label: "Combined", value: "combined" },
+];
+
+const TIER_OPTIONS: Array<{ label: string; value: NonNullable<TierOption> }> = [
+  { label: "Micro", value: "micro" },
+  { label: "Mini", value: "mini" },
+  { label: "Macro", value: "macro" },
+  { label: "Nano", value: "nano" },
+];
+
+const AGE_OPTIONS: Array<{ label: string; value: NonNullable<AgePreset> }> = [
+  { label: "18-24", value: "18-24" },
+  { label: "25-34", value: "25-34" },
+  { label: "35-44", value: "35-44" },
+  { label: "45+", value: "45+" },
+];
+
+const GENDER_OPTIONS: Array<{ label: React.ReactNode; value: GenderPreset }> = [
+  { label: "All", value: "all" },
+  {
+    label: (
+      <span className="flex items-center gap-1">
+        Male <span className="text-[10px]">♂</span>
+      </span>
+    ),
+    value: "male",
+  },
+  {
+    label: (
+      <span className="flex items-center gap-1">
+        female <span className="text-[10px]">♀</span>
+      </span>
+    ),
+    value: "female",
+  },
+];
+
+function getTierRange(tier: TierOption): { min?: number; max?: number } {
+  switch (tier) {
+    case "nano":
+      return { min: 1000, max: 10000 };
+    case "micro":
+      return { min: 10000, max: 100000 };
+    case "mini":
+      return { min: 100000, max: 1000000 };
+    case "macro":
+      return { min: 1000000 };
+    default:
+      return {};
+  }
 }
 
-function toOptionalNumber(value: string): number | undefined {
-  if (!value.trim()) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+function getAgeRangeFromPreset(preset: AgePreset): { min?: number; max?: number } {
+  switch (preset) {
+    case "18-24":
+      return { min: 18, max: 24 };
+    case "25-34":
+      return { min: 25, max: 34 };
+    case "35-44":
+      return { min: 35, max: 44 };
+    case "45+":
+      return { min: 45, max: 65 };
+    default:
+      return {};
+  }
 }
 
-function Field({
-  label,
-  hint,
-  children,
+function deriveAgePreset(filters: FilterState): AgePreset {
+  const min = filters.influencer.ageMin;
+  const max = filters.influencer.ageMax;
+
+  if (min === 18 && max === 24) return "18-24";
+  if (min === 25 && max === 34) return "25-34";
+  if (min === 35 && max === 44) return "35-44";
+  if (min === 45) return "45+";
+
+  return null;
+}
+
+function deriveTierFromPlatforms(
+  filters: FilterState,
+  selectedPlatforms: Platform[]
+): TierOption {
+  const firstPlatform = selectedPlatforms[0];
+  if (!firstPlatform) return null;
+
+  const min = filters.platform[firstPlatform]?.followersMin;
+  const max = filters.platform[firstPlatform]?.followersMax;
+
+  if (min === 1000 && max === 10000) return "nano";
+  if (min === 10000 && max === 100000) return "micro";
+  if (min === 100000 && max === 1000000) return "mini";
+  if (min === 1000000 && (max == null || max === undefined)) return "macro";
+
+  return null;
+}
+
+function PlatformIconChip({
+  platform,
+  selected,
+  onClick,
 }: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
+  platform: Platform;
+  selected: boolean;
+  onClick: () => void;
 }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="block text-sm font-semibold text-[#1A1A1A]">{label}</label>
-      {children}
-      {hint ? <p className="text-[11px] text-[#7b7b7b]">{hint}</p> : null}
-    </div>
-  );
-}
+  const config = platformConfig[platform];
 
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <input
-      {...props}
+    <button
+      type="button"
+      onClick={onClick}
+      title={config.label}
       className={cn(
-        "h-11 w-full rounded-[12px] border border-[#d8d8d8] bg-white px-3 text-sm text-[#222] outline-none focus:border-black",
-        props.className,
+        "inline-flex flex-1 h-7 items-center justify-center rounded-md border transition-all",
+        selected
+          ? "border-border bg-background text-foreground shadow-sm"
+          : "border-transparent bg-transparent text-muted-foreground hover:text-foreground"
       )}
-    />
+    >
+      {config.icon}
+    </button>
   );
 }
 
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+function RowLabel({ children }: { children: React.ReactNode }) {
   return (
-    <select
-      {...props}
-      className={cn(
-        "h-11 w-full rounded-[12px] border border-[#d8d8d8] bg-white px-3 text-sm text-[#222] outline-none focus:border-black",
-        props.className,
-      )}
-    />
+    <div className="text-[11px] font-medium text-[#1A1A1A]">{children}</div>
   );
 }
 
-function ToggleRow({
-  label,
-  checked,
+function SelectLikeInput({
+  value,
   onChange,
+  placeholder,
 }: {
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-[12px] border border-[#ece7df] px-3 py-2.5">
-      <span className="text-sm text-[#1A1A1A]">{label}</span>
+    <div className="relative w-full">
       <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-8 w-full rounded-[8px] border border-[#E5E5E5] bg-white px-2.5 pr-8 text-[11px] text-[#1A1A1A] outline-none placeholder:text-[#A0A0A0]"
       />
-    </label>
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8A8A8A]" />
+    </div>
   );
 }
 
@@ -110,30 +217,45 @@ export function MoreFiltersDropdown({
   anchorRef,
   filters,
   updateFilter,
+  platforms,
+  setPlatforms,
   onReset,
   onApply,
   loading,
 }: MoreFiltersDropdownProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const [draft, setDraft] = useState({
-    search: filters.search,
-    influencer: filters.influencer,
-    audience: filters.audience,
-  });
-
-  const [menuWidth, setMenuWidth] = useState(760);
+  const [menuWidth, setMenuWidth] = useState(460);
   const [alignRight, setAlignRight] = useState(true);
+
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchModeOption>("combined");
+  const [tier, setTier] = useState<TierOption>(null);
+  const [draftPlatforms, setDraftPlatforms] = useState<Platform[]>(platforms);
+  const [agePreset, setAgePreset] = useState<AgePreset>(null);
+  const [gender, setGender] = useState<GenderPreset>("all");
+  const [country, setCountry] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setDraft({
-      search: { ...filters.search },
-      influencer: { ...filters.influencer },
-      audience: { ...filters.audience },
-    });
-  }, [filters, open]);
 
+    const nextMode = (filters.search.mode as SearchModeOption) || "combined";
+    setSearchMode(nextMode);
+    setVerifiedOnly(
+      nextMode === "standard" ? Boolean(filters.influencer.isVerified) : false
+    );
+    setDraftPlatforms(platforms);
+    setTier(deriveTierFromPlatforms(filters, platforms));
+    setAgePreset(deriveAgePreset(filters));
+    setGender((filters.influencer.gender as GenderPreset) || "all");
+    setCountry(filters.audience.country || "");
+  }, [filters, open, platforms]);
+
+  useEffect(() => {
+    if (searchMode !== "standard" && verifiedOnly) {
+      setVerifiedOnly(false);
+    }
+  }, [searchMode, verifiedOnly]);
   useLayoutEffect(() => {
     if (!open || !anchorRef.current) return;
 
@@ -142,7 +264,7 @@ export function MoreFiltersDropdown({
       if (!rect) return;
 
       const viewportPadding = 16;
-      const idealWidth = 760;
+      const idealWidth = 460;
       const safeWidth = Math.min(idealWidth, window.innerWidth - viewportPadding * 2);
 
       setMenuWidth(safeWidth);
@@ -170,61 +292,61 @@ export function MoreFiltersDropdown({
 
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
+
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [anchorRef, onClose, open]);
 
+  const orderedPlatforms = useMemo(() => {
+    return PLATFORM_ORDER.filter((platform) => draftPlatforms.includes(platform));
+  }, [draftPlatforms]);
+
   if (!open) return null;
 
-  const setSearch = (key: keyof typeof draft.search, value: any) =>
-    setDraft((current) => ({ ...current, search: { ...current.search, [key]: value } }));
+  const togglePlatform = (platform: Platform) => {
+    setDraftPlatforms((current) => {
+      const next = new Set(current);
 
-  const setInfluencer = (key: keyof typeof draft.influencer, value: any) =>
-    setDraft((current) => ({ ...current, influencer: { ...current.influencer, [key]: value } }));
+      if (next.has(platform)) {
+        if (next.size === 1) return current;
+        next.delete(platform);
+      } else {
+        next.add(platform);
+      }
 
-  const setAudience = (key: keyof typeof draft.audience, value: any) =>
-    setDraft((current) => ({ ...current, audience: { ...current.audience, [key]: value } }));
-
-  const applyChanges = () => {
-    updateFilter("search.mode", draft.search.mode);
-    updateFilter("search.aiQuery", draft.search.aiQuery || undefined);
-    updateFilter(
-      "search.exactHandleBoost",
-      draft.search.exactHandleBoost === false ? false : undefined,
-    );
-    updateFilter("search.aiHasEmail", draft.search.aiHasEmail || undefined);
-    updateFilter("search.aiContentType", draft.search.aiContentType || undefined);
-    updateFilter("search.aiMaxPostAgeMonths", draft.search.aiMaxPostAgeMonths || undefined);
-    updateFilter("search.aiUsername", draft.search.aiUsername || undefined);
-    updateFilter("search.aiBrandsText", draft.search.aiBrandsText || undefined);
-    updateFilter("search.aiAccountType", draft.search.aiAccountType || undefined);
-
-    updateFilter("influencer.isVerified", draft.influencer.isVerified || undefined);
-    updateFilter("influencer.ageMin", draft.influencer.ageMin || undefined);
-    updateFilter("influencer.ageMax", draft.influencer.ageMax || undefined);
-    updateFilter("influencer.gender", draft.influencer.gender || undefined);
-
-    updateFilter("audience.country", draft.audience.country || undefined);
-    updateFilter("audience.locationIdsText", draft.audience.locationIdsText || undefined);
-    updateFilter("audience.locationWeight", draft.audience.locationWeight || undefined);
-    updateFilter("audience.languageCode", draft.audience.languageCode || undefined);
-    updateFilter("audience.languageWeight", draft.audience.languageWeight || undefined);
-    updateFilter("audience.gender", draft.audience.gender || undefined);
-    updateFilter("audience.genderWeight", draft.audience.genderWeight || undefined);
-    updateFilter("audience.ageBucket", draft.audience.ageBucket || undefined);
-    updateFilter("audience.ageWeight", draft.audience.ageWeight || undefined);
-    updateFilter("audience.interestsIdsText", draft.audience.interestsIdsText || undefined);
-    updateFilter("audience.interestsWeight", draft.audience.interestsWeight || undefined);
-    updateFilter("audience.credibilityMin", draft.audience.credibilityMin || undefined);
-
-    onApply();
-    onClose();
+      return PLATFORM_ORDER.filter((item) => next.has(item));
+    });
   };
 
   const handleReset = () => {
     onReset();
+    onClose();
+  };
+
+  const handleApply = () => {
+    const ageRange = getAgeRangeFromPreset(agePreset);
+    const tierRange = getTierRange(tier);
+
+    setPlatforms(orderedPlatforms.length ? orderedPlatforms : ["youtube"]);
+
+    updateFilter(
+      "influencer.isVerified",
+      searchMode === "standard" && verifiedOnly ? true : undefined
+    );
+    updateFilter("search.mode", searchMode);
+    updateFilter("influencer.gender", gender === "all" ? undefined : gender);
+    updateFilter("influencer.ageMin", ageRange.min);
+    updateFilter("influencer.ageMax", ageRange.max);
+    updateFilter("audience.country", country.trim() || undefined);
+
+    (orderedPlatforms.length ? orderedPlatforms : ["youtube"]).forEach((platform) => {
+      updateFilter(`platform.${platform}.followersMin`, tierRange.min);
+      updateFilter(`platform.${platform}.followersMax`, tierRange.max);
+    });
+
+    onApply();
     onClose();
   };
 
@@ -233,331 +355,176 @@ export function MoreFiltersDropdown({
       ref={menuRef}
       style={{ width: `${menuWidth}px` }}
       className={cn(
-        "absolute top-[calc(100%+8px)] z-50 max-h-[min(82vh,48rem)] overflow-y-auto rounded-[18px] border border-[#e6e0d7] bg-white shadow-[0_18px_48px_rgba(0,0,0,0.12)]",
-        alignRight ? "right-0" : "left-0",
+        "absolute top-[calc(100%+10px)] z-50 rounded-[16px] border border-[#E4E4E4] bg-white shadow-[0_18px_50px_rgba(0,0,0,0.14)]",
+        alignRight ? "right-0" : "left-0"
       )}
     >
-      <div className="space-y-6 p-4 md:p-5">
-        <section className="space-y-4">
-          <div>
-            <h3 className="text-[17px] font-semibold text-[#1A1A1A]">Search settings</h3>
-            <p className="mt-1 text-xs text-[#777]">
-              Combined runs exact handle lookup + standard search + AI search together.
-            </p>
-          </div>
+      <div className="p-5">
+        <div className="mb-4 border-b border-[#EFEFEF] pb-4">
+          <h3 className="text-[20px] font-semibold text-[#1A1A1A]">More Filters</h3>
+        </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field label="Search mode">
-              <Select
-                value={draft.search.mode}
-                onChange={(event) => setSearch("mode", event.target.value)}
+        <div className="space-y-4">
+
+
+          {/* Verified Influencer Only */}
+          {searchMode === "standard" ? (
+            <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+              <RowLabel>Verified Influencer Only</RowLabel>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={verifiedOnly}
+                onClick={() => setVerifiedOnly((prev) => !prev)}
+                className={cn(
+                  "relative inline-flex h-6 w-11 items-center rounded-full transition",
+                  verifiedOnly ? "bg-[#1A1A1A]" : "bg-[#E8E8E8]"
+                )}
               >
+                <span
+                  className={cn(
+                    "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all duration-200",
+                    verifiedOnly ? "left-[22px]" : "left-0.5"
+                  )}
+                />
+              </button>
+            </div>
+          ) : null}
+
+          {/* Search Mode */}
+          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+            <RowLabel>Search Mode</RowLabel>
+            <Tabs
+              value={searchMode}
+              onValueChange={(v) => setSearchMode(v as SearchModeOption)}
+            >
+              <TabsList className="w-full">
                 {SEARCH_MODE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
+                  <TabsTrigger key={option.value} value={option.value}>
                     {option.label}
-                  </option>
+                  </TabsTrigger>
                 ))}
-              </Select>
-            </Field>
-
-            <Field label="AI query override" hint="Leave empty to reuse the main search box text">
-              <Input
-                value={toInputValue(draft.search.aiQuery)}
-                onChange={(event) => setSearch("aiQuery", event.target.value)}
-                placeholder="woman with curly hair lifting weights"
-              />
-            </Field>
-
-            <Field label="AI username">
-              <Input
-                value={toInputValue(draft.search.aiUsername)}
-                onChange={(event) => setSearch("aiUsername", event.target.value)}
-                placeholder="@creator_handle"
-              />
-            </Field>
-
-            <Field label="AI brand names" hint="Comma separated brand names for AI search">
-              <Input
-                value={toInputValue(draft.search.aiBrandsText)}
-                onChange={(event) => setSearch("aiBrandsText", event.target.value)}
-                placeholder="Nike, Adidas"
-              />
-            </Field>
-
-            <Field label="AI account type">
-              <Select
-                value={toInputValue(draft.search.aiAccountType)}
-                onChange={(event) => setSearch("aiAccountType", event.target.value || undefined)}
-              >
-                {AI_ACCOUNT_TYPE_OPTIONS.map((option) => (
-                  <option key={option.label} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="AI content type">
-              <Select
-                value={toInputValue(draft.search.aiContentType)}
-                onChange={(event) => setSearch("aiContentType", event.target.value || undefined)}
-              >
-                {AI_CONTENT_TYPE_OPTIONS.map((option) => (
-                  <option key={option.label} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="AI max post age (months)">
-              <Select
-                value={toInputValue(draft.search.aiMaxPostAgeMonths)}
-                onChange={(event) =>
-                  setSearch(
-                    "aiMaxPostAgeMonths",
-                    event.target.value ? Number(event.target.value) : undefined,
-                  )
-                }
-              >
-                <option value="">Any recency</option>
-                <option value="3">3 months</option>
-                <option value="6">6 months</option>
-                <option value="9">9 months</option>
-                <option value="12">12 months</option>
-              </Select>
-            </Field>
+              </TabsList>
+            </Tabs>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <ToggleRow
-              label="Boost exact handle / URL matches first"
-              checked={draft.search.exactHandleBoost !== false}
-              onChange={(next) => setSearch("exactHandleBoost", next ? undefined : false)}
+          {/* Influencer Tier */}
+          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+            <RowLabel>Influencer Tier</RowLabel>
+            <Tabs
+              value={tier ?? ""}
+              onValueChange={(v) => setTier(v as TierOption)}
+            >
+              <div
+                onPointerDown={(e) => {
+                  const trigger = (e.target as HTMLElement).closest("[data-slot='tabs-trigger']");
+                  if (trigger && trigger.getAttribute("data-state") === "active") {
+                    e.preventDefault();
+                    setTier(null);
+                  }
+                }}
+              >
+                <TabsList className="w-full">
+                  {TIER_OPTIONS.map((option) => (
+                    <TabsTrigger key={option.value} value={option.value}>
+                      {option.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+          </div>
+
+          {/* Platform */}
+          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+            <RowLabel>Platform</RowLabel>
+            <div className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-muted p-[3px]">
+              {PLATFORM_ORDER.map((platform) => (
+                <PlatformIconChip
+                  key={platform}
+                  platform={platform}
+                  selected={draftPlatforms.includes(platform)}
+                  onClick={() => togglePlatform(platform)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Age */}
+          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+            <RowLabel>Age</RowLabel>
+            <Tabs
+              value={agePreset ?? ""}
+              onValueChange={(v) => setAgePreset(v as AgePreset)}
+            >
+              <div
+                onPointerDown={(e) => {
+                  const trigger = (e.target as HTMLElement).closest("[data-slot='tabs-trigger']");
+                  if (trigger && trigger.getAttribute("data-state") === "active") {
+                    e.preventDefault();
+                    setAgePreset(null);
+                  }
+                }}
+              >
+                <TabsList className="w-full">
+                  {AGE_OPTIONS.map((option) => (
+                    <TabsTrigger key={option.value} value={option.value}>
+                      {option.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+          </div>
+
+          {/* Gender */}
+          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+            <RowLabel>Gender</RowLabel>
+            <Tabs
+              value={gender}
+              onValueChange={(v) => setGender(v as GenderPreset)}
+            >
+              <TabsList className="w-full">
+                {GENDER_OPTIONS.map((option) => (
+                  <TabsTrigger key={option.value} value={option.value}>
+                    {option.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Country */}
+          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+            <RowLabel>Country</RowLabel>
+            <SelectLikeInput
+              value={country}
+              onChange={setCountry}
+              placeholder="Select Country"
             />
-            <ToggleRow
-              label="AI search: require email"
-              checked={!!draft.search.aiHasEmail}
-              onChange={(next) => setSearch("aiHasEmail", next || undefined)}
-            />
           </div>
-        </section>
+        </div>
 
-        <section className="space-y-4 border-t border-[#ece7df] pt-5">
-          <h3 className="text-[17px] font-semibold text-[#1A1A1A]">Influencer filters</h3>
+        <div className="mt-7 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex h-10 items-center justify-center px-4 text-[12px] font-medium text-[#1A1A1A]"
+          >
+            Clear
+          </button>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Field label="Age min">
-              <Input
-                type="number"
-                value={toInputValue(draft.influencer.ageMin)}
-                onChange={(event) => setInfluencer("ageMin", toOptionalNumber(event.target.value))}
-                placeholder="18"
-              />
-            </Field>
-
-            <Field label="Age max">
-              <Input
-                type="number"
-                value={toInputValue(draft.influencer.ageMax)}
-                onChange={(event) => setInfluencer("ageMax", toOptionalNumber(event.target.value))}
-                placeholder="45"
-              />
-            </Field>
-
-            <Field label="Gender">
-              <Select
-                value={toInputValue(draft.influencer.gender)}
-                onChange={(event) => setInfluencer("gender", event.target.value || undefined)}
-              >
-                {INFLUENCER_GENDER_OPTIONS.map((option) => (
-                  <option key={option.label} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-
-          <ToggleRow
-            label="Verified creators only"
-            checked={!!draft.influencer.isVerified}
-            onChange={(next) => setInfluencer("isVerified", next || undefined)}
-          />
-        </section>
-
-        <section className="space-y-4 border-t border-[#ece7df] pt-5">
-          <h3 className="text-[17px] font-semibold text-[#1A1A1A]">Audience filters</h3>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field label="Audience country text" hint="Client-side fallback filter on returned country/location">
-              <Input
-                value={toInputValue(draft.audience.country)}
-                onChange={(event) => setAudience("country", event.target.value)}
-                placeholder="India"
-              />
-            </Field>
-
-            <Field label="Audience location IDs" hint="Comma separated location IDs for weighted API filtering">
-              <Input
-                value={toInputValue(draft.audience.locationIdsText)}
-                onChange={(event) => setAudience("locationIdsText", event.target.value)}
-                placeholder="148838,62149"
-              />
-            </Field>
-
-            <Field label="Location weight">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="1"
-                value={toInputValue(draft.audience.locationWeight)}
-                onChange={(event) =>
-                  setAudience("locationWeight", toOptionalNumber(event.target.value))
-                }
-                placeholder="0.2"
-              />
-            </Field>
-
-            <Field label="Audience language">
-              <Select
-                value={toInputValue(draft.audience.languageCode)}
-                onChange={(event) => setAudience("languageCode", event.target.value || undefined)}
-              >
-                {LANGUAGE_OPTIONS.map((option) => (
-                  <option key={option.label} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Language weight">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="1"
-                value={toInputValue(draft.audience.languageWeight)}
-                onChange={(event) =>
-                  setAudience("languageWeight", toOptionalNumber(event.target.value))
-                }
-                placeholder="0.2"
-              />
-            </Field>
-
-            <Field label="Audience gender">
-              <Select
-                value={toInputValue(draft.audience.gender)}
-                onChange={(event) => setAudience("gender", event.target.value || undefined)}
-              >
-                {AUDIENCE_GENDER_OPTIONS.map((option) => (
-                  <option key={option.label} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Gender weight">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="1"
-                value={toInputValue(draft.audience.genderWeight)}
-                onChange={(event) =>
-                  setAudience("genderWeight", toOptionalNumber(event.target.value))
-                }
-                placeholder="0.5"
-              />
-            </Field>
-
-            <Field label="Audience age bucket">
-              <Select
-                value={toInputValue(draft.audience.ageBucket)}
-                onChange={(event) => setAudience("ageBucket", event.target.value || undefined)}
-              >
-                {AUDIENCE_AGE_OPTIONS.map((option) => (
-                  <option key={option.label} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Age weight">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="1"
-                value={toInputValue(draft.audience.ageWeight)}
-                onChange={(event) =>
-                  setAudience("ageWeight", toOptionalNumber(event.target.value))
-                }
-                placeholder="0.3"
-              />
-            </Field>
-
-            <Field label="Audience interests IDs">
-              <Input
-                value={toInputValue(draft.audience.interestsIdsText)}
-                onChange={(event) => setAudience("interestsIdsText", event.target.value)}
-                placeholder="1708,13,3"
-              />
-            </Field>
-
-            <Field label="Interests weight">
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="1"
-                value={toInputValue(draft.audience.interestsWeight)}
-                onChange={(event) =>
-                  setAudience("interestsWeight", toOptionalNumber(event.target.value))
-                }
-                placeholder="0.3"
-              />
-            </Field>
-
-            <Field label="Audience credibility min" hint="Useful especially for Instagram audience credibility">
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max="1"
-                value={toInputValue(draft.audience.credibilityMin)}
-                onChange={(event) =>
-                  setAudience("credibilityMin", toOptionalNumber(event.target.value))
-                }
-                placeholder="0.75"
-              />
-            </Field>
-          </div>
-        </section>
-      </div>
-
-      <div className="flex flex-col gap-3 border-t border-[#ece7df] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex h-11 items-center justify-center rounded-[12px] border border-[#e0ddd7] bg-white px-5 text-sm font-semibold text-[#1A1A1A]"
-        >
-          Clear all
-        </button>
-
-        <button
-          type="button"
-          onClick={applyChanges}
-          disabled={loading}
-          className="inline-flex h-11 min-w-[160px] items-center justify-center rounded-[12px] bg-black px-6 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Apply filters
-        </button>
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={loading}
+            className="inline-flex h-10 min-w-[96px] items-center justify-center rounded-[10px] bg-[#141414] px-5 text-[12px] font-semibold text-white disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Apply
+          </button>
+        </div>
       </div>
     </div>
   );

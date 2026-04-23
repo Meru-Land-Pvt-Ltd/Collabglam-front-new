@@ -46,7 +46,7 @@ const DEFAULT_ITEMS: Testimonial[] = [
     role: "(Marketing Manager)",
     quote:
       "“Onboarding creators became much smoother, especially with built in communication and deliverable tracking”",
-    avatarSrc: "/images/login_1.png",
+    avatarSrc: "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image5.png",
     rating: 4.5,
   },
   {
@@ -56,7 +56,7 @@ const DEFAULT_ITEMS: Testimonial[] = [
     role: "(Brand Lead)",
     quote:
       "“Approvals are clean, replies are fast, and the pipeline finally feels organized.”",
-    avatarSrc: "/images/login_1.png",
+    avatarSrc: "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image5.png",
     rating: 5,
   },
   {
@@ -66,7 +66,7 @@ const DEFAULT_ITEMS: Testimonial[] = [
     role: "(Growth Manager)",
     quote:
       "“We launched campaigns quicker and the reporting is super easy for the team.”",
-    avatarSrc: "/images/login_1.png",
+    avatarSrc: "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image5.png",
     rating: 4,
   },
   {
@@ -76,7 +76,7 @@ const DEFAULT_ITEMS: Testimonial[] = [
     role: "(Founder)",
     quote:
       "“It looks premium, saves back-and-forth, and keeps everything in one place.”",
-    avatarSrc: "/images/login_1.png",
+    avatarSrc: "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image5.png",
     rating: 4.5,
   },
   {
@@ -86,7 +86,7 @@ const DEFAULT_ITEMS: Testimonial[] = [
     role: "(Partnerships)",
     quote:
       "“Creator onboarding is smooth, and deliverables are tracked without chaos.”",
-    avatarSrc: "/images/login_1.png",
+    avatarSrc: "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image5.png",
     rating: 4.5,
   },
 ];

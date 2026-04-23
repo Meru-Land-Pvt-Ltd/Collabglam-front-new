@@ -5,7 +5,11 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { X } from "@phosphor-icons/react";
-import { ChevronDownIcon, ChevronUpIcon, Search as SearchIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  Search as SearchIcon,
+} from "lucide-react";
 import { FieldInfoIcon } from "@/components/ui/field-info-icon";
 
 type FieldState = "default" | "selected" | "error" | "disabled";
@@ -13,10 +17,9 @@ type FieldSize = "small" | "large";
 
 export const FIELD_SHELL_SIZE: Record<FieldSize, string> = {
   small: "min-h-[4rem] md:min-h-[4.25rem] xl:min-h-[4.5rem] 2xl:min-h-[5rem]",
-  large: "min-h-[4.5rem] md:min-h-[4.75rem] xl:min-h-[5rem] 2xl:min-h-[5.5rem]",
+  large:
+    "min-h-[4.5rem] md:min-h-[4.75rem] xl:min-h-[5rem] 2xl:min-h-[5.5rem]",
 };
-
-export type DropdownDirection = "auto" | "up" | "down";
 
 /* -------------------------------------------------------------------------------------------------
  * helpers
@@ -30,7 +33,11 @@ function isItemEl(el: React.ReactElement<any>) {
   return el.type === SelectItem || el.type === SelectPrimitive.Item;
 }
 
-function filterSelectChildren(children: React.ReactNode, query: string, keepValue?: string): React.ReactNode {
+function filterSelectChildren(
+  children: React.ReactNode,
+  query: string,
+  keepValue?: string
+): React.ReactNode {
   const q = normalizeText(query);
   if (!q) return children;
 
@@ -49,7 +56,11 @@ function filterSelectChildren(children: React.ReactNode, query: string, keepValu
       }
 
       if (el.props && "children" in el.props) {
-        const nextKids = filterSelectChildren(el.props.children, query, keepValue);
+        const nextKids = filterSelectChildren(
+          el.props.children,
+          query,
+          keepValue
+        );
         const nextArr = React.Children.toArray(nextKids).filter(Boolean);
         if (nextArr.length === 0) return null;
         return React.cloneElement(el, { children: nextKids });
@@ -62,19 +73,18 @@ function filterSelectChildren(children: React.ReactNode, query: string, keepValu
   return filtered.length ? filtered : null;
 }
 
-const X_SCROLLBAR =
-  "[scrollbar-width:thin] [scrollbar-gutter:stable] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/30 [&::-webkit-scrollbar-track]:bg-transparent";
+const X_SCROLLBAR_BOTTOM =
+  "[scrollbar-width:thin] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/30 [&::-webkit-scrollbar-track]:bg-transparent";
 
 const HOVER_BG = "hover:bg-[var(--Light-Background-NeutralPressed,#EDEDED)]";
 const ACTIVE_BG = "active:bg-[var(--Light-Background-NeutralSelected,#DFDFDF)]";
 const SELECTED_BG = "bg-[var(--Light-Background-NeutralSelected,#DFDFDF)]";
 
-const X_SCROLLBAR_BOTTOM =
-  "[scrollbar-width:thin] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/30 [&::-webkit-scrollbar-track]:bg-transparent";
-
-const FIELD_CONTROL_PADDING: Record<FieldSize, { rest: string; float: string; iconBottom: string }> = {
+const FIELD_CONTROL_PADDING: Record<
+  FieldSize,
+  { rest: string; float: string; iconBottom: string }
+> = {
   small: {
-    // bottom aligned content, little bottom padding
     rest: "pt-[18px] pb-[8px]",
     float: "pt-[26px] pb-[8px]",
     iconBottom: "bottom-[10px]",
@@ -100,25 +110,48 @@ function SearchField({
   className?: string;
 }) {
   return (
-    <div className={cn("sticky top-0 z-10 bg-bg-primary border-b border-bd-primary", className)}>
+    <div
+      className={cn(
+        "sticky top-0 z-10 border-b border-bd-primary bg-bg-primary",
+        className
+      )}
+    >
       <div className="flex items-center gap-2 px-3 py-2">
         <SearchIcon className="size-4 opacity-60" />
         <input
           ref={inputRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            const el = e.currentTarget;
+            const next = el.value;
+            const caret = el.selectionStart ?? next.length;
+
+            onChange(next);
+
+            requestAnimationFrame(() => {
+              const target = inputRef?.current ?? el;
+              if (!target) return;
+              target.focus({ preventScroll: true });
+              const pos = Math.min(caret, target.value.length);
+              target.setSelectionRange(pos, pos);
+            });
+          }}
           placeholder={placeholder ?? "Search..."}
           onKeyDownCapture={(e) => {
-            // allow Escape to bubble for Radix close
+            if (e.key !== "Escape") e.stopPropagation();
+          }}
+          onKeyDown={(e) => {
             if (e.key !== "Escape") e.stopPropagation();
           }}
           onPointerDownCapture={(e) => {
-            // keep input interactions from triggering outer listeners
+            e.stopPropagation();
+          }}
+          onClickCapture={(e) => {
             e.stopPropagation();
           }}
           className={cn(
             "w-full bg-transparent outline-none",
-            "text-[14px] leading-[20px] font-medium",
+            "text-[14px] font-medium leading-[20px]",
             "text-tx-primary placeholder:text-tx-tertiary"
           )}
         />
@@ -134,7 +167,9 @@ function SearchField({
               e.preventDefault();
               e.stopPropagation();
               onChange("");
-              requestAnimationFrame(() => inputRef?.current?.focus?.());
+              requestAnimationFrame(() =>
+                inputRef?.current?.focus?.({ preventScroll: true })
+              );
             }}
             className="inline-flex items-center justify-center rounded-s p-1 hover:bg-black/10"
             aria-label="Clear search"
@@ -171,6 +206,8 @@ function useEventListener<T extends Window | Document>(
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
+type DropdownDirection = "auto" | "up" | "down";
 
 function decideDirection(opts: {
   direction: DropdownDirection;
@@ -216,11 +253,15 @@ export function Select(props: React.ComponentProps<typeof SelectPrimitive.Root>)
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
-export function SelectGroup(props: React.ComponentProps<typeof SelectPrimitive.Group>) {
+export function SelectGroup(
+  props: React.ComponentProps<typeof SelectPrimitive.Group>
+) {
   return <SelectPrimitive.Group data-slot="select-group" {...props} />;
 }
 
-export function SelectValue(props: React.ComponentProps<typeof SelectPrimitive.Value>) {
+export function SelectValue(
+  props: React.ComponentProps<typeof SelectPrimitive.Value>
+) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
@@ -251,15 +292,24 @@ export const SelectContent = React.forwardRef<
     searchPlaceholder,
     searchInputRef,
     safeBottom = 140,
-    safeTop = 12,
     ...props
   },
   ref
 ) {
+  React.useEffect(() => {
+    if (!searchable) return;
+
+    const id = window.requestAnimationFrame(() => {
+      searchInputRef?.current?.focus?.({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(id);
+  }, [searchable, searchInputRef]);
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
-        ref={ref as any}
+        ref={ref as React.Ref<HTMLDivElement>}
         data-slot="select-content"
         position={position}
         align={align}
@@ -292,17 +342,14 @@ export const SelectContent = React.forwardRef<
         {searchable ? (
           <SearchField
             value={searchValue ?? ""}
-            onChange={onSearchValueChange ?? (() => { })}
+            onChange={onSearchValueChange ?? (() => {})}
             placeholder={searchPlaceholder ?? "Search..."}
             inputRef={searchInputRef}
           />
         ) : null}
 
         <SelectPrimitive.Viewport
-          className={cn(
-            "p-1 space-y-[1px]",
-            position === "popper" && "w-full scroll-my-1"
-          )}
+          className={cn("space-y-[1px] p-1", position === "popper" && "w-full scroll-my-1")}
         >
           {children}
         </SelectPrimitive.Viewport>
@@ -320,7 +367,10 @@ export function SelectItem({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Item> & { textValue?: string }) {
   const derivedTextValue =
-    textValue ?? (typeof children === "string" || typeof children === "number" ? String(children) : undefined);
+    textValue ??
+    (typeof children === "string" || typeof children === "number"
+      ? String(children)
+      : undefined);
 
   return (
     <SelectPrimitive.Item
@@ -343,7 +393,10 @@ export function SelectItem({
   );
 }
 
-export function SelectLabel({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Label>) {
+export function SelectLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Label>) {
   return (
     <SelectPrimitive.Label
       data-slot="select-label"
@@ -353,7 +406,10 @@ export function SelectLabel({ className, ...props }: React.ComponentProps<typeof
   );
 }
 
-export function SelectSeparator({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Separator>) {
+export function SelectSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Separator>) {
   return (
     <SelectPrimitive.Separator
       data-slot="select-separator"
@@ -363,7 +419,10 @@ export function SelectSeparator({ className, ...props }: React.ComponentProps<ty
   );
 }
 
-export function SelectScrollUpButton({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
+export function SelectScrollUpButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
   return (
     <SelectPrimitive.ScrollUpButton
       data-slot="select-scroll-up-button"
@@ -391,7 +450,7 @@ export function SelectScrollDownButton({
 }
 
 /* -------------------------------------------------------------------------------------------------
- * 2) Floating shell (UNCHANGED STYLES)
+ * 2) Floating shell
  * ------------------------------------------------------------------------------------------------- */
 
 type FloatingShellProps = {
@@ -454,17 +513,24 @@ function FloatingShell({
   const ERROR_BORDER = "border-[color:var(--Errors-500,#E35141)]";
   const ERROR_TEXT = "text-[color:var(--Errors-500,#E35141)]";
 
-  const shellBorder = isInvalid ? ERROR_BORDER : isSelectedForced || isActive ? "border-black" : "border-bd-primary";
+  const shellBorder = isInvalid
+    ? ERROR_BORDER
+    : isSelectedForced || isActive
+      ? "border-black"
+      : "border-bd-primary";
   const shellBg = filled ? "bg-bg-inverse" : "bg-bg-primary";
   const patchBg = filled ? "bg-bg-inverse" : "bg-bg-primary";
-  const shellRing = !isDisabled && !isInvalid && (isSelectedForced || isActive) ? "ring-1 ring-black" : "";
+  const shellRing =
+    !isDisabled && !isInvalid && (isSelectedForced || isActive)
+      ? "ring-1 ring-black"
+      : "";
   const shellHover = "";
 
   return (
     <div className={cn("my-2 w-full", className)}>
       <div
         className={cn(
-          "group relative w-full border flex items-stretch",
+          "group relative flex w-full items-stretch border",
           "transition-[background-color,box-shadow] duration-300 ease-out",
           shellRadius,
           shellBorder,
@@ -481,43 +547,52 @@ function FloatingShell({
         <label
           htmlFor={fieldId}
           className={cn(
-            "pointer-events-none",
-            "absolute z-10 select-none",
+            "pointer-events-none absolute z-10 max-w-full select-none truncate pr-[84px]",
             LEFT_PAD,
-            "pr-[84px]",
-            "max-w-full truncate",
-            "transition-[top,transform,font-size,line-height,font-weight] duration-300 ease-out",
             isInvalid ? ERROR_TEXT : LABEL_SECONDARY,
             isDisabled ? "cursor-not-allowed" : "cursor-text",
             "top-1/2 -translate-y-1/2",
             LABEL_DEFAULT,
+            "transition-[top,transform,font-size,line-height,font-weight] duration-300 ease-out",
             !isDisabled &&
-            cn(
-              "group-hover:translate-y-0",
-              "group-hover:top-[8px]",
-              "group-hover:text-[14px] group-hover:leading-[16px] group-hover:font-normal"
-            ),
+              cn(
+                "group-hover:top-[8px] group-hover:translate-y-0",
+                "group-hover:text-[14px] group-hover:font-normal group-hover:leading-[16px]"
+              ),
             !isDisabled &&
-            cn(
-              "peer-focus:translate-y-0",
-              "peer-focus:top-[8px]",
-              "peer-focus:text-[14px] peer-focus:leading-[16px] peer-focus:font-normal"
-            ),
+              cn(
+                "peer-focus:top-[8px] peer-focus:translate-y-0",
+                "peer-focus:text-[14px] peer-focus:font-normal peer-focus:leading-[16px]"
+              ),
             isFloatingNow && cn(FLOAT_TOP, "translate-y-0", LABEL_FLOAT)
           )}
         >
-          <span className={cn("inline-flex items-center", isFloatingNow && cn("px-[6px] -ml-[6px] rounded-xs", patchBg))}>
+          <span
+            className={cn(
+              "inline-flex items-center",
+              isFloatingNow && cn("rounded-xs -ml-[6px] px-[6px]", patchBg)
+            )}
+          >
             <span className="inline-flex items-center gap-[2px]">
               <span>{label}</span>
 
               {required ? (
-                <span className={cn("font-normal", isDisabled ? "text-neutral-400" : "text-[#E53935]")}>*</span>
+                <span
+                  className={cn(
+                    "font-normal",
+                    isDisabled ? "text-neutral-400" : "text-[#E53935]"
+                  )}
+                >
+                  *
+                </span>
               ) : null}
 
-              {optional ? <span className="ml-xs text-tx-tertiary">(optional)</span> : null}
+              {optional ? (
+                <span className="ml-xs text-tx-tertiary">(optional)</span>
+              ) : null}
 
               {info ? (
-                <span className="ml-1 inline-flex pointer-events-auto">
+                <span className="pointer-events-auto ml-1 inline-flex">
                   <FieldInfoIcon content={info} />
                 </span>
               ) : null}
@@ -543,10 +618,12 @@ function FloatingShell({
 }
 
 /* -------------------------------------------------------------------------------------------------
- * 3) Floating SINGLE Select + SEARCH (Radix)
+ * 3) Floating SINGLE Select
  * ------------------------------------------------------------------------------------------------- */
 
-export type FloatingSelectProps = React.ComponentProps<typeof SelectPrimitive.Root> & {
+export type FloatingSelectProps = React.ComponentProps<
+  typeof SelectPrimitive.Root
+> & {
   state?: FieldState;
   size?: FieldSize;
   label: string;
@@ -570,6 +647,7 @@ export type FloatingSelectProps = React.ComponentProps<typeof SelectPrimitive.Ro
   safeBottom?: number;
   safeTop?: number;
   minSpace?: number;
+  disabled?: boolean;
 };
 
 export function FloatingSelect({
@@ -584,8 +662,8 @@ export function FloatingSelect({
   errorText,
   icon = true,
   filled = false,
-  disabled,
   info,
+  disabled = false,
   value,
   defaultValue,
   onValueChange,
@@ -619,7 +697,7 @@ export function FloatingSelect({
 
   const isSearchControlled = searchValueProp !== undefined;
   const [innerSearch, setInnerSearch] = React.useState("");
-  const search = isSearchControlled ? (searchValueProp ?? "") : innerSearch;
+  const search = isSearchControlled ? searchValueProp ?? "" : innerSearch;
 
   const setSearch = React.useCallback(
     (v: string) => {
@@ -633,7 +711,6 @@ export function FloatingSelect({
 
   type TriggerEl = React.ElementRef<typeof SelectPrimitive.Trigger>;
   const triggerRef = React.useRef<TriggerEl | null>(null);
-
   const contentRef = React.useRef<HTMLDivElement | null>(null);
 
   const clearBtnRef = React.useRef<HTMLButtonElement | null>(null);
@@ -643,21 +720,20 @@ export function FloatingSelect({
 
   const FIELD_TRIGGER_PAD_Y: Record<FieldSize, { rest: string; float: string }> = {
     small: {
-      // height = 20 (line) + 2*py -> matches 64/68/72/80
       rest: "py-[22px] md:py-[24px] xl:py-[26px] 2xl:py-[30px]",
-      // height = 20 + pt+pb -> matches 64/68/72/80
       float:
         "pt-[28px] pb-[16px] md:pt-[30px] md:pb-[18px] xl:pt-[32px] xl:pb-[20px] 2xl:pt-[36px] 2xl:pb-[24px]",
     },
     large: {
-      // matches 72/76/80/88
       rest: "py-[26px] md:py-[28px] xl:py-[30px] 2xl:py-[34px]",
       float:
         "pt-[32px] pb-[20px] md:pt-[34px] md:pb-[22px] xl:pt-[36px] xl:pb-[24px] 2xl:pt-[40px] 2xl:pb-[28px]",
     },
   };
 
-  const PAD_Y = isFloatingNow ? FIELD_CONTROL_PADDING[size].float : FIELD_CONTROL_PADDING[size].rest;
+  const PAD_Y = isFloatingNow
+    ? FIELD_TRIGGER_PAD_Y[size].float
+    : FIELD_TRIGGER_PAD_Y[size].rest;
   const PL = "pl-[18px]";
   const ICON_Y = FIELD_CONTROL_PADDING[size].iconBottom;
   const CHEVRON_RIGHT = "right-[.62rem]";
@@ -666,7 +742,10 @@ export function FloatingSelect({
   const PR_NO_CLEAR = "pr-[48px]";
   const INPUT_TEXT = "text-[14px] leading-[20px] font-semibold";
 
-  const [contentSide, setContentSide] = React.useState<"top" | "bottom">("bottom");
+  const [contentSide, setContentSide] = React.useState<"top" | "bottom">(
+    "bottom"
+  );
+
   const computeSide = React.useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
@@ -683,6 +762,7 @@ export function FloatingSelect({
   }, [dropdownDirection, safeTop, safeBottom, minSpace]);
 
   const [rightPadPx, setRightPadPx] = React.useState<number | null>(null);
+
   const computeRightPad = React.useCallback(() => {
     const chevronW = measureEl(chevronWrapRef.current);
     const clearW = canClear ? measureEl(clearBtnRef.current) : 0;
@@ -691,7 +771,10 @@ export function FloatingSelect({
     const gapBetweenIcons = canClear ? 10 : 0;
 
     const minPad = canClear ? 78 : 48;
-    const pad = Math.max(minPad, gutter + chevronW + (canClear ? clearW + gapBetweenIcons : 0) + 8);
+    const pad = Math.max(
+      minPad,
+      gutter + chevronW + (canClear ? clearW + gapBetweenIcons : 0) + 8
+    );
 
     setRightPadPx(pad);
   }, [canClear]);
@@ -705,17 +788,20 @@ export function FloatingSelect({
 
   React.useEffect(() => {
     if (!open || !searchable) return;
-    const el = searchRef.current;
-    if (!el) return;
 
-    if (document.activeElement !== el) {
-      requestAnimationFrame(() => {
+    const id = window.requestAnimationFrame(() => {
+      const el = searchRef.current;
+      if (!el) return;
+
+      if (document.activeElement !== el) {
         el.focus({ preventScroll: true });
         const len = el.value.length;
         el.setSelectionRange(len, len);
-      });
-    }
-  }, [search, open, searchable]);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(id);
+  }, [open, searchable]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -772,10 +858,10 @@ export function FloatingSelect({
           });
           return;
         }
+
         setSearch("");
         onFieldBlur?.();
         setIsFocused(false);
-
       }}
       disabled={isDisabled}
       {...rootProps}
@@ -836,21 +922,30 @@ export function FloatingSelect({
                   "absolute z-10",
                   CLEAR_RIGHT,
                   ICON_Y,
-                  // ✅ key: keep big tap area but bottom-align icon inside it
-                  "inline-flex items-end justify-center pb-[2px]",
-                  "size-4xl rounded-s",
+                  "inline-flex size-4xl items-end justify-center rounded-s pb-[2px]",
                   "text-neutral-600 transition-colors duration-300 ease-out",
                   "hover:text-neutral-700"
                 )}
                 aria-label="Clear selection"
               >
-                {/* ✅ key: match chevron size so baseline feels identical */}
                 <X size={16} />
               </button>
             ) : null}
 
-            <span ref={chevronWrapRef} className={cn("absolute z-10 pointer-events-none text-neutral-600", CHEVRON_RIGHT, ICON_Y)}>
-              <ChevronDownIcon className={cn("size-4 opacity-60 transition-transform", open && "rotate-180")} />
+            <span
+              ref={chevronWrapRef}
+              className={cn(
+                "pointer-events-none absolute z-10 text-neutral-600",
+                CHEVRON_RIGHT,
+                ICON_Y
+              )}
+            >
+              <ChevronDownIcon
+                className={cn(
+                  "size-4 opacity-60 transition-transform",
+                  open && "rotate-180"
+                )}
+              />
             </span>
 
             <SelectPrimitive.Trigger
@@ -858,15 +953,19 @@ export function FloatingSelect({
               id={fieldId}
               aria-invalid={isInvalid || undefined}
               className={cn(
-                "peer w-full bg-transparent outline-none text-left flex flex-1 items-end",
+                "peer flex min-w-0 flex-1 items-end border-0 bg-transparent text-left outline-none",
                 INPUT_TEXT,
                 PL,
                 PAD_Y,
                 canClear ? PR_WITH_CLEAR : PR_NO_CLEAR,
                 isDisabled ? "text-tx-disabled" : "text-tx-primary",
-                "min-w-0 [&>span]:block [&>span]:truncate [&>span]:whitespace-nowrap"
+                "[&>span]:block [&>span]:truncate [&>span]:whitespace-nowrap"
               )}
-              style={rightPadPx != null ? ({ paddingRight: `${rightPadPx}px` } as React.CSSProperties) : undefined}
+              style={
+                rightPadPx != null
+                  ? ({ paddingRight: `${rightPadPx}px` } as React.CSSProperties)
+                  : undefined
+              }
               onFocus={() => setIsFocused(true)}
               onBlur={() => {
                 window.setTimeout(() => {
@@ -902,7 +1001,7 @@ export function FloatingSelect({
 }
 
 /* -------------------------------------------------------------------------------------------------
- * 4) Floating MULTI Select (Custom portal) — FIXED SELECTION
+ * 4) Floating MULTI Select
  * ------------------------------------------------------------------------------------------------- */
 
 const FIELD_MULTI_ICON_BOTTOM: Record<FieldSize, string> = {
@@ -910,47 +1009,39 @@ const FIELD_MULTI_ICON_BOTTOM: Record<FieldSize, string> = {
   large: "bottom-[14px]",
 };
 
-export type MultiOption = { label: string; value: string; disabled?: boolean };
+export type MultiOption = {
+  label: string;
+  value: string;
+  disabled?: boolean;
+};
 
 export type FloatingMultiSelectProps = {
   className?: string;
   state?: FieldState;
   size?: FieldSize;
   label: string;
-
   required?: boolean;
   optional?: boolean;
-
   hint?: boolean;
   hintText?: string;
-
   errorText?: string;
-
   icon?: boolean;
   filled?: boolean;
-
   disabled?: boolean;
-
   options: MultiOption[];
   value?: string[];
   defaultValue?: string[];
   onValueChange?: (val: string[]) => void;
-
   includeAll?: boolean;
   allLabel?: string;
-
   dropdownZIndex?: number;
   info?: React.ReactNode;
   searchable?: boolean;
   searchPlaceholder?: string;
-
   searchValue?: string;
   onSearchValueChange?: (v: string) => void;
-
   clientFilter?: boolean;
-
   dropdownDirection?: DropdownDirection;
-
   safeBottom?: number;
   safeTop?: number;
   minSpace?: number;
@@ -962,37 +1053,27 @@ export function FloatingMultiSelect({
   state,
   size = "small",
   label,
-
   required = false,
   optional = false,
-
   hint = false,
   hintText = "Hint text",
-
   errorText,
   info,
   icon = true,
   filled = false,
-
   disabled,
-
   options,
   value,
   defaultValue,
   onValueChange,
-
   includeAll = true,
   allLabel = "All",
-
   dropdownZIndex = 99999,
-
   searchable = true,
   searchPlaceholder = "Search...",
-
   searchValue: searchValueProp,
   onSearchValueChange: onSearchValueChangeProp,
   clientFilter = true,
-
   dropdownDirection = "auto",
   safeBottom = 140,
   safeTop = 12,
@@ -1001,8 +1082,10 @@ export function FloatingMultiSelect({
 }: FloatingMultiSelectProps) {
   const isControlled = value !== undefined;
 
-  const [inner, setInner] = React.useState<string[]>((defaultValue ?? []).map(String));
-  const selected = (isControlled ? (value ?? []) : inner).map(String);
+  const [inner, setInner] = React.useState<string[]>(
+    (defaultValue ?? []).map(String)
+  );
+  const selected = (isControlled ? value ?? [] : inner).map(String);
   const selectedRef = useLatestRef(selected);
 
   const derivedState: FieldState = disabled ? "disabled" : state ?? "default";
@@ -1020,7 +1103,6 @@ export function FloatingMultiSelect({
   const btnRef = React.useRef<HTMLButtonElement | null>(null);
   const dropdownRef = React.useRef<HTMLDivElement | null>(null);
 
-  // dynamic icon spacing
   const clearBtnRef = React.useRef<HTMLButtonElement | null>(null);
   const chevronWrapRef = React.useRef<HTMLSpanElement | null>(null);
   const [rightPadPx, setRightPadPx] = React.useState<number | null>(null);
@@ -1045,7 +1127,6 @@ export function FloatingMultiSelect({
     searchRef.current?.blur?.();
   }, []);
 
-  // focus search on open
   React.useEffect(() => {
     if (!open || !searchable) return;
     const el = searchRef.current;
@@ -1068,7 +1149,10 @@ export function FloatingMultiSelect({
     for (const o of options) m.set(String(o.value), o.label);
   }, [options]);
 
-  const getLabel = React.useCallback((v: string) => labelCacheRef.current.get(String(v)) ?? String(v), []);
+  const getLabel = React.useCallback(
+    (v: string) => labelCacheRef.current.get(String(v)) ?? String(v),
+    []
+  );
 
   const disabledCacheRef = React.useRef<Map<string, boolean>>(new Map());
   React.useEffect(() => {
@@ -1076,7 +1160,10 @@ export function FloatingMultiSelect({
     for (const o of options) m.set(String(o.value), !!o.disabled);
   }, [options]);
 
-  const isDisabledValue = React.useCallback((v: string) => disabledCacheRef.current.get(String(v)) === true, []);
+  const isDisabledValue = React.useCallback(
+    (v: string) => disabledCacheRef.current.get(String(v)) === true,
+    []
+  );
 
   const filteredOptions = React.useMemo(() => {
     if (!clientFilter) return options;
@@ -1091,7 +1178,8 @@ export function FloatingMultiSelect({
   );
 
   const allCheckedFiltered =
-    filteredEnabledValues.length > 0 && filteredEnabledValues.every((v) => selectedRef.current.includes(v));
+    filteredEnabledValues.length > 0 &&
+    filteredEnabledValues.every((v) => selectedRef.current.includes(v));
 
   const commitSelected = React.useCallback(
     (next: string[]) => {
@@ -1109,13 +1197,14 @@ export function FloatingMultiSelect({
       if (isDisabledValue(valueStr)) return;
 
       const cur = selectedRef.current;
-      const next = cur.includes(valueStr) ? cur.filter((x) => x !== valueStr) : [...cur, valueStr];
+      const next = cur.includes(valueStr)
+        ? cur.filter((x) => x !== valueStr)
+        : [...cur, valueStr];
       commitSelected(next);
     },
     [commitSelected, isDisabledValue, selectedRef]
   );
 
-  // dynamic right padding based on icons
   const computeRightPad = React.useCallback(() => {
     const chevronW = measureEl(chevronWrapRef.current);
     const clearW = canClear ? measureEl(clearBtnRef.current) : 0;
@@ -1124,7 +1213,10 @@ export function FloatingMultiSelect({
     const gapBetweenIcons = canClear ? 10 : 0;
 
     const minPad = canClear ? 78 : 48;
-    const pad = Math.max(minPad, gutter + chevronW + (canClear ? clearW + gapBetweenIcons : 0) + 8);
+    const pad = Math.max(
+      minPad,
+      gutter + chevronW + (canClear ? clearW + gapBetweenIcons : 0) + 8
+    );
     setRightPadPx(pad);
   }, [canClear]);
 
@@ -1139,7 +1231,13 @@ export function FloatingMultiSelect({
 
   const OFFSET = 4;
   const [dropDir, setDropDir] = React.useState<"up" | "down">("down");
-  const [pos, setPos] = React.useState<{ top?: number; bottom?: number; left: number; width: number; maxH: number }>({
+  const [pos, setPos] = React.useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    maxH: number;
+  }>({
     top: 0,
     left: 0,
     width: 0,
@@ -1202,7 +1300,6 @@ export function FloatingMultiSelect({
     };
   }, [open, updatePosition]);
 
-  // ✅ close on PAGE scroll (but not inside dropdown)
   useEventListener(
     wind,
     "scroll",
@@ -1221,7 +1318,6 @@ export function FloatingMultiSelect({
     if (open) scheduleUpdate();
   });
 
-  // outside click close
   useEventListener(doc, "pointerdown", (e: PointerEvent) => {
     if (!open) return;
     const t = e.target as Node;
@@ -1234,7 +1330,6 @@ export function FloatingMultiSelect({
     }
   });
 
-  // escape close
   useEventListener(doc, "keydown", (e: KeyboardEvent) => {
     if (!open) return;
     if (e.key === "Escape") {
@@ -1246,8 +1341,9 @@ export function FloatingMultiSelect({
     }
   });
 
-  // paddings (UNCHANGED)
-  const PAD_Y = isFloatingNow ? FIELD_CONTROL_PADDING[size].float : FIELD_CONTROL_PADDING[size].rest;
+  const PAD_Y = isFloatingNow
+    ? FIELD_CONTROL_PADDING[size].float
+    : FIELD_CONTROL_PADDING[size].rest;
   const PL = "pl-[18px]";
   const ICON_Y = FIELD_MULTI_ICON_BOTTOM[size];
   const CHEVRON_RIGHT = "right-[.62rem]";
@@ -1256,17 +1352,26 @@ export function FloatingMultiSelect({
   const PR_NO_CLEAR = "pr-[48px]";
   const INPUT_TEXT = "text-[14px] leading-[20px] font-semibold";
 
-  // ✅ FIX: reliable activation for touch + mouse
   const activateAll = React.useCallback(() => {
-    // blur AFTER action (do not blur-before, which can swallow taps on mobile)
     if (allCheckedFiltered) {
-      commitSelected(selectedRef.current.filter((v) => !filteredEnabledValues.includes(v)));
+      commitSelected(
+        selectedRef.current.filter((v) => !filteredEnabledValues.includes(v))
+      );
     } else {
-      for (const o of filteredOptions) labelCacheRef.current.set(String(o.value), o.label);
+      for (const o of filteredOptions) {
+        labelCacheRef.current.set(String(o.value), o.label);
+      }
       commitSelected([...selectedRef.current, ...filteredEnabledValues]);
     }
     blurSearch();
-  }, [allCheckedFiltered, commitSelected, filteredEnabledValues, filteredOptions, blurSearch, selectedRef]);
+  }, [
+    allCheckedFiltered,
+    commitSelected,
+    filteredEnabledValues,
+    filteredOptions,
+    blurSearch,
+    selectedRef,
+  ]);
 
   const activateOption = React.useCallback(
     (o: MultiOption) => {
@@ -1284,13 +1389,11 @@ export function FloatingMultiSelect({
   const checkChipsScrollbar = React.useCallback(() => {
     const el = chipsRef.current;
     if (!el) return;
-    // +1 to avoid flicker due to sub-pixel rounding
     const has = el.scrollWidth > el.clientWidth + 1;
     setChipsHasScrollbar(has);
   }, []);
 
   React.useLayoutEffect(() => {
-    // after chips render / right padding changes / size changes
     checkChipsScrollbar();
   }, [checkChipsScrollbar, selected.length, rightPadPx, size]);
 
@@ -1304,7 +1407,6 @@ export function FloatingMultiSelect({
   }, [checkChipsScrollbar]);
 
   const onOptionPointerDown = (e: React.PointerEvent) => {
-    // IMPORTANT: prevent focus shift stealing the first tap on iOS
     e.preventDefault();
     e.stopPropagation();
   };
@@ -1373,9 +1475,7 @@ export function FloatingMultiSelect({
                   "absolute z-10",
                   CLEAR_RIGHT,
                   ICON_Y,
-                  // ✅ key: keep big tap area but bottom-align icon inside it
-                  "inline-flex items-end justify-center pb-[2px]",
-                  "size-4xl rounded-s",
+                  "inline-flex size-4xl items-end justify-center rounded-s pb-[2px]",
                   "text-neutral-600 transition-colors duration-300 ease-out",
                   "hover:text-neutral-700"
                 )}
@@ -1385,8 +1485,20 @@ export function FloatingMultiSelect({
               </button>
             ) : null}
 
-            <span ref={chevronWrapRef} className={cn("absolute z-10 pointer-events-none text-neutral-600", CHEVRON_RIGHT, ICON_Y)}>
-              <ChevronDownIcon className={cn("size-4 opacity-60 transition-transform", open && "rotate-180")} />
+            <span
+              ref={chevronWrapRef}
+              className={cn(
+                "pointer-events-none absolute z-10 text-neutral-600",
+                CHEVRON_RIGHT,
+                ICON_Y
+              )}
+            >
+              <ChevronDownIcon
+                className={cn(
+                  "size-4 opacity-60 transition-transform",
+                  open && "rotate-180"
+                )}
+              />
             </span>
 
             <button
@@ -1406,7 +1518,6 @@ export function FloatingMultiSelect({
                       updatePosition();
                     });
                   }
-
                   return next;
                 });
               }}
@@ -1417,15 +1528,18 @@ export function FloatingMultiSelect({
                 }, 0);
               }}
               className={cn(
-                "peer relative w-full bg-transparent outline-none text-left border-0 flex flex-1 items-end",
+                "peer relative flex min-w-0 flex-1 items-end border-0 bg-transparent text-left outline-none",
                 INPUT_TEXT,
                 PL,
                 PAD_Y,
                 canClear ? PR_WITH_CLEAR : PR_NO_CLEAR,
-                isDisabled ? "text-tx-disabled" : "text-tx-primary",
-                "min-w-0"
+                isDisabled ? "text-tx-disabled" : "text-tx-primary"
               )}
-              style={rightPadPx != null ? ({ paddingRight: `${rightPadPx}px` } as React.CSSProperties) : undefined}
+              style={
+                rightPadPx != null
+                  ? ({ paddingRight: `${rightPadPx}px` } as React.CSSProperties)
+                  : undefined
+              }
               aria-haspopup="listbox"
               aria-expanded={open}
             >
@@ -1433,9 +1547,9 @@ export function FloatingMultiSelect({
                 <span
                   ref={chipsRef}
                   className={cn(
-                    "absolute left-[18px] bottom-[6px]",
+                    "absolute bottom-[6px] left-[18px]",
                     size === "small" ? "min-h-[28px]" : "min-h-[30px]",
-                    "flex flex-nowrap items-center gap-[10px] min-w-0 max-w-full",
+                    "flex min-w-0 max-w-full flex-nowrap items-center gap-[10px]",
                     "overflow-x-auto overflow-y-hidden whitespace-nowrap",
                     X_SCROLLBAR_BOTTOM,
                     "pb-[6px]"
@@ -1447,9 +1561,9 @@ export function FloatingMultiSelect({
                   {selectedRef.current.map((v) => (
                     <span
                       key={v}
-                      className="inline-flex h-6 shrink-0 max-w-full items-center gap-1 rounded-full bg-[#1A1A1A] px-2"
+                      className="inline-flex h-6 max-w-full shrink-0 items-center gap-1 rounded-full bg-[#1A1A1A] px-2"
                     >
-                      <span className="truncate text-[color:var(--Light-Text-PrimaryInverse,#F9F9F9)] font-semibold text-[14px] leading-[20px]">
+                      <span className="truncate text-[14px] font-semibold leading-[20px] text-[color:var(--Light-Text-PrimaryInverse,#F9F9F9)]">
                         {getLabel(v)}
                       </span>
 
@@ -1462,112 +1576,130 @@ export function FloatingMultiSelect({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          commitSelected(selectedRef.current.filter((x) => x !== v));
+                          commitSelected(
+                            selectedRef.current.filter((x) => x !== v)
+                          );
                         }}
                         aria-label={`Remove ${getLabel(v)}`}
                       >
-                        <X size={14} className="text-[color:var(--Light-Text-PrimaryInverse,#F9F9F9)]" />
+                        <X
+                          size={14}
+                          className="text-[color:var(--Light-Text-PrimaryInverse,#F9F9F9)]"
+                        />
                       </span>
                     </span>
                   ))}
                 </span>
               ) : null}
-
             </button>
 
             {open && mounted
               ? createPortal(
-                <div
-                  ref={dropdownRef}
-                  role="listbox"
-                  aria-multiselectable="true"
-                  onPointerDown={(e) => {
-                    const el = e.target as HTMLElement | null;
-                    if (el?.tagName !== "INPUT") blurSearch();
-                  }}
-                  style={{
-                    position: "fixed",
-                    top: pos.top !== undefined ? pos.top : "auto",
-                    bottom: pos.bottom !== undefined ? pos.bottom : "auto",
-                    left: pos.left,
-                    width: pos.width,
-                    zIndex: dropdownZIndex,
-                    maxHeight: pos.maxH,
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                  className={cn(
-                    "rounded-m border border-bd-primary bg-bg-primary",
-                    "shadow-[0_12px_28px_-8px_rgba(0,0,0,0.22)] overflow-hidden"
-                  )}
-                >
-                  {searchable ? (
-                    <SearchField value={search} onChange={setSearch} placeholder={searchPlaceholder} inputRef={searchRef} />
-                  ) : null}
-
-                  <div className="overflow-auto p-1 space-y-[1px]" style={{ maxHeight: pos.maxH }}>
-                    {includeAll ? (
-                      <button
-                        type="button"
-                        className={cn(
-                          "w-full rounded-sm px-3 py-2 text-left text-sm outline-none select-none",
-                          "text-tx-primary",
-                          HOVER_BG,
-                          ACTIVE_BG,
-                          allCheckedFiltered ? SELECTED_BG : ""
-                        )}
-                        // ✅ FIX: pointerdown activation (reliable on mobile)
-                        onPointerDown={(e) => {
-                          onOptionPointerDown(e);
-                          activateAll();
-                        }}
-                        onKeyDown={(e) => onOptionKeyDown(e, activateAll)}
-                      >
-                        {allLabel}
-                      </button>
+                  <div
+                    ref={dropdownRef}
+                    role="listbox"
+                    aria-multiselectable="true"
+                    onPointerDown={(e) => {
+                      const el = e.target as HTMLElement | null;
+                      if (el?.tagName !== "INPUT") blurSearch();
+                    }}
+                    style={{
+                      position: "fixed",
+                      top: pos.top !== undefined ? pos.top : "auto",
+                      bottom: pos.bottom !== undefined ? pos.bottom : "auto",
+                      left: pos.left,
+                      width: pos.width,
+                      zIndex: dropdownZIndex,
+                      maxHeight: pos.maxH,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                    className={cn(
+                      "overflow-hidden rounded-m border border-bd-primary bg-bg-primary",
+                      "shadow-[0_12px_28px_-8px_rgba(0,0,0,0.22)]"
+                    )}
+                  >
+                    {searchable ? (
+                      <SearchField
+                        value={search}
+                        onChange={setSearch}
+                        placeholder={searchPlaceholder}
+                        inputRef={searchRef}
+                      />
                     ) : null}
 
-                    {includeAll ? <div className="bg-border -mx-1 my-[1px] h-px" /> : null}
+                    <div
+                      className="space-y-[1px] overflow-auto p-1"
+                      style={{ maxHeight: pos.maxH }}
+                    >
+                      {includeAll ? (
+                        <button
+                          type="button"
+                          className={cn(
+                            "w-full rounded-sm px-3 py-2 text-left text-sm outline-none select-none",
+                            "text-tx-primary",
+                            HOVER_BG,
+                            ACTIVE_BG,
+                            allCheckedFiltered ? SELECTED_BG : ""
+                          )}
+                          onPointerDown={(e) => {
+                            onOptionPointerDown(e);
+                            activateAll();
+                          }}
+                          onKeyDown={(e) => onOptionKeyDown(e, activateAll)}
+                        >
+                          {allLabel}
+                        </button>
+                      ) : null}
 
-                    {filteredOptions.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-tx-tertiary">No results</div>
-                    ) : (
-                      filteredOptions.map((o) => {
-                        const v = String(o.value);
-                        const checked = selectedRef.current.includes(v);
+                      {includeAll ? (
+                        <div className="bg-border -mx-1 my-[1px] h-px" />
+                      ) : null}
 
-                        const disabledBtn = isDisabled || o.disabled;
+                      {filteredOptions.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-tx-tertiary">
+                          No results
+                        </div>
+                      ) : (
+                        filteredOptions.map((o) => {
+                          const v = String(o.value);
+                          const checked = selectedRef.current.includes(v);
+                          const disabledBtn = isDisabled || o.disabled;
 
-                        return (
-                          <button
-                            key={v}
-                            type="button"
-                            disabled={disabledBtn}
-                            aria-selected={checked}
-                            className={cn(
-                              "w-full rounded-sm px-3 py-2 text-left text-sm outline-none select-none",
-                              "text-tx-primary",
-                              "disabled:opacity-50 disabled:pointer-events-none",
-                              HOVER_BG,
-                              ACTIVE_BG,
-                              checked ? SELECTED_BG : ""
-                            )}
-                            // ✅ FIX: pointerdown activation (reliable on mobile)
-                            onPointerDown={(e) => {
-                              onOptionPointerDown(e);
-                              if (!disabledBtn) activateOption(o);
-                            }}
-                            onKeyDown={(e) => onOptionKeyDown(e, () => !disabledBtn && activateOption(o))}
-                          >
-                            {o.label}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>,
-                document.body
-              )
+                          return (
+                            <button
+                              key={v}
+                              type="button"
+                              disabled={disabledBtn}
+                              aria-selected={checked}
+                              className={cn(
+                                "w-full rounded-sm px-3 py-2 text-left text-sm outline-none select-none",
+                                "text-tx-primary",
+                                "disabled:pointer-events-none disabled:opacity-50",
+                                HOVER_BG,
+                                ACTIVE_BG,
+                                checked ? SELECTED_BG : ""
+                              )}
+                              onPointerDown={(e) => {
+                                onOptionPointerDown(e);
+                                if (!disabledBtn) activateOption(o);
+                              }}
+                              onKeyDown={(e) =>
+                                onOptionKeyDown(
+                                  e,
+                                  () => !disabledBtn && activateOption(o)
+                                )
+                              }
+                            >
+                              {o.label}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>,
+                  document.body
+                )
               : null}
           </>
         )}

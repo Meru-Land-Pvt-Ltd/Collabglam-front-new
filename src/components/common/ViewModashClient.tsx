@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import { Loader } from "@/components/ui/loader";
-import api from "@/lib/api";
+import api, { post } from "@/lib/api";
 import {
   apiGetContractedCampaigns,
   apiGetfetchMediaKit,
@@ -1741,87 +1741,207 @@ export default function ViewClient() {
     [modashData]
   );
 
-  const handleCopy = async () => {
+const handleCopy = async () => {
+  try {
+    const selectedReport =
+      displayedReport ??
+      activeReport ??
+      primaryReport ??
+      mediaKit?.primaryInfluencerReport ??
+      mediaKit?.influencerReports?.[0] ??
+      mediaKit?.socialProfiles?.[0] ??
+      null;
+
+    const reportAny = (selectedReport as any) ?? {};
+    const mediaKitRoot = (mediaKit as any) ?? {};
+
+    const userId = String(
+      reportAny?.modashId ||
+      reportAny?._id ||
+      mediaKitRoot?.influencerId ||
+      mediaKitRoot?.userId ||
+      ""
+    ).trim();
+
+    const provider = String(
+      activePlatform ||
+      reportAny?.provider ||
+      mediaKitRoot?.primaryPlatform ||
+      "instagram"
+    )
+      .trim()
+      .toLowerCase();
+
+    const rawHandle = String(
+      reportAny?.handle ||
+      reportAny?.username ||
+      mediaKitRoot?.handle ||
+      mediaKitRoot?.username ||
+      ""
+    ).trim();
+
+    const normalizedHandle = rawHandle
+      ? rawHandle.startsWith("@")
+        ? rawHandle
+        : `@${rawHandle}`
+      : "";
+
+    if (!userId) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Missing userId",
+        text: "Could not generate media kit link because userId was not found.",
+      });
+      return;
+    }
+
+    const mediaKitUrl =
+      `${window.location.origin}/mediakit/${encodeURIComponent(userId)}` +
+      `?platform=${encodeURIComponent(provider)}`;
+
     try {
-      const selectedReport =
-        displayedReport ??
-        activeReport ??
-        primaryReport ??
-        mediaKit?.primaryInfluencerReport ??
-        mediaKit?.influencerReports?.[0] ??
-        mediaKit?.socialProfiles?.[0] ??
-        null;
-
-      const userId = String(
-        selectedReport?.modashId ||
-        selectedReport?._id ||
-        mediaKit?.influencerId ||
-        ""
-      ).trim();
-
-      const provider = String(
-        activePlatform ||
-        selectedReport?.provider ||
-        mediaKit?.primaryPlatform ||
-        "instagram"
-      )
-        .trim()
-        .toLowerCase();
-
-      if (!userId) {
-        await Swal.fire({
-          icon: "warning",
-          title: "Missing userId",
-          text: "Could not generate media kit link because userId was not found.",
-        });
-        return;
+      if (window.isSecureContext && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(mediaKitUrl);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = mediaKitUrl;
+        ta.style.position = "fixed";
+        ta.style.top = "0";
+        ta.style.left = "0";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
       }
 
-      const mediaKitUrl =
-        `${window.location.origin}/mediakit/${encodeURIComponent(userId)}` +
-        `?platform=${encodeURIComponent(provider)}`;
+      await Swal.fire({
+        icon: "success",
+        title: "Copied",
+        text: "Media kit link copied to clipboard.",
+        timer: 1600,
+        showConfirmButton: false,
+      });
 
       try {
-        if (window.isSecureContext && navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(mediaKitUrl);
-        } else {
-          const ta = document.createElement("textarea");
-          ta.value = mediaKitUrl;
-          ta.style.position = "fixed";
-          ta.style.top = "0";
-          ta.style.left = "0";
-          ta.style.opacity = "0";
-          document.body.appendChild(ta);
-          ta.focus();
-          ta.select();
-          document.execCommand("copy");
-          document.body.removeChild(ta);
-        }
-
-        await Swal.fire({
-          icon: "success",
-          title: "Copied",
-          text: "Media kit link copied to clipboard.",
-          timer: 1600,
-          showConfirmButton: false,
+        await post("/modash/creator", {
+          userId,
+          username:
+            reportAny?.username ||
+            String(normalizedHandle || "").replace(/^@/, "") ||
+            "",
+          handle:
+            normalizedHandle ||
+            reportAny?.handle ||
+            reportAny?.username ||
+            "",
+          fullname:
+            reportAny?.fullname ||
+            reportAny?.fullName ||
+            reportAny?.name ||
+            mediaKitRoot?.fullname ||
+            mediaKitRoot?.fullName ||
+            mediaKitRoot?.name ||
+            "",
+          followers: Number(
+            reportAny?.followers ??
+              reportAny?.stats?.followers?.value ??
+              mediaKitRoot?.followers ??
+              mediaKitRoot?.followerCount ??
+              0
+          ),
+          engagementRate: Number(
+            reportAny?.engagementRate ??
+              mediaKitRoot?.engagementRate ??
+              0
+          ),
+          engagements: Number(
+            reportAny?.engagements ??
+              mediaKitRoot?.engagements ??
+              mediaKitRoot?.stats?.engagements ??
+              0
+          ),
+          averageViews: Number(
+            reportAny?.avgViews ??
+              reportAny?.averageViews ??
+              reportAny?.stats?.avgViews?.value ??
+              mediaKitRoot?.averageViews ??
+              mediaKitRoot?.avgViews ??
+              mediaKitRoot?.stats?.avgViews?.value ??
+              0
+          ),
+          picture:
+            reportAny?.picture ||
+            mediaKitRoot?.picture ||
+            mediaKitRoot?.avatar ||
+            mediaKitRoot?.profilePicUrl ||
+            "",
+          url: reportAny?.url || mediaKitRoot?.url || "",
+          isVerified: Boolean(
+            reportAny?.isVerified || mediaKitRoot?.isVerified
+          ),
+          isPrivate: Boolean(
+            reportAny?.isPrivate || mediaKitRoot?.isPrivate
+          ),
+          platform: provider,
+          bio:
+            reportAny?.bio ||
+            mediaKitRoot?.bio ||
+            mediaKitRoot?.description ||
+            "",
+          country:
+            reportAny?.country ||
+            mediaKitRoot?.country ||
+            mediaKitRoot?.location?.country ||
+            (typeof mediaKitRoot?.location === "string"
+              ? mediaKitRoot.location
+              : "") ||
+            "",
+          location:
+            (typeof mediaKitRoot?.location === "string"
+              ? mediaKitRoot.location
+              : "") ||
+            mediaKitRoot?.location?.country ||
+            reportAny?.country ||
+            mediaKitRoot?.country ||
+            "",
+          categories: Array.isArray(mediaKitRoot?.categories)
+            ? mediaKitRoot.categories
+                .map((item: any) =>
+                  typeof item === "string"
+                    ? item
+                    : item?.categoryName ||
+                      item?.subcategoryName ||
+                      item?.name ||
+                      item?.subcategory ||
+                      ""
+                )
+                .filter(Boolean)
+            : [],
+          searchType: mediaKitRoot?.searchType || "standard",
+          source: mediaKitRoot?.source || "standard",
         });
-      } catch (copyErr) {
-        console.error("Clipboard copy failed:", copyErr);
-        await Swal.fire({
-          icon: "error",
-          title: "Copy failed",
-          text: "Could not copy the link. Please copy it manually from the address bar.",
-        });
+      } catch (apiError) {
+        console.error("Failed to post /modash/creator:", apiError);
       }
-    } catch (error) {
-      console.error("Failed to copy media kit link:", error);
+    } catch (copyErr) {
+      console.error("Clipboard copy failed:", copyErr);
       await Swal.fire({
         icon: "error",
         title: "Copy failed",
-        text: "Unable to copy the media kit link.",
+        text: "Could not copy the link. Please copy it manually from the address bar.",
       });
     }
-  };
+  } catch (error) {
+    console.error("Failed to copy media kit link:", error);
+    await Swal.fire({
+      icon: "error",
+      title: "Copy failed",
+      text: "Unable to copy the media kit link.",
+    });
+  }
+};
 
   if (loading) {
     return (
@@ -1868,7 +1988,7 @@ export default function ViewClient() {
               />
             ) : null}
 
-            {hasSectionAccess("riskCompliance") ? (
+            {/* {hasSectionAccess("riskCompliance") ? (
               <RiskComplianceCard
                 credibilityScore={credibilityScore}
                 isPrivate={modashData?.profile?.isPrivate ?? primaryReport?.isPrivate}
@@ -1878,7 +1998,7 @@ export default function ViewClient() {
                 title="Risk & Compliance Monitoring"
                 plan="starter"
               />
-            )}
+            )} */}
           </div>
 
           <div className="space-y-6">
@@ -1946,11 +2066,11 @@ export default function ViewClient() {
             <FeatureLockedCard title="Lookalike Creators" plan="pro" />
           )}
 
-          {hasSectionAccess("auditTrail") ? (
+          {/* {hasSectionAccess("auditTrail") ? (
             <AuditTrailTable items={auditItems} />
           ) : (
             <FeatureLockedCard title="Audit Trail" plan="enterprise" />
-          )}
+          )} */}
         </div>
       </div>
     </div>

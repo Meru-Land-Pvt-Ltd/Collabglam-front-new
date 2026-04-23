@@ -75,10 +75,10 @@ export function CreatorHeader({
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#7d7569]">
-            <span>@{displayProfile?.username || "creator_handle"}</span>
+            <span>{displayProfile?.handle ? `${displayProfile?.handle}` : `@${displayProfile?.username}`}</span>
             {/* <span>ID: {displayProfile?.modashId || displayProfile?._id || "—"}</span> */}
-            <span>{mediaKit?.country || displayProfile?.country || "Philippines"}</span>
-            <span>{accountType || displayProfile?.accountType || "Business"}</span>
+            <span>{mediaKit?.country || displayProfile?.country || mediaKit?.location || displayProfile?.location || "-"}</span>
+            <span>{accountType || displayProfile?.accountType || ""}</span>
             {(postsCount ?? displayProfile?.postsCount) ? (
               <span>{(postsCount ?? displayProfile?.postsCount)?.toLocaleString()} posts</span>
             ) : null}
@@ -99,11 +99,10 @@ export function CreatorHeader({
                   <button
                     type="button"
                     onClick={() => openProfile(primaryPlatformProfile.url)}
-                    className={`inline-flex items-center gap-2 rounded-full border border-[#e8e0d5] bg-white px-3 py-2 text-xs text-[#5e584f] transition ${
-                      primaryPlatformProfile.url
+                    className={`inline-flex items-center gap-2 rounded-full border border-[#e8e0d5] bg-white px-3 py-2 text-xs text-[#5e584f] transition ${primaryPlatformProfile.url
                         ? "cursor-pointer hover:bg-[#fff9f1]"
                         : "cursor-default"
-                    }`}
+                      }`}
                   >
                     <CheckCircleIcon size={16} weight="fill" className="text-[#d39305]" />
                     <Icon className="h-3.5 w-3.5" />

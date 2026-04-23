@@ -12,16 +12,21 @@ import {
 import type { Transition, Variants } from "framer-motion";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import HelpDialog, { type SupportMenuKey } from "@/components/common/HelpDialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import {
   CardsThree,
   DotsThree,
   EnvelopeSimpleIcon,
-  Gear,
   ImageIcon,
   PaperPlaneTilt,
   Question,
-  RocketLaunchIcon,
   SignOut,
   SuitcaseIcon,
   UserIcon,
@@ -190,49 +195,78 @@ function PanelCaretGlyph({ dir }: { dir: "left" | "right" }) {
   );
 }
 
-const RailIconButton = React.memo(function RailIconButton({
-  active,
-  onClick,
+function SidebarTooltip({
+  content,
   children,
-  label,
-  hasIndicator,
-  tight,
+  side = "right",
 }: {
+  content: string;
+  children: React.ReactElement;
+  side?: "top" | "right" | "bottom" | "left";
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side={side}>{content}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+type RailIconButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   active?: boolean;
-  onClick?: () => void;
   children: React.ReactNode;
   label: string;
   hasIndicator?: boolean;
   tight?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={cn(
-        "grid place-items-center rounded-lg transition cursor-pointer",
-        tight ? "h-11 w-11" : "h-12 w-12",
-        FOCUS_RING,
-        REST_NAV,
-        active ? ACTIVE_NAV : HOVER_NAV
-      )}
-    >
-      <span className="relative grid place-items-center text-current">
-        {children}
-        {hasIndicator ? (
-          <span
-            className={cn(
-              "absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full",
-              active ? "bg-white" : "bg-[#1a1a1a]"
-            )}
-          />
-        ) : null}
-      </span>
-    </button>
-  );
-});
+};
+
+const RailIconButtonBase = React.forwardRef<HTMLButtonElement, RailIconButtonProps>(
+  function RailIconButton(
+    {
+      active,
+      children,
+      label,
+      hasIndicator,
+      tight,
+      className,
+      type,
+      ...props
+    },
+    ref
+  ) {
+    return (
+      <button
+        ref={ref}
+        type={type ?? "button"}
+        aria-label={label}
+        className={cn(
+          "grid place-items-center rounded-lg transition cursor-pointer",
+          tight ? "h-11 w-11" : "h-12 w-12",
+          FOCUS_RING,
+          REST_NAV,
+          active ? ACTIVE_NAV : HOVER_NAV,
+          className
+        )}
+        {...props}
+      >
+        <span className="relative grid place-items-center text-current">
+          {children}
+          {hasIndicator ? (
+            <span
+              className={cn(
+                "absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full",
+                active ? "bg-white" : "bg-[#1a1a1a]"
+              )}
+            />
+          ) : null}
+        </span>
+      </button>
+    );
+  }
+);
+
+RailIconButtonBase.displayName = "RailIconButton";
+const RailIconButton = React.memo(RailIconButtonBase);
 
 const RowButton = React.memo(function RowButton({
   active,
@@ -422,7 +456,15 @@ export default function Sidebar({
   const [drawerOpenInternal, setDrawerOpenInternal] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpDialogPosition, setHelpDialogPosition] = useState({
+    top: 0,
+    left: 0,
+  });
+
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const helpAnchorRef = useRef<HTMLDivElement | null>(null);
+  const helpDialogRef = useRef<HTMLDivElement | null>(null);
 
   const drawerOpen = drawerOpenProp ?? drawerOpenInternal;
 
@@ -483,6 +525,35 @@ export default function Sidebar({
     loadProfile();
   }, [influencerId, token]);
 
+  useEffect(() => {
+    if (!helpDialogOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHelpDialogOpen(false);
+    };
+
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+
+      const dialogEl = helpDialogRef.current;
+      const anchorEl = helpAnchorRef.current;
+
+      if (dialogEl?.contains(target)) return;
+      if (anchorEl?.contains(target)) return;
+
+      setHelpDialogOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [helpDialogOpen]);
+
   const items = useMemo<Item[]>(
     () => [
       {
@@ -542,13 +613,6 @@ export default function Sidebar({
         section: "main",
         href: "/influencer/media-kit",
       },
-      // {
-      //   key: "profile",
-      //   label: "Profile",
-      //   icon: UserIcon,
-      //   section: "main",
-      //   href: "/influencer/profile",
-      // },
       {
         key: "support",
         label: "Help",
@@ -560,10 +624,21 @@ export default function Sidebar({
     [campaignBadge, appliedBadge, messagesBadge]
   );
 
+  const helpMenuItems = useMemo<Array<{ key: SupportMenuKey; label: string }>>(
+    () => [
+      { key: "dispute", label: "Dispute" },
+      { key: "report_issue", label: "Report an Issue" },
+      { key: "help_center", label: "Help Center" },
+      { key: "privacy_policy", label: "Privacy Policy" },
+    ],
+    []
+  );
+
   const mainItems = useMemo(
     () => items.filter((i) => i.section === "main"),
     [items]
   );
+
   const footerItems = useMemo(
     () => items.filter((i) => i.section === "footer"),
     [items]
@@ -629,6 +704,57 @@ export default function Sidebar({
     [items, router, isDesktop, setDrawerOpen]
   );
 
+  const openHelpDialog = useCallback(() => {
+    const rect = helpAnchorRef.current?.getBoundingClientRect();
+
+    if (rect) {
+      const DIALOG_HEIGHT = 340;
+      const GAP = 12;
+      const VIEWPORT_PADDING = 16;
+
+      let top = rect.top;
+
+      if (top + DIALOG_HEIGHT > window.innerHeight - VIEWPORT_PADDING) {
+        top = window.innerHeight - VIEWPORT_PADDING - DIALOG_HEIGHT;
+      }
+
+      top = Math.max(VIEWPORT_PADDING, top);
+
+      setHelpDialogPosition({
+        top,
+        left: rect.right + GAP,
+      });
+    }
+
+    setHelpDialogOpen((prev) => !prev);
+  }, []);
+
+  const handleHelpMenuSelect = useCallback(
+    (key: SupportMenuKey) => {
+      setHelpDialogOpen(false);
+
+      switch (key) {
+        case "dispute":
+          router.push("/influencer/disputes");
+          break;
+        case "report_issue":
+          router.push("/influencer/report-issue");
+          break;
+        case "help_center":
+          router.push("/influencer/support-centre");
+          break;
+        case "privacy_policy":
+          router.push("/privacy-policy");
+          break;
+        default:
+          break;
+      }
+
+      if (!isDesktop) setDrawerOpen(false);
+    },
+    [router, isDesktop, setDrawerOpen]
+  );
+
   const beginOpenDesktop = useCallback(() => {
     setCollapsed(false);
     setIsClosing(false);
@@ -639,19 +765,31 @@ export default function Sidebar({
     setIsClosing(true);
     setWidthCollapsed(true);
     setProfileMenuOpen(false);
+    setHelpDialogOpen(false);
   }, []);
 
   const handleLogout = useCallback(() => {
-    if (onLogout) {
-      onLogout();
-      return;
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+
+      document.cookie = "influencerId=; Max-Age=0; path=/";
+      document.cookie = "influencer_token=; Max-Age=0; path=/";
+      document.cookie = "token=; Max-Age=0; path=/";
+    } catch (error) {
+      console.error("Logout cleanup failed:", error);
     }
 
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("userId");
-    router.push("/influencer/login");
-  }, [onLogout, router]);
+    setProfileMenuOpen(false);
+    setHelpDialogOpen(false);
+
+    if (!isDesktop) {
+      setDrawerOpen(false);
+    }
+
+    onLogout?.();
+    router.replace("/influencer/login");
+  }, [onLogout, router, isDesktop, setDrawerOpen]);
 
   const collapsedW = isXl ? 92 : 84;
   const expandedW = isXl ? 320 : 280;
@@ -669,17 +807,52 @@ export default function Sidebar({
       const isWalletItem = i.key === "wallet-payments";
 
       if (isDesktop && collapsed) {
+        if (i.key === "support") {
+          return (
+            <div key={i.key} ref={helpAnchorRef}>
+              <SidebarTooltip content={i.label}>
+                <RailIconButton
+                  label={i.label}
+                  tight={tight}
+                  active={helpDialogOpen}
+                  hasIndicator={Boolean(i.right)}
+                  onClick={openHelpDialog}
+                >
+                  <Icon size={20} weight="regular" className="text-current" />
+                </RailIconButton>
+              </SidebarTooltip>
+            </div>
+          );
+        }
+
         return (
-          <RailIconButton
-            key={i.key}
-            label={i.label}
-            tight={tight}
-            active={isActiveItem}
-            hasIndicator={Boolean(i.right)}
-            onClick={() => handleSetActive(i.key)}
-          >
-            <Icon size={20} weight="regular" className="text-current" />
-          </RailIconButton>
+          <SidebarTooltip key={i.key} content={i.label}>
+            <RailIconButton
+              label={i.label}
+              tight={tight}
+              active={isActiveItem}
+              hasIndicator={Boolean(i.right)}
+              onClick={() => handleSetActive(i.key)}
+            >
+              <Icon size={20} weight="regular" className="text-current" />
+            </RailIconButton>
+          </SidebarTooltip>
+        );
+      }
+
+      if (i.key === "support") {
+        return (
+          <div key={i.key} ref={helpAnchorRef}>
+            <RowButton
+              icon={i.icon}
+              label={i.label}
+              right={i.right}
+              active={helpDialogOpen}
+              hideLabel={isDesktop ? isClosing : false}
+              tight={tight}
+              onClick={openHelpDialog}
+            />
+          </div>
         );
       }
 
@@ -694,6 +867,10 @@ export default function Sidebar({
               hideLabel={isDesktop ? isClosing : false}
               tight={tight}
               onClick={() => handleSetActive(i.key)}
+            />
+            <WalletSummary
+              summary={payoutSummary}
+              hideLabel={isDesktop ? isClosing : false}
             />
           </div>
         );
@@ -712,55 +889,46 @@ export default function Sidebar({
         />
       );
     },
-    [active, collapsed, handleSetActive, isClosing, isDesktop, tight]
+    [
+      active,
+      collapsed,
+      handleSetActive,
+      helpDialogOpen,
+      isClosing,
+      isDesktop,
+      openHelpDialog,
+      payoutSummary,
+      tight,
+    ]
   );
 
   const BottomProfileSection = (
     <div className="relative mt-auto pt-4" ref={profileMenuRef}>
       <div className="mb-3 h-px w-full bg-neutral-200" />
 
-      {isDesktop && collapsed ? (
+      {isDesktop && compactUI ? (
         <div className="flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push("/influencer/profile")}
-            className={cn(
-              "grid h-12 w-12 place-items-center rounded-full border border-neutral-200 bg-white transition hover:bg-neutral-50",
-              FOCUS_RING
-            )}
-            title="Profile"
-            aria-label="Profile"
-          >
-            {profileImage ? (
-              <img
-                src={profileImage}
-                alt={profileName}
-                className="h-12 w-12 rounded-full object-cover"
-              />
-            ) : (
-              <UserIcon size={22} weight="regular" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setProfileMenuOpen((prev) => !prev)}
-            className={cn(
-              "grid h-12 w-12 place-items-center rounded-full bg-neutral-100 transition hover:bg-neutral-200",
-              FOCUS_RING
-            )}
-            title="Open profile menu"
-            aria-label="Open profile menu"
-          >
-            <DotsThree size={22} weight="bold" />
-          </button>
-
-          <ProfileMenu
-            open={profileMenuOpen}
-            onClose={() => setProfileMenuOpen(false)}
-            onProfile={() => router.push("/influencer/profile")}
-            onLogout={handleLogout}
-          />
+          <SidebarTooltip content="Profile">
+            <button
+              type="button"
+              onClick={() => router.push("/influencer/profile")}
+              className={cn(
+                "grid h-12 w-12 place-items-center rounded-full border border-neutral-200 bg-white transition hover:bg-neutral-50",
+                FOCUS_RING
+              )}
+              aria-label="Profile"
+            >
+              {profileImage ? (
+                <img
+                  src={profileImage}
+                  alt={profileName}
+                  className="h-12 w-12 rounded-full object-cover"
+                />
+              ) : (
+                <UserIcon size={22} weight="regular" />
+              )}
+            </button>
+          </SidebarTooltip>
         </div>
       ) : (
         <>
@@ -794,18 +962,27 @@ export default function Sidebar({
               </div>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setProfileMenuOpen((prev) => !prev)}
-              className={cn(
-                "grid h-12 w-12 flex-shrink-0 place-items-center rounded-full bg-neutral-100 transition hover:bg-neutral-200",
-                FOCUS_RING
+            <AnimatePresence initial={false}>
+              {!compactUI && (
+                <m.button
+                  key="profile-menu-trigger"
+                  type="button"
+                  onClick={() => setProfileMenuOpen((prev) => !prev)}
+                  className={cn(
+                    "grid h-12 w-12 flex-shrink-0 place-items-center rounded-full bg-neutral-100 transition hover:bg-neutral-200",
+                    FOCUS_RING
+                  )}
+                  aria-label="Open profile menu"
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  variants={fadeScale}
+                  transition={motionTransitions.content}
+                >
+                  <DotsThree size={22} weight="bold" />
+                </m.button>
               )}
-              title="Open profile menu"
-              aria-label="Open profile menu"
-            >
-              <DotsThree size={22} weight="bold" />
-            </button>
+            </AnimatePresence>
           </div>
 
           <ProfileMenu
@@ -828,30 +1005,57 @@ export default function Sidebar({
             isDesktop && (collapsed || isClosing) ? "flex-col gap-3" : "gap-3"
           )}
         >
-          <button
-            type="button"
-            onClick={() => {
-              if (isDesktop) {
-                if (collapsed || isClosing) beginOpenDesktop();
-                else router.push("/influencer/dashboards");
-              } else {
-                setDrawerOpen(true);
-              }
-            }}
-            className={cn(
-              "grid place-items-center flex-shrink-0",
-              FOCUS_RING,
-              isDesktop && collapsed ? "cursor-pointer" : "cursor-default"
-            )}
-            aria-label={isDesktop && collapsed ? "Open sidebar" : "CollabGlam"}
-            title={isDesktop && collapsed ? "Open" : "CollabGlam"}
-          >
-            <img
-              src="/logo.png"
-              alt="CollabGlam"
-              className="h-[40px] w-[40px] rounded-full object-cover"
-            />
-          </button>
+          {isDesktop && collapsed ? (
+            <SidebarTooltip content="Open sidebar">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDesktop) {
+                    if (collapsed || isClosing) beginOpenDesktop();
+                    else router.push("/influencer/dashboards");
+                  } else {
+                    setDrawerOpen(true);
+                  }
+                }}
+                className={cn(
+                  "grid place-items-center flex-shrink-0",
+                  FOCUS_RING,
+                  "cursor-pointer"
+                )}
+                aria-label="Open sidebar"
+              >
+                <img
+                  src="/logo.png"
+                  alt="CollabGlam"
+                  className="h-[40px] w-[40px] rounded-full object-cover"
+                />
+              </button>
+            </SidebarTooltip>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (isDesktop) {
+                  if (collapsed || isClosing) beginOpenDesktop();
+                  else router.push("/influencer/dashboards");
+                } else {
+                  setDrawerOpen(true);
+                }
+              }}
+              className={cn(
+                "grid place-items-center flex-shrink-0",
+                FOCUS_RING,
+                isDesktop && collapsed ? "cursor-pointer" : "cursor-default"
+              )}
+              aria-label={isDesktop && collapsed ? "Open sidebar" : "CollabGlam"}
+            >
+              <img
+                src="/logo.png"
+                alt="CollabGlam"
+                className="h-[40px] w-[40px] rounded-full object-cover"
+              />
+            </button>
+          )}
 
           <AnimatePresence initial={false}>
             {!compactUI && (
@@ -880,33 +1084,36 @@ export default function Sidebar({
           </AnimatePresence>
 
           {isDesktop ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (collapsed || isClosing) beginOpenDesktop();
-                else beginCloseDesktop();
-              }}
-              aria-label={collapsed ? "Open sidebar" : "Close sidebar"}
-              title={collapsed ? "Open" : "Close"}
-              className={cn(
-                "grid h-10 w-10 flex-shrink-0 place-items-center transition rounded-lg",
-                "text-[#343330] hover:bg-[#EDEDED] hover:text-[#1a1a1a]",
-                FOCUS_RING,
-                collapsed || isClosing ? "" : "ml-auto"
-              )}
+            <SidebarTooltip
+              content={collapsed || isClosing ? "Open sidebar" : "Close sidebar"}
+              side={collapsed || isClosing ? "right" : "bottom"}
             >
-              {collapsed ? (
-                <PanelCaretGlyph dir="right" />
-              ) : (
-                <PanelCaretGlyph dir="left" />
-              )}
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (collapsed || isClosing) beginOpenDesktop();
+                  else beginCloseDesktop();
+                }}
+                aria-label={collapsed ? "Open sidebar" : "Close sidebar"}
+                className={cn(
+                  "grid h-10 w-10 flex-shrink-0 place-items-center transition rounded-lg",
+                  "text-[#343330] hover:bg-[#EDEDED] hover:text-[#1a1a1a]",
+                  FOCUS_RING,
+                  collapsed || isClosing ? "" : "ml-auto"
+                )}
+              >
+                {collapsed ? (
+                  <PanelCaretGlyph dir="right" />
+                ) : (
+                  <PanelCaretGlyph dir="left" />
+                )}
+              </button>
+            </SidebarTooltip>
           ) : (
             <button
               type="button"
               onClick={() => setDrawerOpen(false)}
               aria-label="Close menu"
-              title="Close"
               className={cn(
                 "ml-auto grid h-10 w-10 place-items-center rounded-lg transition",
                 "text-[#343330] hover:bg-[#EDEDED] hover:text-[#1a1a1a]",
@@ -1014,7 +1221,20 @@ export default function Sidebar({
   return (
     <LazyMotion features={domAnimation}>
       <MotionConfig reducedMotion={reduceMotion ? "always" : "never"}>
-        {isDesktop ? DesktopAside : MobileDrawer}
+        <TooltipProvider delayDuration={120}>
+          <>
+            {isDesktop ? DesktopAside : MobileDrawer}
+
+            <HelpDialog
+              open={helpDialogOpen}
+              dialogRef={helpDialogRef}
+              position={helpDialogPosition}
+              items={helpMenuItems}
+              onSelect={handleHelpMenuSelect}
+              focusRingClassName={FOCUS_RING}
+            />
+          </>
+        </TooltipProvider>
       </MotionConfig>
     </LazyMotion>
   );

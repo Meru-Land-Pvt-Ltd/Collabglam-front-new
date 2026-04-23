@@ -146,6 +146,31 @@ export default function BrandDashboardHome() {
   const accentTo = "#FF7236";
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const keepOnDashboard = () => {
+      window.history.pushState(
+        { dashboardLock: true, path: "/brand/dashboard" },
+        "",
+        "/brand/dashboard"
+      );
+    };
+
+    keepOnDashboard();
+
+    const handlePopState = () => {
+      keepOnDashboard();
+      router.replace("/brand/dashboard");
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [router]);
+
+  useEffect(() => {
     const brandId =
       typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
 
@@ -303,7 +328,7 @@ export default function BrandDashboardHome() {
             {!isFullyManaged && (
               <StatCard
                 icon={<HiOutlineUsers className="text-[#4f46e5]" size={32} />}
-                label="Hired Influencers"
+                label="Hired Creators"
                 value={totalHiredInfluencers.toLocaleString()}
                 accentFrom={accentFrom}
               />

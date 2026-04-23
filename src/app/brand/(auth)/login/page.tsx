@@ -4,7 +4,10 @@ import * as React from "react";
 import Link from "next/link";
 import { LockKeyOpenIcon } from "@phosphor-icons/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { GoogleReCaptchaProvider, useGoogleReCaptcha } from "react-google-recaptcha-v3";
+import {
+  GoogleReCaptchaProvider,
+  useGoogleReCaptcha,
+} from "react-google-recaptcha-v3";
 
 import { FloatingInput } from "@/components/ui/floatingInput";
 import { PasswordInput } from "@/components/ui/password";
@@ -36,7 +39,46 @@ type VerifyRecaptchaResponse = {
   action?: string;
 };
 
-function getApiErrorDetails(err: any, fallbackMsg = "Login failed"): ApiErrDetails {
+type OnboardingRoute =
+  | "page1"
+  | "page2"
+  | "page3"
+  | "campaign"
+  | "homepage";
+
+type BrandSignInResponse = {
+  token: string;
+  brandId: string;
+  route?: OnboardingRoute;
+  onboarding?: {
+    page1Done?: boolean;
+    page2Done?: boolean;
+    page3Done?: boolean;
+  };
+};
+
+const BRAND_ONBOARDING_RESUME_KEY = "cg_brand_onboarding_resume_step";
+
+function getStoredBrandResumeRoute(): OnboardingRoute | undefined {
+  if (typeof window === "undefined") return undefined;
+
+  try {
+    const step = sessionStorage.getItem(BRAND_ONBOARDING_RESUME_KEY);
+
+    if (step === "page1" || step === "page2" || step === "page3") {
+      return step;
+    }
+  } catch {
+    // ignore
+  }
+
+  return undefined;
+}
+
+function getApiErrorDetails(
+  err: any,
+  fallbackMsg = "Login failed"
+): ApiErrDetails {
   const data = err?.response?.data ?? err?.data ?? err?.cause?.data ?? undefined;
 
   const status =
@@ -49,10 +91,7 @@ function getApiErrorDetails(err: any, fallbackMsg = "Login failed"): ApiErrDetai
   const code = data?.code ?? data?.error?.code ?? err?.code ?? undefined;
 
   const message =
-    data?.message ??
-    data?.error?.message ??
-    err?.message ??
-    fallbackMsg;
+    data?.message ?? data?.error?.message ?? err?.message ?? fallbackMsg;
 
   return {
     message: String(message || fallbackMsg),
@@ -90,7 +129,11 @@ function prettifyRateLimitMessage(msg: string) {
   return m;
 }
 
-function mapLoginError(d: ApiErrDetails): { kind: ErrorKind; title: string; text: string } {
+function mapLoginError(d: ApiErrDetails): {
+  kind: ErrorKind;
+  title: string;
+  text: string;
+} {
   const msg = (d.message || "").toLowerCase();
   const code = (d.code || "").toUpperCase();
   const status = d.status;
@@ -159,18 +202,42 @@ function mapLoginError(d: ApiErrDetails): { kind: ErrorKind; title: string; text
   };
 }
 
-async function verifyRecaptchaToken(token: string, action: string): Promise<VerifyRecaptchaResponse> {
-  // Replace this with your real backend verification endpoint.
-  // Example:
-  // const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/security/recaptcha/verify`, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify({ token, action }),
-  // });
-  // return await res.json();
-
-  console.warn("verifyRecaptchaToken() is using a local mock. Replace it with your real backend call.");
+async function verifyRecaptchaToken(
+  token: string,
+  action: string
+): Promise<VerifyRecaptchaResponse> {
+  console.warn(
+    "verifyRecaptchaToken() is using a local mock. Replace it with your real backend call."
+  );
   return { success: true, score: 0.9, action };
+}
+
+function persistBrandOnboardingRoute(route?: OnboardingRoute) {
+  try {
+    if (route === "page1" || route === "page2" || route === "page3") {
+      sessionStorage.setItem(BRAND_ONBOARDING_RESUME_KEY, route);
+      return;
+    }
+
+    sessionStorage.removeItem(BRAND_ONBOARDING_RESUME_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function routeToBrandPath(route?: OnboardingRoute) {
+  switch (route) {
+    case "page1":
+      return "/brand/onboarding?step=page1";
+    case "page2":
+      return "/brand/onboarding?step=page2";
+    case "page3":
+      return "/brand/onboarding?step=page3";
+    case "homepage":
+    case "campaign":
+    default:
+      return "/brand/dashboard";
+  }
 }
 
 function SecurityCheckOverlay({
@@ -192,7 +259,11 @@ function SecurityCheckOverlay({
         >
           <div className="mb-4 flex justify-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#e6c968] bg-gradient-to-b from-[#fff4c7] to-[#f1d05d] shadow-[0_8px_24px_rgba(212,173,58,0.18)]">
-              <LockKeyOpenIcon size={26} weight="duotone" className="text-[#a97c00]" />
+              <LockKeyOpenIcon
+                size={26}
+                weight="duotone"
+                className="text-[#a97c00]"
+              />
             </div>
           </div>
 
@@ -201,7 +272,8 @@ function SecurityCheckOverlay({
           </div>
 
           <div className="mx-auto max-w-[320px] text-sm leading-6 text-[#7d6b45]">
-            You refreshed this page 3 times. We’re running an invisible security verification before continuing.
+            You refreshed this page 3 times. We’re running an invisible security
+            verification before continuing.
           </div>
 
           <div className="mt-6 space-y-4">
@@ -233,6 +305,7 @@ function BrandLoginContentInner() {
   const pathname = usePathname();
   const { executeRecaptcha } = useGoogleReCaptcha();
 
+  const [authGuardReady, setAuthGuardReady] = React.useState(false);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -243,13 +316,62 @@ function BrandLoginContentInner() {
   const passwordInvalid = !!passwordError;
   const emailTrimmed = email.trim();
 
-  const [refreshCount, setRefreshCount] = React.useState(0);
+  const [, setRefreshCount] = React.useState(0);
   const [captchaRequired, setCaptchaRequired] = React.useState(false);
   const [captchaVerified, setCaptchaVerified] = React.useState(false);
   const [captchaChecking, setCaptchaChecking] = React.useState(false);
   const [captchaAttempt, setCaptchaAttempt] = React.useState(0);
 
   const actionName = React.useMemo(() => "brand_login_refresh_gate", []);
+
+  const hasActiveBrandSession = React.useCallback(() => {
+    if (typeof window === "undefined") return false;
+
+    try {
+      const token = localStorage.getItem("token");
+      const brandId = localStorage.getItem("brandId");
+      return Boolean(token && brandId);
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const redirectAuthenticatedBrandUser = React.useCallback(() => {
+    if (!hasActiveBrandSession()) return false;
+
+    const resumeRoute = getStoredBrandResumeRoute();
+    router.replace(routeToBrandPath(resumeRoute));
+    return true;
+  }, [hasActiveBrandSession, router]);
+
+  React.useEffect(() => {
+    const enforceGuestOnlyAccess = () => {
+      const redirected = redirectAuthenticatedBrandUser();
+      if (!redirected) {
+        setAuthGuardReady(true);
+      }
+    };
+
+    enforceGuestOnlyAccess();
+
+    const handlePageShow = () => {
+      enforceGuestOnlyAccess();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        enforceGuestOnlyAccess();
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [redirectAuthenticatedBrandUser]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -367,6 +489,16 @@ function BrandLoginContentInner() {
     return "/brand/dashboard";
   };
 
+  const getPostLoginRedirect = (res?: BrandSignInResponse) => {
+    const route = res?.route;
+
+    if (route === "page1" || route === "page2" || route === "page3") {
+      return routeToBrandPath(route);
+    }
+
+    return getSafeReturnUrl();
+  };
+
   const clearEmailOnFocus = () => {
     if (emailError) setEmailError("");
   };
@@ -410,10 +542,15 @@ function BrandLoginContentInner() {
 
     setLoading(true);
     try {
-      const res = await apiSignInBrand(emailTrimmed, password);
+      const res = (await apiSignInBrand(
+        emailTrimmed,
+        password
+      )) as BrandSignInResponse;
 
       localStorage.setItem("token", res.token);
       localStorage.setItem("brandId", res.brandId);
+
+      persistBrandOnboardingRoute(res.route);
 
       await fetch("/api-1/brand-auth", {
         method: "POST",
@@ -421,7 +558,7 @@ function BrandLoginContentInner() {
         body: JSON.stringify({ token: res.token }),
       });
 
-      router.replace(getSafeReturnUrl());
+      router.replace(getPostLoginRedirect(res));
     } catch (err) {
       const fallback = getApiErrorMessage(err, "Login failed");
       const details = getApiErrorDetails(err, fallback);
@@ -432,6 +569,10 @@ function BrandLoginContentInner() {
       setLoading(false);
     }
   };
+
+  if (!authGuardReady) {
+    return <div className="min-h-screen bg-background text-foreground" />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground relative">
@@ -463,7 +604,9 @@ function BrandLoginContentInner() {
               loading="eager"
             />
             <span className="leading-tight">
-              <span className="block text-[1.25rem] font-bold text-tx-primary">CollabGlam</span>
+              <span className="block text-[1.25rem] font-bold text-tx-primary">
+                CollabGlam
+              </span>
               <span className="block text-[0.625rem] leading-[0.75rem] text-tx-tertiary -mt-[0.125rem]">
                 For Brands
               </span>
@@ -568,7 +711,11 @@ function BrandLoginContentInner() {
                 <p className="cg-auth-helper">
                   Don’t Have an Account?{" "}
                   <Link
-                    href={emailTrimmed ? `/brand/signup?email=${encodeURIComponent(emailTrimmed)}` : "/brand/signup"}
+                    href={
+                      emailTrimmed
+                        ? `/brand/signup?email=${encodeURIComponent(emailTrimmed)}`
+                        : "/brand/signup"
+                    }
                     className="cg-auth-link hover:underline"
                   >
                     Signup

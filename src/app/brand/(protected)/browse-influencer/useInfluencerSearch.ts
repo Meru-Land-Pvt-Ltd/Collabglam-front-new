@@ -9,12 +9,16 @@ import {
 } from "./filters";
 
 const PAGE_SIZE = 24;
+const REQUEST_PAGE = 1;
+const REQUEST_LIMIT = 15;
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 const API_USERS_ENDPOINT =
-  process.env.NEXT_PUBLIC_MODASH_FRONTEND_USERS_ENDPOINT || `${API_BASE}/modash/users`;
+  process.env.NEXT_PUBLIC_MODASH_FRONTEND_USERS_ENDPOINT ||
+  `${API_BASE}/modash/users`;
 const API_UNIFIED_ENDPOINT =
-  process.env.NEXT_PUBLIC_MODASH_FRONTEND_UNIFIED_SEARCH_ENDPOINT || `${API_BASE}/modash/search-unified`;
+  process.env.NEXT_PUBLIC_MODASH_FRONTEND_UNIFIED_SEARCH_ENDPOINT ||
+  `${API_BASE}/modash/search-unified`;
 
 type SearchArgs = {
   queryText?: string;
@@ -90,6 +94,8 @@ type SearchState = {
   rawResponse: unknown;
 };
 
+type SearchMode = "ai" | "standard" | "combined";
+
 function getBrandIdFromStorage(): string {
   if (typeof window === "undefined") return "";
   try {
@@ -109,11 +115,6 @@ function toNumber(value: unknown): number | undefined {
   return Number.isFinite(num) ? num : undefined;
 }
 
-function clamp01PercentUi(value?: number) {
-  if (value == null || !Number.isFinite(value) || value <= 0) return undefined;
-  return Math.max(0, Math.min(1, value / 100));
-}
-
 function splitCommaList(value: string): string[] {
   return value
     .split(",")
@@ -121,31 +122,13 @@ function splitCommaList(value: string): string[] {
     .filter(Boolean);
 }
 
-function splitLooseTokens(value: string): string[] {
-  return value
-    .split(/[\n,]+/)
-    .flatMap((item) => item.split(/\s+/))
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function parseIdList(value?: string): number[] {
-  return splitCommaList(cleanText(value))
-    .map((item) => Number(item))
-    .filter((item) => Number.isFinite(item));
-}
-
-function parseStringList(value?: string): string[] {
+function parseCountries(value?: string): string[] {
   return splitCommaList(cleanText(value));
 }
 
-function parseAccountTypes(value?: string): number[] {
-  return splitCommaList(cleanText(value))
-    .map((item) => Number(item))
-    .filter((item) => Number.isFinite(item) && [1, 2, 3].includes(item));
-}
-
-function parseTextTags(value?: string): Array<{ type: "hashtag" | "mention"; value: string }> {
+function parseTextTags(
+  value?: string
+): Array<{ type: "hashtag" | "mention"; value: string }> {
   const tokens = splitCommaList(cleanText(value));
   const out: Array<{ type: "hashtag" | "mention"; value: string }> = [];
 
@@ -193,103 +176,22 @@ function extractExplicitHandles(queryText: string): string[] {
   return Array.from(found);
 }
 
-function shouldRunAiSearch(queryText: string, filters: FilterState): boolean {
-  const mode = filters.search.mode || "combined";
-  const aiOverride = cleanText(filters.search.aiQuery);
-  const value = cleanText(queryText);
-
-  if (mode === "standard") return false;
-  if (mode === "ai") return !!(aiOverride || value);
-
-  if (aiOverride) return true;
-  if (!value) return false;
-
-  const explicitHandles = extractExplicitHandles(value);
-  if (explicitHandles.length) return false;
-
-  const words = value.split(/\s+/).filter(Boolean);
-
-  if (words.length <= 1 && value.length <= 12) return false;
-
-  return (
-    words.length >= 3 ||
-    value.length >= 18 ||
-    /creator|influencer|people|person|talking|filming|wearing|doing|reviewing|explaining|news channel/i.test(
-      value
-    )
-  );
-}
-
 function minDefined(values: Array<number | undefined>): number | undefined {
-  const nums = values.filter((value): value is number => value != null && Number.isFinite(value));
+  const nums = values.filter(
+    (value): value is number => value != null && Number.isFinite(value)
+  );
   return nums.length ? Math.min(...nums) : undefined;
 }
 
 function maxDefined(values: Array<number | undefined>): number | undefined {
-  const nums = values.filter((value): value is number => value != null && Number.isFinite(value));
+  const nums = values.filter(
+    (value): value is number => value != null && Number.isFinite(value)
+  );
   return nums.length ? Math.max(...nums) : undefined;
 }
 
 function firstDefined<T>(values: Array<T | undefined>): T | undefined {
   return values.find((value) => value !== undefined);
-}
-
-function setMinMaxRange(target: Record<string, any>, key: string, min?: number, max?: number) {
-  if (min == null && max == null) return;
-  target[key] = {
-    ...(min != null ? { min } : {}),
-    ...(max != null ? { max } : {}),
-  };
-}
-
-function buildWeightedLocation(value?: string, weight?: number) {
-  const ids = parseIdList(value);
-  const safeWeight = weight && weight > 0 ? weight : 0.2;
-  return ids.map((id) => ({ id, weight: safeWeight }));
-}
-
-function normalizeAiAgeRange(min?: number, max?: number): { min?: string; max?: string } | undefined {
-  const allowedMin = ["13", "18", "25", "35", "45", "65"];
-  const allowedMax = ["18", "25", "35", "45", "65"];
-
-  let normalizedMin: string | undefined;
-  let normalizedMax: string | undefined;
-
-  if (min != null) {
-    normalizedMin = allowedMin.find((value) => Number(value) >= min) ?? "65";
-  }
-
-  if (max != null) {
-    normalizedMax = [...allowedMax].reverse().find((value) => Number(value) <= max) ?? "18";
-  }
-
-  if (!normalizedMin && !normalizedMax) return undefined;
-
-  return {
-    ...(normalizedMin ? { min: normalizedMin } : {}),
-    ...(normalizedMax ? { max: normalizedMax } : {}),
-  };
-}
-
-function weightOrDefault(value?: number, fallback = 0.2) {
-  return value && value > 0 ? value : fallback;
-}
-
-function uiResultScore(item: UiResult): number {
-  const searchType = item.searchType || "standard";
-  let score = 0;
-
-  if (searchType === "combined") score += 500;
-  else if (searchType === "exact") score += 400;
-  else if (searchType === "ai") score += 300;
-  else score += 100;
-
-  if (item.isVerified) score += 25;
-  score += Math.min(item.aiMatchedPostsCount || 0, 10) * 12;
-  score += Math.min(Math.log10((item.followers || 0) + 1) * 12, 60);
-  score += Math.min((item.engagementRate || 0) * 100, 20);
-
-  return score;
 }
 
 function uniqStrings(values: Array<string | undefined>): string[] {
@@ -310,25 +212,62 @@ function uniqStrings(values: Array<string | undefined>): string[] {
   return out;
 }
 
-function mergeResults(items: UiResult[]): UiResult[] {
-  const map = new Map<string, UiResult>();
+function setMinMaxRange(
+  target: Record<string, any>,
+  key: string,
+  min?: number,
+  max?: number
+) {
+  if (min == null && max == null) return;
+
+  target[key] = {
+    ...(min != null ? { min } : {}),
+    ...(max != null ? { max } : {}),
+  };
+}
+
+function uiResultScore(item: UiResult): number {
+  const searchType = item.searchType || "standard";
+  let score = 0;
+
+  if (searchType === "combined") score += 500;
+  else if (searchType === "exact") score += 400;
+  else if (searchType === "ai") score += 300;
+  else score += 100;
+
+  if (item.isVerified) score += 25;
+  score += Math.min(item.aiMatchedPostsCount || 0, 10) * 12;
+  score += Math.min(Math.log10((item.followers || 0) + 1) * 12, 60);
+  score += Math.min((item.engagementRate || 0) * 100, 20);
+
+  return score;
+}
+
+function mergeResultsPreserveOrder(items: UiResult[]): UiResult[] {
+  const keyToIndex = new Map<string, number>();
+  const out: UiResult[] = [];
 
   for (const item of items) {
     const key = `${item.platform}:${item.userId || item.username || item.id}`.toLowerCase();
-    const prev = map.get(key);
+    const existingIndex = keyToIndex.get(key);
 
-    if (!prev) {
-      map.set(key, item);
+    if (existingIndex == null) {
+      keyToIndex.set(key, out.length);
+      out.push(item);
       continue;
     }
 
+    const prev = out[existingIndex];
     const preferred = uiResultScore(item) >= uiResultScore(prev) ? item : prev;
     const other = preferred === item ? prev : item;
 
-    const merged: UiResult = {
+    out[existingIndex] = {
       ...other,
       ...preferred,
-      categories: uniqStrings([...(other.categories || []), ...(preferred.categories || [])]),
+      categories: uniqStrings([
+        ...(other.categories || []),
+        ...(preferred.categories || []),
+      ]),
       matchedPosts:
         (preferred.matchedPosts && preferred.matchedPosts.length
           ? preferred.matchedPosts
@@ -346,17 +285,15 @@ function mergeResults(items: UiResult[]): UiResult[] {
           ? "combined"
           : preferred.searchType,
     };
-
-    map.set(key, merged);
   }
 
-  return Array.from(map.values()).sort((a, b) => uiResultScore(b) - uiResultScore(a));
+  return out;
 }
 
 function mapBackendResult(
   item: BackendResult,
   fallbackPlatform: Platform,
- source: "exact" | "standard" | "ai" | "combined" = "standard"
+  source: "exact" | "standard" | "ai" | "combined" = "standard"
 ): UiResult | null {
   const platform = item.platform || fallbackPlatform;
   const id = String(
@@ -427,55 +364,75 @@ function applyClientFilters(items: UiResult[], filters: FilterState): UiResult[]
   });
 }
 
-function buildStandardSearchBody(queryText: string, filters: FilterState, platform: Platform) {
+function buildMergedInfluencerPayload(
+  queryText: string,
+  filters: FilterState,
+  selectedPlatforms: Platform[]
+) {
   const globalInfluencer = filters.influencer;
-  const audienceFilters = filters.audience;
-  const platformFilters = filters.platform[platform] || {};
-  const influencer: Record<string, unknown> = {};
-  const audience: Record<string, unknown> = {};
-
-  setMinMaxRange(
-    influencer,
-    "followers",
-    toNumber(platformFilters.followersMin),
-    toNumber(platformFilters.followersMax)
+  const selectedPlatformFilters = selectedPlatforms.map(
+    (platform) => filters.platform[platform] || {}
   );
+  const singlePlatform =
+    selectedPlatforms.length === 1 ? selectedPlatforms[0] : null;
 
-  setMinMaxRange(
-    influencer,
-    "views",
-    toNumber(platformFilters.avgViewsMin),
-    toNumber(platformFilters.avgViewsMax)
-  );
-
-  setMinMaxRange(
-    influencer,
-    "engagements",
-    toNumber(platformFilters.engagementsMin),
-    toNumber(platformFilters.engagementsMax)
-  );
-
-  const engagementRateMin = clamp01PercentUi(platformFilters.engagementRateMin);
-  if (engagementRateMin != null) influencer.engagementRate = engagementRateMin;
-
-  if (platformFilters.languageCode) {
-    influencer.language = platformFilters.languageCode;
-  }
-
-  if (platformFilters.lastPostedDays != null) {
-    influencer.lastposted = Math.max(30, Number(platformFilters.lastPostedDays));
-  }
-
-  const influencerLocationIds = parseIdList(platformFilters.locationIdsText);
-  if (influencerLocationIds.length) {
-    influencer.location = influencerLocationIds;
-  }
+  const influencer: Record<string, any> = {};
 
   if (globalInfluencer.isVerified) {
     influencer.isVerified = true;
   }
 
-  const normalizedAge = normalizeInfluencerAgeRange(globalInfluencer.ageMin, globalInfluencer.ageMax);
+  setMinMaxRange(
+    influencer,
+    "followers",
+    minDefined(selectedPlatformFilters.map((item) => toNumber(item.followersMin))),
+    maxDefined(selectedPlatformFilters.map((item) => toNumber(item.followersMax)))
+  );
+
+  setMinMaxRange(
+    influencer,
+    "views",
+    minDefined(selectedPlatformFilters.map((item) => toNumber(item.avgViewsMin))),
+    maxDefined(selectedPlatformFilters.map((item) => toNumber(item.avgViewsMax)))
+  );
+
+  const language = firstDefined(
+    selectedPlatformFilters.map((item) => cleanText(item.languageCode) || undefined)
+  );
+  if (language) {
+    influencer.language = language;
+  }
+
+  const engagementRateMin = minDefined(
+    selectedPlatformFilters.map((item) => toNumber(item.engagementRateMin))
+  );
+  if (engagementRateMin != null) {
+    influencer.engagementRate = { min: engagementRateMin };
+  }
+
+  const lastposted = minDefined(
+    selectedPlatformFilters.map((item) => toNumber(item.lastPostedDays))
+  );
+  if (lastposted != null) {
+    influencer.lastposted = lastposted;
+  }
+
+  const explicitHandles = extractExplicitHandles(queryText);
+  const keywordQuery = cleanText(queryText);
+  const platformKeywords = firstDefined(
+    selectedPlatformFilters.map((item) => cleanText(item.keywords) || undefined)
+  );
+
+  if (platformKeywords) {
+    influencer.keywords = platformKeywords;
+  } else if (keywordQuery && explicitHandles.length === 0) {
+    influencer.keywords = keywordQuery;
+  }
+
+  const normalizedAge = normalizeInfluencerAgeRange(
+    globalInfluencer.ageMin,
+    globalInfluencer.ageMax
+  );
   if (normalizedAge) {
     influencer.age = normalizedAge;
   }
@@ -484,263 +441,177 @@ function buildStandardSearchBody(queryText: string, filters: FilterState, platfo
     influencer.gender = globalInfluencer.gender;
   }
 
-  if (platformFilters.bioQuery) {
-    influencer.bio = platformFilters.bioQuery;
+  const countries = parseCountries(filters.audience.country);
+  if (countries.length) {
+    influencer.locations = { countries };
   }
 
-  const explicitHandles = extractExplicitHandles(queryText);
-  const keywordQuery = cleanText(queryText);
-
-  if (platformFilters.keywords) {
-    influencer.keywords = platformFilters.keywords;
-  } else if (keywordQuery && explicitHandles.length === 0) {
-    influencer.keywords = keywordQuery;
+  if (singlePlatform === "youtube") {
+    const platformFilter = filters.platform.youtube || {};
+    const bio = cleanText(platformFilter.bioQuery);
+    if (bio) {
+      influencer.bio = bio;
+    }
   }
 
-  const relevance = explicitHandles.length
-    ? explicitHandles.map((handle) => `@${handle}`)
-    : uniqStrings([
-        ...splitLooseTokens(cleanText(platformFilters.relevance)),
-        ...splitLooseTokens(keywordQuery),
-      ]).slice(0, 100);
+  if (singlePlatform === "instagram") {
+    const platformFilter = filters.platform.instagram || {};
 
-  if (relevance.length) {
-    influencer.relevance = relevance;
-  }
-
-  const audienceRelevanceHandles = splitCommaList(cleanText(platformFilters.audienceRelevance))
-    .map((item) => (item.startsWith("@") ? item : `@${item}`));
-  if (audienceRelevanceHandles.length) {
-    influencer.audienceRelevance = audienceRelevanceHandles;
-  }
-
-  if (platformFilters.hasAudienceData != null) {
-    influencer.hasAudienceData = platformFilters.hasAudienceData;
-  }
-
-  if (platformFilters.contactEmailOnly) {
-    influencer.hasContactDetails = [{ contactType: "email", filterAction: "must" }];
-  }
-
-  const textTags = parseTextTags(platformFilters.textTags);
-  if (textTags.length && (platform === "instagram" || platform === "tiktok")) {
-    influencer.textTags = textTags;
-  }
-
-  if (
-    platformFilters.followersGrowthInterval &&
-    platformFilters.followersGrowthOperator &&
-    platformFilters.followersGrowthValue != null
-  ) {
-    influencer.followersGrowthRate = {
-      interval: platformFilters.followersGrowthInterval,
-      operator: platformFilters.followersGrowthOperator,
-      value: platformFilters.followersGrowthValue,
-    };
-  }
-
-  if (
-    platform === "youtube" &&
-    platformFilters.viewsGrowthInterval &&
-    platformFilters.viewsGrowthOperator &&
-    platformFilters.viewsGrowthValue != null
-  ) {
-    influencer.viewsGrowthRate = {
-      interval: platformFilters.viewsGrowthInterval,
-      operator: platformFilters.viewsGrowthOperator,
-      value: platformFilters.viewsGrowthValue,
-    };
-  }
-
-  if (
-    platform === "tiktok" &&
-    platformFilters.likesGrowthInterval &&
-    platformFilters.likesGrowthOperator &&
-    platformFilters.likesGrowthValue != null
-  ) {
-    influencer.likesGrowthRate = {
-      interval: platformFilters.likesGrowthInterval,
-      operator: platformFilters.likesGrowthOperator,
-      value: platformFilters.likesGrowthValue,
-    };
-  }
-
-  if (platform === "instagram") {
     setMinMaxRange(
       influencer,
       "reelsPlays",
-      toNumber(platformFilters.reelsPlaysMin),
-      toNumber(platformFilters.reelsPlaysMax)
+      toNumber(platformFilter.reelsPlaysMin),
+      toNumber(platformFilter.reelsPlaysMax)
     );
 
-    if (platformFilters.hasSponsoredPosts) influencer.hasSponsoredPosts = true;
-    if (platformFilters.hasYouTube) influencer.hasYouTube = true;
-
-    const interests = parseIdList(platformFilters.interestsIdsText);
-    if (interests.length) influencer.interests = interests;
-
-    const brands = parseIdList(platformFilters.brandsIdsText);
-    if (brands.length) influencer.brands = brands;
-
-    const accountTypes = parseAccountTypes(platformFilters.igAccountTypesText);
-    if (accountTypes.length) influencer.accountTypes = accountTypes;
-  }
-
-  if (platform === "youtube" && platformFilters.isOfficialArtist) {
-    influencer.isOfficialArtist = true;
-  }
-
-  if (platform === "tiktok") {
-    setMinMaxRange(
-      influencer,
-      "shares",
-      toNumber(platformFilters.sharesMin),
-      toNumber(platformFilters.sharesMax)
-    );
-    setMinMaxRange(
-      influencer,
-      "saves",
-      toNumber(platformFilters.savesMin),
-      toNumber(platformFilters.savesMax)
-    );
-  }
-
-  const weightedLocations = buildWeightedLocation(
-    audienceFilters.locationIdsText,
-    audienceFilters.locationWeight
-  );
-  if (weightedLocations.length) {
-    audience.location = weightedLocations;
-  }
-
-  if (audienceFilters.languageCode) {
-    audience.language = {
-      id: audienceFilters.languageCode,
-      weight: weightOrDefault(audienceFilters.languageWeight, 0.2),
-    };
-  }
-
-  if (audienceFilters.gender) {
-    audience.gender = {
-      id: audienceFilters.gender,
-      weight: weightOrDefault(audienceFilters.genderWeight, 0.5),
-    };
-  }
-
-  if (audienceFilters.ageBucket) {
-    audience.age = [
-      {
-        id: audienceFilters.ageBucket,
-        weight: weightOrDefault(audienceFilters.ageWeight, 0.3),
-      },
-    ];
-  }
-
-  if (platform === "instagram") {
-    const audienceInterests = buildWeightedLocation(
-      audienceFilters.interestsIdsText,
-      audienceFilters.interestsWeight
-    );
-    if (audienceInterests.length) {
-      audience.interests = audienceInterests;
-    }
-
-    if (audienceFilters.credibilityMin != null) {
-      audience.credibility = audienceFilters.credibilityMin;
+    if (platformFilter.hasSponsoredPosts) {
+      influencer.sponsoredPostsOnly = true;
     }
   }
 
-  const filter: Record<string, unknown> = {};
-  if (Object.keys(influencer).length) filter.influencer = influencer;
-  if (Object.keys(audience).length) filter.audience = audience;
+  if (singlePlatform === "tiktok") {
+    const platformFilter = filters.platform.tiktok || {};
 
+    setMinMaxRange(
+      influencer,
+      "engagements",
+      toNumber(platformFilter.engagementsMin),
+      toNumber(platformFilter.engagementsMax)
+    );
+
+    const textTags = parseTextTags(platformFilter.textTags);
+    if (textTags.length) {
+      influencer.textTags = textTags;
+    }
+  }
+
+  return influencer;
+}
+
+function buildStandardSearchBody(
+  queryText: string,
+  filters: FilterState,
+  selectedPlatforms: Platform[]
+) {
   return {
     page: 0,
-    calculationMethod: "median",
-    sort: { field: "followers", direction: "desc" as const },
-    filter,
+    calculationMethod: "median" as const,
+    sort: {
+      field: "followers",
+      direction: "desc" as const,
+    },
+    filter: {
+      influencer: buildMergedInfluencerPayload(queryText, filters, selectedPlatforms),
+    },
   };
 }
 
-function buildAiFilters(queryText: string, filters: FilterState, platforms: Platform[]) {
-  const aiQuery = cleanText(filters.search.aiQuery || queryText);
-  const selectedPlatformFilters = platforms.map((platform) => filters.platform[platform] || {});
-
-  const followersMin = minDefined(selectedPlatformFilters.map((item) => toNumber(item.followersMin)));
-  const followersMax = maxDefined(selectedPlatformFilters.map((item) => toNumber(item.followersMax)));
-  const engagementRateMin = minDefined(
-    selectedPlatformFilters.map((item) => clamp01PercentUi(item.engagementRateMin))
+function buildAiPayload(
+  queryText: string,
+  filters: FilterState,
+  selectedPlatforms: Platform[]
+) {
+  const selectedPlatformFilters = selectedPlatforms.map(
+    (platform) => filters.platform[platform] || {}
   );
-  const languageCode = firstDefined(
+
+  const aiFilters: Record<string, any> = {};
+
+  if (filters.influencer.isVerified) {
+    aiFilters.isVerified = true;
+  }
+
+  setMinMaxRange(
+    aiFilters,
+    "followers",
+    minDefined(selectedPlatformFilters.map((item) => toNumber(item.followersMin))),
+    maxDefined(selectedPlatformFilters.map((item) => toNumber(item.followersMax)))
+  );
+
+  setMinMaxRange(
+    aiFilters,
+    "views",
+    minDefined(selectedPlatformFilters.map((item) => toNumber(item.avgViewsMin))),
+    maxDefined(selectedPlatformFilters.map((item) => toNumber(item.avgViewsMax)))
+  );
+
+  const language = firstDefined(
     selectedPlatformFilters.map((item) => cleanText(item.languageCode) || undefined)
   );
-  const lastPostedDays = minDefined(
+  if (language) {
+    aiFilters.language = language;
+  }
+
+  const engagementRateMin = minDefined(
+    selectedPlatformFilters.map((item) => toNumber(item.engagementRateMin))
+  );
+  if (engagementRateMin != null) {
+    aiFilters.engagementRate = { min: engagementRateMin };
+  }
+
+  const lastposted = minDefined(
     selectedPlatformFilters.map((item) => toNumber(item.lastPostedDays))
   );
+  if (lastposted != null) {
+    aiFilters.lastposted = lastposted;
+  }
 
-  const aiFilters: Record<string, unknown> = {};
-
-  setMinMaxRange(aiFilters, "followersCount", followersMin, followersMax);
+  const normalizedAge = normalizeInfluencerAgeRange(
+    filters.influencer.ageMin,
+    filters.influencer.ageMax
+  );
+  if (normalizedAge) {
+    aiFilters.age = normalizedAge;
+  }
 
   if (filters.influencer.gender) {
     aiFilters.gender = filters.influencer.gender;
   }
 
-  const aiAge = normalizeAiAgeRange(filters.influencer.ageMin, filters.influencer.ageMax);
-  if (aiAge) {
-    aiFilters.age = aiAge;
-  }
-
-  if (engagementRateMin != null) {
-    aiFilters.engagementRate = { min: engagementRateMin };
-  }
-
-  if (languageCode) {
-    aiFilters.language = languageCode;
-  }
-
-  if (lastPostedDays != null) {
-    aiFilters.lastPostedInDays = Math.max(30, lastPostedDays);
-  }
-
-  if (filters.search.aiHasEmail) {
-    aiFilters.hasEmail = true;
-  }
-
-  if (filters.search.aiContentType) {
-    aiFilters.contentType = filters.search.aiContentType;
-  }
-
-  if (filters.search.aiMaxPostAgeMonths) {
-    aiFilters.maxPostAgeMonths = filters.search.aiMaxPostAgeMonths;
-  }
-
-  if (filters.search.aiUsername) {
-    aiFilters.username = filters.search.aiUsername;
-  }
-
-  if (filters.search.aiAccountType) {
-    aiFilters.accountType = filters.search.aiAccountType;
-  }
-
-  const aiBrands = parseStringList(filters.search.aiBrandsText);
-  if (aiBrands.length) {
-    aiFilters.brands = aiBrands;
-  }
-
-  const aiLocations = parseIdList(filters.audience.locationIdsText);
-  if (aiLocations.length) {
-    aiFilters.locations = aiLocations;
-  }
-
-  if (filters.audience.credibilityMin != null && platforms.includes("instagram")) {
-    aiFilters.audience = { credibility: filters.audience.credibilityMin };
+  const countries = parseCountries(filters.audience.country);
+  if (countries.length) {
+    aiFilters.countries = countries;
   }
 
   return {
     page: 0,
-    query: aiQuery,
+    query: cleanText(filters.search.aiQuery || queryText),
     filters: aiFilters,
+  };
+}
+
+function buildUnifiedPayload(
+  queryText: string,
+  filters: FilterState,
+  platforms: Platform[]
+) {
+  const selectedPlatforms = platforms.length
+    ? platforms
+    : (["youtube"] as Platform[]);
+
+  const requestedMode = (filters.search.mode || "combined") as SearchMode;
+
+  const payload: Record<string, any> = {
+    brandId: getBrandIdFromStorage(),
+    platforms: selectedPlatforms,
+    page: REQUEST_PAGE,
+    limit: REQUEST_LIMIT,
+    searchMode: requestedMode,
+    query: cleanText(queryText),
+  };
+
+  if (requestedMode === "ai") {
+    payload.ai = buildAiPayload(queryText, filters, selectedPlatforms);
+  } else if (requestedMode === "standard") {
+    payload.body = buildStandardSearchBody(queryText, filters, selectedPlatforms);
+  } else if (requestedMode === "combined") {
+    payload.body = buildStandardSearchBody(queryText, filters, selectedPlatforms);
+  }
+
+  return {
+    payload,
+    effectiveMode: requestedMode,
+    shouldRunAi: requestedMode === "ai",
   };
 }
 
@@ -768,7 +639,7 @@ export function useInfluencerSearch(platforms: Platform[]) {
 
       const search = new URLSearchParams({
         q: handles.join(","),
-        platforms: (platforms.length ? platforms : ["instagram"]).join(","),
+        platforms: (platforms.length ? platforms : ["youtube"]).join(","),
       });
 
       const response = await fetch(`${API_USERS_ENDPOINT}?${search.toString()}`);
@@ -777,7 +648,9 @@ export function useInfluencerSearch(platforms: Platform[]) {
       if (!response.ok || !Array.isArray(data?.results)) return [];
 
       return data.results
-        .map((item: BackendResult) => mapBackendResult(item, platforms[0] || "instagram", "exact"))
+        .map((item: BackendResult) =>
+          mapBackendResult(item, platforms[0] || "youtube", "exact")
+        )
         .filter(Boolean) as UiResult[];
     },
     [platforms]
@@ -796,72 +669,65 @@ export function useInfluencerSearch(platforms: Platform[]) {
         return;
       }
 
-      const selectedPlatforms = platforms.length ? platforms : (["instagram"] as Platform[]);
       const explicitHandles = extractExplicitHandles(value);
-      const requestedMode = filters.search.mode || "combined";
-
       const shouldRunExact =
         explicitHandles.length > 0 && filters.search.exactHandleBoost !== false;
 
-      const shouldRunAi = shouldRunAiSearch(value, filters);
-
-      const effectiveMode =
-        requestedMode === "ai"
-          ? "ai"
-          : requestedMode === "standard"
-          ? "standard"
-          : shouldRunAi
-          ? "combined"
-          : "standard";
+      const { payload, effectiveMode, shouldRunAi } = buildUnifiedPayload(
+        value,
+        filters,
+        platforms
+      );
 
       setLoading(true);
       setError(null);
       setVisibleCount(PAGE_SIZE);
 
       try {
-        const unifiedPayload: Record<string, any> = {
-          brandId,
-          platforms: selectedPlatforms,
-          searchMode: effectiveMode,
-        };
-
-        if (effectiveMode !== "ai") {
-          unifiedPayload.body = buildStandardSearchBody(value, filters, selectedPlatforms[0]);
-        }
-
-        if (effectiveMode !== "standard") {
-          unifiedPayload.ai = buildAiFilters(value, filters, selectedPlatforms);
-        }
-
         const unifiedPromise = fetch(API_UNIFIED_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(unifiedPayload),
+          body: JSON.stringify(payload),
         }).then(async (response) => {
           const data = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(data?.error || "Unified search failed");
           return data;
         });
 
-        const exactPromise = shouldRunExact ? fetchExactUsers(value) : Promise.resolve([]);
+        const exactPromise = shouldRunExact
+          ? fetchExactUsers(value)
+          : Promise.resolve([]);
 
-        const [unifiedData, exactHits] = await Promise.all([unifiedPromise, exactPromise]);
+        const [unifiedData, exactHits] = await Promise.all([
+          unifiedPromise,
+          exactPromise,
+        ]);
+
+        const fallbackPlatform = (payload.platforms?.[0] || "youtube") as Platform;
 
         const unifiedResults = Array.isArray(unifiedData?.results)
-          ? unifiedData.results
+          ? (unifiedData.results
               .map((item: BackendResult) =>
-                mapBackendResult(item, item.platform || selectedPlatforms[0], item.searchType || "standard")
+                mapBackendResult(
+                  item,
+                  item.platform || fallbackPlatform,
+                  item.searchType || "standard"
+                )
               )
-              .filter(Boolean) as UiResult[]
+              .filter(Boolean) as UiResult[])
           : [];
 
-        const merged = mergeResults([...exactHits, ...unifiedResults]);
+        const merged = mergeResultsPreserveOrder([
+          ...exactHits,
+          ...unifiedResults,
+        ]);
         const filtered = applyClientFilters(merged, filters);
 
         setAllResults(filtered);
         setLastRaw({
           unified: unifiedData,
           exact: exactHits,
+          payload,
           effectiveMode,
           shouldRunExact,
           shouldRunAi,
@@ -914,36 +780,7 @@ export function useInfluencerSearch(platforms: Platform[]) {
     resetFilters,
     loadMore,
     loadAll,
-    buildPayload: () => {
-      const selectedPlatforms = platforms.length ? platforms : (["instagram"] as Platform[]);
-      const value = lastQueryRef.current;
-      const requestedMode = filters.search.mode || "combined";
-      const shouldRunAi = shouldRunAiSearch(value, filters);
-
-      const effectiveMode =
-        requestedMode === "ai"
-          ? "ai"
-          : requestedMode === "standard"
-          ? "standard"
-          : shouldRunAi
-          ? "combined"
-          : "standard";
-
-      const payload: Record<string, any> = {
-        brandId: getBrandIdFromStorage(),
-        platforms: selectedPlatforms,
-        searchMode: effectiveMode,
-      };
-
-      if (effectiveMode !== "ai") {
-        payload.body = buildStandardSearchBody(value, filters, selectedPlatforms[0]);
-      }
-
-      if (effectiveMode !== "standard") {
-        payload.ai = buildAiFilters(value, filters, selectedPlatforms);
-      }
-
-      return payload;
-    },
+    buildPayload: () =>
+      buildUnifiedPayload(lastQueryRef.current, filters, platforms).payload,
   };
 }

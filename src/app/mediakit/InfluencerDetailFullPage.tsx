@@ -13,7 +13,10 @@ import {
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { LockKeyOpenIcon } from '@phosphor-icons/react';
-
+import {
+  GoogleReCaptchaProvider,
+  useGoogleReCaptcha,
+} from 'react-google-recaptcha-v3';
 import type { Platform, ReportResponse } from '../brand/(protected)/browse-influencer/types';
 import { post } from '@/lib/api';
 import { Loader } from '@/components/ui/loader';
@@ -832,7 +835,67 @@ function AccessBlurSection({
   );
 }
 
-export default function InfluencerDetailFullPage({
+
+function SecurityCheckOverlay({
+  checking,
+  onRetry,
+}: {
+  checking: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[200] bg-[#fbf8f3]/90 backdrop-blur-sm">
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <div
+          className="w-full max-w-md rounded-[28px] border border-[#ead28a] px-7 py-8 text-center shadow-[0_24px_70px_rgba(183,145,35,0.14)]"
+          style={{
+            background:
+              'linear-gradient(156.55deg, #FFFBF04D 0%, #FBFAF9FF 50%, #FDF2FC33 100%)',
+          }}
+        >
+          <div className="mb-4 flex justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#e6c968] bg-gradient-to-b from-[#fff4c7] to-[#f1d05d] shadow-[0_8px_24px_rgba(212,173,58,0.18)]">
+              <LockKeyOpenIcon
+                size={26}
+                weight="duotone"
+                className="text-[#a97c00]"
+              />
+            </div>
+          </div>
+
+          <div className="mb-2 text-[28px] font-semibold leading-tight text-[#b88300]">
+            Security check required
+          </div>
+
+          <div className="mx-auto max-w-[320px] text-sm leading-6 text-[#7d6b45]">
+            You refreshed this page 3 times. We’re running an invisible security
+            verification before continuing.
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <div className="text-sm leading-6 text-[#7d6b45]">
+              {checking
+                ? 'Running invisible security verification...'
+                : 'Verification did not complete. Please try again.'}
+            </div>
+
+            {!checking ? (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center justify-center rounded-full border border-[#e3c14e] bg-gradient-to-r from-[#f2d15b] to-[#e7bf43] px-5 py-2.5 text-sm font-medium text-[#5e470f] shadow-[0_10px_28px_rgba(212,173,58,0.22)]"
+              >
+                Try again
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfluencerDetailFullPageInner({
   loading,
   error,
   data,
@@ -866,10 +929,95 @@ export default function InfluencerDetailFullPage({
   const [activePlatform, setActivePlatform] = useState<SupportedPlatform>(normalisePlatform(platform));
   const [activeReport, setActiveReport] = useState<InfluencerReportShape | null>(null);
   const effectiveViewerRole: 'brand' | 'admin' | '' = hasAdminAccess ? 'admin' : (viewerRole ?? '');
-
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [captchaRequired, setCaptchaRequired] = useState(false);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [captchaChecking, setCaptchaChecking] = useState(false);
+  const [captchaAttempt, setCaptchaAttempt] = useState(0);
+  const { executeRecaptcha } = useGoogleReCaptcha();
   const hasBrandAccess = Boolean((brandId || '').trim());
   const hasAdminStoredAccess = Boolean((adminId || '').trim());
   const hasInfluencerAccess = Boolean((influencerId || '').trim());
+
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const countKey = `cg-refresh-count:${pathname}`;
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+
+    const navEntry = performance.getEntriesByType('navigation')[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+
+    const isReload =
+      navEntry?.type === 'reload' ||
+      (typeof performance !== 'undefined' &&
+        typeof (performance as any).navigation !== 'undefined' &&
+        (performance as any).navigation.type === 1);
+
+    const previousCount = Number(sessionStorage.getItem(countKey) || '0');
+    const nextCount = isReload ? previousCount + 1 : 0;
+
+    sessionStorage.setItem(countKey, String(nextCount));
+    setRefreshCount(nextCount);
+
+    const alreadyVerified = sessionStorage.getItem(verifiedKey) === '1';
+    setCaptchaVerified(alreadyVerified);
+    setCaptchaRequired(nextCount >= 3 && !alreadyVerified);
+  }, [pathname]);
+
+
+  const markCaptchaPassed = () => {
+    const countKey = `cg-refresh-count:${pathname}`;
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+
+    sessionStorage.setItem(countKey, '0');
+    sessionStorage.setItem(verifiedKey, '1');
+
+    setRefreshCount(0);
+    setCaptchaVerified(true);
+    setCaptchaRequired(false);
+  };
+
+  const markCaptchaFailed = () => {
+    const verifiedKey = `cg-refresh-verified:${pathname}`;
+    sessionStorage.removeItem(verifiedKey);
+    setCaptchaVerified(false);
+    setCaptchaRequired(true);
+  };
+
+  useEffect(() => {
+    if (!captchaRequired || captchaVerified) return;
+    if (!executeRecaptcha) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setCaptchaChecking(true);
+        const token = await executeRecaptcha('media_kit_refresh_gate');
+
+        if (cancelled) return;
+
+        if (token) {
+          markCaptchaPassed();
+        } else {
+          markCaptchaFailed();
+        }
+      } catch {
+        if (!cancelled) {
+          markCaptchaFailed();
+        }
+      } finally {
+        if (!cancelled) setCaptchaChecking(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [captchaRequired, captchaVerified, executeRecaptcha, captchaAttempt, pathname]);
 
   const canViewRestrictedSections =
     hasAdminAccess ||
@@ -1371,7 +1519,29 @@ export default function InfluencerDetailFullPage({
       setRefreshing(false);
     }
   };
+  const handleDashboardBack = () => {
+    const localInfluencerId =
+      typeof window !== 'undefined'
+        ? (localStorage.getItem('influencerId') || '').trim()
+        : '';
 
+    const localBrandId =
+      typeof window !== 'undefined'
+        ? (localStorage.getItem('brandId') || '').trim()
+        : '';
+
+    if (localInfluencerId || influencerId) {
+      router.push('/influencer/dashboard');
+      return;
+    }
+
+    if (localBrandId || brandId) {
+      router.push('/brand/dashboard');
+      return;
+    }
+
+    router.back();
+  };
   const handleMediaKit = async () => {
     const url = window.location.href;
 
@@ -1544,6 +1714,12 @@ export default function InfluencerDetailFullPage({
 
   return (
     <div className="min-h-screen  text-[#1f1f1f]">
+      {captchaRequired && !captchaVerified ? (
+        <SecurityCheckOverlay
+          checking={captchaChecking}
+          onRetry={() => setCaptchaAttempt((x) => x + 1)}
+        />
+      ) : null}
       {/* <div className="sticky top-0 z-20 border-b border-[#ebe4d8] bg-[#fbf8f3]/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 lg:px-6 xl:px-8">
           <button
@@ -1692,6 +1868,17 @@ export default function InfluencerDetailFullPage({
       </div> */}
 
       <div className="w-full px-4 py-5 lg:px-6 xl:px-8">
+        <div className="mb-4 flex items-center justify-start">
+          <button
+            type="button"
+            onClick={handleDashboardBack}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#e7ddd0] bg-white px-4 py-2 text-sm font-medium text-[#2b2b2b] shadow-sm transition hover:bg-[#f7f2ea]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
+        </div>
+
         <CreatorHeader
           primaryReport={displayedReport as any}
           mediaKit={mediaKit as any}
@@ -1700,7 +1887,6 @@ export default function InfluencerDetailFullPage({
           accountType={displayedReport.accountType}
           postsCount={displayedReport.postsCount}
         />
-
         <div className="mt-6 space-y-6">
           <MetricsGrid metrics={metricCards} />
 
@@ -1777,16 +1963,31 @@ export default function InfluencerDetailFullPage({
             </AccessBlurSection>
           ) : null}
 
-          <AccessBlurSection
+          {/* <AccessBlurSection
             unlocked={canViewRestrictedSections}
             showPrompt={false}
             title="Unlock the complete profile"
             subtitle="Log in to review activity history, profile actions, and detailed audit information."
           >
             <AuditTrailTable items={auditItems} />
-          </AccessBlurSection>
+          </AccessBlurSection> */}
         </div>
       </div>
     </div>
+  );
+}
+
+export default function InfluencerDetailFullPage(props: Props) {
+  return (
+    <GoogleReCaptchaProvider
+      reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ''}
+      scriptProps={{
+        async: true,
+        defer: true,
+        appendTo: 'head',
+      }}
+    >
+      <InfluencerDetailFullPageInner {...props} />
+    </GoogleReCaptchaProvider>
   );
 }

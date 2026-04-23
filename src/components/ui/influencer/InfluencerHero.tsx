@@ -5,18 +5,20 @@ import { cn } from "@/lib/utils";
 
 // ✅ Put your exact filenames here (mix png/jpg is fine)
 const HERO_IMAGES = [
-  "/images/influencer2.jpg",
-  "/images/influencer3.jpg",
-  "/images/influencer4.jpg",
-  "/images/influencer5.png",
-  "/images/influencer6.jpg",
-  "/images/influencer7.jpg",
-  "/images/influencer8.png",
-  "/images/influencer9.jpg",
-  "/images/influencer10.jpg",
-  "/images/influencer11.jpg",
-  "/images/influencer12.jpg",
-  "/images/influencer13.jpg",
+  // "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image1.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image2.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image3.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image4.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image5.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image6.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image7.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image8.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image9.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image10.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image11.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image12.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image13.png",
+  "https://collaglam-campaign.s3.us-east-1.amazonaws.com/image14.png",
 ];
 
 const HERO_QUOTES = [

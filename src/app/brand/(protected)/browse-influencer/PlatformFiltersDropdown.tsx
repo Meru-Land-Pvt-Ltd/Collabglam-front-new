@@ -3,11 +3,13 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { flushSync } from "react-dom";
-import { InstagramLogo, TiktokLogo, YoutubeLogo } from "@phosphor-icons/react";
+import {
+  InstagramLogo,
+  TiktokLogo,
+  YoutubeLogo,
+} from "@phosphor-icons/react";
 import type { FilterState, Platform, PlatformFilterState } from "./filters";
 import {
-  GROWTH_INTERVAL_OPTIONS,
-  GROWTH_OPERATOR_OPTIONS,
   LANGUAGE_OPTIONS,
   LAST_POSTED_OPTIONS,
   PLATFORM_ORDER,
@@ -77,10 +79,22 @@ type PlatformDraft = {
   isOfficialArtist: boolean;
 };
 
-const platformConfig: Record<Platform, { label: string; icon: React.ReactNode }> = {
-  youtube: { label: "YouTube", icon: <YoutubeLogo size={22} weight="fill" /> },
-  instagram: { label: "Instagram", icon: <InstagramLogo size={22} weight="fill" /> },
-  tiktok: { label: "TikTok", icon: <TiktokLogo size={22} weight="fill" /> },
+const platformConfig: Record<
+  Platform,
+  { label: string; icon: React.ReactNode }
+> = {
+  youtube: {
+    label: "YouTube",
+    icon: <YoutubeLogo size={18} weight="fill" />,
+  },
+  instagram: {
+    label: "Instagram",
+    icon: <InstagramLogo size={18} weight="fill" />,
+  },
+  tiktok: {
+    label: "TikTok",
+    icon: <TiktokLogo size={18} weight="fill" />,
+  },
 };
 
 function toDraftValue(value?: number | string) {
@@ -220,14 +234,16 @@ function PlatformIconButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative inline-flex h-14 w-14 items-center justify-center rounded-full border transition",
-        selected ? "border-[#d7d7d7] bg-white shadow-sm" : "border-[#dedede] bg-white hover:bg-[#fafafa]",
+        "relative inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
+        selected
+          ? "border-[#D8D8D8] bg-white shadow-sm"
+          : "border-[#E6E6E6] bg-white hover:bg-[#FAFAFA]"
       )}
     >
       {children}
       {selected ? (
-        <span className="absolute right-0 top-0 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#31c759] text-white">
-          <Check className="h-3 w-3" />
+        <span className="absolute -right-0.5 -top-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#31C759] text-white">
+          <Check className="h-2.5 w-2.5" />
         </span>
       ) : null}
     </button>
@@ -235,35 +251,30 @@ function PlatformIconButton({
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="mb-2 block text-[14px] font-semibold text-[#1A1A1A]">{children}</label>;
-}
-
-function FieldHint({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1 text-[11px] text-[#777]">{children}</p>;
+  return (
+    <label className="mb-1 block text-[11px] font-medium text-[#1A1A1A]">
+      {children}
+    </label>
+  );
 }
 
 function InputField({
   value,
   onChange,
   placeholder,
-  suffix,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  suffix?: string;
 }) {
   return (
-    <div className="flex h-[42px] items-center overflow-hidden rounded-[12px] border border-[#dcdcdc] bg-white">
-      <input
-        type="text"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="h-full w-full min-w-0 bg-transparent px-3 text-sm text-[#222] outline-none placeholder:text-[#a0a0a0]"
-      />
-      {suffix ? <span className="shrink-0 pr-3 text-sm text-[#444]">{suffix}</span> : null}
-    </div>
+    <input
+      type="text"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className="h-8 w-full rounded-[8px] border border-[#E3E3E3] bg-white px-2.5 text-[11px] text-[#1A1A1A] outline-none placeholder:text-[#A0A0A0]"
+    />
   );
 }
 
@@ -279,16 +290,18 @@ function NumberInputField({
   suffix?: string;
 }) {
   return (
-    <div className="flex h-[42px] items-center overflow-hidden rounded-[12px] border border-[#dcdcdc] bg-white">
+    <div className="flex h-8 items-center overflow-hidden rounded-[8px] border border-[#E3E3E3] bg-white">
       <input
         type="number"
         inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-full w-full min-w-0 bg-transparent px-3 text-sm text-[#222] outline-none placeholder:text-[#a0a0a0]"
+        className="h-full w-full min-w-0 bg-transparent px-2.5 text-[11px] text-[#1A1A1A] outline-none placeholder:text-[#A0A0A0]"
       />
-      {suffix ? <span className="shrink-0 pr-3 text-sm text-[#444]">{suffix}</span> : null}
+      {suffix ? (
+        <span className="shrink-0 pr-2.5 text-[11px] text-[#555]">{suffix}</span>
+      ) : null}
     </div>
   );
 }
@@ -299,28 +312,21 @@ function MinMaxField({
   maxValue,
   onMinChange,
   onMaxChange,
-  hint,
 }: {
   label: string;
   minValue: string;
   maxValue: string;
   onMinChange: (value: string) => void;
   onMaxChange: (value: string) => void;
-  hint?: string;
 }) {
   return (
     <div>
       <FieldLabel>{label}</FieldLabel>
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <NumberInputField value={minValue} onChange={onMinChange} placeholder="Min" />
-        </div>
-        <span className="shrink-0 text-sm text-[#9a9a9a]">to</span>
-        <div className="min-w-0 flex-1">
-          <NumberInputField value={maxValue} onChange={onMaxChange} placeholder="Max" />
-        </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+        <NumberInputField value={minValue} onChange={onMinChange} placeholder="Min" />
+        <span className="text-[10px] text-[#8E8E8E]">—</span>
+        <NumberInputField value={maxValue} onChange={onMaxChange} placeholder="Max" />
       </div>
-      {hint ? <FieldHint>{hint}</FieldHint> : null}
     </div>
   );
 }
@@ -330,13 +336,11 @@ function SelectField({
   value,
   options,
   onChange,
-  hint,
 }: {
   label: string;
   value: string;
   options: Array<{ label: string; value: string }>;
   onChange: (value: string) => void;
-  hint?: string;
 }) {
   return (
     <div>
@@ -345,7 +349,7 @@ function SelectField({
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-[42px] w-full appearance-none rounded-[12px] border border-[#dcdcdc] bg-white px-3 pr-10 text-sm text-[#444] outline-none"
+          className="h-8 w-full appearance-none rounded-[8px] border border-[#E3E3E3] bg-white px-2.5 pr-8 text-[11px] text-[#1A1A1A] outline-none"
         >
           {options.map((option) => (
             <option key={`${option.label}-${option.value}`} value={option.value}>
@@ -353,9 +357,8 @@ function SelectField({
             </option>
           ))}
         </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8b8b8b]" />
+        <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8B8B8B]" />
       </div>
-      {hint ? <FieldHint>{hint}</FieldHint> : null}
     </div>
   );
 }
@@ -370,97 +373,15 @@ function ToggleRow({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-[12px] border border-[#ece7df] px-3 py-2.5">
-      <span className="text-sm text-[#1A1A1A]">{label}</span>
+    <label className="flex items-center justify-between rounded-[8px] border border-[#EEEEEE] bg-[#FAFAFA] px-2.5 py-2">
+      <span className="text-[11px] text-[#1A1A1A]">{label}</span>
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4"
+        className="h-3.5 w-3.5"
       />
     </label>
-  );
-}
-
-function GrowthTriplet({
-  title,
-  interval,
-  operator,
-  value,
-  setInterval,
-  setOperator,
-  setValue,
-}: {
-  title: string;
-  interval: string;
-  operator: string;
-  value: string;
-  setInterval: (value: string) => void;
-  setOperator: (value: string) => void;
-  setValue: (value: string) => void;
-}) {
-  return (
-    <div className="rounded-[14px] border border-[#ece7df] p-3">
-      <p className="mb-3 text-sm font-semibold text-[#1A1A1A]">{title}</p>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <SelectField
-          label="Interval"
-          value={interval}
-          onChange={setInterval}
-          options={[
-            { label: "Any", value: "" },
-            ...GROWTH_INTERVAL_OPTIONS.map((option) => ({
-              label: option.label,
-              value: option.value,
-            })),
-          ]}
-        />
-
-        <SelectField
-          label="Operator"
-          value={operator}
-          onChange={setOperator}
-          options={[
-            { label: "Any", value: "" },
-            ...GROWTH_OPERATOR_OPTIONS.map((option) => ({
-              label: option.label,
-              value: option.value,
-            })),
-          ]}
-        />
-
-        <div>
-          <FieldLabel>Value</FieldLabel>
-          <NumberInputField
-            value={value}
-            onChange={setValue}
-            placeholder="Value"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SimpleTextField({
-  label,
-  value,
-  onChange,
-  placeholder,
-  hint,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  hint?: string;
-}) {
-  return (
-    <div>
-      <FieldLabel>{label}</FieldLabel>
-      <InputField value={value} onChange={onChange} placeholder={placeholder} />
-      {hint ? <FieldHint>{hint}</FieldHint> : null}
-    </div>
   );
 }
 
@@ -469,11 +390,15 @@ function PlatformSection({
   draft,
   setDraft,
   onClear,
+  expanded,
+  onToggle,
 }: {
   platform: Platform;
   draft: PlatformDraft;
   setDraft: (patch: Partial<PlatformDraft>) => void;
   onClear: () => void;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const config = platformConfig[platform];
   const isYoutube = platform === "youtube";
@@ -481,26 +406,43 @@ function PlatformSection({
   const isTiktok = platform === "tiktok";
 
   return (
-    <div className="w-full border-t border-[#ece7df] pt-5 first:border-t-0 first:pt-0">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 text-[16px] font-semibold text-[#1A1A1A]">
-          <span className="text-[#111]">{config.icon}</span>
-          <span>{config.label}</span>
+    <div className="overflow-hidden border-[#E8E8E8] bg-white shadow-[0_6px_18px_rgba(0,0,0,0.04)]">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 border-b border-[#F0F0F0] px-3 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[#1A1A1A]">{config.icon}</span>
+          <span className="text-[12px] font-semibold text-[#1A1A1A]">
+            {config.label}
+          </span>
         </div>
 
-        <button
-          type="button"
-          onClick={onClear}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border border-[#e0ddd7] bg-white px-4 text-sm font-semibold text-[#1A1A1A] shadow-sm transition hover:bg-[#faf8f4] sm:w-auto"
-        >
-          Clear <X className="h-4 w-4" />
-        </button>
-      </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onClear();
+            }}
+            className="inline-flex items-center gap-1 rounded-[8px] border border-[#ECECEC] px-2 py-1 text-[10px] text-[#666] hover:bg-[#FAFAFA]"
+          >
+            Clear <X className="h-3 w-3" />
+          </button>
 
-      <div className="space-y-4">
-        <div className="rounded-[18px] border border-[#e5e1da] bg-white p-4">
-          <div className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Core filters</div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-[#777] transition-transform",
+              expanded ? "rotate-180" : ""
+            )}
+          />
+        </div>
+      </button>
+
+      {expanded ? (
+        <div className="space-y-4 p-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <MinMaxField
               label={isYoutube ? "Subscribers" : "Followers"}
               minValue={draft.followersMin}
@@ -510,161 +452,71 @@ function PlatformSection({
             />
 
             <MinMaxField
-              label="Average views"
+              label="Avg views"
               minValue={draft.avgViewsMin}
               maxValue={draft.avgViewsMax}
               onMinChange={(value) => setDraft({ avgViewsMin: value })}
               onMaxChange={(value) => setDraft({ avgViewsMax: value })}
             />
 
-            <MinMaxField
-              label="Engagements"
-              minValue={draft.engagementsMin}
-              maxValue={draft.engagementsMax}
-              onMinChange={(value) => setDraft({ engagementsMin: value })}
-              onMaxChange={(value) => setDraft({ engagementsMax: value })}
+            <SelectField
+              label="Language"
+              value={draft.languageCode}
+              onChange={(value) => setDraft({ languageCode: value })}
+              options={LANGUAGE_OPTIONS}
             />
 
             <div>
-              <FieldLabel>Minimum engagement rate</FieldLabel>
+              <FieldLabel>Min engagement rate</FieldLabel>
               <NumberInputField
                 value={draft.engagementRateMin}
                 onChange={(value) => setDraft({ engagementRateMin: value })}
-                placeholder="e.g. 3.5"
+                placeholder="%"
                 suffix="%"
               />
             </div>
 
             <SelectField
-              label="Language"
-              value={draft.languageCode}
-              options={LANGUAGE_OPTIONS}
-              onChange={(value) => setDraft({ languageCode: value })}
-            />
-
-            <SelectField
               label="Last posted"
               value={draft.lastPostedDays}
+              onChange={(value) => setDraft({ lastPostedDays: value })}
               options={LAST_POSTED_OPTIONS.map((item) => ({
                 label: item.label,
                 value: item.value == null ? "" : String(item.value),
               }))}
-              onChange={(value) => setDraft({ lastPostedDays: value })}
             />
 
-            <SimpleTextField
-              label="Influencer location IDs"
-              value={draft.locationIdsText}
-              onChange={(value) => setDraft({ locationIdsText: value })}
-              placeholder="148838,62149"
-              hint="Comma separated location IDs"
-            />
-          </div>
-        </div>
-
-        <div className="rounded-[18px] border border-[#e5e1da] bg-white p-4">
-          <div className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Discovery matching</div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <SimpleTextField
-              label="Bio query"
-              value={draft.bioQuery}
-              onChange={(value) => setDraft({ bioQuery: value })}
-              placeholder="photos videos"
-            />
-
-            <SimpleTextField
-              label="Keywords"
-              value={draft.keywords}
-              onChange={(value) => setDraft({ keywords: value })}
-              placeholder="cars, beauty hacks"
-              hint="Phrase used in captions or spoken content"
-            />
-
-            <SimpleTextField
-              label="Relevance terms"
-              value={draft.relevance}
-              onChange={(value) => setDraft({ relevance: value })}
-              placeholder="#cars, @topgear"
-              hint="Comma separated hashtags, handles, or terms"
-            />
-
-            <SimpleTextField
-              label="Audience relevance"
-              value={draft.audienceRelevance}
-              onChange={(value) => setDraft({ audienceRelevance: value })}
-              placeholder="@topgear"
-              hint="Comma separated reference handles"
-            />
-
-            <SimpleTextField
-              label="Text tags"
-              value={draft.textTags}
-              onChange={(value) => setDraft({ textTags: value })}
-              placeholder="#carsofinstagram, @topgear"
-              hint="Example: #cars, @topgear"
-            />
-          </div>
-        </div>
-
-        <div className="rounded-[18px] border border-[#e5e1da] bg-white p-4">
-          <div className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Data requirements</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <ToggleRow
-              label="Require audience data"
-              checked={draft.hasAudienceData}
-              onChange={(next) => setDraft({ hasAudienceData: next })}
-            />
-            <ToggleRow
-              label="Require email contact"
-              checked={draft.contactEmailOnly}
-              onChange={(next) => setDraft({ contactEmailOnly: next })}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-[18px] border border-[#e5e1da] bg-white p-4">
-          <div className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Growth filters</div>
-          <div className="space-y-3">
-            <GrowthTriplet
-              title="Followers growth"
-              interval={draft.followersGrowthInterval}
-              operator={draft.followersGrowthOperator}
-              value={draft.followersGrowthValue}
-              setInterval={(value) => setDraft({ followersGrowthInterval: value })}
-              setOperator={(value) => setDraft({ followersGrowthOperator: value })}
-              setValue={(value) => setDraft({ followersGrowthValue: value })}
-            />
-
-            {isYoutube ? (
-              <GrowthTriplet
-                title="Views growth"
-                interval={draft.viewsGrowthInterval}
-                operator={draft.viewsGrowthOperator}
-                value={draft.viewsGrowthValue}
-                setInterval={(value) => setDraft({ viewsGrowthInterval: value })}
-                setOperator={(value) => setDraft({ viewsGrowthOperator: value })}
-                setValue={(value) => setDraft({ viewsGrowthValue: value })}
+            <div>
+              <FieldLabel>Keywords</FieldLabel>
+              <InputField
+                value={draft.keywords}
+                onChange={(value) => setDraft({ keywords: value })}
+                placeholder="tech, beauty..."
               />
-            ) : null}
-
-            {isTiktok ? (
-              <GrowthTriplet
-                title="Likes growth"
-                interval={draft.likesGrowthInterval}
-                operator={draft.likesGrowthOperator}
-                value={draft.likesGrowthValue}
-                setInterval={(value) => setDraft({ likesGrowthInterval: value })}
-                setOperator={(value) => setDraft({ likesGrowthOperator: value })}
-                setValue={(value) => setDraft({ likesGrowthValue: value })}
-              />
-            ) : null}
+            </div>
           </div>
-        </div>
 
-        {isInstagram ? (
-          <div className="rounded-[18px] border border-[#e5e1da] bg-white p-4">
-            <div className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">Instagram extras</div>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          {isYoutube ? (
+            <div className="grid grid-cols-1 gap-2.5">
+              <div>
+                <FieldLabel>Bio query</FieldLabel>
+                <InputField
+                  value={draft.bioQuery}
+                  onChange={(value) => setDraft({ bioQuery: value })}
+                  placeholder="creator bio"
+                />
+              </div>
+
+              {/* <ToggleRow
+                label="Official artist only"
+                checked={draft.isOfficialArtist}
+                onChange={(next) => setDraft({ isOfficialArtist: next })}
+              /> */}
+            </div>
+          ) : null}
+
+          {isInstagram ? (
+            <div className="grid grid-cols-1 gap-2.5">
               <MinMaxField
                 label="Reels plays"
                 minValue={draft.reelsPlaysMin}
@@ -673,77 +525,51 @@ function PlatformSection({
                 onMaxChange={(value) => setDraft({ reelsPlaysMax: value })}
               />
 
-              <SimpleTextField
-                label="Instagram account types"
-                value={draft.igAccountTypesText}
-                onChange={(value) => setDraft({ igAccountTypesText: value })}
-                placeholder="2,3"
-                hint="1 = Regular, 2 = Business, 3 = Creator"
-              />
+              {/* <div>
+                <FieldLabel>Interests IDs</FieldLabel>
+                <InputField
+                  value={draft.interestsIdsText}
+                  onChange={(value) => setDraft({ interestsIdsText: value })}
+                  placeholder="3,21,1"
+                />
+              </div> */}
 
-              <SimpleTextField
-                label="Instagram interests IDs"
-                value={draft.interestsIdsText}
-                onChange={(value) => setDraft({ interestsIdsText: value })}
-                placeholder="3,21,1"
-              />
-
-              <SimpleTextField
-                label="Instagram brand IDs"
-                value={draft.brandsIdsText}
-                onChange={(value) => setDraft({ brandsIdsText: value })}
-                placeholder="1708,13"
-              />
-            </div>
-
-            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
               <ToggleRow
                 label="Sponsored posts only"
                 checked={draft.hasSponsoredPosts}
                 onChange={(next) => setDraft({ hasSponsoredPosts: next })}
               />
-              <ToggleRow
-                label="Must have YouTube linked"
-                checked={draft.hasYouTube}
-                onChange={(next) => setDraft({ hasYouTube: next })}
-              />
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {isYoutube ? (
-          <div className="rounded-[18px] border border-[#e5e1da] bg-white p-4">
-            <div className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">YouTube extras</div>
-            <ToggleRow
-              label="Official artist only"
-              checked={draft.isOfficialArtist}
-              onChange={(next) => setDraft({ isOfficialArtist: next })}
-            />
-          </div>
-        ) : null}
+          {isTiktok ? (
+            <div className="grid grid-cols-1 gap-2.5">
+              <MinMaxField
+                label="Engagements"
+                minValue={draft.engagementsMin}
+                maxValue={draft.engagementsMax}
+                onMinChange={(value) => setDraft({ engagementsMin: value })}
+                onMaxChange={(value) => setDraft({ engagementsMax: value })}
+              />
 
-        {isTiktok ? (
-          <div className="rounded-[18px] border border-[#e5e1da] bg-white p-4">
-            <div className="mb-4 text-[14px] font-semibold text-[#1A1A1A]">TikTok extras</div>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <MinMaxField
-                label="Shares"
-                minValue={draft.sharesMin}
-                maxValue={draft.sharesMax}
-                onMinChange={(value) => setDraft({ sharesMin: value })}
-                onMaxChange={(value) => setDraft({ sharesMax: value })}
-              />
-              <MinMaxField
-                label="Saves"
-                minValue={draft.savesMin}
-                maxValue={draft.savesMax}
-                onMinChange={(value) => setDraft({ savesMin: value })}
-                onMaxChange={(value) => setDraft({ savesMax: value })}
-              />
+              <div>
+                <FieldLabel>Text tags</FieldLabel>
+                <InputField
+                  value={draft.textTags}
+                  onChange={(value) => setDraft({ textTags: value })}
+                  placeholder="#tech, @creator"
+                />
+              </div>
+
+              {/* <ToggleRow
+                label="Require audience data"
+                checked={draft.hasAudienceData}
+                onChange={(next) => setDraft({ hasAudienceData: next })}
+              /> */}
             </div>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -763,7 +589,12 @@ export function PlatformFiltersDropdown({
     instagram: fromFilters(filters.platform.instagram),
     tiktok: fromFilters(filters.platform.tiktok),
   });
-  const [menuWidth, setMenuWidth] = useState(680);
+  const [expanded, setExpanded] = useState<Record<Platform, boolean>>({
+    youtube: platforms.includes("youtube"),
+    instagram: platforms.includes("instagram"),
+    tiktok: platforms.includes("tiktok"),
+  });
+  const [menuWidth, setMenuWidth] = useState(540);
   const [alignRight, setAlignRight] = useState(true);
 
   useEffect(() => {
@@ -773,11 +604,16 @@ export function PlatformFiltersDropdown({
       instagram: fromFilters(filters.platform.instagram),
       tiktok: fromFilters(filters.platform.tiktok),
     });
+    setExpanded({
+      youtube: platforms.includes("youtube"),
+      instagram: platforms.includes("instagram"),
+      tiktok: platforms.includes("tiktok"),
+    });
   }, [filters, platforms]);
 
   const selectedPlatforms = useMemo(
     () => PLATFORM_ORDER.filter((platform) => draftPlatforms.includes(platform)),
-    [draftPlatforms],
+    [draftPlatforms]
   );
 
   useLayoutEffect(() => {
@@ -786,7 +622,7 @@ export function PlatformFiltersDropdown({
       if (!rect) return;
 
       const viewportPadding = 16;
-      const idealWidth = 680;
+      const idealWidth = 540;
       const safeWidth = Math.min(idealWidth, window.innerWidth - viewportPadding * 2);
 
       setMenuWidth(safeWidth);
@@ -801,10 +637,22 @@ export function PlatformFiltersDropdown({
   const togglePlatform = (platform: Platform) => {
     setDraftPlatforms((current) => {
       const next = new Set(current);
-      if (next.has(platform)) next.delete(platform);
-      else next.add(platform);
-      return Array.from(next.size ? next : new Set([platform]));
+      const exists = next.has(platform);
+
+      if (exists) {
+        if (next.size === 1) return current;
+        next.delete(platform);
+      } else {
+        next.add(platform);
+      }
+
+      return PLATFORM_ORDER.filter((item) => next.has(item));
     });
+
+    setExpanded((current) => ({
+      ...current,
+      [platform]: true,
+    }));
   };
 
   const clearPlatform = (platform: Platform) => {
@@ -814,9 +662,17 @@ export function PlatformFiltersDropdown({
     }));
   };
 
+  const handleClearAll = () => {
+    setDrafts({
+      youtube: createEmptyDraft(),
+      instagram: createEmptyDraft(),
+      tiktok: createEmptyDraft(),
+    });
+  };
+
   const applyChanges = () => {
     flushSync(() => {
-      setPlatforms(draftPlatforms.length ? draftPlatforms : ["instagram"]);
+      setPlatforms(draftPlatforms.length ? draftPlatforms : ["youtube"]);
 
       PLATFORM_ORDER.forEach((platform) => {
         const draft = drafts[platform];
@@ -879,58 +735,82 @@ export function PlatformFiltersDropdown({
     <div
       style={{ width: `${menuWidth}px` }}
       className={cn(
-        "absolute top-[calc(100%+8px)] z-50 flex max-h-[min(82vh,48rem)] flex-col overflow-hidden rounded-[18px] border border-[#e6e0d7] bg-white shadow-[0_18px_48px_rgba(0,0,0,0.12)]",
-        alignRight ? "right-0" : "left-0",
+        "absolute top-[calc(100%+8px)] z-50 max-h-[min(82vh,48rem)] overflow-y-auto rounded-[18px] border border-[#E7E7E7] bg-white shadow-[0_18px_48px_rgba(0,0,0,0.12)]",
+        alignRight ? "right-0" : "left-0"
       )}
     >
-      <div className="shrink-0 p-4 md:p-5">
-        <h3 className="mb-5 text-[18px] font-semibold text-[#1A1A1A]">Select Platform</h3>
+      <div className="space-y-4">
+        <div className="border border-[#EAEAEA] bg-white p-3">
+          <div className="mb-2">
+            <h3 className="text-[12px] font-semibold text-[#1A1A1A]">
+              Select Platform
+            </h3>
+            <p className="mt-1 text-[10px] text-[#8A8A8A]">
+              Select any platform to apply the filters
+            </p>
+          </div>
 
-        <div className="mb-2 flex flex-wrap gap-3">
-          {PLATFORM_ORDER.map((platform) => {
-            const selected = draftPlatforms.includes(platform);
-            return (
-              <PlatformIconButton key={platform} selected={selected} onClick={() => togglePlatform(platform)}>
-                <span className="text-[#111]">{platformConfig[platform].icon}</span>
-              </PlatformIconButton>
-            );
-          })}
+          <div className="flex flex-wrap gap-2.5">
+            {PLATFORM_ORDER.map((platform) => {
+              const selected = draftPlatforms.includes(platform);
+              return (
+                <PlatformIconButton
+                  key={platform}
+                  selected={selected}
+                  onClick={() => togglePlatform(platform)}
+                >
+                  <span className="text-[#1A1A1A]">
+                    {platformConfig[platform].icon}
+                  </span>
+                </PlatformIconButton>
+              );
+            })}
+          </div>
         </div>
+
+        {selectedPlatforms.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {selectedPlatforms.map((platform) => (
+              <PlatformSection
+                key={platform}
+                platform={platform}
+                draft={drafts[platform]}
+                setDraft={(patch) =>
+                  setDrafts((current) => ({
+                    ...current,
+                    [platform]: {
+                      ...current[platform],
+                      ...patch,
+                    },
+                  }))
+                }
+                onClear={() => clearPlatform(platform)}
+                expanded={expanded[platform]}
+                onToggle={() =>
+                  setExpanded((current) => ({
+                    ...current,
+                    [platform]: !current[platform],
+                  }))
+                }
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-[#ece7df] px-4 pb-4 md:px-5 md:pb-5">
-        {selectedPlatforms.map((platform) => (
-          <PlatformSection
-            key={platform}
-            platform={platform}
-            draft={drafts[platform]}
-            setDraft={(patch) =>
-              setDrafts((current) => ({
-                ...current,
-                [platform]: {
-                  ...current[platform],
-                  ...patch,
-                },
-              }))
-            }
-            onClear={() => clearPlatform(platform)}
-          />
-        ))}
-      </div>
-
-      <div className="shrink-0 flex flex-col gap-3 border-t border-[#ece7df] bg-white p-4 sm:flex-row sm:items-center sm:justify-end md:px-5">
+      <div className="sticky bottom-0 flex flex-col gap-3 border-t border-[#ECECEC] bg-white p-4 sm:flex-row sm:items-center sm:justify-end">
         <button
           type="button"
-          onClick={() => setDraftPlatforms(["instagram", "tiktok", "youtube"])}
-          className="inline-flex h-11 w-full items-center justify-center rounded-[12px] border border-[#e0ddd7] bg-white px-5 text-sm font-semibold text-[#1A1A1A] sm:w-auto"
+          onClick={handleClearAll}
+          className="inline-flex h-10 items-center justify-center rounded-[10px] border border-[#E5E5E5] bg-white px-4 text-[12px] font-semibold text-[#1A1A1A]"
         >
-          Select all
+          Clear all filters
         </button>
 
         <button
           type="button"
           onClick={applyChanges}
-          className="inline-flex h-11 w-full min-w-[150px] items-center justify-center rounded-[12px] bg-[#121417] px-6 text-sm font-semibold text-white sm:w-auto"
+          className="inline-flex h-10 min-w-[120px] items-center justify-center rounded-[10px] bg-[#121417] px-5 text-[12px] font-semibold text-white"
         >
           Apply
         </button>

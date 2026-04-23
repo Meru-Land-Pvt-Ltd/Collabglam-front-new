@@ -19,7 +19,6 @@ import {
   ListBullets,
   ListNumbers,
   TextAlignLeft,
-  CaretDown,
   Copy,
   ClipboardText,
   PaperPlaneTilt,
@@ -32,7 +31,7 @@ export type EmailEditorAttachment = {
   contentType: string;
   size: number;
   contentBase64: string;
-};  
+};
 
 export type EmailEditorProps = {
   open: boolean;
@@ -43,6 +42,8 @@ export type EmailEditorProps = {
   toAvatar?: string;
   subject?: string;
   initialBody?: string;
+  initialHtmlBody?: string;
+  startExpanded?: boolean;
   sending?: boolean;
   onSend: (payload: {
     to: string;
@@ -157,6 +158,8 @@ export default function EmailEditor({
   toAvatar = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200&auto=format&fit=crop",
   subject = "",
   initialBody = "",
+  initialHtmlBody = "",
+  startExpanded = false,
   sending = false,
   onSend,
   onSaveDraft,
@@ -231,11 +234,17 @@ export default function EmailEditor({
     setAttachments([]);
     setShowEmojiPicker(false);
     setMinimized(false);
-    setExpanded(false);
+    setExpanded(Boolean(startExpanded));
     setConfidentialMode(false);
     setSelectedFont("Inter");
 
-    const html = initialBody ? plainTextToHtml(initialBody) : "";
+    const html =
+      initialHtmlBody && initialHtmlBody.trim()
+        ? initialHtmlBody
+        : initialBody
+          ? plainTextToHtml(initialBody)
+          : "";
+
     setEditorHtml(html);
 
     requestAnimationFrame(() => {
@@ -243,7 +252,7 @@ export default function EmailEditor({
         editorRef.current.innerHTML = html;
       }
     });
-  }, [open, toLabel, subject, initialBody]);
+  }, [open, toLabel, subject, initialBody, initialHtmlBody, startExpanded]);
 
   React.useEffect(() => {
     const handleSelectionChange = () => {
@@ -379,8 +388,7 @@ export default function EmailEditor({
   return (
     <div
       className={cn(
-        "pointer-events-none fixed z-50 flex items-end justify-end",
-        // When expanded, take up the whole screen. Otherwise, sit bottom-right.
+        "pointer-events-none fixed z-[200] flex items-end justify-end",
         expanded
           ? "inset-2 sm:inset-10"
           : "bottom-0 right-0 p-0 sm:bottom-0 sm:right-16 lg:right-24"
@@ -416,15 +424,13 @@ export default function EmailEditor({
       <div
         className={cn(
           "pointer-events-auto flex flex-col overflow-hidden bg-white shadow-[0_8px_30px_rgba(60,64,67,0.15)] transition-all duration-200 ease-in-out",
-          // Layout scaling based on state
           minimized
             ? "h-[44px] w-full rounded-t-xl border border-[#dadce0] sm:w-[320px]"
             : expanded
-            ? "h-full w-full rounded-xl border border-[#dadce0]"
-            : "h-[calc(100vh-80px)] max-h-[640px] w-full rounded-t-xl border border-[#dadce0] sm:w-[560px]"
+              ? "h-full w-full rounded-xl border border-[#dadce0]"
+              : "h-[calc(100vh-80px)] max-h-[640px] w-full rounded-t-xl border border-[#dadce0] sm:w-[560px]"
         )}
       >
-        {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-[#e0e0e0] bg-[#f2f2f2] px-4 py-2.5">
           <div className="text-[14px] font-medium text-[#202124]">New Message</div>
           <div className="flex items-center gap-1">
@@ -454,7 +460,6 @@ export default function EmailEditor({
 
         {!minimized && (
           <div className="flex flex-1 flex-col overflow-hidden">
-            {/* From */}
             <div className="shrink-0 border-b border-[#ececec] px-4 py-3 text-[13px] text-[#5f6368]">
               <div className="flex items-center gap-2">
                 <span className="w-10">From</span>
@@ -475,7 +480,6 @@ export default function EmailEditor({
               </div>
             </div>
 
-            {/* To */}
             <div className="shrink-0 border-b border-[#ececec] px-4 py-2.5">
               <div className="flex items-center gap-3 text-[13px] text-[#5f6368]">
                 <div className="w-10 shrink-0">To</div>
@@ -517,7 +521,6 @@ export default function EmailEditor({
               </div>
             </div>
 
-            {/* CC / BCC fields */}
             {showCc && (
               <div className="shrink-0 border-b border-[#ececec] px-4 py-2.5">
                 <div className="flex items-center gap-3 text-[13px] text-[#5f6368]">
@@ -550,7 +553,6 @@ export default function EmailEditor({
               </div>
             )}
 
-            {/* Subject */}
             <div className="shrink-0 border-b border-[#ececec] px-4 py-3">
               <input
                 value={mailSubject}
@@ -560,7 +562,6 @@ export default function EmailEditor({
               />
             </div>
 
-            {/* Toolbar (Scrollable horizontally) */}
             <div className="relative shrink-0 border-b border-[#ececec]">
               <div className="hide-scrollbar flex w-full items-center gap-0.5 overflow-x-auto px-3 py-2">
                 <div className="relative flex shrink-0 items-center">
@@ -632,7 +633,6 @@ export default function EmailEditor({
                   <TextAlignLeft size={16} />
                 </ToolbarButton>
 
-                {/* Gradient AI Button */}
                 <button className="ml-auto shrink-0 pl-2 pr-1 text-[13px] font-medium transition-opacity hover:opacity-80">
                   <span className="bg-gradient-to-r from-[#FFB020] via-[#F34C73] to-[#9E33FF] bg-clip-text text-transparent">
                     Compose with AI
@@ -662,7 +662,6 @@ export default function EmailEditor({
               </div>
             )}
 
-            {/* Rich Text Editor Container (Flex-1 allows it to fill available space) */}
             <div className="flex flex-1 flex-col overflow-y-auto bg-white p-4">
               <div
                 ref={editorRef}
@@ -680,7 +679,6 @@ export default function EmailEditor({
                 style={{ fontFamily: selectedFont }}
               />
 
-              {/* Attachments */}
               {attachments.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {attachments.map((item, index) => (
@@ -705,7 +703,6 @@ export default function EmailEditor({
               )}
             </div>
 
-            {/* Bottom Actions Bar */}
             <div className="shrink-0 border-t border-[#ececec] px-3 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-0.5 text-[#5f6368]">

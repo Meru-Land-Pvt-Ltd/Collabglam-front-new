@@ -100,6 +100,19 @@ async function verifyRecaptchaToken(
   return { success: true, score: 0.9, action };
 }
 
+function isPasswordReuseErrorMessage(message: string) {
+  const lower = String(message || "").toLowerCase();
+  return (
+    lower.includes("previous password") ||
+    lower.includes("old password") ||
+    lower.includes("same password") ||
+    lower.includes("same as") ||
+    lower.includes("reuse") ||
+    lower.includes("used before") ||
+    lower.includes("already used")
+  );
+}
+
 function SecurityCheckOverlay({
   checking,
   onRetry,
@@ -193,6 +206,32 @@ function ForgotPasswordInner() {
 
     return () => window.clearInterval(t);
   }, [step]);
+
+  React.useEffect(() => {
+    if (step !== "new_password") return;
+    if (!confirmPassword.trim()) {
+      setFieldErr((prev) =>
+        prev.confirm === "Passwords do not match."
+          ? { ...prev, confirm: undefined }
+          : prev
+      );
+      return;
+    }
+
+    setFieldErr((prev) => {
+      if (password && confirmPassword && password !== confirmPassword) {
+        return { ...prev, confirm: "Passwords do not match." };
+      }
+
+      if (prev.confirm === "Passwords do not match.") {
+        const next = { ...prev };
+        delete next.confirm;
+        return next;
+      }
+
+      return prev;
+    });
+  }, [password, confirmPassword, step]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -341,6 +380,7 @@ function ForgotPasswordInner() {
         toast({ icon: "success", title: "OTP sent", text: `We sent a 6-digit code to ${email.trim()}` });
       } catch (e) {
         const msg = getApiErrorMessage(e, "Failed to send OTP");
+        setFieldErr({ email: msg });
         toast({ icon: "error", title: "Failed to send OTP", text: msg });
       } finally {
         setIsSendingOtp(false);
@@ -363,6 +403,7 @@ function ForgotPasswordInner() {
         toast({ icon: "success", title: "OTP verified", text: "Now create your new password." });
       } catch (e) {
         const msg = getApiErrorMessage(e, "OTP verification failed");
+        setFieldErr({ otp: msg });
         toast({ icon: "error", title: "OTP verification failed", text: msg });
       } finally {
         setIsVerifyingOtp(false);
@@ -414,6 +455,11 @@ function ForgotPasswordInner() {
         window.setTimeout(() => router.push("/brand/login"), 700);
       } catch (e) {
         const msg = getApiErrorMessage(e, "Failed to update password");
+        setFieldErr(
+          isPasswordReuseErrorMessage(msg)
+            ? { password: msg }
+            : { password: msg }
+        );
         toast({ icon: "error", title: "Failed to update password", text: msg });
       } finally {
         setIsUpdatingPw(false);
@@ -450,6 +496,7 @@ function ForgotPasswordInner() {
       toast({ icon: "success", title: "OTP resent", text: `A new OTP was sent to ${email.trim()}` });
     } catch (e) {
       const msg = getApiErrorMessage(e, "Failed to resend OTP");
+      setFieldErr({ otp: msg });
       toast({ icon: "error", title: "Failed to resend OTP", text: msg });
     } finally {
       setIsSendingOtp(false);
@@ -645,9 +692,20 @@ function ForgotPasswordInner() {
                   value={confirmPassword}
                   onValueChange={(v) => {
                     setConfirmPassword(v);
-                    clearErr("confirm");
+                    setFieldErr((prev) => {
+                      if (!prev.confirm || prev.confirm === "Passwords do not match.") {
+                        return prev;
+                      }
+                      const next = { ...prev };
+                      delete next.confirm;
+                      return next;
+                    });
                   }}
-                  onFocus={() => clearErr("confirm")}
+                  onFocus={() => {
+                    if (fieldErr.confirm && fieldErr.confirm !== "Passwords do not match.") {
+                      clearErr("confirm");
+                    }
+                  }}
                   state={confirmInvalid ? "error" : "default"}
                   showRules={false}
                   errorText={fieldErr.confirm}

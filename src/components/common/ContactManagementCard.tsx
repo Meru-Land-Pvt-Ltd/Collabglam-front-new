@@ -89,16 +89,16 @@ export function ContactManagementCard({
       value: getDisplayHandle(primaryReport),
       icon: activePlatformMeta.Icon,
     },
-    {
-      label: "Email",
-      value: mediaKit?.email || "—",
-      icon: Mail,
-    },
-    {
-      label: "Phone",
-      value: mediaKit?.phone || "—",
-      icon: Phone,
-    },
+    // {
+    //   label: "Email",
+    //   value: mediaKit?.email || "—",
+    //   icon: Mail,
+    // },
+    // {
+    //   label: "Phone",
+    //   value: mediaKit?.phone || "—",
+    //   icon: Phone,
+    // },
     {
       label: "Location",
       value: primaryReport?.country || mediaKit?.country || "—",
@@ -182,10 +182,10 @@ export function ContactManagementCard({
             Copy kit
           </button>
 
-          <button className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e8e0d5] bg-white px-4 py-3 text-sm font-semibold text-[#1f1f1f] transition hover:bg-[#fff9f1]">
+          {/* <button className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e8e0d5] bg-white px-4 py-3 text-sm font-semibold text-[#1f1f1f] transition hover:bg-[#fff9f1]">
             <Download className="h-4 w-4" />
             Export
-          </button>
+          </button> */}
         </div>
       </div>
     </SectionCard>

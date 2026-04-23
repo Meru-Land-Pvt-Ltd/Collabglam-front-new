@@ -105,6 +105,7 @@ export interface InfluencerReport {
   subscribers?: number | string;
   engagementRate?: number | string;
   country?: string;
+  location?:string;
   language?: { name?: string };
   hashtags?: Array<{ tag: string }>;
   popularPosts?: SocialPost[];
@@ -156,6 +157,7 @@ export interface MediaKit {
   socialProfiles?: InfluencerReport[];
   name?: string;
   country?: string;
+  location?:string;
   languages?: Array<{ name?: string }>;
   email?: string;
   phone?: string;
