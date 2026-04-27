@@ -12,11 +12,15 @@ import {
   Briefcase,
   CheckCircle2,
   CircleDollarSign,
+  Clock3,
   Eye,
   FileWarning,
   FolderKanban,
+  Inbox,
   LayoutDashboard,
   Loader2,
+  Mail,
+  MessageSquareText,
   RefreshCcw,
   ShieldAlert,
   Sparkles,
@@ -46,6 +50,18 @@ type DashboardSummary = {
   totalRevenueThisYear?: number;
   activeCampaigns?: number;
   completedCampaigns?: number;
+
+  // Revenue Head dashboard summary
+  totalAssignedBrands?: number;
+  fullyManagedBrands?: number;
+  partiallyManagedBrands?: number;
+  totalEmployees?: number;
+  totalBME?: number;
+  totalIME?: number;
+  totalSDR?: number;
+  totalApplicants?: number;
+  totalApprovedApplicants?: number;
+  totalWorkingApplicants?: number;
 };
 
 type CampaignCreator = {
@@ -53,19 +69,24 @@ type CampaignCreator = {
   id?: string;
   name?: string;
   email?: string;
+  role?: string;
+  userModel?: string;
   adminRole?: string;
   label?: string;
 };
 
 type CampaignItem = {
   _id: string;
+  id?: string;
   campaignId?: string;
+  campaignsId?: string;
   brandId?: string;
   brandName?: string;
   brandPlanName?: string;
   campaignTitle?: string;
   name?: string;
   campaignName?: string;
+  productOrServiceName?: string;
   campaignType?: string;
   campaignCategory?: string;
   publishStatus?: string;
@@ -79,13 +100,27 @@ type CampaignItem = {
   applicantCount?: number;
   isActive?: number;
   isDraft?: number;
-  byAi?: number;
+  byAi?: number | boolean;
   startAt?: string;
   endAt?: string;
   startDate?: string | null;
   endDate?: string | null;
   createdAt?: string;
   updatedAt?: string;
+
+  // Revenue Head dashboard fields
+  brand?: BrandItem | any;
+  applicationSummary?: {
+    totalApplyRows?: number;
+    totalApplicants?: number;
+    totalApprovedApplicants?: number;
+    totalWorkingApplicants?: number;
+  };
+  applicants?: any[];
+  approvedApplicants?: any[];
+  workingApplicants?: any[];
+
+  createdBy?: CampaignCreator | null;
   createdByAdmin?: CampaignCreator | null;
 };
 
@@ -148,12 +183,14 @@ type InfluencerAppliedCampaignItem = {
   contractId?: string;
   startDate?: string;
   endDate?: string;
+  goal?: string;
   applicantCount?: number;
   isActive?: number;
 };
 
 type InfluencerItem = {
   _id: string;
+  id?: string;
   influencerId?: string;
   email?: string;
   name?: string;
@@ -173,6 +210,11 @@ type InfluencerCampaignLookup = Record<
     campaigns: InfluencerAppliedCampaignItem[];
     total: number;
     error?: string | null;
+    influencer?: {
+      influencerId?: string;
+      name?: string;
+      email?: string;
+    };
   }
 >;
 
@@ -187,6 +229,29 @@ type BrandSubscription = {
   status?: string;
   startedAt?: string;
   expiresAt?: string | null;
+};
+
+type MiniAdminItem = {
+  _id?: string;
+  adminId?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  proxyEmail?: string;
+  teamType?: string | null;
+};
+type EmployeesByRole = {
+  all: MiniAdminItem[];
+  bme: MiniAdminItem[];
+  ime: MiniAdminItem[];
+  sdr: MiniAdminItem[];
+};
+
+type AssignedPersons = {
+  revenueHead?: MiniAdminItem | null;
+  bme?: MiniAdminItem | null;
+  idm?: MiniAdminItem | null;
 };
 
 type BrandItem = {
@@ -204,8 +269,28 @@ type BrandItem = {
   subscription?: BrandSubscription;
   subscriptionExpired?: boolean;
   fullyManagedSubscription?: boolean;
+
+  // Revenue Head dashboard fields
+  assignmentId?: string;
+  assignmentStatus?: string;
+  assignedAt?: string | null;
+  assignedPersons?: AssignedPersons;
+  plan?: BrandSubscription | any;
+  isFullyManaged?: boolean;
+
   createdAt?: string;
   updatedAt?: string;
+};
+
+type RevenueHeadAssignedBrand = {
+  assignmentId?: string;
+  assignmentStatus?: string;
+  assignedAt?: string | null;
+  updatedAt?: string | null;
+  isFullyManaged?: boolean;
+  assignedPersons?: AssignedPersons;
+  plan?: BrandSubscription | any;
+  brand?: BrandItem;
 };
 
 type ApiMeta = {
@@ -217,6 +302,91 @@ type ApiMeta = {
   pages?: number;
 };
 
+type DashboardInfluencerCampaignResult = {
+  success?: boolean;
+  page?: number;
+  limit?: number;
+  total?: number;
+  pages?: number;
+  totalPages?: number;
+  count?: number;
+  campaigns?: InfluencerAppliedCampaignItem[];
+  influencer?: {
+    influencerId?: string;
+    name?: string;
+    email?: string;
+  };
+};
+
+type DashboardApiData = {
+  roleDashboard?: "super_admin" | "revenue_head" | string;
+  revenueHead?: MiniAdminItem | null;
+
+  summary?: DashboardSummary;
+
+  brands?: {
+    page?: number;
+    limit?: number;
+    total?: number;
+    totalPages?: number;
+    sortBy?: string;
+    sortOrder?: string;
+    brands?: BrandItem[];
+  } | any;
+
+  influencers?: {
+    success?: boolean;
+    page?: number;
+    limit?: number;
+    total?: number;
+    pages?: number;
+    count?: number;
+    influencers?: InfluencerItem[];
+  } | any;
+
+  campaigns?: {
+    page?: number;
+    limit?: number;
+    total?: number;
+    totalPages?: number;
+    status?: string | number;
+    sortBy?: string;
+    sortOrder?: string;
+    campaigns?: CampaignItem[];
+  } | any;
+
+
+
+  disputes?: {
+    success?: boolean;
+    page?: number;
+    limit?: number;
+    total?: number;
+    totalPages?: number;
+    count?: number;
+    disputes?: DisputeItem[];
+  } | any;
+
+  influencerCampaigns?: {
+    success?: boolean;
+    influencerIds?: string[];
+    totalInfluencers?: number;
+    count?: number;
+    results?: DashboardInfluencerCampaignResult[];
+  } | any;
+
+  assignedBrands?: RevenueHeadAssignedBrand[];
+  employees?: {
+    all?: MiniAdminItem[];
+    bme?: MiniAdminItem[];
+    ime?: MiniAdminItem[];
+    sdr?: MiniAdminItem[];
+  };
+
+  appliedCampaignsByInfluencer?: any;
+  influencerAppliedCampaigns?: any;
+};
+
 type DashboardApiResponse = {
   success?: boolean;
   role?: AdminRole;
@@ -225,17 +395,6 @@ type DashboardApiResponse = {
     role?: AdminRole;
     dashboard?: DashboardApiData;
   };
-};
-
-type DashboardApiData = {
-  summary?: DashboardSummary;
-  brands?: any;
-  influencers?: any;
-  campaigns?: any;
-  disputes?: any;
-  influencerCampaigns?: any;
-  appliedCampaignsByInfluencer?: any;
-  influencerAppliedCampaigns?: any;
 };
 
 type DashboardState = {
@@ -250,6 +409,9 @@ type DashboardState = {
   influencerCampaigns: InfluencerCampaignLookup;
   brands: BrandItem[];
   brandMeta: ApiMeta;
+  employees: EmployeesByRole;
+  reviewQueue: ReviewQueueItem[];
+  reviewQueueMeta: ApiMeta;
 };
 
 type SectionErrorMap = {
@@ -258,6 +420,7 @@ type SectionErrorMap = {
   disputes?: string | null;
   influencers?: string | null;
   brands?: string | null;
+  reviewQueue?: string | null;
 };
 
 type SafeResult<T> = {
@@ -294,9 +457,40 @@ type DashboardTableRow = {
   cells: Array<string | number | React.ReactNode>;
 };
 
+type ReviewQueueItem = {
+  _id?: string;
+  id?: string;
+  threadId?: string;
+  messageId?: string;
+  subject?: string;
+  snippet?: string;
+  preview?: string;
+  bodyPreview?: string;
+  text?: string;
+  message?: string;
+  from?: string | {
+    name?: string;
+    email?: string;
+  };
+  sender?: string;
+  fromName?: string;
+  fromEmail?: string;
+  email?: string;
+  brandName?: string;
+  campaignName?: string;
+  status?: string;
+  receivedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  displayUrl?: string;
+  url?: string;
+};
+
 const API = {
   me: "/admins/me",
   dashboard: "/dash/dashboard",
+  revenueHeadDetails: "/dash/revenueheaddetails",
+  reviewQueue: "/outreach/replies/pending",
 };
 
 const DASHBOARD_POST_BODY = {};
@@ -306,6 +500,7 @@ const CAMPAIGN_VIEW_BASE = "/admin/campaigns/view";
 const DISPUTES_ROUTE = "/admin/disputes";
 const INFLUENCERS_ROUTE = "/admin/influencers";
 const BRANDS_ROUTE = "/admin/brands";
+const QUEUE_ROUTE = "/admin/crm/review-queue";
 
 const MAIN_ADMIN = {
   userId: "69b007bb8e53408b168a8371",
@@ -376,7 +571,7 @@ function extractMeta(payload: any): ApiMeta {
     page: source.page,
     limit: source.limit,
     total: source.total,
-    totalPages: source.totalPages,
+    totalPages: source.totalPages || source.pages,
     count: source.count,
     pages: source.pages,
   };
@@ -437,13 +632,140 @@ async function safePost<T = any>(
   }
 }
 
-function getDashboardFromResponse(payload: any): DashboardApiData {
-  return (
+function mapRevenueHeadDetailsToDashboard(payload: any): DashboardApiData {
+  const source = payload?.data?.data || payload?.data || payload || {};
+
+  const assignedBrands = extractArray<RevenueHeadAssignedBrand>(source, [
+    "assignedBrands",
+  ]);
+
+  const campaigns = extractArray<CampaignItem>(source, ["campaigns"]);
+
+  const brands = assignedBrands.map((item) => {
+    const brand = item.brand || ({} as BrandItem);
+
+    return {
+      ...brand,
+
+      _id: String(brand._id || brand.brandId || item.assignmentId || ""),
+      brandId: String(brand.brandId || brand._id || item.assignmentId || ""),
+      brandName: brand.brandName || brand.name || "Unnamed Brand",
+
+      assignmentId: item.assignmentId,
+      assignmentStatus: item.assignmentStatus,
+      assignedAt: item.assignedAt,
+      assignedPersons: item.assignedPersons,
+
+      plan: item.plan,
+      planName: item.plan?.planName || brand.planName || "free",
+
+      isFullyManaged: Boolean(item.isFullyManaged),
+      fullyManagedSubscription: Boolean(item.isFullyManaged),
+    };
+  });
+
+  const activeCampaigns = campaigns.filter((campaign) => {
+    return (
+      Number(campaign.isActive || 0) === 1 ||
+      String(campaign.campaignStatus || campaign.status || "")
+        .toLowerCase()
+        .includes("active")
+    );
+  });
+
+  const completedCampaigns = campaigns.filter((campaign) => {
+    return String(campaign.campaignStatus || campaign.status || "")
+      .toLowerCase()
+      .includes("completed");
+  });
+
+  return {
+    roleDashboard: "revenue_head",
+    revenueHead: source.revenueHead || null,
+
+    summary: {
+      totalBrands: brands.length,
+      totalInfluencers: 0,
+      totalCampaigns: campaigns.length,
+      totalDisputes: 0,
+      activeCampaigns: activeCampaigns.length,
+      completedCampaigns: completedCampaigns.length,
+      totalRevenueThisMonth: 0,
+      totalRevenueThisQuarter: 0,
+      totalRevenueThisYear: 0,
+      ...(source.summary || {}),
+    },
+
+    brands: {
+      page: 1,
+      limit: brands.length,
+      total: brands.length,
+      totalPages: 1,
+      brands,
+    },
+
+    influencers: {
+      success: true,
+      page: 1,
+      limit: 0,
+      total: 0,
+      pages: 1,
+      count: 0,
+      influencers: [],
+    },
+
+    campaigns: {
+      page: 1,
+      limit: campaigns.length,
+      total: campaigns.length,
+      totalPages: 1,
+      campaigns,
+    },
+
+    disputes: {
+      page: 1,
+      limit: 0,
+      total: 0,
+      totalPages: 1,
+      disputes: [],
+    },
+
+    influencerCampaigns: {
+      success: true,
+      influencerIds: [],
+      totalInfluencers: 0,
+      count: 0,
+      results: [],
+    },
+
+    assignedBrands,
+    employees: source.employees || {
+      all: [],
+      bme: [],
+      ime: [],
+      sdr: [],
+    },
+  };
+}
+
+function getDashboardFromResponse(
+  payload: any,
+  role?: AdminRole
+): DashboardApiData {
+  const dashboard =
     payload?.dashboard ||
     payload?.data?.dashboard ||
-    payload?.data?.data?.dashboard ||
-    {}
-  );
+    payload?.data?.data?.dashboard;
+
+  if (dashboard) {
+    return dashboard;
+  }
+
+  if (role === "revenue_head") {
+    return mapRevenueHeadDetailsToDashboard(payload);
+  }
+
+  return {};
 }
 
 function getInfluencerCampaignLookupFromDashboard(
@@ -452,72 +774,76 @@ function getInfluencerCampaignLookupFromDashboard(
 ): InfluencerCampaignLookup {
   const lookup: InfluencerCampaignLookup = {};
 
+  const resultRows = extractArray<DashboardInfluencerCampaignResult>(
+    dashboard.influencerCampaigns,
+    ["results"]
+  );
+
+  resultRows.forEach((row) => {
+    const influencerId =
+      row.influencer?.influencerId ||
+      (row as any).influencerId ||
+      (row as any)._id ||
+      (row as any).id;
+
+    const campaigns = extractArray<InfluencerAppliedCampaignItem>(row, [
+      "campaigns",
+      "appliedCampaigns",
+    ]);
+
+    const entry = {
+      campaigns,
+      total: Number(row.total ?? row.count ?? campaigns.length),
+      error: null,
+      influencer: row.influencer,
+    };
+
+    setInfluencerLookupEntry(
+      lookup,
+      [
+        influencerId,
+        row.influencer?.influencerId,
+        row.influencer?.email,
+        row.influencer?.name,
+      ],
+      entry
+    );
+  });
+
   influencers.forEach((influencer) => {
-    const influencerId = getInfluencerId(influencer);
+    const existingEntry = getInfluencerLookupEntry(influencer, lookup);
+
+    if (existingEntry) {
+      setInfluencerLookupEntry(
+        lookup,
+        getInfluencerLookupKeys(influencer),
+        existingEntry
+      );
+
+      return;
+    }
+
     const campaigns = extractArray<InfluencerAppliedCampaignItem>(
       influencer.appliedCampaigns || influencer.campaigns,
       ["campaigns", "appliedCampaigns"]
     );
 
-    if (campaigns.length) {
-      lookup[influencerId] = {
-        campaigns,
-        total: campaigns.length,
-        error: null,
-      };
-    }
-  });
+    const entry = {
+      campaigns,
+      total: campaigns.length,
+      error: null,
+      influencer: {
+        influencerId: influencer.influencerId || influencer.id || influencer._id,
+        name: influencer.name,
+        email: influencer.email,
+      },
+    };
 
-  const candidates = [
-    dashboard.influencerCampaigns,
-    dashboard.appliedCampaignsByInfluencer,
-    dashboard.influencerAppliedCampaigns,
-    dashboard.influencers?.influencerCampaigns,
-    dashboard.influencers?.appliedCampaignsByInfluencer,
-    dashboard.influencers?.campaignsByInfluencer,
-  ].filter(Boolean);
-
-  candidates.forEach((candidate) => {
-    if (Array.isArray(candidate)) {
-      candidate.forEach((item: any) => {
-        const influencerId =
-          item.influencerId ||
-          item._id ||
-          item.id ||
-          item.influencer?._id ||
-          item.influencer?.influencerId;
-
-        if (!influencerId) return;
-
-        const campaigns = extractArray<InfluencerAppliedCampaignItem>(item, [
-          "campaigns",
-          "appliedCampaigns",
-        ]);
-
-        lookup[String(influencerId)] = {
-          campaigns,
-          total: Number(item.total || item.count || campaigns.length),
-          error: null,
-        };
-      });
-
-      return;
-    }
-
-    if (candidate && typeof candidate === "object") {
-      Object.entries(candidate).forEach(([key, value]: [string, any]) => {
-        const campaigns = extractArray<InfluencerAppliedCampaignItem>(value, [
-          "campaigns",
-          "appliedCampaigns",
-        ]);
-
-        lookup[key] = {
-          campaigns,
-          total: Number(value?.total || value?.count || campaigns.length),
-          error: value?.error || null,
-        };
-      });
-    }
+    setInfluencerLookupEntry(
+      lookup,
+      getInfluencerLookupKeys(influencer),
+      entry
+    );
   });
 
   return lookup;
@@ -590,9 +916,9 @@ function getCampaignTitle(campaign: CampaignItem) {
 function getCampaignBudgetValue(campaign: CampaignItem) {
   return Number(
     campaign.campaignBudget ||
-      campaign.budget ||
-      campaign.influencerBudget ||
-      0
+    campaign.budget ||
+    campaign.influencerBudget ||
+    0
   );
 }
 
@@ -635,17 +961,21 @@ function isBrandFullyManaged(campaign: CampaignItem) {
 }
 
 function isAdminManagedCampaign(campaign: CampaignItem) {
-  const creator = campaign.createdByAdmin;
+  const creator = campaign.createdByAdmin || campaign.createdBy;
   if (!creator) return false;
 
   const creatorUserId = String(creator.userId || creator.id || "");
   const creatorEmail = String(creator.email || "").toLowerCase();
-  const creatorRole = String(creator.adminRole || "").toLowerCase();
+  const creatorRole = String(
+    creator.adminRole || creator.role || ""
+  ).toLowerCase();
 
   return (
-    creatorUserId === MAIN_ADMIN.userId &&
-    creatorEmail === MAIN_ADMIN.email &&
-    creatorRole === MAIN_ADMIN.role
+    creatorUserId === MAIN_ADMIN.userId ||
+    creatorEmail === MAIN_ADMIN.email ||
+    creatorRole === MAIN_ADMIN.role ||
+    creatorRole === "admin" ||
+    creatorRole === "super_admin"
   );
 }
 
@@ -656,7 +986,118 @@ function getManagementType(campaign: CampaignItem) {
 }
 
 function getInfluencerId(influencer: InfluencerItem) {
-  return influencer.influencerId || influencer._id;
+  return (
+    influencer.influencerId ||
+    influencer.id ||
+    influencer._id ||
+    influencer.email ||
+    ""
+  );
+}
+
+function normalizeLookupKey(value?: string | null) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getInfluencerLookupKeys(influencer: InfluencerItem) {
+  return [
+    influencer.influencerId,
+    influencer.id,
+    influencer._id,
+    influencer.email,
+    influencer.name,
+  ]
+    .filter(Boolean)
+    .map((item) => String(item));
+}
+
+function setInfluencerLookupEntry(
+  lookup: InfluencerCampaignLookup,
+  keys: Array<string | undefined | null>,
+  entry: InfluencerCampaignLookup[string]
+) {
+  keys.filter(Boolean).forEach((key) => {
+    const rawKey = String(key);
+    const normalizedKey = normalizeLookupKey(rawKey);
+
+    lookup[rawKey] = entry;
+    lookup[normalizedKey] = entry;
+  });
+}
+
+function getInfluencerLookupEntry(
+  influencer: InfluencerItem,
+  lookup: InfluencerCampaignLookup
+) {
+  const keys = getInfluencerLookupKeys(influencer);
+
+  for (const key of keys) {
+    const direct = lookup[key];
+    if (direct) return direct;
+
+    const normalized = lookup[normalizeLookupKey(key)];
+    if (normalized) return normalized;
+  }
+
+  const influencerEmail = normalizeLookupKey(influencer.email);
+  const influencerName = normalizeLookupKey(influencer.name);
+
+  return (
+    Object.values(lookup).find((entry) => {
+      const entryEmail = normalizeLookupKey(entry.influencer?.email);
+      const entryName = normalizeLookupKey(entry.influencer?.name);
+
+      return (
+        (influencerEmail && entryEmail && influencerEmail === entryEmail) ||
+        (influencerName && entryName && influencerName === entryName)
+      );
+    }) || null
+  );
+}
+function mergeInfluencersWithCampaignResults(
+  influencers: InfluencerItem[],
+  dashboard: DashboardApiData
+): InfluencerItem[] {
+  const merged = [...influencers];
+
+  const resultRows = extractArray<DashboardInfluencerCampaignResult>(
+    dashboard.influencerCampaigns,
+    ["results"]
+  );
+
+  resultRows.forEach((row, index) => {
+    const info = row.influencer;
+
+    if (!info?.influencerId && !info?.email) return;
+
+    const alreadyExists = merged.some((influencer) => {
+      const influencerKeys = getInfluencerLookupKeys(influencer).map(
+        normalizeLookupKey
+      );
+
+      return (
+        (info.influencerId &&
+          influencerKeys.includes(normalizeLookupKey(info.influencerId))) ||
+        (info.email &&
+          normalizeLookupKey(influencer.email) === normalizeLookupKey(info.email))
+      );
+    });
+
+    if (alreadyExists) return;
+
+    merged.push({
+      _id:
+        info.influencerId ||
+        info.email ||
+        `influencer-campaign-result-${index}`,
+      influencerId: info.influencerId,
+      name: info.name,
+      email: info.email,
+      appliedCampaigns: row.campaigns || [],
+    });
+  });
+
+  return merged;
 }
 
 function getInfluencerDate(influencer: InfluencerItem) {
@@ -672,8 +1113,8 @@ function isInfluencerOnboarded(influencer: InfluencerItem) {
 
   return Boolean(
     onboarding?.page1Done &&
-      onboarding?.page2Done &&
-      onboarding?.page3Done
+    onboarding?.page2Done &&
+    onboarding?.page3Done
   );
 }
 
@@ -691,10 +1132,9 @@ function getInfluencerAppliedCampaignTotal(
   influencer: InfluencerItem,
   lookup: InfluencerCampaignLookup
 ) {
-  const influencerId = getInfluencerId(influencer);
-  const item = lookup[influencerId];
+  const item = getInfluencerLookupEntry(influencer, lookup);
 
-  return Number(item?.total || item?.campaigns?.length || 0);
+  return Number(item?.total ?? item?.campaigns?.length ?? 0);
 }
 
 function getBrandId(brand: BrandItem) {
@@ -1016,11 +1456,10 @@ function getActivityItems(
 ): ActivityItem[] {
   const campaignActivities = campaigns.slice(0, 3).map((campaign) => ({
     id: `campaign-${campaign._id}`,
-    title: `${getCampaignTitle(campaign)} ${
-      isAdminManagedCampaign(campaign)
-        ? "created by Main Admin"
-        : "listed by brand"
-    }`,
+    title: `${getCampaignTitle(campaign)} ${isAdminManagedCampaign(campaign)
+      ? "created by Main Admin"
+      : "listed by brand"
+      }`,
     subtitle: `${campaign.brandName || "Unknown brand"} • ${getManagementType(
       campaign
     )}`,
@@ -1047,6 +1486,70 @@ function getActivityItems(
     .slice(0, 6);
 }
 
+
+function canViewReviewQueue(role?: AdminRole | null) {
+  return role === "super_admin" || role === "revenue_head";
+}
+
+function getReviewQueueId(item: ReviewQueueItem, index: number) {
+  return (
+    item._id ||
+    item.id ||
+    item.threadId ||
+    item.messageId ||
+    `${item.fromEmail || item.email || "review"}-${index}`
+  );
+}
+
+function getReviewQueueSenderName(item: ReviewQueueItem) {
+  if (typeof item.from === "object" && item.from?.name) {
+    return item.from.name;
+  }
+
+  return (
+    item.fromName ||
+    item.sender ||
+    item.brandName ||
+    item.campaignName ||
+    "Unknown Sender"
+  );
+}
+
+function getReviewQueueSenderEmail(item: ReviewQueueItem) {
+  if (typeof item.from === "object" && item.from?.email) {
+    return item.from.email;
+  }
+
+  if (typeof item.from === "string" && item.from.includes("@")) {
+    return item.from;
+  }
+
+  return item.fromEmail || item.email || "";
+}
+
+function getReviewQueueSubject(item: ReviewQueueItem) {
+  return (
+    item.subject ||
+    item.campaignName ||
+    item.brandName ||
+    "New pending reply"
+  );
+}
+
+function getReviewQueuePreview(item: ReviewQueueItem) {
+  return (
+    item.snippet ||
+    item.preview ||
+    item.bodyPreview ||
+    item.text ||
+    item.message ||
+    "No message preview available."
+  );
+}
+
+function getReviewQueueTime(item: ReviewQueueItem) {
+  return item.receivedAt || item.createdAt || item.updatedAt || null;
+}
 function getStatusTone(status?: string) {
   const key = String(status || "").toLowerCase();
 
@@ -1106,13 +1609,21 @@ export default function AdminDashboardPage() {
     influencerCampaigns: {},
     brands: [],
     brandMeta: {},
+    employees: {
+      all: [],
+      bme: [],
+      ime: [],
+      sdr: [],
+    },
+    reviewQueue: [],
+    reviewQueueMeta: {},
   });
 
   const analytics = useMemo(() => {
     const campaigns = state.campaigns;
     const influencers = state.influencers;
     const brands = state.brands;
-
+    const employees = state.employees;
     const activeBrands = brands.filter(isBrandActiveAccount);
     const fullyManagedBrands = brands.filter(isFullyManagedBrandAccount);
     const freeBrands = brands.filter(
@@ -1246,7 +1757,7 @@ export default function AdminDashboardPage() {
       brandMonthGrowth,
       brandSignupTrend,
       recentBrands,
-
+      employees,
       influencers,
       activeInfluencers,
       pendingInfluencers,
@@ -1288,6 +1799,7 @@ export default function AdminDashboardPage() {
     state.influencers,
     state.influencerCampaigns,
     state.brands,
+    state.employees,
   ]);
 
   const visibleErrorCount = useMemo(() => {
@@ -1326,11 +1838,41 @@ export default function AdminDashboardPage() {
         router.replace("/admin/login");
         return;
       }
+      let reviewQueue: ReviewQueueItem[] = [];
+      let reviewQueueMeta: ApiMeta = {};
+      let reviewQueueError: string | null = null;
+
+      if (canViewReviewQueue(me.role)) {
+        const reviewQueueResult = await safeGet<any>(
+          API.reviewQueue,
+          "Review Queue"
+        );
+
+        if (reviewQueueResult.ok && reviewQueueResult.data) {
+          reviewQueue = extractArray<ReviewQueueItem>(reviewQueueResult.data, [
+            "replies",
+            "pendingReplies",
+            "items",
+            "results",
+            "queue",
+            "threads",
+            "data",
+          ]);
+
+          reviewQueueMeta = extractMeta(reviewQueueResult.data);
+        } else {
+          reviewQueueError =
+            reviewQueueResult.error || "Unable to load review queue";
+        }
+      }
+
+      const dashboardEndpoint =
+        me.role === "revenue_head" ? API.revenueHeadDetails : API.dashboard;
 
       const dashboardResult = await safePost<DashboardApiResponse>(
-        API.dashboard,
+        dashboardEndpoint,
         DASHBOARD_POST_BODY,
-        "Dashboard"
+        me.role === "revenue_head" ? "Revenue Head Dashboard" : "Dashboard"
       );
 
       if (!dashboardResult.ok || !dashboardResult.data) {
@@ -1350,18 +1892,41 @@ export default function AdminDashboardPage() {
         return;
       }
 
-      const dashboard = getDashboardFromResponse(dashboardResult.data);
+      const dashboard = getDashboardFromResponse(dashboardResult.data, me.role);
 
       const brands = extractArray<BrandItem>(dashboard.brands, ["brands"]);
-      const influencers = extractArray<InfluencerItem>(dashboard.influencers, [
+
+      const rawInfluencers = extractArray<InfluencerItem>(dashboard.influencers, [
         "influencers",
       ]);
+
+      const influencers = mergeInfluencersWithCampaignResults(
+        rawInfluencers,
+        dashboard
+      );
+
       const campaigns = extractArray<CampaignItem>(dashboard.campaigns, [
         "campaigns",
       ]);
+
       const disputes = extractArray<DisputeItem>(dashboard.disputes, [
         "disputes",
       ]);
+
+      const employees: EmployeesByRole = {
+        all: Array.isArray(dashboard.employees?.all)
+          ? dashboard.employees.all
+          : [],
+        bme: Array.isArray(dashboard.employees?.bme)
+          ? dashboard.employees.bme
+          : [],
+        ime: Array.isArray(dashboard.employees?.ime)
+          ? dashboard.employees.ime
+          : [],
+        sdr: Array.isArray(dashboard.employees?.sdr)
+          ? dashboard.employees.sdr
+          : [],
+      };
 
       const influencerCampaigns = getInfluencerCampaignLookupFromDashboard(
         dashboard,
@@ -1371,15 +1936,24 @@ export default function AdminDashboardPage() {
       setState({
         me,
         summary: dashboard.summary || {},
+
         brands,
         brandMeta: extractMeta(dashboard.brands),
+
         influencers,
         influencerMeta: extractMeta(dashboard.influencers),
         influencerCampaigns,
+
         campaigns,
         campaignMeta: extractMeta(dashboard.campaigns),
+
         disputes,
         disputeMeta: extractMeta(dashboard.disputes),
+
+        employees,
+
+        reviewQueue,
+        reviewQueueMeta,
       });
 
       setSectionErrors({
@@ -1388,6 +1962,7 @@ export default function AdminDashboardPage() {
         influencers: null,
         campaigns: null,
         disputes: null,
+        reviewQueue: reviewQueueError,
       });
     } catch (error: any) {
       setFatalError(error?.message || "Failed to load dashboard");
@@ -1461,18 +2036,16 @@ export default function AdminDashboardPage() {
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-                <span>CollabGlam</span>
-                <span>/</span>
-                <span className="text-slate-900">Super Admin Dashboard</span>
-              </div>
-
               <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 sm:text-[34px]">
-                Super Admin Dashboard
+                {titleCase(state.me?.role || "Admin")} Dashboard
               </h1>
 
               <p className="mt-2 max-w-3xl text-sm text-slate-500">
-                Brand, influencer, campaign, dispute, and platform activity analytics.
+                {state.me?.role === "revenue_head"
+                  ? "Assigned brands, team employees, campaign activity, and revenue head performance analytics."
+                  : state.me?.role === "super_admin"
+                    ? "Brand, influencer, campaign, dispute, and platform activity analytics."
+                    : "Role-based dashboard overview and activity analytics."}
               </p>
             </div>
 
@@ -1485,50 +2058,9 @@ export default function AdminDashboardPage() {
                 </span>
               ) : null}
 
-              <button
-                onClick={() => void loadDashboard("refresh")}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-              >
-                <RefreshCcw
-                  className={cn("h-4 w-4", refreshing && "animate-spin")}
-                />
-                Refresh
-              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <QuickAction
-              href={BRANDS_ROUTE}
-              icon={<LayoutDashboard className="h-4 w-4" />}
-              label="Manage Brands"
-            />
-            <QuickAction
-              href={INFLUENCERS_ROUTE}
-              icon={<Users className="h-4 w-4" />}
-              label="Verify Influencer"
-            />
-            <QuickAction
-              href={CAMPAIGNS_ROUTE}
-              icon={<FolderKanban className="h-4 w-4" />}
-              label="Approve Campaign"
-            />
-            <QuickAction
-              href="/admin/withdrawals"
-              icon={<WalletCards className="h-4 w-4" />}
-              label="Approve Withdrawal"
-            />
-            <QuickAction
-              href={DISPUTES_ROUTE}
-              icon={<ShieldAlert className="h-4 w-4" />}
-              label="Resolve Dispute"
-            />
-            <QuickAction
-              href="/admin/employees"
-              icon={<Briefcase className="h-4 w-4" />}
-              label="Add Employee"
-            />
-          </div>
         </section>
 
         <section className="flex flex-col gap-5">
@@ -1537,16 +2069,29 @@ export default function AdminDashboardPage() {
             subtitle="Brand signup, subscription, plan, and account health overview"
           />
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
             <MetricCard
               icon={<LayoutDashboard className="h-5 w-5" />}
-              label="Total Brands"
+              label={
+                state.me?.role === "revenue_head"
+                  ? "Assigned Brands"
+                  : "Total Brands"
+              }
               value={String(
-                state.summary.totalBrands ||
-                  state.brandMeta.total ||
+                state.me?.role === "revenue_head"
+                  ? state.summary.totalAssignedBrands ??
+                  state.summary.totalBrands ??
+                  state.brandMeta.total ??
+                  analytics.brands.length
+                  : state.summary.totalBrands ??
+                  state.brandMeta.total ??
                   analytics.brands.length
               )}
-              helper="All registered brands"
+              helper={
+                state.me?.role === "revenue_head"
+                  ? "Brands assigned to you"
+                  : "All registered brands"
+              }
               tone="info"
               href={BRANDS_ROUTE}
             />
@@ -1565,14 +2110,6 @@ export default function AdminDashboardPage() {
               value={analytics.brandMonthGrowth.label}
               helper="Compared with last month"
               tone="managed"
-            />
-
-            <MetricCard
-              icon={<Sparkles className="h-5 w-5" />}
-              label="Active Brands"
-              value={String(analytics.activeBrands.length)}
-              helper="Active brand accounts"
-              tone="success"
             />
 
             <MetricCard
@@ -1600,34 +2137,73 @@ export default function AdminDashboardPage() {
             />
           </div>
 
-          <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-            <Card
-              title="Brand Analytics"
-              subtitle="Brand signup, subscription, and plan overview"
-              action={
-                <Link
-                  href={BRANDS_ROUTE}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  View All
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              }
-              className="h-full"
-            >
-              {sectionErrors.brands ? (
-                <SectionWarning text={sectionErrors.brands} />
-              ) : (
-                <BrandAnalyticsCard
-                  total={analytics.brands.length}
-                  active={analytics.activeBrands.length}
-                  fullyManaged={analytics.fullyManagedBrands.length}
-                  free={analytics.freeBrands.length}
-                  paid={analytics.paidBrands.length}
-                  growth={analytics.brandMonthGrowth}
-                />
+          <div className="flex flex-col gap-5">
+            <div
+              className={cn(
+                "grid grid-cols-1 items-stretch gap-5",
+                canViewReviewQueue(state.me?.role)
+                  ? "xl:grid-cols-[0.95fr_1.05fr]"
+                  : "xl:grid-cols-1"
               )}
-            </Card>
+            >
+              <Card
+                title="Brand Analytics"
+                subtitle="Brand signup, subscription, and plan overview"
+                action={
+                  <Link
+                    href={BRANDS_ROUTE}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  >
+                    View All
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                }
+                className="h-full"
+              >
+                {sectionErrors.brands ? (
+                  <SectionWarning text={sectionErrors.brands} />
+                ) : (
+                  <BrandAnalyticsCard
+                    total={analytics.brands.length}
+                    active={analytics.activeBrands.length}
+                    fullyManaged={analytics.fullyManagedBrands.length}
+                    free={analytics.freeBrands.length}
+                    paid={analytics.paidBrands.length}
+                    growth={analytics.brandMonthGrowth}
+                  />
+                )}
+              </Card>
+
+              {canViewReviewQueue(state.me?.role) ? (
+                <Card
+                  title="Review Queue"
+                  subtitle="Pending outreach replies that need review"
+                  className="h-full"
+                  action={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
+                        <Mail className="h-3.5 w-3.5" />
+                        {state.reviewQueue.length} pending
+                      </span>
+
+                      <Link
+                        href={QUEUE_ROUTE}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                      >
+                        View All
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                  }
+                >
+                  {sectionErrors.reviewQueue ? (
+                    <SectionWarning text={sectionErrors.reviewQueue} />
+                  ) : (
+                    <ReviewQueueThreads items={state.reviewQueue} />
+                  )}
+                </Card>
+              ) : null}
+            </div>
 
             <Card
               title="Brand Signup Growth"
@@ -1668,148 +2244,133 @@ export default function AdminDashboardPage() {
             )}
           </Card>
         </section>
+        {state.me?.role !== "revenue_head" ? (
+          <section className="flex flex-col gap-5">
+            <SectionHeader
+              title="Influencer Data"
+              subtitle="Influencer signup, onboarding, and applied campaign analytics"
+            />
 
-        <section className="flex flex-col gap-5">
-          <SectionHeader
-            title="Influencer Data"
-            subtitle="Influencer signup, onboarding, and applied campaign analytics"
-          />
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <MetricCard
-              icon={<Users className="h-5 w-5" />}
-              label="Total Influencers"
-              value={String(
-                state.summary.totalInfluencers ||
-                  state.influencerMeta.total ||
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <MetricCard
+                icon={<Users className="h-5 w-5" />}
+                label="Total Influencers"
+                value={String(
+                  state.summary.totalInfluencers ??
+                  state.influencerMeta.total ??
                   analytics.influencers.length
-              )}
-              helper="All registered influencers"
-              tone="info"
-              href={INFLUENCERS_ROUTE}
-            />
+                )}
+                helper="All registered influencers"
+                tone="info"
+                href={INFLUENCERS_ROUTE}
+              />
 
-            <MetricCard
-              icon={<CheckCircle2 className="h-5 w-5" />}
-              label="This Month"
-              value={String(analytics.influencerMonthGrowth.current)}
-              helper="New influencer signups"
-              tone="success"
-            />
+              <MetricCard
+                icon={<CheckCircle2 className="h-5 w-5" />}
+                label="This Month"
+                value={String(analytics.influencerMonthGrowth.current)}
+                helper="New influencer signups"
+                tone="success"
+              />
 
-            <MetricCard
-              icon={<TrendingUp className="h-5 w-5" />}
-              label="Growth Rate"
-              value={analytics.influencerMonthGrowth.label}
-              helper="Compared with last month"
-              tone="managed"
-            />
+              <MetricCard
+                icon={<TrendingUp className="h-5 w-5" />}
+                label="Growth Rate"
+                value={analytics.influencerMonthGrowth.label}
+                helper="Compared with last month"
+                tone="managed"
+              />
 
-            <MetricCard
-              icon={<Sparkles className="h-5 w-5" />}
-              label="Onboarded"
-              value={String(analytics.activeInfluencers.length)}
-              helper="All onboarding steps done"
-              tone="success"
-            />
+              <MetricCard
+                icon={<Sparkles className="h-5 w-5" />}
+                label="Onboarded"
+                value={String(analytics.activeInfluencers.length)}
+                helper="All onboarding steps done"
+                tone="success"
+              />
 
-            <MetricCard
-              icon={<FileWarning className="h-5 w-5" />}
-              label="Pending Influencers"
-              value={String(analytics.pendingInfluencers.length)}
-              helper="Onboarding incomplete"
-              tone="danger"
-            />
-          </div>
+              <MetricCard
+                icon={<FileWarning className="h-5 w-5" />}
+                label="Pending Influencers"
+                value={String(analytics.pendingInfluencers.length)}
+                helper="Onboarding incomplete"
+                tone="danger"
+              />
+            </div>
 
-          <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-            <Card
-              title="Influencer Onboarding"
-              subtitle="Active means all onboarding steps are completed"
-              action={
-                <Link
-                  href={INFLUENCERS_ROUTE}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  View All
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              }
-              className="h-full"
-            >
-              {sectionErrors.influencers ? (
-                <SectionWarning text={sectionErrors.influencers} />
-              ) : (
-                <InfluencerOnboardingCard
-                  total={analytics.influencers.length}
-                  active={analytics.activeInfluencers.length}
-                  pending={analytics.pendingInfluencers.length}
-                  followers={analytics.totalInfluencerFollowers}
-                  appliedCampaigns={analytics.appliedCampaignTotal}
-                />
-              )}
-            </Card>
+            <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[0.85fr_1.15fr]">
+              <Card
+                title="Influencer Onboarding"
+                subtitle="Active means all onboarding steps are completed"
+                action={
+                  <Link
+                    href={INFLUENCERS_ROUTE}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  >
+                    View All
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                }
+                className="h-full"
+              >
+                {sectionErrors.influencers ? (
+                  <SectionWarning text={sectionErrors.influencers} />
+                ) : (
+                  <InfluencerOnboardingCard
+                    total={analytics.influencers.length}
+                    active={analytics.activeInfluencers.length}
+                    pending={analytics.pendingInfluencers.length}
+                    followers={analytics.totalInfluencerFollowers}
+                    appliedCampaigns={analytics.appliedCampaignTotal}
+                  />
+                )}
+              </Card>
 
-            <Card
-              title="Fully Onboarded Influencers"
-              subtitle="Monthly fully onboarded influencer count"
-              className="h-full"
-              bodyClassName="flex h-full flex-col"
-            >
-              {sectionErrors.influencers ? (
-                <SectionWarning text={sectionErrors.influencers} />
-              ) : (
-                <HoverBarChart
-                  data={analytics.fullyOnboardedMonthlyTrend}
-                  valueFormatter={(value) => `${value}`}
-                  valueLabel="Fully onboarded"
-                  secondary
-                />
-              )}
-            </Card>
-          </div>
+              <Card
+                title="Fully Onboarded Influencers"
+                subtitle="Monthly fully onboarded influencer count"
+                className="h-full"
+                bodyClassName="flex h-full flex-col"
+              >
+                {sectionErrors.influencers ? (
+                  <SectionWarning text={sectionErrors.influencers} />
+                ) : (
+                  <HoverBarChart
+                    data={analytics.fullyOnboardedMonthlyTrend}
+                    valueFormatter={(value) => `${value}`}
+                    valueLabel="Fully onboarded"
+                    secondary
+                  />
+                )}
+              </Card>
+            </div>
 
-          <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[0.95fr_1.05fr]">
-            <Card
-              title="Recently Signed Up"
-              subtitle="Latest 3 influencer registrations"
-              action={
-                <Link
-                  href={INFLUENCERS_ROUTE}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  View All
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              }
-              className="h-full"
-            >
-              {sectionErrors.influencers ? (
-                <SectionWarning text={sectionErrors.influencers} />
-              ) : (
-                <RecentInfluencerList
-                  influencers={analytics.recentSignedUpInfluencers}
-                />
-              )}
-            </Card>
-
-            <Card
-              title="Applied Campaigns by Influencer"
-              subtitle="Campaign applications fetched by influencer ID"
-              className="h-full"
-            >
-              {sectionErrors.influencers ? (
-                <SectionWarning text={sectionErrors.influencers} />
-              ) : (
-                <InfluencerAppliedCampaigns
-                  influencers={analytics.topInfluencers}
-                  lookup={state.influencerCampaigns}
-                />
-              )}
-            </Card>
-          </div>
-        </section>
-
+            <div className="grid grid-cols-1 items-stretch gap-5 ">
+              <Card
+                title="Recently Signed Up"
+                subtitle="Latest 3 influencer registrations"
+                action={
+                  <Link
+                    href={INFLUENCERS_ROUTE}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  >
+                    View All
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                }
+                className="h-full"
+              >
+                {sectionErrors.influencers ? (
+                  <SectionWarning text={sectionErrors.influencers} />
+                ) : (
+                  <RecentInfluencerList
+                    influencers={analytics.recentSignedUpInfluencers}
+                  />
+                )}
+              </Card>
+            </div>
+          </section>
+        ) : null}
         <section className="flex flex-col gap-5">
           <SectionHeader
             title="Campaign Data"
@@ -1821,7 +2382,7 @@ export default function AdminDashboardPage() {
               icon={<FolderKanban className="h-5 w-5" />}
               label="Active Campaigns"
               value={String(
-                state.summary.activeCampaigns || analytics.activeCampaigns.length
+                state.summary.activeCampaigns ?? analytics.activeCampaigns.length
               )}
               helper="Current active listings"
               tone="success"
@@ -1875,11 +2436,10 @@ export default function AdminDashboardPage() {
               icon={<FileWarning className="h-5 w-5" />}
               label="Open Disputes"
               value={String(analytics.openDisputes.length)}
-              helper={`${
-                state.summary.totalDisputes ||
-                state.disputeMeta.total ||
+              helper={`${state.summary.totalDisputes ??
+                state.disputeMeta.total ??
                 state.disputes.length
-              } total disputes`}
+                } total disputes`}
               tone="danger"
               href={DISPUTES_ROUTE}
             />
@@ -1904,7 +2464,7 @@ export default function AdminDashboardPage() {
                   <HealthStat
                     label="Active"
                     value={
-                      state.summary.activeCampaigns ||
+                      state.summary.activeCampaigns ??
                       analytics.activeCampaigns.length
                     }
                     accent="text-emerald-700"
@@ -2022,7 +2582,7 @@ export default function AdminDashboardPage() {
                 average={
                   analytics.fullyManagedCampaigns.length
                     ? analytics.fullyManagedBudget /
-                      analytics.fullyManagedCampaigns.length
+                    analytics.fullyManagedCampaigns.length
                     : 0
                 }
                 applicants={analytics.fullyManagedCampaigns.reduce(
@@ -2190,6 +2750,81 @@ export default function AdminDashboardPage() {
             )}
           </Card>
         </section>
+
+        {state.me?.role === "revenue_head" ? (
+          <section className="flex flex-col gap-5">
+            <SectionHeader
+              title="Employees Under You"
+              subtitle="BME, IME, and SDR employees working under this Revenue Head"
+            />
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                icon={<Briefcase className="h-5 w-5" />}
+                label="Total Employees"
+                value={String(
+                  state.employees.all.filter(
+                    (employee) => String(employee.status || "").toLowerCase() === "active"
+                  ).length
+                )}
+                helper="Employees under you"
+                tone="info"
+              />
+
+              <MetricCard
+                icon={<Users className="h-5 w-5" />}
+                label="BME"
+                value={String(
+                  state.employees.bme.filter(
+                    (employee) => String(employee.status || "").toLowerCase() === "active"
+                  ).length
+                )}
+                helper="Brand management executives"
+                tone="managed"
+              />
+
+              <MetricCard
+                icon={<Users className="h-5 w-5" />}
+                label="IME"
+                value={String(
+                  state.employees.ime.filter(
+                    (employee) => String(employee.status || "").toLowerCase() === "active"
+                  ).length
+                )}
+                helper="Influencer management executives"
+                tone="success"
+              />
+
+              <MetricCard
+                icon={<Users className="h-5 w-5" />}
+                label="SDR"
+                value={String(
+                  state.employees.sdr.filter(
+                    (employee) => String(employee.status || "").toLowerCase() === "active"
+                  ).length
+                )}
+                helper="Sales development representatives"
+                tone="default"
+              />
+            </div>
+
+            <Card
+              title="Employee List"
+              subtitle="All employees created by or assigned under this Revenue Head"
+              action={
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600">
+                  {state.employees.all.filter(
+                    (employee) => String(employee.status || "").toLowerCase() === "active"
+                  ).length} employees
+                </span>
+              }
+            >
+              <EmployeeListTable employees={state.employees.all} />
+            </Card>
+          </section>
+        ) : null}
+
+
       </div>
     </div>
   );
@@ -2289,7 +2924,7 @@ function MetricCard({
               growth.direction === "up" && "bg-emerald-50 text-emerald-700",
               growth.direction === "down" && "bg-rose-50 text-rose-700",
               (growth.direction === "flat" || growth.direction === "new") &&
-                "bg-slate-100 text-slate-600"
+              "bg-slate-100 text-slate-600"
             )}
           >
             {growthIcon}
@@ -2500,6 +3135,66 @@ function BrandAnalyticsCard({
   );
 }
 
+function EmployeeListTable({ employees }: { employees: MiniAdminItem[] }) {
+  const activeEmployees = employees.filter((employee) => {
+    return String(employee.status || "").toLowerCase() === "active";
+  });
+
+  if (!activeEmployees.length) {
+    return <EmptyText text="No active employees found under this Revenue Head." />;
+  }
+
+  return (
+    <SimpleTable
+      columns={[
+        "Employee",
+        "Email",
+        "Role",
+        "Status",
+        "Team Type",
+        "Proxy Email",
+      ]}
+      rows={activeEmployees.map((employee) => [
+        <div
+          key={`${employee.adminId || employee._id}-profile`}
+          className="flex items-center gap-3"
+        >
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+            {(employee.name || employee.email || "EM")
+              .slice(0, 2)
+              .toUpperCase()}
+          </div>
+
+          <div className="min-w-0">
+            <div className="truncate font-semibold text-slate-900">
+              {employee.name || "Unnamed Employee"}
+            </div>
+          </div>
+        </div>,
+
+        employee.email || "-",
+
+        <StatusBadge
+          key={`${employee.adminId || employee._id}-role`}
+          text={titleCase(employee.role || "-")}
+          neutral
+        />,
+
+        <StatusBadge
+          key={`${employee.adminId || employee._id}-status`}
+          text={titleCase(employee.status || "Pending")}
+        />,
+
+        titleCase(employee.teamType || "-"),
+
+        employee.proxyEmail || "-",
+      ])}
+      emptyText="No active employees found under this Revenue Head."
+      tableClassName="min-w-[980px]"
+    />
+  );
+}
+
 function BrandListTable({ brands }: { brands: BrandItem[] }) {
   if (!brands.length) {
     return <EmptyText text="No recent brand signups found." />;
@@ -2558,6 +3253,111 @@ function BrandListTable({ brands }: { brands: BrandItem[] }) {
       emptyText="No recent brand signups found."
       tableClassName="min-w-[1080px]"
     />
+  );
+}
+
+function ReviewQueueThreads({ items }: { items: ReviewQueueItem[] }) {
+  if (!items.length) {
+    return (
+      <div className="flex min-h-[360px] flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-3xl bg-white text-slate-500 shadow-sm ring-1 ring-slate-200">
+          <Inbox className="h-7 w-7" />
+        </div>
+
+        <div className="text-sm font-semibold text-slate-700 ">
+          Queue is empty.
+        </div>
+
+        <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">
+          New outreach replies waiting for review will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[560px] overflow-y-auto pr-1">
+      <div className="space-y-3">
+        {items.map((item, index) => {
+          const id = getReviewQueueId(item, index);
+          const senderName = getReviewQueueSenderName(item);
+          const senderEmail = getReviewQueueSenderEmail(item);
+          const subject = getReviewQueueSubject(item);
+          const preview = getReviewQueuePreview(item);
+          const time = getReviewQueueTime(item);
+          const href = item.displayUrl || item.url || "";
+
+          const content = (
+            <div className="group rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/20 hover:shadow-md">
+              <div className="flex items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-50 to-violet-50 text-sm font-bold text-blue-700 ring-1 ring-blue-100">
+                  {(senderName || senderEmail || "RQ")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-slate-950">
+                        {senderName}
+                      </div>
+
+                      <div className="mt-0.5 truncate text-xs font-medium text-slate-500">
+                        {senderEmail || item.brandName || item.campaignName || "-"}
+                      </div>
+                    </div>
+
+                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                      <Clock3 className="h-3 w-3" />
+                      {formatDateTime(time)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex items-start gap-2">
+                    <div className="mt-0.5 rounded-lg bg-blue-50 p-1.5 text-blue-700">
+                      <MessageSquareText className="h-3.5 w-3.5" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="line-clamp-1 text-sm font-semibold text-slate-900">
+                        {subject}
+                      </div>
+
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                        {preview}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {item.campaignName ? (
+                      <StatusBadge text={item.campaignName} neutral />
+                    ) : null}
+
+                    {item.brandName ? (
+                      <StatusBadge text={item.brandName} neutral />
+                    ) : null}
+
+                    <StatusBadge text={titleCase(item.status || "Pending")} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+
+          if (href) {
+            return (
+              <Link key={id} href={href}>
+                {content}
+              </Link>
+            );
+          }
+
+          return <div key={id}>{content}</div>;
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -2711,8 +3511,8 @@ function RecentInfluencerList({
                     <StatusBadge
                       text={titleCase(
                         influencer.primaryPlatform ||
-                          profile?.provider ||
-                          "Platform"
+                        profile?.provider ||
+                        "Platform"
                       )}
                       neutral
                     />
@@ -2752,7 +3552,7 @@ function InfluencerAppliedCampaigns({
       {influencers.map((influencer) => {
         const influencerId = getInfluencerId(influencer);
         const profile = getInfluencerPrimaryProfile(influencer);
-        const applied = lookup[influencerId];
+        const applied = getInfluencerLookupEntry(influencer, lookup);
         const campaigns = applied?.campaigns || [];
         const total = Number(applied?.total || campaigns.length || 0);
         const onboarded = isInfluencerOnboarded(influencer);
@@ -2791,8 +3591,8 @@ function InfluencerAppliedCampaigns({
                     <StatusBadge
                       text={titleCase(
                         influencer.primaryPlatform ||
-                          profile?.provider ||
-                          "Platform"
+                        profile?.provider ||
+                        "Platform"
                       )}
                       neutral
                     />
@@ -2816,9 +3616,8 @@ function InfluencerAppliedCampaigns({
                 campaigns.slice(0, 3).map((campaign) => (
                   <Link
                     key={campaign.campaignId || campaign._id}
-                    href={`/admin/campaigns/view?id=${
-                      campaign.campaignId || campaign._id
-                    }`}
+                    href={`/admin/campaigns/view?id=${campaign.campaignId || campaign._id
+                      }`}
                     className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-slate-300 hover:bg-white"
                   >
                     <div className="min-w-0">
@@ -2859,9 +3658,17 @@ function getChartMax(data: ChartDatum[]) {
 }
 
 function getChartTicks(max: number, count = 4) {
-  return Array.from({ length: count + 1 }, (_, index) => {
-    return Math.round((max / count) * index);
+  const safeMax = Math.max(Number(max || 0), 1);
+
+  if (safeMax <= count) {
+    return Array.from({ length: Math.floor(safeMax) + 1 }, (_, index) => index);
+  }
+
+  const ticks = Array.from({ length: count + 1 }, (_, index) => {
+    return Math.round((safeMax / count) * index);
   });
+
+  return Array.from(new Set([0, ...ticks, safeMax])).sort((a, b) => a - b);
 }
 
 function LineTrendChart({
@@ -2910,9 +3717,8 @@ function LineTrendChart({
 
   const areaPath =
     points.length > 0
-      ? `${linePath} L ${points[points.length - 1].x} ${
-          margin.top + plotHeight
-        } L ${points[0].x} ${margin.top + plotHeight} Z`
+      ? `${linePath} L ${points[points.length - 1].x} ${margin.top + plotHeight
+      } L ${points[0].x} ${margin.top + plotHeight} Z`
       : "";
 
   const hoveredPoint =
@@ -2936,11 +3742,11 @@ function LineTrendChart({
       ) : null}
 
       <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full">
-        {ticks.map((tick) => {
+        {ticks.map((tick, tickIndex) => {
           const y = getY(tick);
 
           return (
-            <g key={tick}>
+            <g key={`line-tick-${tickIndex}-${tick}`}>
               <line
                 x1={margin.left}
                 x2={width - margin.right}
@@ -2992,7 +3798,7 @@ function LineTrendChart({
         ) : null}
 
         {points.map((point, index) => (
-          <g key={point.label}>
+          <g key={`line-point-${index}-${point.label}`}>
             <circle cx={point.x} cy={point.y} r="5" fill="#7c3aed" />
             <circle
               cx={point.x}
@@ -3088,11 +3894,11 @@ function HoverBarChart({
       ) : null}
 
       <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full">
-        {ticks.map((tick) => {
+        {ticks.map((tick, tickIndex) => {
           const y = getY(tick);
 
           return (
-            <g key={tick}>
+            <g key={`bar-tick-${tickIndex}-${tick}`}>
               <line
                 x1={margin.left}
                 x2={width - margin.right}
@@ -3131,7 +3937,7 @@ function HoverBarChart({
         />
 
         {bars.map((bar, index) => (
-          <g key={bar.label}>
+          <g key={`bar-${index}-${bar.label}`}>
             <defs>
               <linearGradient
                 id={`bar-gradient-${index}`}
@@ -3428,14 +4234,14 @@ function GrowthPill({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold",
         growth.direction === "up" &&
-          (tone === "managed"
-            ? "bg-violet-600 text-white"
-            : "bg-blue-600 text-white"),
+        (tone === "managed"
+          ? "bg-violet-600 text-white"
+          : "bg-blue-600 text-white"),
         growth.direction === "down" && "bg-rose-600 text-white",
         (growth.direction === "flat" || growth.direction === "new") &&
-          (tone === "managed"
-            ? "bg-violet-600 text-white"
-            : "bg-blue-600 text-white")
+        (tone === "managed"
+          ? "bg-violet-600 text-white"
+          : "bg-blue-600 text-white")
       )}
     >
       {icon}
@@ -3481,24 +4287,24 @@ function ActivityRow({
 
   const toneClass = isCampaign
     ? {
-        icon: "bg-blue-50 text-blue-700 ring-blue-100",
-        line: "from-blue-500 to-blue-300",
-        badge: "bg-blue-50 text-blue-700 ring-blue-100",
-        label: "Campaign",
-      }
+      icon: "bg-blue-50 text-blue-700 ring-blue-100",
+      line: "from-blue-500 to-blue-300",
+      badge: "bg-blue-50 text-blue-700 ring-blue-100",
+      label: "Campaign",
+    }
     : isDispute
       ? {
-          icon: "bg-rose-50 text-rose-700 ring-rose-100",
-          line: "from-rose-500 to-orange-300",
-          badge: "bg-rose-50 text-rose-700 ring-rose-100",
-          label: "Dispute",
-        }
+        icon: "bg-rose-50 text-rose-700 ring-rose-100",
+        line: "from-rose-500 to-orange-300",
+        badge: "bg-rose-50 text-rose-700 ring-rose-100",
+        label: "Dispute",
+      }
       : {
-          icon: "bg-violet-50 text-violet-700 ring-violet-100",
-          line: "from-violet-500 to-purple-300",
-          badge: "bg-violet-50 text-violet-700 ring-violet-100",
-          label: "Budget",
-        };
+        icon: "bg-violet-50 text-violet-700 ring-violet-100",
+        line: "from-violet-500 to-purple-300",
+        badge: "bg-violet-50 text-violet-700 ring-violet-100",
+        label: "Budget",
+      };
 
   return (
     <Link
@@ -3652,4 +4458,4 @@ function SimpleTable({
       className="py-1"
     />
   );
-}
+} 
