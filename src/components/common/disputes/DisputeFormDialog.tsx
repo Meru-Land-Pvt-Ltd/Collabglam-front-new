@@ -850,7 +850,6 @@ export function DisputeFormDialog({
             />
 
             <ProductCardUpload
-              showLabel={false}
               files={values.attachments}
               onFilesChange={(files) => updateField("attachments", files)}
               title="Upload Attachments"
