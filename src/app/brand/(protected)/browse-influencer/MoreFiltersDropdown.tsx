@@ -1,18 +1,33 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import React, {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { flushSync } from "react-dom";
+import { Loader2 } from "lucide-react";
+import { GenderFemale, GenderMale } from "@phosphor-icons/react/dist/ssr";
+import type { FilterState } from "./filters";
 import {
-  InstagramLogo,
-  TiktokLogo,
-  YoutubeLogo,
-} from "@phosphor-icons/react";
-import type { FilterState, Platform } from "./filters";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
+
+type TierKey = "nano" | "micro" | "mid" | "macro" | "mega";
+type GenderKey = "all" | "male" | "female";
+type AgeKey = "18-24" | "25-34" | "35-44" | "45+";
+type SearchModeKey = "combined" | "standard" | "ai";
 
 interface MoreFiltersDropdownProps {
   open: boolean;
@@ -20,194 +35,148 @@ interface MoreFiltersDropdownProps {
   anchorRef: React.RefObject<HTMLDivElement | null>;
   filters: FilterState;
   updateFilter: (path: string, value: any) => void;
-  platforms: Platform[];
-  setPlatforms: (platforms: Platform[]) => void;
   onReset: () => void;
   onApply: () => void;
   loading?: boolean;
 }
 
-type SearchModeOption = "ai" | "standard" | "combined";
-type TierOption = "nano" | "micro" | "mini" | "macro" | null;
-type AgePreset = "18-24" | "25-34" | "35-44" | "45+" | null;
-type GenderPreset = "all" | "male" | "female";
-
-const PLATFORM_ORDER: Platform[] = ["instagram", "youtube", "tiktok"];
-
-const platformConfig: Record<
-  Platform,
-  { label: string; icon: React.ReactNode; accent: string }
-> = {
-  youtube: {
-    label: "YouTube",
-    icon: <YoutubeLogo size={16} weight="fill" />,
-    accent: "#FF3B30",
-  },
-  instagram: {
-    label: "Instagram",
-    icon: <InstagramLogo size={16} weight="fill" />,
-    accent: "#C13584",
-  },
-  tiktok: {
-    label: "TikTok",
-    icon: <TiktokLogo size={16} weight="fill" />,
-    accent: "#111111",
-  },
+type ApiCountry = {
+  _id: string;
+  countryName: string;
+  countryCode: string;
+  flag?: string;
 };
 
-const SEARCH_MODE_OPTIONS: Array<{ label: string; value: SearchModeOption }> = [
-  { label: "AI", value: "ai" },
-  { label: "Standard", value: "standard" },
-  { label: "Combined", value: "combined" },
-];
+const COUNTRY_API = "https://api.collabglam.com/country/getAll";
 
-const TIER_OPTIONS: Array<{ label: string; value: NonNullable<TierOption> }> = [
-  { label: "Micro", value: "micro" },
-  { label: "Mini", value: "mini" },
-  { label: "Macro", value: "macro" },
-  { label: "Nano", value: "nano" },
-];
+const AGE_OPTIONS: AgeKey[] = ["18-24", "25-34", "35-44", "45+"];
 
-const AGE_OPTIONS: Array<{ label: string; value: NonNullable<AgePreset> }> = [
-  { label: "18-24", value: "18-24" },
-  { label: "25-34", value: "25-34" },
-  { label: "35-44", value: "35-44" },
-  { label: "45+", value: "45+" },
-];
+const TIER_RANGES: Record<TierKey, { min: number; max?: number }> = {
+  nano: { min: 1000, max: 10000 },
+  micro: { min: 10000, max: 100000 },
+  mid: { min: 100000, max: 500000 },
+  macro: { min: 500000, max: 1000000 },
+  mega: { min: 1000000, max: undefined },
+};
 
-const GENDER_OPTIONS: Array<{ label: React.ReactNode; value: GenderPreset }> = [
-  { label: "All", value: "all" },
-  {
-    label: (
-      <span className="flex items-center gap-1">
-        Male <span className="text-[10px]">♂</span>
-      </span>
-    ),
-    value: "male",
-  },
-  {
-    label: (
-      <span className="flex items-center gap-1">
-        female <span className="text-[10px]">♀</span>
-      </span>
-    ),
-    value: "female",
-  },
-];
-
-function getTierRange(tier: TierOption): { min?: number; max?: number } {
-  switch (tier) {
-    case "nano":
-      return { min: 1000, max: 10000 };
-    case "micro":
-      return { min: 10000, max: 100000 };
-    case "mini":
-      return { min: 100000, max: 1000000 };
-    case "macro":
-      return { min: 1000000 };
-    default:
-      return {};
-  }
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") return {};
+  return value as Record<string, unknown>;
 }
 
-function getAgeRangeFromPreset(preset: AgePreset): { min?: number; max?: number } {
-  switch (preset) {
-    case "18-24":
-      return { min: 18, max: 24 };
-    case "25-34":
-      return { min: 25, max: 34 };
-    case "35-44":
-      return { min: 35, max: 44 };
-    case "45+":
-      return { min: 45, max: 65 };
-    default:
-      return {};
+function getSearchModeFromFilters(filters: FilterState): SearchModeKey {
+  const value = String((filters as any)?.search?.mode || "combined");
+
+  if (value === "ai" || value === "standard" || value === "combined") {
+    return value;
   }
+
+  return "combined";
 }
 
-function deriveAgePreset(filters: FilterState): AgePreset {
-  const min = filters.influencer.ageMin;
-  const max = filters.influencer.ageMax;
+function getTierFromFilters(filters: FilterState): TierKey | null {
+  const influencer = toRecord(filters.influencer as unknown);
+  const tier = String(influencer.tier || "");
+
+  if (
+    tier === "nano" ||
+    tier === "micro" ||
+    tier === "mid" ||
+    tier === "macro" ||
+    tier === "mega"
+  ) {
+    return tier;
+  }
+
+  return null;
+}
+
+function getAgeFromFilters(filters: FilterState): AgeKey | null {
+  const min = filters?.influencer?.ageMin;
+  const max = filters?.influencer?.ageMax;
 
   if (min === 18 && max === 24) return "18-24";
   if (min === 25 && max === 34) return "25-34";
   if (min === 35 && max === 44) return "35-44";
-  if (min === 45) return "45+";
+  if (min === 45 && (max == null || max >= 45)) return "45+";
 
   return null;
 }
 
-function deriveTierFromPlatforms(
+function getGenderFromFilters(filters: FilterState): GenderKey {
+  const value = filters?.influencer?.gender;
+  if (value === "MALE") return "male";
+  if (value === "FEMALE") return "female";
+  return "all";
+}
+
+function getCountryFromFilters(filters: FilterState) {
+  return String(filters?.audience?.country || "");
+}
+
+function platformFollowersMatchTier(filters: FilterState, tier: TierKey) {
+  const range = TIER_RANGES[tier];
+
+  return Object.values(filters.platform || {}).every((platformFilter) => {
+    return (
+      platformFilter?.followersMin === range.min &&
+      platformFilter?.followersMax === range.max
+    );
+  });
+}
+
+function clearPreviousTierRangeIfStillMatching(
   filters: FilterState,
-  selectedPlatforms: Platform[]
-): TierOption {
-  const firstPlatform = selectedPlatforms[0];
-  if (!firstPlatform) return null;
+  updateFilter: (path: string, value: any) => void
+) {
+  const previousTier = getTierFromFilters(filters);
 
-  const min = filters.platform[firstPlatform]?.followersMin;
-  const max = filters.platform[firstPlatform]?.followersMax;
+  if (!previousTier) return;
+  if (!platformFollowersMatchTier(filters, previousTier)) return;
 
-  if (min === 1000 && max === 10000) return "nano";
-  if (min === 10000 && max === 100000) return "micro";
-  if (min === 100000 && max === 1000000) return "mini";
-  if (min === 1000000 && (max == null || max === undefined)) return "macro";
-
-  return null;
+  Object.keys(filters.platform || {}).forEach((platformKey) => {
+    updateFilter(`platform.${platformKey}.followersMin`, undefined);
+    updateFilter(`platform.${platformKey}.followersMax`, undefined);
+  });
 }
 
-function PlatformIconChip({
-  platform,
-  selected,
-  onClick,
-}: {
-  platform: Platform;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const config = platformConfig[platform];
+const RowEl = ({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="w-full flex flex-row items-center justify-between gap-4">
+    <div className="shrink-0 text-[16px] font-semibold text-[#1A1A1A]">
+      {label}
+    </div>
+    <div className="min-w-0 flex-1 flex justify-end">
+      <div className="max-w-full overflow-x-auto scrollbar-none">
+        <div className="w-max">{children}</div>
+      </div>
+    </div>
+  </div>
+);
 
+function Toggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      title={config.label}
+      aria-pressed={checked}
+      onClick={() => onChange(!checked)}
       className={cn(
-        "inline-flex flex-1 h-7 items-center justify-center rounded-md border transition-all",
-        selected
-          ? "border-border bg-background text-foreground shadow-sm"
-          : "border-transparent bg-transparent text-muted-foreground hover:text-foreground"
+        "relative inline-flex h-[30px] w-[52px] items-center rounded-full transition-colors",
+        checked ? "bg-black" : "bg-[#E8E8E8]"
       )}
     >
-      {config.icon}
-    </button>
-  );
-}
-
-function RowLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[11px] font-medium text-[#1A1A1A]">{children}</div>
-  );
-}
-
-function SelectLikeInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <div className="relative w-full">
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="h-8 w-full rounded-[8px] border border-[#E5E5E5] bg-white px-2.5 pr-8 text-[11px] text-[#1A1A1A] outline-none placeholder:text-[#A0A0A0]"
+      <span
+        className={cn(
+          "absolute h-[24px] w-[24px] rounded-full bg-white shadow-sm transition-transform",
+          checked ? "translate-x-[24px]" : "translate-x-[4px]"
+        )}
       />
-      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8A8A8A]" />
-    </div>
+    </button>
   );
 }
 
@@ -217,45 +186,36 @@ export function MoreFiltersDropdown({
   anchorRef,
   filters,
   updateFilter,
-  platforms,
-  setPlatforms,
   onReset,
   onApply,
   loading,
 }: MoreFiltersDropdownProps) {
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const [menuWidth, setMenuWidth] = useState(460);
-  const [alignRight, setAlignRight] = useState(true);
-
+  const [searchMode, setSearchMode] = useState<SearchModeKey>("combined");
+  const [tier, setTier] = useState<TierKey | null>(null);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [searchMode, setSearchMode] = useState<SearchModeOption>("combined");
-  const [tier, setTier] = useState<TierOption>(null);
-  const [draftPlatforms, setDraftPlatforms] = useState<Platform[]>(platforms);
-  const [agePreset, setAgePreset] = useState<AgePreset>(null);
-  const [gender, setGender] = useState<GenderPreset>("all");
+  const [age, setAge] = useState<AgeKey | null>(null);
+  const [gender, setGender] = useState<GenderKey>("all");
   const [country, setCountry] = useState("");
+
+  const [countries, setCountries] = useState<string[]>([]);
+  const [loadingCountries, setLoadingCountries] = useState(false);
+
+  const [menuWidth, setMenuWidth] = useState(707);
+  const [alignRight, setAlignRight] = useState(true);
 
   useEffect(() => {
     if (!open) return;
 
-    const nextMode = (filters.search.mode as SearchModeOption) || "combined";
-    setSearchMode(nextMode);
-    setVerifiedOnly(
-      nextMode === "standard" ? Boolean(filters.influencer.isVerified) : false
-    );
-    setDraftPlatforms(platforms);
-    setTier(deriveTierFromPlatforms(filters, platforms));
-    setAgePreset(deriveAgePreset(filters));
-    setGender((filters.influencer.gender as GenderPreset) || "all");
-    setCountry(filters.audience.country || "");
-  }, [filters, open, platforms]);
+    setSearchMode(getSearchModeFromFilters(filters));
+    setTier(getTierFromFilters(filters));
+    setVerifiedOnly(!!filters?.influencer?.isVerified);
+    setAge(getAgeFromFilters(filters));
+    setGender(getGenderFromFilters(filters));
+    setCountry(getCountryFromFilters(filters));
+  }, [open, filters]);
 
-  useEffect(() => {
-    if (searchMode !== "standard" && verifiedOnly) {
-      setVerifiedOnly(false);
-    }
-  }, [searchMode, verifiedOnly]);
   useLayoutEffect(() => {
     if (!open || !anchorRef.current) return;
 
@@ -264,25 +224,74 @@ export function MoreFiltersDropdown({
       if (!rect) return;
 
       const viewportPadding = 16;
-      const idealWidth = 460;
-      const safeWidth = Math.min(idealWidth, window.innerWidth - viewportPadding * 2);
+      const idealWidth = 707;
+      const safeWidth = Math.min(
+        idealWidth,
+        window.innerWidth - viewportPadding * 2
+      );
 
       setMenuWidth(safeWidth);
-      setAlignRight(rect.right - safeWidth >= viewportPadding);
+
+      const leftIfRightAligned = rect.right - safeWidth;
+      setAlignRight(leftIfRightAligned >= viewportPadding);
     };
 
     updatePosition();
     window.addEventListener("resize", updatePosition);
-    return () => window.removeEventListener("resize", updatePosition);
-  }, [anchorRef, open]);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        setLoadingCountries(true);
+
+        const res = await fetch(COUNTRY_API, {
+          method: "GET",
+          signal: controller.signal,
+        });
+
+        if (!res.ok) throw new Error("Failed to fetch countries");
+
+        const raw = (await res.json()) as ApiCountry[];
+
+        const next = raw
+          .map((item) => {
+            const code = String(item.countryCode || "").toUpperCase();
+            const name = String(item.countryName || "").trim();
+            const flag = item.flag ? `${item.flag} ` : "";
+            return code && name ? `${flag}${name} (${code})` : "";
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b));
+
+        setCountries(Array.from(new Set(next)));
+      } catch {
+        setCountries([]);
+      } finally {
+        setLoadingCountries(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
 
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (menuRef.current?.contains(target)) return;
+
+      if (filterMenuRef.current?.contains(target)) return;
       if (anchorRef.current?.contains(target)) return;
+
       onClose();
     };
 
@@ -297,234 +306,301 @@ export function MoreFiltersDropdown({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [anchorRef, onClose, open]);
+  }, [open, onClose, anchorRef]);
 
-  const orderedPlatforms = useMemo(() => {
-    return PLATFORM_ORDER.filter((platform) => draftPlatforms.includes(platform));
-  }, [draftPlatforms]);
-
-  if (!open) return null;
-
-  const togglePlatform = (platform: Platform) => {
-    setDraftPlatforms((current) => {
-      const next = new Set(current);
-
-      if (next.has(platform)) {
-        if (next.size === 1) return current;
-        next.delete(platform);
-      } else {
-        next.add(platform);
-      }
-
-      return PLATFORM_ORDER.filter((item) => next.has(item));
-    });
+  const toggleTier = (value: TierKey) => {
+    setTier((prev) => (prev === value ? null : value));
   };
 
-  const handleReset = () => {
-    onReset();
-    onClose();
+  const toggleAge = (value: AgeKey) => {
+    setAge((prev) => (prev === value ? null : value));
+  };
+
+  const handleClearLocal = () => {
+    setSearchMode("combined");
+    setTier(null);
+    setVerifiedOnly(false);
+    setAge(null);
+    setGender("all");
+    setCountry("");
   };
 
   const handleApply = () => {
-    const ageRange = getAgeRangeFromPreset(agePreset);
-    const tierRange = getTierRange(tier);
+    flushSync(() => {
+      const previousTier = getTierFromFilters(filters);
 
-    setPlatforms(orderedPlatforms.length ? orderedPlatforms : ["youtube"]);
+      updateFilter("search.mode", searchMode);
+      updateFilter("influencer.tier", tier || undefined);
 
-    updateFilter(
-      "influencer.isVerified",
-      searchMode === "standard" && verifiedOnly ? true : undefined
-    );
-    updateFilter("search.mode", searchMode);
-    updateFilter("influencer.gender", gender === "all" ? undefined : gender);
-    updateFilter("influencer.ageMin", ageRange.min);
-    updateFilter("influencer.ageMax", ageRange.max);
-    updateFilter("audience.country", country.trim() || undefined);
+      if (tier) {
+        const range = TIER_RANGES[tier];
 
-    (orderedPlatforms.length ? orderedPlatforms : ["youtube"]).forEach((platform) => {
-      updateFilter(`platform.${platform}.followersMin`, tierRange.min);
-      updateFilter(`platform.${platform}.followersMax`, tierRange.max);
+        Object.keys(filters.platform || {}).forEach((platformKey) => {
+          updateFilter(`platform.${platformKey}.followersMin`, range.min);
+          updateFilter(`platform.${platformKey}.followersMax`, range.max);
+        });
+      } else if (previousTier) {
+        clearPreviousTierRangeIfStillMatching(filters, updateFilter);
+      }
+
+      updateFilter("influencer.isVerified", verifiedOnly || undefined);
+
+      if (age === "18-24") {
+        updateFilter("influencer.ageMin", 18);
+        updateFilter("influencer.ageMax", 24);
+      } else if (age === "25-34") {
+        updateFilter("influencer.ageMin", 25);
+        updateFilter("influencer.ageMax", 34);
+      } else if (age === "35-44") {
+        updateFilter("influencer.ageMin", 35);
+        updateFilter("influencer.ageMax", 44);
+      } else if (age === "45+") {
+        updateFilter("influencer.ageMin", 45);
+        updateFilter("influencer.ageMax", undefined);
+      } else {
+        updateFilter("influencer.ageMin", undefined);
+        updateFilter("influencer.ageMax", undefined);
+      }
+
+      if (gender === "male") {
+        updateFilter("influencer.gender", "MALE");
+      } else if (gender === "female") {
+        updateFilter("influencer.gender", "FEMALE");
+      } else {
+        updateFilter("influencer.gender", undefined);
+      }
+
+      updateFilter("audience.country", country || undefined);
     });
 
     onApply();
     onClose();
   };
 
+  const handleResetMoreOnly = () => {
+    handleClearLocal();
+
+    flushSync(() => {
+      clearPreviousTierRangeIfStillMatching(filters, updateFilter);
+
+      updateFilter("search.mode", "combined");
+      updateFilter("influencer.tier", undefined);
+      updateFilter("influencer.isVerified", undefined);
+      updateFilter("influencer.ageMin", undefined);
+      updateFilter("influencer.ageMax", undefined);
+      updateFilter("influencer.gender", undefined);
+      updateFilter("audience.country", undefined);
+    });
+
+    onApply();
+  };
+
+  if (!open) return null;
+
+  const pillWrap =
+    "inline-flex max-w-full flex-wrap items-center gap-1 rounded-[12px] bg-[#F2F2F2] p-1 md:flex-nowrap";
+  const pillBtn =
+    "inline-flex h-[40px] items-center justify-center rounded-[10px] px-4 text-sm font-medium transition-colors whitespace-nowrap";
+  const active = "bg-black text-white";
+  const inactive = "cursor-pointer text-[#8B8B8B] hover:text-[#1A1A1A]";
+
   return (
     <div
-      ref={menuRef}
+      ref={filterMenuRef}
+      role="menu"
       style={{ width: `${menuWidth}px` }}
       className={cn(
-        "absolute top-[calc(100%+10px)] z-50 rounded-[16px] border border-[#E4E4E4] bg-white shadow-[0_18px_50px_rgba(0,0,0,0.14)]",
-        alignRight ? "right-0" : "left-0"
+        "absolute top-[calc(100%+8px)] z-50",
+        alignRight ? "right-0" : "left-0",
+        "max-h-[min(78vh,42rem)] overflow-y-auto",
+        "flex flex-col items-start gap-[0.8125rem]",
+        "rounded-[1rem] border border-[#F1F3F7] bg-white",
+        "shadow-[0_10px_28px_0_rgba(25,33,61,0.08)]",
+        "px-4 py-5 md:px-[2.3125rem] md:py-[2.0625rem]"
       )}
     >
-      <div className="p-5">
-        <div className="mb-4 border-b border-[#EFEFEF] pb-4">
-          <h3 className="text-[20px] font-semibold text-[#1A1A1A]">More Filters</h3>
-        </div>
+      <div className="flex w-full flex-col gap-[0.95rem]">
+        <RowEl label="Search Mode">
+          <div className={pillWrap}>
+            <button
+              type="button"
+              className={cn(
+                pillBtn,
+                searchMode === "combined" ? active : inactive
+              )}
+              onClick={() => setSearchMode("combined")}
+            >
+              Combined
+            </button>
 
-        <div className="space-y-4">
+            <button
+              type="button"
+              className={cn(
+                pillBtn,
+                searchMode === "standard" ? active : inactive
+              )}
+              onClick={() => setSearchMode("standard")}
+            >
+              Standard
+            </button>
 
+            <button
+              type="button"
+              className={cn(pillBtn, searchMode === "ai" ? active : inactive)}
+              onClick={() => setSearchMode("ai")}
+            >
+              AI
+            </button>
+          </div>
+        </RowEl>
 
-          {/* Verified Influencer Only */}
-          {searchMode === "standard" ? (
-            <div className="grid grid-cols-[150px_1fr] items-center gap-4">
-              <RowLabel>Verified Influencer Only</RowLabel>
+        <RowEl label="Verified Influencer Only">
+          <div className="flex justify-start md:justify-end">
+            <Toggle checked={verifiedOnly} onChange={setVerifiedOnly} />
+          </div>
+        </RowEl>
 
+        <RowEl label="Influencer Tier">
+          <div className={pillWrap}>
+            <button
+              type="button"
+              className={cn(pillBtn, tier === "nano" ? active : inactive)}
+              onClick={() => toggleTier("nano")}
+            >
+              Nano
+            </button>
+            <button
+              type="button"
+              className={cn(pillBtn, tier === "micro" ? active : inactive)}
+              onClick={() => toggleTier("micro")}
+            >
+              Micro
+            </button>
+            <button
+              type="button"
+              className={cn(pillBtn, tier === "mid" ? active : inactive)}
+              onClick={() => toggleTier("mid")}
+            >
+              Mid-tier
+            </button>
+            <button
+              type="button"
+              className={cn(pillBtn, tier === "macro" ? active : inactive)}
+              onClick={() => toggleTier("macro")}
+            >
+              Macro
+            </button>
+            <button
+              type="button"
+              className={cn(pillBtn, tier === "mega" ? active : inactive)}
+              onClick={() => toggleTier("mega")}
+            >
+              Mega
+            </button>
+          </div>
+        </RowEl>
+
+        <RowEl label="Age">
+          <div className={pillWrap}>
+            {AGE_OPTIONS.map((item) => (
               <button
+                key={item}
                 type="button"
-                role="switch"
-                aria-checked={verifiedOnly}
-                onClick={() => setVerifiedOnly((prev) => !prev)}
-                className={cn(
-                  "relative inline-flex h-6 w-11 items-center rounded-full transition",
-                  verifiedOnly ? "bg-[#1A1A1A]" : "bg-[#E8E8E8]"
-                )}
+                className={cn(pillBtn, age === item ? active : inactive)}
+                onClick={() => toggleAge(item)}
               >
-                <span
-                  className={cn(
-                    "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all duration-200",
-                    verifiedOnly ? "left-[22px]" : "left-0.5"
-                  )}
-                />
+                {item}
               </button>
-            </div>
-          ) : null}
+            ))}
+          </div>
+        </RowEl>
 
-          {/* Search Mode */}
-          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
-            <RowLabel>Search Mode</RowLabel>
-            <Tabs
-              value={searchMode}
-              onValueChange={(v) => setSearchMode(v as SearchModeOption)}
+        <RowEl label="Gender">
+          <div className={pillWrap}>
+            <button
+              type="button"
+              className={cn(pillBtn, gender === "all" ? active : inactive)}
+              onClick={() => setGender("all")}
             >
-              <TabsList className="w-full">
-                {SEARCH_MODE_OPTIONS.map((option) => (
-                  <TabsTrigger key={option.value} value={option.value}>
-                    {option.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
+              All
+            </button>
 
-          {/* Influencer Tier */}
-          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
-            <RowLabel>Influencer Tier</RowLabel>
-            <Tabs
-              value={tier ?? ""}
-              onValueChange={(v) => setTier(v as TierOption)}
+            <button
+              type="button"
+              className={cn(
+                pillBtn,
+                "flex items-center gap-2",
+                gender === "male" ? active : inactive
+              )}
+              onClick={() => setGender("male")}
             >
-              <div
-                onPointerDown={(e) => {
-                  const trigger = (e.target as HTMLElement).closest("[data-slot='tabs-trigger']");
-                  if (trigger && trigger.getAttribute("data-state") === "active") {
-                    e.preventDefault();
-                    setTier(null);
-                  }
-                }}
-              >
-                <TabsList className="w-full">
-                  {TIER_OPTIONS.map((option) => (
-                    <TabsTrigger key={option.value} value={option.value}>
-                      {option.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-            </Tabs>
-          </div>
+              Male <GenderMale size={18} weight="bold" />
+            </button>
 
-          {/* Platform */}
-          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
-            <RowLabel>Platform</RowLabel>
-            <div className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-muted p-[3px]">
-              {PLATFORM_ORDER.map((platform) => (
-                <PlatformIconChip
-                  key={platform}
-                  platform={platform}
-                  selected={draftPlatforms.includes(platform)}
-                  onClick={() => togglePlatform(platform)}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Age */}
-          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
-            <RowLabel>Age</RowLabel>
-            <Tabs
-              value={agePreset ?? ""}
-              onValueChange={(v) => setAgePreset(v as AgePreset)}
+            <button
+              type="button"
+              className={cn(
+                pillBtn,
+                "flex items-center gap-2",
+                gender === "female" ? active : inactive
+              )}
+              onClick={() => setGender("female")}
             >
-              <div
-                onPointerDown={(e) => {
-                  const trigger = (e.target as HTMLElement).closest("[data-slot='tabs-trigger']");
-                  if (trigger && trigger.getAttribute("data-state") === "active") {
-                    e.preventDefault();
-                    setAgePreset(null);
-                  }
-                }}
-              >
-                <TabsList className="w-full">
-                  {AGE_OPTIONS.map((option) => (
-                    <TabsTrigger key={option.value} value={option.value}>
-                      {option.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-            </Tabs>
+              Female <GenderFemale size={18} weight="bold" />
+            </button>
           </div>
+        </RowEl>
 
-          {/* Gender */}
-          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
-            <RowLabel>Gender</RowLabel>
-            <Tabs
-              value={gender}
-              onValueChange={(v) => setGender(v as GenderPreset)}
-            >
-              <TabsList className="w-full">
-                {GENDER_OPTIONS.map((option) => (
-                  <TabsTrigger key={option.value} value={option.value}>
-                    {option.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
-
-          {/* Country */}
-          <div className="grid grid-cols-[150px_1fr] items-center gap-4">
-            <RowLabel>Country</RowLabel>
-            <SelectLikeInput
+        <RowEl label="Country">
+          <div className="w-full md:ml-auto md:w-[320px]">
+            <Combobox
+              items={countries}
               value={country}
-              onChange={setCountry}
-              placeholder="Select Country"
-            />
+              onValueChange={(value) => setCountry(value ?? "")}
+            >
+              <ComboboxInput
+                placeholder={
+                  loadingCountries ? "Loading countries..." : "Select country"
+                }
+                disabled={loadingCountries}
+                className="h-[44px] rounded-[12px] border border-[#d6d6d6] bg-white px-3 text-sm shadow-none focus-within:border-[#1a1a1a] focus-within:ring-[3px] focus-within:ring-[#1a1a1a]/20"
+              />
+              <ComboboxContent className="w-[320px] max-w-[calc(100vw-32px)] rounded-[12px] border-0 ring-1 ring-[#d6d6d6] shadow-[0_7px_20px_0_rgba(25,33,61,0.04)]">
+                <ComboboxEmpty>
+                  {loadingCountries ? "Loading countries..." : "No items found."}
+                </ComboboxEmpty>
+
+                <ComboboxList>
+                  {(item) => (
+                    <ComboboxItem key={item} value={item}>
+                      {item}
+                    </ComboboxItem>
+                  )}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
           </div>
-        </div>
+        </RowEl>
+      </div>
 
-        <div className="mt-7 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="inline-flex h-10 items-center justify-center px-4 text-[12px] font-medium text-[#1A1A1A]"
-          >
-            Clear
-          </button>
+      <div className="ml-auto flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleResetMoreOnly}
+          className="inline-flex h-[2.5rem] items-center justify-center rounded-[12px] px-5 text-sm font-medium text-[#1A1A1A] transition hover:bg-[#F5F5F5]"
+        >
+          Clear
+        </button>
 
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={loading}
-            className="inline-flex h-10 min-w-[96px] items-center justify-center rounded-[10px] bg-[#141414] px-5 text-[12px] font-semibold text-white disabled:opacity-60"
-          >
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Apply
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleApply}
+          disabled={loading}
+          className="inline-flex h-[2.5rem] max-w-[7rem]  items-center justify-center rounded-[12px] bg-black px-6 text-sm font-medium text-white transition hover:bg-[#111] disabled:opacity-60"
+        >
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Apply
+        </button>
       </div>
     </div>
   );

@@ -4,7 +4,6 @@ import {
   type InfluencerReport,
   type MediaKit,
   type SubscriptionPlan,
-  PLAN_DISPLAY_NAME,
   buildInitials,
   getPlatformIcon,
 } from "./viewModashShared";
@@ -18,17 +17,86 @@ interface CreatorHeaderProps {
   postsCount?: number;
 }
 
+function cleanText(value: unknown): string {
+  if (value === undefined || value === null) return "";
+
+  const text = String(value).trim();
+
+  if (
+    !text ||
+    text === "—" ||
+    text === "--" ||
+    text.toLowerCase() === "null" ||
+    text.toLowerCase() === "undefined"
+  ) {
+    return "";
+  }
+
+  return text;
+}
+
+function getLocationValue(
+  displayProfile: any,
+  primaryReport: any,
+  mediaKit: any
+): string {
+  return (
+    cleanText(displayProfile?.country) ||
+    cleanText(displayProfile?.location) ||
+    cleanText(displayProfile?.city) ||
+    cleanText(displayProfile?.state) ||
+    cleanText(primaryReport?.country) ||
+    cleanText(primaryReport?.location) ||
+    cleanText(primaryReport?.city) ||
+    cleanText(primaryReport?.state) ||
+    cleanText(mediaKit?.country) ||
+    cleanText(mediaKit?.location) ||
+    cleanText(mediaKit?.city) ||
+    cleanText(mediaKit?.state) ||
+    ""
+  );
+}
+
+function getDisplayHandle(profile: any): string {
+  const handle = cleanText(profile?.handle);
+  const username = cleanText(profile?.username);
+
+  if (handle) return handle.startsWith("@") ? handle : `@${handle}`;
+  if (username) return username.startsWith("@") ? username : `@${username}`;
+
+  return "";
+}
+
 export function CreatorHeader({
   primaryReport,
   mediaKit,
-  activePlan,
   isVerified,
   accountType,
   postsCount,
 }: CreatorHeaderProps) {
-  const displayProfile = mediaKit?.primaryInfluencerReport || primaryReport || null;
+  const displayProfile =
+    mediaKit?.primaryInfluencerReport || primaryReport || null;
 
   const primaryPlatformProfile = mediaKit?.primaryInfluencerReport || null;
+
+  const displayName =
+    displayProfile?.name ||
+    displayProfile?.fullname ||
+    mediaKit?.name ||
+    "Creator Name";
+
+  const displayHandle = getDisplayHandle(displayProfile);
+
+  const locationValue = getLocationValue(
+    displayProfile,
+    primaryReport,
+    mediaKit
+  );
+
+  const resolvedAccountType =
+    cleanText(accountType) || cleanText(displayProfile?.accountType);
+
+  const resolvedPostsCount = postsCount ?? displayProfile?.postsCount;
 
   const openProfile = (url?: string) => {
     if (!url) return;
@@ -42,14 +110,12 @@ export function CreatorHeader({
           {displayProfile?.picture ? (
             <img
               src={displayProfile.picture}
-              alt={displayProfile.name || displayProfile.fullname || "Creator"}
+              alt={displayName}
               className="h-full w-full object-cover"
             />
           ) : (
             <div className="grid h-full w-full place-items-center text-sm font-bold text-[#5d5349]">
-              {buildInitials(
-                displayProfile?.name || displayProfile?.fullname || mediaKit?.name
-              )}
+              {buildInitials(displayName)}
             </div>
           )}
         </div>
@@ -57,10 +123,7 @@ export function CreatorHeader({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-[28px] font-bold tracking-tight text-[#1f1f1f]">
-              {displayProfile?.name ||
-                displayProfile?.fullname ||
-                mediaKit?.name ||
-                "Creator Name"}
+              {displayName}
             </h1>
 
             {(isVerified ?? displayProfile?.isVerified) && (
@@ -70,17 +133,23 @@ export function CreatorHeader({
               </span>
             )}
 
-            <span className="text-xs font-medium text-[#7f786d]">Active</span>
-            <span className="text-xs font-medium text-[#7f786d]">Public</span>
+            <span className="text-xs font-medium text-[#7f786d]">
+              Active
+            </span>
+            <span className="text-xs font-medium text-[#7f786d]">
+              Public
+            </span>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#7d7569]">
-            <span>{displayProfile?.handle ? `${displayProfile?.handle}` : `@${displayProfile?.username}`}</span>
-            {/* <span>ID: {displayProfile?.modashId || displayProfile?._id || "—"}</span> */}
-            <span>{mediaKit?.country || displayProfile?.country || mediaKit?.location || displayProfile?.location || "-"}</span>
-            <span>{accountType || displayProfile?.accountType || ""}</span>
-            {(postsCount ?? displayProfile?.postsCount) ? (
-              <span>{(postsCount ?? displayProfile?.postsCount)?.toLocaleString()} posts</span>
+            {displayHandle ? <span>{displayHandle}</span> : null}
+
+            {locationValue ? <span>{locationValue}</span> : null}
+
+            {resolvedAccountType ? <span>{resolvedAccountType}</span> : null}
+
+            {resolvedPostsCount ? (
+              <span>{resolvedPostsCount.toLocaleString()} posts</span>
             ) : null}
           </div>
 
@@ -94,26 +163,33 @@ export function CreatorHeader({
             {primaryPlatformProfile?.provider ? (
               (() => {
                 const Icon = getPlatformIcon(primaryPlatformProfile.provider);
+                const profileHandle = getDisplayHandle(primaryPlatformProfile);
 
                 return (
                   <button
                     type="button"
                     onClick={() => openProfile(primaryPlatformProfile.url)}
-                    className={`inline-flex items-center gap-2 rounded-full border border-[#e8e0d5] bg-white px-3 py-2 text-xs text-[#5e584f] transition ${primaryPlatformProfile.url
+                    className={`inline-flex items-center gap-2 rounded-full border border-[#e8e0d5] bg-white px-3 py-2 text-xs text-[#5e584f] transition ${
+                      primaryPlatformProfile.url
                         ? "cursor-pointer hover:bg-[#fff9f1]"
                         : "cursor-default"
-                      }`}
+                    }`}
                   >
-                    <CheckCircleIcon size={16} weight="fill" className="text-[#d39305]" />
+                    <CheckCircleIcon
+                      size={16}
+                      weight="fill"
+                      className="text-[#d39305]"
+                    />
                     <Icon className="h-3.5 w-3.5" />
                     <span className="font-medium capitalize">
                       {primaryPlatformProfile.provider}
                     </span>
-                    <span className="text-[#9a9287]">
-                      {primaryPlatformProfile.username
-                        ? `@${primaryPlatformProfile.username}`
-                        : "—"}
-                    </span>
+
+                    {profileHandle ? (
+                      <span className="text-[#9a9287]">
+                        {profileHandle}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })()
@@ -125,18 +201,6 @@ export function CreatorHeader({
           </div>
         </div>
       </div>
-
-      {/* <div className="rounded-2xl border border-[#efe8dd] bg-[#fffdfa] px-5 py-4 text-right">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ab9f8e]">
-          System status
-        </div>
-        <div className="mt-2 text-sm font-semibold text-[#1f1f1f]">
-          Account health: Optimal
-        </div>
-        <div className="mt-1 text-xs text-[#7f786d]">
-          Visibility mapped to {PLAN_DISPLAY_NAME[activePlan]} plan
-        </div>
-      </div> */}
     </div>
   );
 }

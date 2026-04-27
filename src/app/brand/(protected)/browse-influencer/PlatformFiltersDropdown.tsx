@@ -476,27 +476,29 @@ function PlatformSection({
               />
             </div>
 
-            <SelectField
-              label="Last posted"
-              value={draft.lastPostedDays}
-              onChange={(value) => setDraft({ lastPostedDays: value })}
-              options={LAST_POSTED_OPTIONS.map((item) => ({
-                label: item.label,
-                value: item.value == null ? "" : String(item.value),
-              }))}
-            />
+            <div className="col-span-2">
+              <SelectField
+                label="Last posted"
+                value={draft.lastPostedDays}
+                onChange={(value) => setDraft({ lastPostedDays: value })}
+                options={LAST_POSTED_OPTIONS.map((item) => ({
+                  label: item.label,
+                  value: item.value == null ? "" : String(item.value),
+                }))}
+              />
+            </div>
 
-            <div>
+            {/* <div>
               <FieldLabel>Keywords</FieldLabel>
               <InputField
                 value={draft.keywords}
                 onChange={(value) => setDraft({ keywords: value })}
                 placeholder="tech, beauty..."
               />
-            </div>
+            </div> */}
           </div>
 
-          {isYoutube ? (
+          {/* {isYoutube ? (
             <div className="grid grid-cols-1 gap-2.5">
               <div>
                 <FieldLabel>Bio query</FieldLabel>
@@ -506,14 +508,8 @@ function PlatformSection({
                   placeholder="creator bio"
                 />
               </div>
-
-              {/* <ToggleRow
-                label="Official artist only"
-                checked={draft.isOfficialArtist}
-                onChange={(next) => setDraft({ isOfficialArtist: next })}
-              /> */}
             </div>
-          ) : null}
+          ) : null} */}
 
           {isInstagram ? (
             <div className="grid grid-cols-1 gap-2.5">
@@ -524,15 +520,6 @@ function PlatformSection({
                 onMinChange={(value) => setDraft({ reelsPlaysMin: value })}
                 onMaxChange={(value) => setDraft({ reelsPlaysMax: value })}
               />
-
-              {/* <div>
-                <FieldLabel>Interests IDs</FieldLabel>
-                <InputField
-                  value={draft.interestsIdsText}
-                  onChange={(value) => setDraft({ interestsIdsText: value })}
-                  placeholder="3,21,1"
-                />
-              </div> */}
 
               <ToggleRow
                 label="Sponsored posts only"
@@ -552,20 +539,14 @@ function PlatformSection({
                 onMaxChange={(value) => setDraft({ engagementsMax: value })}
               />
 
-              <div>
+              {/* <div>
                 <FieldLabel>Text tags</FieldLabel>
                 <InputField
                   value={draft.textTags}
                   onChange={(value) => setDraft({ textTags: value })}
                   placeholder="#tech, @creator"
                 />
-              </div>
-
-              {/* <ToggleRow
-                label="Require audience data"
-                checked={draft.hasAudienceData}
-                onChange={(next) => setDraft({ hasAudienceData: next })}
-              /> */}
+              </div> */}
             </div>
           ) : null}
         </div>
@@ -583,31 +564,35 @@ export function PlatformFiltersDropdown({
   onApply,
   onClose,
 }: PlatformFiltersDropdownProps) {
-  const [draftPlatforms, setDraftPlatforms] = useState<Platform[]>(platforms);
+  const initialPlatform = platforms[0] || "youtube";
+
+  const [draftPlatforms, setDraftPlatforms] = useState<Platform[]>([initialPlatform]);
   const [drafts, setDrafts] = useState<Record<Platform, PlatformDraft>>({
     youtube: fromFilters(filters.platform.youtube),
     instagram: fromFilters(filters.platform.instagram),
     tiktok: fromFilters(filters.platform.tiktok),
   });
   const [expanded, setExpanded] = useState<Record<Platform, boolean>>({
-    youtube: platforms.includes("youtube"),
-    instagram: platforms.includes("instagram"),
-    tiktok: platforms.includes("tiktok"),
+    youtube: initialPlatform === "youtube",
+    instagram: initialPlatform === "instagram",
+    tiktok: initialPlatform === "tiktok",
   });
   const [menuWidth, setMenuWidth] = useState(540);
   const [alignRight, setAlignRight] = useState(true);
 
   useEffect(() => {
-    setDraftPlatforms(platforms);
+    const nextPlatform = platforms[0] || "youtube";
+
+    setDraftPlatforms([nextPlatform]);
     setDrafts({
       youtube: fromFilters(filters.platform.youtube),
       instagram: fromFilters(filters.platform.instagram),
       tiktok: fromFilters(filters.platform.tiktok),
     });
     setExpanded({
-      youtube: platforms.includes("youtube"),
-      instagram: platforms.includes("instagram"),
-      tiktok: platforms.includes("tiktok"),
+      youtube: nextPlatform === "youtube",
+      instagram: nextPlatform === "instagram",
+      tiktok: nextPlatform === "tiktok",
     });
   }, [filters, platforms]);
 
@@ -634,25 +619,14 @@ export function PlatformFiltersDropdown({
     return () => window.removeEventListener("resize", updatePosition);
   }, [anchorRef]);
 
-  const togglePlatform = (platform: Platform) => {
-    setDraftPlatforms((current) => {
-      const next = new Set(current);
-      const exists = next.has(platform);
+  const selectPlatform = (platform: Platform) => {
+    setDraftPlatforms([platform]);
 
-      if (exists) {
-        if (next.size === 1) return current;
-        next.delete(platform);
-      } else {
-        next.add(platform);
-      }
-
-      return PLATFORM_ORDER.filter((item) => next.has(item));
+    setExpanded({
+      youtube: platform === "youtube",
+      instagram: platform === "instagram",
+      tiktok: platform === "tiktok",
     });
-
-    setExpanded((current) => ({
-      ...current,
-      [platform]: true,
-    }));
   };
 
   const clearPlatform = (platform: Platform) => {
@@ -671,8 +645,10 @@ export function PlatformFiltersDropdown({
   };
 
   const applyChanges = () => {
+    const selectedPlatform = draftPlatforms[0] || "youtube";
+
     flushSync(() => {
-      setPlatforms(draftPlatforms.length ? draftPlatforms : ["youtube"]);
+      setPlatforms([selectedPlatform]);
 
       PLATFORM_ORDER.forEach((platform) => {
         const draft = drafts[platform];
@@ -746,7 +722,7 @@ export function PlatformFiltersDropdown({
               Select Platform
             </h3>
             <p className="mt-1 text-[10px] text-[#8A8A8A]">
-              Select any platform to apply the filters
+              Select one platform at a time to apply platform-specific filters.
             </p>
           </div>
 
@@ -757,7 +733,7 @@ export function PlatformFiltersDropdown({
                 <PlatformIconButton
                   key={platform}
                   selected={selected}
-                  onClick={() => togglePlatform(platform)}
+                  onClick={() => selectPlatform(platform)}
                 >
                   <span className="text-[#1A1A1A]">
                     {platformConfig[platform].icon}

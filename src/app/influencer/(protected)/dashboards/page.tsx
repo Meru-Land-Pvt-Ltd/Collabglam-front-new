@@ -116,6 +116,19 @@ function getStoredToken() {
   );
 }
 
+function getStoredInfluencerId() {
+  if (typeof window === "undefined") return "";
+
+  const parsedUser: any = readStoredUser();
+
+  return (
+    localStorage.getItem("influencerId") ||
+    parsedUser?.influencerId ||
+    parsedUser?._id ||
+    ""
+  );
+}
+
 function extractInfluencerName(payload: any) {
   const candidates = [
     payload?.name,
@@ -375,13 +388,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [influencerName, setInfluencerName] = useState("Influencer");
 
-  const influencerId =
-    typeof window !== "undefined"
-      ? localStorage.getItem("influencerId") ||
-        JSON.parse(localStorage.getItem("user") || "{}")?.influencerId ||
-        JSON.parse(localStorage.getItem("user") || "{}")?._id ||
-        ""
-      : "";
+  const influencerId = getStoredInfluencerId();
 
   useEffect(() => {
     setInfluencerName(getStoredInfluencerName());
@@ -412,14 +419,9 @@ export default function Dashboard() {
     };
   }, [router]);
 
-
   useEffect(() => {
     if (!influencerId) {
-      setCampaigns([]);
-      setInvitations([]);
-      setWalletBalance(0);
-      setInfluencerName(getStoredInfluencerName());
-      setLoading(false);
+      router.replace("/influencer/login");
       return;
     }
 
@@ -468,7 +470,7 @@ export default function Dashboard() {
     };
 
     fetchDashboardData();
-  }, [influencerId]);
+  }, [influencerId, router]);
 
   const activeCampaigns = useMemo(
     () =>

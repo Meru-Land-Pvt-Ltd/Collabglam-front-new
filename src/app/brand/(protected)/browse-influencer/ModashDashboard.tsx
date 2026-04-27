@@ -3,8 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ResultsGrid } from "./ResultsGrid";
 import { useInfluencerSearch } from "./useInfluencerSearch";
-import type { Platform } from "./filters";
-import { countActiveFilters } from "./filters";
+import type { FilterState, Platform } from "./filters";
 import { SearchHeader } from "./SearchHeader";
 import { DetailPanel } from "./DetailPanel";
 import { useInfluencerReport } from "./useInfluencerReport";
@@ -29,6 +28,61 @@ type SavedSearchUiState = {
   hasMore?: boolean;
 };
 
+type TierKey = "nano" | "micro" | "mid" | "macro" | "mega";
+
+const DEFAULT_PLATFORM: Platform = "youtube";
+const COUNTED_PLATFORMS: Platform[] = ["youtube", "instagram", "tiktok"];
+
+const TIER_RANGES: Record<TierKey, { min: number; max?: number }> = {
+  nano: { min: 1000, max: 10000 },
+  micro: { min: 10000, max: 100000 },
+  mid: { min: 100000, max: 500000 },
+  macro: { min: 500000, max: 1000000 },
+  mega: { min: 1000000, max: undefined },
+};
+
+const PLATFORM_FILTER_KEYS = [
+  "followersMin",
+  "followersMax",
+  "avgViewsMin",
+  "avgViewsMax",
+  "engagementsMin",
+  "engagementsMax",
+  "engagementRateMin",
+  "languageCode",
+  "lastPostedDays",
+  "lastposted",
+  "locationIdsText",
+  "bioQuery",
+  "keywords",
+  "relevance",
+  "audienceRelevance",
+  "textTags",
+  "hasAudienceData",
+  "contactEmailOnly",
+  "followersGrowthInterval",
+  "followersGrowthOperator",
+  "followersGrowthValue",
+  "viewsGrowthInterval",
+  "viewsGrowthOperator",
+  "viewsGrowthValue",
+  "likesGrowthInterval",
+  "likesGrowthOperator",
+  "likesGrowthValue",
+  "reelsPlaysMin",
+  "reelsPlaysMax",
+  "sharesMin",
+  "sharesMax",
+  "savesMin",
+  "savesMax",
+  "interestsIdsText",
+  "brandsIdsText",
+  "igAccountTypesText",
+  "hasSponsoredPosts",
+  "hasYouTube",
+  "isOfficialArtist",
+] as const;
+
 function getInfluencerIdentity(influencer: any): string {
   return String(
     influencer?.userId ||
@@ -40,10 +94,158 @@ function getInfluencerIdentity(influencer: any): string {
   ).trim();
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") return {};
+  return value as Record<string, unknown>;
+}
+
+function hasActiveFilterValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  return true;
+}
+
+function countFilledFilterValues(values: unknown[]): number {
+  return values.reduce<number>((total, value) => {
+    return total + (hasActiveFilterValue(value) ? 1 : 0);
+  }, 0);
+}
+
+function getFilterRoot(filters: FilterState): Record<string, unknown> {
+  return toRecord(filters as unknown);
+}
+
+function getTier(filters: FilterState): TierKey | null {
+  const root = getFilterRoot(filters);
+  const influencer = toRecord(root.influencer);
+  const value = String(influencer.tier || "");
+
+  if (
+    value === "nano" ||
+    value === "micro" ||
+    value === "mid" ||
+    value === "macro" ||
+    value === "mega"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function isTierGeneratedPlatformFollowerValue({
+  key,
+  value,
+  tier,
+}: {
+  key: string;
+  value: unknown;
+  tier: TierKey | null;
+}) {
+  if (!tier) return false;
+
+  const range = TIER_RANGES[tier];
+
+  if (key === "followersMin") {
+    return value === range.min;
+  }
+
+  if (key === "followersMax") {
+    return value === range.max;
+  }
+
+  return false;
+}
+
+function countPlatformFilters(filters: FilterState): number {
+  const root = getFilterRoot(filters);
+  const platformRoot = toRecord(root.platform);
+  const tier = getTier(filters);
+
+  return COUNTED_PLATFORMS.reduce<number>((total, platform) => {
+    const platformFilters = toRecord(platformRoot[platform]);
+
+    const values = PLATFORM_FILTER_KEYS.map((key) => {
+      const value = platformFilters[key];
+
+      if (
+        isTierGeneratedPlatformFollowerValue({
+          key,
+          value,
+          tier,
+        })
+      ) {
+        return undefined;
+      }
+
+      return value;
+    });
+
+    return total + countFilledFilterValues(values);
+  }, 0);
+}
+
+function countMoreFilters(filters: FilterState): number {
+  const root = getFilterRoot(filters);
+  const search = toRecord(root.search);
+  const influencer = toRecord(root.influencer);
+  const audience = toRecord(root.audience);
+
+  const searchMode =
+    typeof search.mode === "string" ? search.mode : "combined";
+
+  let total = 0;
+
+  if (searchMode && searchMode !== "combined") {
+    total += 1;
+  }
+
+  if (hasActiveFilterValue(influencer.tier)) {
+    total += 1;
+  }
+
+  if (searchMode === "standard" && influencer.isVerified === true) {
+    total += 1;
+  } else if (!searchMode || searchMode === "combined") {
+    if (influencer.isVerified === true) total += 1;
+  }
+
+  if (hasActiveFilterValue(influencer.gender)) {
+    total += 1;
+  }
+
+  if (
+    hasActiveFilterValue(influencer.ageMin) ||
+    hasActiveFilterValue(influencer.ageMax)
+  ) {
+    total += 1;
+  }
+
+  if (hasActiveFilterValue(audience.country)) {
+    total += 1;
+  }
+
+  return total;
+}
+
 export default function ModashDashboard() {
-  const [platforms, setPlatforms] = useState<Platform[]>([
-    "youtube",
-  ]);
+  const [platforms, setPlatforms] = useState<Platform[]>([DEFAULT_PLATFORM]);
   const [queryText, setQueryText] = useState("");
   const [brandId, setBrandId] = useState<string>("");
   const [panelOpen, setPanelOpen] = useState(false);
@@ -78,6 +280,7 @@ export default function ModashDashboard() {
   } = useInfluencerReport();
 
   const { exists: emailExists, checkStatus } = useEmailStatus();
+
   const {
     searchState,
     filters,
@@ -89,16 +292,23 @@ export default function ModashDashboard() {
   } = useInfluencerSearch(platforms);
 
   const primaryPlatform: Platform = useMemo(
-    () => platforms[0] ?? "youtube",
+    () => platforms[0] ?? DEFAULT_PLATFORM,
     [platforms]
   );
-  const activeFilterCount = useMemo(
-    () => countActiveFilters(filters),
+
+  const platformFilterCount = useMemo<number>(
+    () => countPlatformFilters(filters),
+    [filters]
+  );
+
+  const moreFilterCount = useMemo<number>(
+    () => countMoreFilters(filters),
     [filters]
   );
 
   const persistPanelState = useCallback((next: SavedDetailPanelState) => {
     if (typeof window === "undefined") return;
+
     window.sessionStorage.setItem(
       DETAIL_PANEL_STORAGE_KEY,
       JSON.stringify(next)
@@ -114,6 +324,7 @@ export default function ModashDashboard() {
     if (typeof window === "undefined") return;
 
     const rawSaved = window.sessionStorage.getItem(SEARCH_UI_STORAGE_KEY);
+
     if (!rawSaved) {
       setSearchStateRestored(true);
       return;
@@ -127,7 +338,7 @@ export default function ModashDashboard() {
       }
 
       if (Array.isArray(saved?.platforms) && saved.platforms.length) {
-        setPlatforms(["youtube"]);
+        setPlatforms(saved.platforms);
       }
 
       setRestoredSearch(saved);
@@ -203,6 +414,7 @@ export default function ModashDashboard() {
     if (Array.isArray(searchState.results) && searchState.results.length > 0) {
       return searchState.results;
     }
+
     return restoredSearch?.results ?? [];
   }, [searchState.results, restoredSearch]);
 
@@ -226,15 +438,14 @@ export default function ModashDashboard() {
     }
   }, [selectedId, selectedInfluencer, visibleResults]);
 
-  const onApplyFilters = useCallback(() => {
-    // runSearch({ queryText });
-  }, [queryText, runSearch]);
+  const onApplyFilters = useCallback(() => {}, []);
 
   const onViewProfile = useCallback(
     (influencer: any) => {
       const inferredPlatform = influencer?.platform as
         | ReportPlatform
         | undefined;
+
       if (!inferredPlatform) return;
 
       const idCandidate =
@@ -272,6 +483,7 @@ export default function ModashDashboard() {
         const safeHandle = String(handleCandidate).startsWith("@")
           ? String(handleCandidate)
           : `@${String(handleCandidate)}`;
+
         checkStatus(safeHandle, inferredPlatform);
       }
     },
@@ -289,6 +501,7 @@ export default function ModashDashboard() {
 
   const handleRefreshReport = useCallback(async () => {
     if (!selectedId || !selectedPlatform) return;
+
     await fetchReport(
       selectedId,
       selectedPlatform,
@@ -302,6 +515,7 @@ export default function ModashDashboard() {
     (profile: any) => {
       const nextPlatform = (profile?.provider ||
         profile?.platform) as ReportPlatform | undefined;
+
       const nextId =
         profile?.modashId ||
         profile?._id ||
@@ -333,6 +547,7 @@ export default function ModashDashboard() {
         const safeHandle = String(nextHandle).startsWith("@")
           ? String(nextHandle)
           : `@${String(nextHandle)}`;
+
         checkStatus(safeHandle, nextPlatform);
       }
     },
@@ -359,12 +574,14 @@ export default function ModashDashboard() {
               resetFilters();
               setQueryText("");
               setRestoredSearch(null);
+
               if (typeof window !== "undefined") {
                 window.sessionStorage.removeItem(SEARCH_UI_STORAGE_KEY);
               }
             }}
             onApplyFilters={onApplyFilters}
-            activeFilterCount={activeFilterCount}
+            platformFilterCount={platformFilterCount}
+            moreFilterCount={moreFilterCount}
           />
 
           <ResultsGrid
@@ -391,6 +608,7 @@ export default function ModashDashboard() {
         platform={selectedPlatform}
         onChangeCalc={(calc) => {
           setCalculationMethod(calc);
+
           if (selectedId && selectedPlatform) {
             fetchReport(selectedId, selectedPlatform, calc);
 

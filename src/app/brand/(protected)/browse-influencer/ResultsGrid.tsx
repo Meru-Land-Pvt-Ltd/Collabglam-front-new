@@ -188,7 +188,7 @@ export function ResultsGrid({
             ) : null}
           </div>
 
-          {(hasMore || loading) && (
+          {/* {(hasMore || loading) && (
             <div className="flex flex-wrap items-center gap-2">
               {hasMore && onLoadMore && (
                 <button
@@ -214,7 +214,7 @@ export function ResultsGrid({
                 </button>
               )}
             </div>
-          )}
+          )} */}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-[#666]">

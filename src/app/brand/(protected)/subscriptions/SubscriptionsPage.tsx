@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { get, post } from "@/lib/api";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,12 +11,11 @@ import {
   X,
   Loader2,
   Crown,
-  AlertTriangle,
 } from "lucide-react";
 import CheckoutAutoStart from "@/components/common/CheckoutAutoStart";
 import { Button } from "@/components/ui/buttonComp";
 
-type BillingCycle = "monthly" | "annual";
+type BillingCycle = "monthly" | "annually";
 type PaymentStatus = "idle" | "processing" | "success" | "failed";
 
 interface Feature {
@@ -43,6 +42,20 @@ interface Plan {
   features: Feature[];
 }
 
+interface AdminSubscriptionListItem {
+  _id: string;
+  name: string;
+  monthlyCost: number;
+  annualCost?: number;
+  currency?: string;
+}
+
+interface AdminSubscriptionListResponse {
+  success: boolean;
+  message?: string;
+  data: AdminSubscriptionListItem[];
+}
+
 interface BrandSubscription {
   planName: string;
   expiresAt: string | null;
@@ -58,6 +71,33 @@ interface BrandProfile {
 interface BrandResponse {
   success: boolean;
   data: BrandProfile;
+}
+
+interface VerifiedCouponSubscription {
+  _id?: string;
+  name?: string;
+  monthlyCost?: number;
+  annualCost?: number;
+  currency?: string;
+}
+
+interface VerifiedCouponData {
+  couponId?: string;
+  brandId?: string;
+  subscriptionId?: string | VerifiedCouponSubscription | null;
+  mode?: string;
+  promocode?: string;
+  promoCode?: string;
+  newPrice?: number;
+  expiredAt?: string | null;
+  hasUsed?: boolean;
+}
+
+interface VerifyCouponResponse {
+  success?: boolean;
+  verified?: boolean;
+  message?: string;
+  data?: VerifiedCouponData;
 }
 
 const STRIPE_HANDLED_KEY = "stripe_subscription_handled_session";
@@ -118,7 +158,7 @@ const MARKETING_COPY: Record<
     subtitle: "Scale Your Influencer Marketing With Confidence",
     description:
       "Designed for brands ready to run consistent campaigns and grow their reach faster. This plan gives you the right balance of flexibility, performance, and support.",
-    cta: "Start Growing",
+    cta: "Upgrade",
     annualText: "$948 per year",
     savingsText: "Save 20% ($240 per year)",
     sections: [
@@ -156,7 +196,7 @@ const MARKETING_COPY: Record<
     subtitle: "Run Large-Scale Campaigns Without Limits",
     description:
       "Built for brands managing high-volume collaborations and multiple campaigns. This plan gives you the capacity, speed, and support needed to scale influencer marketing operations.",
-    cta: "Scale Campaigns",
+    cta: "Upgrade",
     annualText: "$2,988 per year",
     savingsText: "Save 17% ($600 per year)",
     sections: [
@@ -248,8 +288,90 @@ const getAnnualTotal = (plan: Plan) => {
   return 0;
 };
 
+const getPlanSubscriptionId = (plan: Plan) => plan._id || plan.planId;
+
+const getCouponSubscriptionId = (coupon?: VerifiedCouponData | null) => {
+  if (!coupon?.subscriptionId) return "";
+
+  if (typeof coupon.subscriptionId === "string") {
+    return coupon.subscriptionId;
+  }
+
+  return coupon.subscriptionId._id || "";
+};
+
+const getCouponCode = (coupon?: VerifiedCouponData | null) => {
+  return coupon?.promocode || coupon?.promoCode || "";
+};
+
+const normalizeBillingMode = (value?: string | null): BillingCycle | null => {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (normalized === "monthly") return "monthly";
+  if (normalized === "annual" || normalized === "annually" || normalized === "yearly") {
+    return "annually";
+  }
+
+  return null;
+};
+
+const getPlanBillingModes = (plan?: Plan | null) => {
+  if (!plan) return [] as BillingCycle[];
+
+  const modes: BillingCycle[] = [];
+
+  if (typeof plan.monthlyCost === "number") {
+    modes.push("monthly");
+  }
+
+  if (typeof plan.annualCost === "number") {
+    modes.push("annually");
+  }
+
+  return modes;
+};
+
+const formatPlanName = (name?: string) => {
+  if (!name) return "Plan";
+  return name.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const formatPlanAmount = (plan: Plan, amount: number) => {
+  return `${currencySymbol(plan.currency)}${Number(amount || 0).toLocaleString()}`;
+};
+
+const getDiscountAmount = (coupon?: VerifiedCouponData | null) => {
+  const discountAmount = Number(coupon?.newPrice || 0);
+
+  if (!Number.isFinite(discountAmount) || discountAmount <= 0) {
+    return 0;
+  }
+
+  return discountAmount;
+};
+
+const getDiscountedAmount = (baseAmount: number, coupon?: VerifiedCouponData | null) => {
+  const discountAmount = getDiscountAmount(coupon);
+  return Math.max(baseAmount - discountAmount, 0);
+};
+
+const mapAdminSubscriptionToPlan = (item: AdminSubscriptionListItem): Plan => {
+  return {
+    _id: item._id,
+    planId: item._id,
+    role: "Brand",
+    name: item.name,
+    displayName: formatPlanName(item.name),
+    monthlyCost: item.monthlyCost ?? 0,
+    annualCost: item.annualCost,
+    currency: item.currency || "USD",
+    features: [],
+  };
+};
+
 const stripStripeParamsFromUrl = () => {
   if (typeof window === "undefined") return;
+
   const url = new URL(window.location.href);
   url.searchParams.delete("stripe_success");
   url.searchParams.delete("stripe_cancel");
@@ -257,14 +379,33 @@ const stripStripeParamsFromUrl = () => {
   window.history.replaceState({}, "", url.toString());
 };
 
+const syncCouponParamsToUrl = ({
+  subscriptionId,
+  mode,
+  promoCode,
+}: {
+  subscriptionId: string;
+  mode: BillingCycle;
+  promoCode: string;
+}) => {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("subscriptionId", subscriptionId);
+  url.searchParams.set("mode", mode);
+  url.searchParams.set("promoCode", promoCode);
+  window.history.replaceState({}, "", url.toString());
+};
+
 const resolveMarketingCopy = (plan: Plan) => {
   const key = plan.name.toLowerCase();
+
   return (
     MARKETING_COPY[key] ?? {
       title: plan.displayName || plan.name.toUpperCase(),
       subtitle: plan.overview || "Built for growing brands.",
       description: plan.overview || "Flexible creator collaboration tools for your brand.",
-      cta: plan.monthlyCost <= 0 ? "Start Free" : "Choose Plan",
+      cta: plan.monthlyCost <= 0 ? "Start Free" : "Upgrade",
       sections: [
         {
           items: ["Instagram creator access", "TikTok creator access", "YouTube creator access"],
@@ -277,6 +418,9 @@ const resolveMarketingCopy = (plan: Plan) => {
 export default function BrandSubscriptionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const autoCouponKeyRef = useRef("");
+
+  const requestedSubscriptionId = searchParams.get("subscriptionId") || "";
 
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -287,10 +431,20 @@ export default function BrandSubscriptionPage() {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
   const [paymentMessage, setPaymentMessage] = useState("");
 
-  const [showDowngradeModal, setShowDowngradeModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-  const [confirmText, setConfirmText] = useState("");
-  const [submittingDowngrade, setSubmittingDowngrade] = useState(false);
+  const [verifiedCoupon, setVerifiedCoupon] = useState<VerifiedCouponData | null>(null);
+  const [verifyingCoupon, setVerifyingCoupon] = useState(false);
+  const [promoSubscriptionId, setPromoSubscriptionId] = useState("");
+  const [promoMode, setPromoMode] = useState<BillingCycle>("monthly");
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [showPromoDialog, setShowPromoDialog] = useState(false);
+  const [planPendingPromo, setPlanPendingPromo] = useState<Plan | null>(null);
+  const [promoMessage, setPromoMessage] = useState<{
+    type: "idle" | "success" | "failed";
+    message: string;
+  }>({
+    type: "idle",
+    message: "",
+  });
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactSubmitting, setContactSubmitting] = useState(false);
@@ -309,6 +463,92 @@ export default function BrandSubscriptionPage() {
     message: "",
   });
 
+  const verifyCoupon = useCallback(
+    async ({
+      subscriptionId,
+      mode,
+      promoCode,
+      updateUrl = false,
+    }: {
+      subscriptionId: string;
+      mode: BillingCycle;
+      promoCode: string;
+      updateUrl?: boolean;
+    }) => {
+      const cleanPromoCode = promoCode.trim();
+
+      if (!subscriptionId || !mode || !cleanPromoCode) {
+        setPromoMessage({
+          type: "failed",
+          message: "Please enter a promo code.",
+        });
+        return null;
+      }
+
+      const brandId = typeof window !== "undefined" ? localStorage.getItem("brandId") : "";
+
+      if (!brandId) {
+        setPromoMessage({
+          type: "failed",
+          message: "Missing brand ID. Please log in again.",
+        });
+        return null;
+      }
+
+      setVerifyingCoupon(true);
+      setPromoMessage({ type: "idle", message: "" });
+
+      try {
+        const resp = await post<VerifyCouponResponse>("/brand/verify-coupon", {
+          brandId,
+          subscriptionId,
+          mode,
+          promocode: cleanPromoCode,
+        });
+
+        if (!resp?.success || !resp?.verified || !resp?.data) {
+          throw new Error(resp?.message || "Invalid promo code.");
+        }
+
+        const couponData = resp.data;
+        const verifiedSubscriptionId = getCouponSubscriptionId(couponData) || subscriptionId;
+        const verifiedMode = normalizeBillingMode(couponData.mode) || mode;
+        const verifiedCode = getCouponCode(couponData) || cleanPromoCode;
+
+        setVerifiedCoupon(couponData);
+        setPromoSubscriptionId(verifiedSubscriptionId);
+        setPromoMode(verifiedMode);
+        setPromoCodeInput(verifiedCode);
+        setBilling(verifiedMode);
+
+        setPromoMessage({
+          type: "success",
+          message: resp.message || "Promo code verified successfully.",
+        });
+
+        if (updateUrl) {
+          syncCouponParamsToUrl({
+            subscriptionId: verifiedSubscriptionId,
+            mode: verifiedMode,
+            promoCode: verifiedCode,
+          });
+        }
+
+        return couponData;
+      } catch (error: any) {
+        setVerifiedCoupon(null);
+        setPromoMessage({
+          type: "failed",
+          message: error?.message || "Could not verify promo code.",
+        });
+        return null;
+      } finally {
+        setVerifyingCoupon(false);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const stripeSuccess = searchParams.get("stripe_success");
     const stripeCancel = searchParams.get("stripe_cancel");
@@ -324,10 +564,12 @@ export default function BrandSubscriptionPage() {
     if (stripeSuccess && sessionId) {
       if (typeof window !== "undefined") {
         const handled = sessionStorage.getItem(STRIPE_HANDLED_KEY);
+
         if (handled === sessionId) {
           stripStripeParamsFromUrl();
           return;
         }
+
         sessionStorage.setItem(STRIPE_HANDLED_KEY, sessionId);
       }
 
@@ -383,6 +625,8 @@ export default function BrandSubscriptionPage() {
           localStorage.removeItem("pendingPlanId");
           localStorage.removeItem("pendingPlanName");
           localStorage.removeItem("pendingBillingCycle");
+          localStorage.removeItem("pendingPromoCode");
+          localStorage.removeItem("pendingCouponId");
 
           setPaymentStatus("success");
           setPaymentMessage("Subscription updated successfully!");
@@ -396,31 +640,67 @@ export default function BrandSubscriptionPage() {
   }, [router, searchParams]);
 
   useEffect(() => {
+    const subscriptionId = searchParams.get("subscriptionId") || "";
+    const mode = normalizeBillingMode(searchParams.get("mode"));
+    const promoCode = searchParams.get("promoCode") || searchParams.get("promocode") || "";
+
+    if (!subscriptionId || !mode || !promoCode) return;
+    if (!plans.length) return;
+
+    const key = `${subscriptionId}:${mode}:${promoCode}`;
+    if (autoCouponKeyRef.current === key) return;
+
+    autoCouponKeyRef.current = key;
+
+    const matchedPlan =
+      plans.find((plan) => getPlanSubscriptionId(plan) === subscriptionId) || null;
+
+    setBilling(mode);
+    setPromoSubscriptionId(subscriptionId);
+    setPromoMode(mode);
+    setPromoCodeInput(promoCode);
+
+    if (matchedPlan) {
+      setPlanPendingPromo(matchedPlan);
+    }
+
+    verifyCoupon({
+      subscriptionId,
+      mode,
+      promoCode,
+      updateUrl: false,
+    });
+  }, [plans, searchParams, verifyCoupon]);
+
+  useEffect(() => {
     (async () => {
       try {
-        const { plans: fetched } = await post<{ message: string; plans: Plan[] }>(
-          "/subscription/list",
-          { role: "Brand" }
+        const subscriptionResp = await get<AdminSubscriptionListResponse>(
+          "/admins/subscription-list"
         );
 
-        console.log("fetched plans:", fetched);
+        const fetched = subscriptionResp?.data || [];
 
-        const sorted = (fetched || [])
-          .slice()
-          .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+        const sorted = fetched
+          .map(mapAdminSubscriptionToPlan)
+          .sort((a, b) => {
+            const order: Record<string, number> = {
+              free: 1,
+              growth: 2,
+              pro: 3,
+              fully_managed: 4,
+            };
+
+            return (order[a.name.toLowerCase()] ?? 999) - (order[b.name.toLowerCase()] ?? 999);
+          });
 
         setPlans(sorted);
 
         const id = localStorage.getItem("brandId");
-        console.log("brandId:", id);
 
         if (id) {
           const brandResp = await get<BrandResponse>(`/brand/${id}`);
           const brand = brandResp?.data;
-
-          console.log("brand response:", brandResp);
-          console.log("brand data:", brand);
-          console.log("current subscription plan:", brand?.subscription?.planName);
 
           setCurrentPlan(brand?.subscription?.planName || null);
           setExpiresAt(brand?.subscription?.expiresAt ?? null);
@@ -430,8 +710,7 @@ export default function BrandSubscriptionPage() {
             email: brand?.email || "",
           }));
         }
-      } catch (error) {
-        console.error("subscription load error:", error);
+      } catch {
         setPaymentStatus("failed");
         setPaymentMessage("Unable to load subscription info. Please try again.");
       } finally {
@@ -444,6 +723,16 @@ export default function BrandSubscriptionPage() {
     () => plans.find((p) => p.name.toLowerCase() === currentPlan?.toLowerCase()),
     [plans, currentPlan]
   );
+
+  const currentPlanIsPaid = useMemo(() => {
+    const normalizedCurrentPlan = currentPlan?.trim().toLowerCase();
+
+    if (!normalizedCurrentPlan) return false;
+    if (normalizedCurrentPlan === "free") return false;
+    if (currentPlanObj) return currentPlanObj.monthlyCost > 0;
+
+    return true;
+  }, [currentPlan, currentPlanObj]);
 
   const fullyManagedPlan = useMemo(
     () =>
@@ -463,33 +752,110 @@ export default function BrandSubscriptionPage() {
     [plans]
   );
 
-  const featureLoss = useMemo(() => {
-    if (!currentPlanObj || !selectedPlan) return [] as { key: string; from: any; to: any }[];
+  const visibleStandardPlans = useMemo(() => {
+    if (!requestedSubscriptionId) return standardPlans;
 
-    const mapNew = new Map(selectedPlan.features.map((f) => [f.key, f.value]));
-    const union = Array.from(
-      new Set([
-        ...currentPlanObj.features.map((f) => f.key),
-        ...selectedPlan.features.map((f) => f.key),
-      ])
-    );
+    return standardPlans.filter((plan) => {
+      return getPlanSubscriptionId(plan) === requestedSubscriptionId;
+    });
+  }, [requestedSubscriptionId, standardPlans]);
 
-    return union
-      .map((k) => {
-        const from = currentPlanObj.features.find((f) => f.key === k)?.value;
-        const to = mapNew.get(k);
+  const visibleFullyManagedPlan = useMemo(() => {
+    if (!fullyManagedPlan) return null;
 
-        const loss = (() => {
-          if (typeof from === "number" && typeof to === "number") return to < from;
-          if (typeof from === "boolean" && typeof to === "boolean") return from && !to;
-          if (Array.isArray(from) && Array.isArray(to)) return to.length < from.length;
-          return false;
-        })();
+    if (!requestedSubscriptionId) return fullyManagedPlan;
 
-        return loss ? { key: k, from, to } : null;
-      })
-      .filter(Boolean) as { key: string; from: any; to: any }[];
-  }, [currentPlanObj, selectedPlan]);
+    return getPlanSubscriptionId(fullyManagedPlan) === requestedSubscriptionId
+      ? fullyManagedPlan
+      : null;
+  }, [fullyManagedPlan, requestedSubscriptionId]);
+
+  const visiblePlans = useMemo(() => {
+    return [...visibleStandardPlans, ...(visibleFullyManagedPlan ? [visibleFullyManagedPlan] : [])];
+  }, [visibleFullyManagedPlan, visibleStandardPlans]);
+
+  const promoPlanOptions = useMemo(() => {
+    const source = requestedSubscriptionId ? visiblePlans : plans;
+    return source.filter((plan) => !!getPlanSubscriptionId(plan));
+  }, [plans, requestedSubscriptionId, visiblePlans]);
+
+  const selectedPromoPlan = useMemo(() => {
+    return promoPlanOptions.find((plan) => getPlanSubscriptionId(plan) === promoSubscriptionId) || null;
+  }, [promoPlanOptions, promoSubscriptionId]);
+
+  useEffect(() => {
+    if (requestedSubscriptionId) {
+      setPromoSubscriptionId(requestedSubscriptionId);
+      return;
+    }
+
+    if (!promoSubscriptionId && promoPlanOptions[0]) {
+      const firstPlan = promoPlanOptions[0];
+      const firstPlanId = getPlanSubscriptionId(firstPlan);
+      const modes = getPlanBillingModes(firstPlan);
+
+      setPromoSubscriptionId(firstPlanId);
+
+      if (modes[0]) {
+        setPromoMode(modes[0]);
+      }
+    }
+  }, [promoPlanOptions, promoSubscriptionId, requestedSubscriptionId]);
+
+  useEffect(() => {
+    if (!selectedPromoPlan) return;
+
+    const modes = getPlanBillingModes(selectedPromoPlan);
+
+    if (modes.length && !modes.includes(promoMode)) {
+      setPromoMode(modes[0]);
+    }
+  }, [promoMode, selectedPromoPlan]);
+
+  const getAppliedCouponForPlan = useCallback(
+    (plan: Plan) => {
+      if (!verifiedCoupon) return null;
+
+      const couponSubscriptionId = getCouponSubscriptionId(verifiedCoupon);
+      const planSubscriptionId = getPlanSubscriptionId(plan);
+      const couponMode = normalizeBillingMode(verifiedCoupon.mode);
+
+      if (!couponSubscriptionId || !planSubscriptionId || couponSubscriptionId !== planSubscriptionId) {
+        return null;
+      }
+
+      if (!couponMode || couponMode !== billing) {
+        return null;
+      }
+
+      if (typeof verifiedCoupon.newPrice !== "number") {
+        return null;
+      }
+
+      return verifiedCoupon;
+    },
+    [billing, verifiedCoupon]
+  );
+
+  const getBasePayAmount = (plan: Plan, billingOverride: BillingCycle = billing) => {
+    if (billingOverride === "annually") return getAnnualTotal(plan) || plan.monthlyCost * 12;
+    return plan.monthlyCost;
+  };
+
+  const getPayAmount = (
+    plan: Plan,
+    couponOverride?: VerifiedCouponData | null,
+    billingOverride: BillingCycle = billing
+  ) => {
+    const appliedCoupon = couponOverride ?? getAppliedCouponForPlan(plan);
+    const baseAmount = getBasePayAmount(plan, billingOverride);
+
+    if (appliedCoupon) {
+      return getDiscountedAmount(baseAmount, appliedCoupon);
+    }
+
+    return baseAmount;
+  };
 
   const openContactModal = () => {
     setContactToast({ type: "idle", message: "" });
@@ -501,6 +867,149 @@ export default function BrandSubscriptionPage() {
         "Hi CollabGlam team, we want help running our campaigns with a managed plan. Please share next steps.",
     }));
     setShowContactModal(true);
+  };
+
+  const assignFreePlan = async (plan: Plan) => {
+    if (currentPlanIsPaid) {
+      setPaymentStatus("failed");
+      setPaymentMessage("Downgrading to the Free plan is not available.");
+      return;
+    }
+
+    setProcessing(plan.name);
+    setPaymentStatus("processing");
+    setPaymentMessage("Activating free plan…");
+
+    try {
+      const brandId = localStorage.getItem("brandId");
+
+      if (!brandId) {
+        throw new Error("Missing brandId.");
+      }
+
+      const assignResp = await post<{
+        message: string;
+        subscription?: { planId?: string; planName?: string; expiresAt?: string | null };
+      }>("/subscription/assign", {
+        userType: "Brand",
+        userId: brandId,
+        planId: plan.planId,
+        billingCycle: "monthly",
+      });
+
+      const assignedPlanName = assignResp?.subscription?.planName || plan.name;
+
+      setCurrentPlan(assignedPlanName);
+      setExpiresAt(assignResp?.subscription?.expiresAt ?? null);
+
+      localStorage.setItem("brandPlanName", assignedPlanName);
+      localStorage.setItem("brandPlanId", plan.planId);
+
+      setPaymentStatus("success");
+      setPaymentMessage("Free plan activated successfully.");
+      router.refresh?.();
+    } catch (e: any) {
+      setPaymentStatus("failed");
+      setPaymentMessage(e?.message || "Could not activate the Free plan.");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const proceedToCheckout = async (
+    plan: Plan,
+    couponOverride?: VerifiedCouponData | null,
+    billingOverride: BillingCycle = billing
+  ) => {
+    if (processing || plan.name.toLowerCase() === currentPlan?.toLowerCase()) return;
+
+    if (plan.monthlyCost <= 0) {
+      await assignFreePlan(plan);
+      return;
+    }
+
+    const appliedCoupon = couponOverride ?? getAppliedCouponForPlan(plan);
+
+    setProcessing(plan.name);
+    setPaymentStatus("processing");
+    setPaymentMessage("Redirecting to secure checkout…");
+
+    try {
+      const brandId = localStorage.getItem("brandId");
+      if (!brandId) throw new Error("Missing brandId.");
+
+      const appliedPromoCode = getCouponCode(appliedCoupon);
+      const appliedCouponId = appliedCoupon?.couponId || "";
+      const originalAmount = getBasePayAmount(plan, billingOverride);
+      const discountAmount = appliedCoupon ? getDiscountAmount(appliedCoupon) : 0;
+      const finalAmount = getPayAmount(plan, appliedCoupon, billingOverride);
+
+      localStorage.setItem("pendingPlanId", plan.planId);
+      localStorage.setItem("pendingPlanName", plan.name);
+      localStorage.setItem("pendingBillingCycle", billingOverride);
+
+      if (appliedPromoCode) {
+        localStorage.setItem("pendingPromoCode", appliedPromoCode);
+      } else {
+        localStorage.removeItem("pendingPromoCode");
+      }
+
+      if (appliedCouponId) {
+        localStorage.setItem("pendingCouponId", appliedCouponId);
+      } else {
+        localStorage.removeItem("pendingCouponId");
+      }
+
+      const resp = await post<{ success: boolean; url?: string; message?: string }>(
+        "/payment/Order",
+        {
+          planId: plan.planId,
+          amount: finalAmount,
+          currency: plan.currency || "USD",
+          userId: brandId,
+          role: "Brand",
+          billingCycle: billingOverride,
+          promoCode: appliedPromoCode || undefined,
+          promocode: appliedPromoCode || undefined,
+          couponId: appliedCouponId || undefined,
+          originalAmount: appliedCoupon ? originalAmount : undefined,
+          discountAmount: appliedCoupon ? discountAmount : undefined,
+        }
+      );
+
+      if (!resp?.success || !resp?.url) {
+        throw new Error(resp?.message || "Failed to start checkout.");
+      }
+
+      window.location.href = resp.url;
+    } catch (e: any) {
+      setPaymentStatus("failed");
+      setPaymentMessage(e?.message || "Failed to initiate payment. Try again later.");
+      setProcessing(null);
+    }
+  };
+
+  const handleVerifyPromoCode = async () => {
+    if (!planPendingPromo) {
+      setPromoMessage({
+        type: "failed",
+        message: "Please select a plan first.",
+      });
+      return;
+    }
+
+    const result = await verifyCoupon({
+      subscriptionId: promoSubscriptionId,
+      mode: promoMode,
+      promoCode: promoCodeInput,
+      updateUrl: true,
+    });
+
+    if (result) {
+      setBilling(promoMode);
+      setShowPromoDialog(false);
+      await proceedToCheckout(planPendingPromo, result, promoMode);
+    }
   };
 
   const handleSendContact = async (e?: React.FormEvent) => {
@@ -526,93 +1035,43 @@ export default function BrandSubscriptionPage() {
     }
   };
 
-  const getPayAmount = (plan: Plan) => {
-    if (billing === "annual") return getAnnualTotal(plan) || plan.monthlyCost * 12;
-    return plan.monthlyCost;
-  };
-
   const handleSelect = async (plan: Plan) => {
     if (processing || plan.name.toLowerCase() === currentPlan?.toLowerCase()) return;
 
-    const key = plan.name.toLowerCase();
-    const isManagedPlan = key === "fully_managed" || key === "enterprise" || !!plan.isCustomPricing;
-
-    if (isManagedPlan) {
-      openContactModal();
-      return;
-    }
-
     if (plan.monthlyCost <= 0) {
-      setSelectedPlan(plan);
-      setShowDowngradeModal(true);
-      setPaymentStatus("idle");
-      setPaymentMessage("");
-      return;
-    }
-
-    setProcessing(plan.name);
-    setPaymentStatus("processing");
-    setPaymentMessage("Redirecting to secure checkout…");
-
-    try {
-      const brandId = localStorage.getItem("brandId");
-      if (!brandId) throw new Error("Missing brandId.");
-
-      localStorage.setItem("pendingPlanId", plan.planId);
-      localStorage.setItem("pendingPlanName", plan.name);
-      localStorage.setItem("pendingBillingCycle", billing);
-
-      const resp = await post<{ success: boolean; url?: string; message?: string }>(
-        "/payment/Order",
-        {
-          planId: plan.planId,
-          amount: getPayAmount(plan),
-          currency: plan.currency || "USD",
-          userId: brandId,
-          role: "Brand",
-          billingCycle: billing,
-        }
-      );
-
-      if (!resp?.success || !resp?.url) {
-        throw new Error(resp?.message || "Failed to start checkout.");
+      if (currentPlanIsPaid) {
+        setPaymentStatus("failed");
+        setPaymentMessage("Downgrading to the Free plan is not available.");
+        return;
       }
 
-      window.location.href = resp.url;
-    } catch (e: any) {
-      setPaymentStatus("failed");
-      setPaymentMessage(e?.message || "Failed to initiate payment. Try again later.");
-      setProcessing(null);
+      await assignFreePlan(plan);
+      return;
     }
-  };
 
-  const handleConfirmDowngrade = async () => {
-    if (!selectedPlan || confirmText.trim().toUpperCase() !== "CANCEL") return;
+    const planSubscriptionId = getPlanSubscriptionId(plan);
+    const planModes = getPlanBillingModes(plan);
+    const nextPromoMode = planModes.includes(billing) ? billing : planModes[0] || billing;
+    const existingCoupon = getAppliedCouponForPlan(plan);
+    const urlPromoCode =
+      searchParams.get("promoCode") || searchParams.get("promocode") || "";
 
-    setSubmittingDowngrade(true);
-    try {
-      const brandId = localStorage.getItem("brandId");
-      await post("/subscription/assign", {
-        userType: "Brand",
-        userId: brandId,
-        planId: selectedPlan.planId,
-        billingCycle: "monthly",
-      });
-
-      setCurrentPlan(selectedPlan.name);
-      setExpiresAt(null);
-      localStorage.setItem("brandPlanName", selectedPlan.name);
-      localStorage.setItem("brandPlanId", selectedPlan.planId);
-      setPaymentStatus("success");
-      setPaymentMessage(`You've moved to the ${capitalize(selectedPlan.name)} plan.`);
-      setShowDowngradeModal(false);
-      setConfirmText("");
-    } catch {
-      setPaymentStatus("failed");
-      setPaymentMessage("Could not change your plan right now. Please try again.");
-    } finally {
-      setSubmittingDowngrade(false);
-    }
+    setPlanPendingPromo(plan);
+    setPromoSubscriptionId(planSubscriptionId);
+    setPromoMode(nextPromoMode);
+    setPromoCodeInput(existingCoupon ? getCouponCode(existingCoupon) : urlPromoCode);
+    setPromoMessage(
+      existingCoupon
+        ? {
+            type: "success",
+            message: "Promo code already applied. Continue to checkout.",
+          }
+        : {
+            type: "idle",
+            message: "",
+          }
+    );
+    setShowPromoDialog(true);
   };
 
   if (loading) {
@@ -634,13 +1093,16 @@ export default function BrandSubscriptionPage() {
             <span className="inline-flex items-center rounded-full border border-[#d1d1d1] bg-white px-4 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#1a1a1a]">
               CollabGlam Pricing Plans
             </span>
+
             <h1 className="mt-5 text-4xl font-bold tracking-tight text-[#250054] sm:text-5xl">
               Find Influencers. Launch Campaigns. Grow Faster.
             </h1>
+
             <p className="mt-4 text-lg leading-8 text-slate-600">
               Start collaborating with verified creators across Instagram, TikTok, and YouTube —
               all from one platform.
             </p>
+
             <p className="mt-3 text-sm font-medium text-slate-500">
               No setup fees • Cancel anytime • 7-day Money-Back Guarantee
             </p>
@@ -650,19 +1112,23 @@ export default function BrandSubscriptionPage() {
             <div className="inline-flex rounded-lg border border-[#eadcf5] bg-white p-1 shadow-sm">
               <button
                 onClick={() => setBilling("monthly")}
-                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${billing === "monthly" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
-                  }`}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${
+                  billing === "monthly" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
+                }`}
               >
                 Monthly
               </button>
+
               <button
-                onClick={() => setBilling("annual")}
-                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${billing === "annual" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
-                  }`}
+                onClick={() => setBilling("annually")}
+                className={`rounded-lg px-5 py-2 text-sm font-semibold transition ${
+                  billing === "annually" ? "bg-[#1a1a1a] text-white" : "text-slate-600"
+                }`}
               >
                 Annual
               </button>
             </div>
+
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
               Save more yearly
             </span>
@@ -673,16 +1139,18 @@ export default function BrandSubscriptionPage() {
               <div className="flex items-center justify-center gap-2 text-sm font-semibold uppercase tracking-wide text-[#1a1a1a]">
                 <CheckCircle className="h-4 w-4" /> Current Plan
               </div>
+
               <h2 className="mt-2 text-2xl font-bold text-[#250054]">
                 {currentPlanObj?.displayName || capitalize(currentPlan)}
               </h2>
+
               <p className="mt-1 text-sm text-slate-500">
                 {expiresAt
                   ? `Renews on ${new Date(expiresAt).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}`
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}`
                   : "No renewal date set"}
               </p>
             </div>
@@ -691,12 +1159,13 @@ export default function BrandSubscriptionPage() {
           {paymentStatus !== "idle" && (
             <div className="mx-auto mt-6 max-w-xl rounded-2xl border bg-white px-5 py-4 shadow-sm">
               <div
-                className={`flex items-center justify-center gap-3 text-sm font-medium ${paymentStatus === "success"
-                  ? "text-emerald-700"
-                  : paymentStatus === "failed"
-                    ? "text-rose-700"
-                    : "text-amber-700"
-                  }`}
+                className={`flex items-center justify-center gap-3 text-sm font-medium ${
+                  paymentStatus === "success"
+                    ? "text-emerald-700"
+                    : paymentStatus === "failed"
+                      ? "text-rose-700"
+                      : "text-amber-700"
+                }`}
               >
                 {paymentStatus === "success" ? (
                   <CheckCircle className="h-5 w-5" />
@@ -705,13 +1174,14 @@ export default function BrandSubscriptionPage() {
                 ) : (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 )}
+
                 <span>{paymentMessage}</span>
               </div>
             </div>
           )}
 
           <div className="mt-12 grid gap-8 md:grid-cols-2 xl:grid-cols-3">
-            {standardPlans.map((plan) => {
+            {visibleStandardPlans.map((plan) => {
               const key = plan.name.toLowerCase();
               const copy = resolveMarketingCopy(plan);
               const theme = getPlanTheme(key);
@@ -720,12 +1190,19 @@ export default function BrandSubscriptionPage() {
               const isProcessing = processing === plan.name;
               const symbol = currencySymbol(plan.currency);
               const annualTotal = getAnnualTotal(plan);
+              const appliedCoupon = getAppliedCouponForPlan(plan);
+              const hasCoupon = !!appliedCoupon;
+              const baseAmount = getBasePayAmount(plan);
+              const discountAmount = getDiscountAmount(appliedCoupon);
+              const discountedAmount = getDiscountedAmount(baseAmount, appliedCoupon);
 
               const displayedPrice = isFree
                 ? copy.priceNote ?? "Free forever"
-                : billing === "annual"
-                  ? `${symbol}${annualTotal.toLocaleString()}/year`
-                  : `${symbol}${plan.monthlyCost.toLocaleString()}/month`;
+                : hasCoupon
+                  ? `${symbol}${discountedAmount.toLocaleString()}`
+                  : billing === "annually"
+                    ? `${symbol}${annualTotal.toLocaleString()}`
+                    : `${symbol}${plan.monthlyCost.toLocaleString()}`;
 
               return (
                 <article
@@ -753,32 +1230,45 @@ export default function BrandSubscriptionPage() {
                     }}
                   >
                     <div className="flex items-end gap-2 text-[#250054]">
-                      <span className="text-4xl font-bold tracking-tight">
-                        {displayedPrice.replace(/\/(month|year)$/, "")}
-                      </span>
+                      <span className="text-4xl font-bold tracking-tight">{displayedPrice}</span>
+
                       {!isFree && (
                         <span className="pb-1 text-base text-slate-500">
-                          /{billing === "annual" ? "year" : "month"}
+                          /{billing === "annually" ? "year" : "month"}
                         </span>
                       )}
                     </div>
 
+                    {hasCoupon && !isFree ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                        <span className="text-slate-500 line-through">
+                          {formatPlanAmount(plan, baseAmount)}
+                          /{billing === "annually" ? "year" : "month"}
+                        </span>
+
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                          {getCouponCode(appliedCoupon)} applied ·{" "}
+                          {formatPlanAmount(plan, discountAmount)} off
+                        </span>
+                      </div>
+                    ) : null}
+
                     {isFree && <p className="mt-1 text-sm text-slate-500">Free forever</p>}
 
-                    {!isFree && billing === "annual" && copy.savingsText && (
+                    {!hasCoupon && !isFree && billing === "annually" && copy.savingsText && (
                       <p className="mt-2 text-sm font-semibold text-emerald-700">
                         {copy.savingsText}
                       </p>
                     )}
 
-                    {!isFree && billing === "monthly" && copy.annualText && (
+                    {!hasCoupon && !isFree && billing === "monthly" && copy.annualText && (
                       <p className="mt-2 text-sm text-slate-500">or {copy.annualText}</p>
                     )}
 
                     <Button
                       onClick={() => handleSelect(plan)}
                       disabled={isActive || isProcessing}
-                      className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a] hover:text-[#1a1a1a]"
+                      className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a]"
                       style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
                       onMouseEnter={(e) => {
                         if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
@@ -810,6 +1300,7 @@ export default function BrandSubscriptionPage() {
                               {section.title}
                             </h4>
                           )}
+
                           <ul className="space-y-3">
                             {section.items.map((item) => (
                               <li
@@ -830,106 +1321,156 @@ export default function BrandSubscriptionPage() {
             })}
           </div>
 
-          {fullyManagedPlan && (() => {
-            const plan = fullyManagedPlan;
-            const key = plan.name.toLowerCase();
-            const copy = resolveMarketingCopy(plan);
-            const theme = getPlanTheme(key);
-            const isActive = !!currentPlan && currentPlan.toLowerCase() === key;
-            const isProcessing = processing === plan.name;
+          {visibleFullyManagedPlan &&
+            (() => {
+              const plan = visibleFullyManagedPlan;
+              const key = plan.name.toLowerCase();
+              const copy = resolveMarketingCopy(plan);
+              const theme = getPlanTheme(key);
+              const isActive = !!currentPlan && currentPlan.toLowerCase() === key;
+              const isProcessing = processing === plan.name;
+              const appliedCoupon = getAppliedCouponForPlan(plan);
+              const hasCoupon = !!appliedCoupon;
+              const baseAmount = getBasePayAmount(plan);
+              const discountAmount = getDiscountAmount(appliedCoupon);
+              const discountedAmount = getDiscountedAmount(baseAmount, appliedCoupon);
 
-            return (
-              <div className="mt-8 w-full">
-                <article
-                  className={`relative flex w-full flex-col overflow-hidden rounded-[28px] border bg-white ${theme.cardBorder} lg:flex-row`}
-                >
-                  <div
-                    className="flex w-full flex-col px-8 pt-10 pb-8 lg:w-[38%]"
-                    style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
-                    onMouseEnter={(e) => {
-                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
-                    }}
-                    onMouseLeave={(e) => {
-                      if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
-                    }}
+              return (
+                <div className="mt-8 w-full">
+                  <article
+                    className={`relative flex w-full flex-col overflow-hidden rounded-[28px] border bg-white ${theme.cardBorder} lg:flex-row`}
                   >
-                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-[#d1d1d1] bg-[#f5f5f5]">
-                      <Crown className="h-5 w-5 text-[#1a1a1a]" />
-                    </div>
-
-                    <h3 className="text-3xl font-bold text-[#250054]">{copy.title}</h3>
-                    <p className="mt-3 text-base font-medium text-slate-700">{copy.subtitle}</p>
-                    <p className="mt-3 text-[15px] leading-7 text-slate-600">{copy.description}</p>
-
-                    <div className="mt-8 border-t border-[#ece7f2] pt-7">
-                      <div className="flex items-end gap-2 text-[#250054]">
-                        <span className="text-4xl font-bold tracking-tight">
-                          {copy.priceNote ?? "$2999/month starting"}
-                        </span>
+                    <div
+                      className="flex w-full flex-col px-8 pt-10 pb-8 lg:w-[38%]"
+                      style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
+                      onMouseEnter={(e) => {
+                        if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
+                      }}
+                      onMouseLeave={(e) => {
+                        if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
+                      }}
+                    >
+                      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-[#d1d1d1] bg-[#f5f5f5]">
+                        <Crown className="h-5 w-5 text-[#1a1a1a]" />
                       </div>
 
-                      <p className="mt-2 text-sm text-slate-500">
-                        Custom execution with expert campaign support
+                      <h3 className="text-3xl font-bold text-[#250054]">{copy.title}</h3>
+                      <p className="mt-3 text-base font-medium text-slate-700">{copy.subtitle}</p>
+                      <p className="mt-3 text-[15px] leading-7 text-slate-600">
+                        {copy.description}
                       </p>
 
-                      <Button
-                        onClick={() => handleSelect(plan)}
-                        disabled={isActive || isProcessing}
-                        className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a] hover:text-[#1a1a1a]"
-                        style={isActive ? { backgroundImage: UPGRADE_REST } : undefined}
-                        onMouseEnter={(e) => {
-                          if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_HOVER;
-                        }}
-                        onMouseLeave={(e) => {
-                          if (isActive) e.currentTarget.style.backgroundImage = UPGRADE_REST;
-                        }}
-                      >
-                        {isActive ? (
-                          <span className="inline-flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4" /> Current Plan
+                      <div className="mt-8 border-t border-[#ece7f2] pt-7">
+                        <div className="flex items-end gap-2 text-[#250054]">
+                          <span className="text-4xl font-bold tracking-tight">
+                            {hasCoupon
+                              ? formatPlanAmount(plan, discountedAmount)
+                              : copy.priceNote ?? "$2999/month starting"}
                           </span>
-                        ) : isProcessing ? (
-                          <span className="inline-flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Processing…
-                          </span>
-                        ) : (
-                          copy.cta
-                        )}
-                      </Button>
-                    </div>
-                  </div>
 
-                  <div className="flex-1 border-t border-[#ece7f2] px-8 py-8 lg:border-t-0 lg:border-l">
-                    <div className="space-y-7">
-                      {copy.sections.map((section) => (
-                        <div key={section.title || section.items.join("|")}>
-                          {section.title && (
-                            <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
-                              {section.title}
-                            </h4>
-                          )}
-                          <ul className="grid gap-3 md:grid-cols-2">
-                            {section.items.map((item) => (
-                              <li
-                                key={item}
-                                className="flex items-start gap-3 text-[15px] leading-6 text-slate-700"
-                              >
-                                <Check className="mt-1 h-4 w-4 flex-shrink-0 text-[#1a1a1a]" />
-                                <span>{item}</span>
-                              </li>
-                            ))}
-                          </ul>
+                          {hasCoupon ? (
+                            <span className="pb-1 text-base text-slate-500">
+                              /{billing === "annually" ? "year" : "month"}
+                            </span>
+                          ) : null}
                         </div>
-                      ))}
+
+                        {hasCoupon ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                            <span className="text-slate-500 line-through">
+                              {formatPlanAmount(plan, baseAmount)}
+                              /{billing === "annually" ? "year" : "month"}
+                            </span>
+
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              {getCouponCode(appliedCoupon)} applied ·{" "}
+                              {formatPlanAmount(plan, discountAmount)} off
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-sm text-slate-500">
+                            Custom execution with expert campaign support
+                          </p>
+                        )}
+
+                        {isActive ? (
+                          <Button
+                            disabled
+                            className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a] hover:text-[#1a1a1a]"
+                            style={{ backgroundImage: UPGRADE_REST }}
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4" /> Current Plan
+                            </span>
+                          </Button>
+                        ) : isProcessing ? (
+                          <Button
+                            disabled
+                            className="mt-6 w-full border border-[#e7d7b4] text-[#1a1a1a] hover:text-[#1a1a1a]"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" /> Processing…
+                            </span>
+                          </Button>
+                        ) : (
+                          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                            <Button
+                              onClick={openContactModal}
+                              className="w-full border border-[#e7d7b4] bg-[#1a1a1a] text-[#fcf8ff]"
+                            >
+                              Contact Sales
+                            </Button>
+
+                            <Button
+                              onClick={() => handleSelect(plan)}
+                              className="w-full border border-[#e7d7b4] bg-[#1a1a1a] text-white hover:bg-black"
+                            >
+                              Upgrade
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              </div>
-            );
-          })()}
+
+                    <div className="flex-1 border-t border-[#ece7f2] px-8 py-8 lg:border-t-0 lg:border-l">
+                      <div className="space-y-7">
+                        {copy.sections.map((section) => (
+                          <div key={section.title || section.items.join("|")}>
+                            {section.title && (
+                              <h4 className="mb-4 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                {section.title}
+                              </h4>
+                            )}
+
+                            <ul className="grid gap-3 md:grid-cols-2">
+                              {section.items.map((item) => (
+                                <li
+                                  key={item}
+                                  className="flex items-start gap-3 text-[15px] leading-6 text-slate-700"
+                                >
+                                  <Check className="mt-1 h-4 w-4 flex-shrink-0 text-[#1a1a1a]" />
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              );
+            })()}
+
+          {requestedSubscriptionId && !visiblePlans.length ? (
+            <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-center text-sm font-semibold text-rose-700">
+              No subscription plan matched the subscriptionId in the URL.
+            </div>
+          ) : null}
 
           <div className="mt-12 rounded-[28px] border border-[#eadcf5] bg-white px-8 py-8 shadow-sm">
             <h3 className="text-center text-xl font-bold text-[#250054]">All paid plans include</h3>
+
             <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {[
                 "7-day Money-Back Guarantee",
@@ -963,12 +1504,109 @@ export default function BrandSubscriptionPage() {
           </p>
         </div>
 
+        {showPromoDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-slate-950/60"
+              onClick={() => {
+                setShowPromoDialog(false);
+                setPlanPendingPromo(null);
+              }}
+            />
+
+            <div className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-[#eadcf5] bg-white shadow-2xl">
+              <div className="border-b border-[#ece7f2] bg-[#fcf8ff] px-7 py-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-2xl font-bold text-[#250054]">Apply Promo Code</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Enter your promo code to continue.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPromoDialog(false);
+                      setPlanPendingPromo(null);
+                    }}
+                    className="rounded-full p-2 hover:bg-white"
+                  >
+                    <X className="h-5 w-5 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4 px-7 py-6">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Promo Code
+                  </span>
+
+                  <input
+                    value={promoCodeInput}
+                    onChange={(event) => setPromoCodeInput(event.target.value)}
+                    placeholder="SAVE20"
+                    className="mt-2 h-12 w-full rounded-2xl border border-[#eadcf5] bg-white px-4 text-sm font-semibold text-slate-700 outline-none focus:border-[#250054]"
+                  />
+                </label>
+
+                {promoMessage.type !== "idle" && (
+                  <div
+                    className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+                      promoMessage.type === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-rose-200 bg-rose-50 text-rose-700"
+                    }`}
+                  >
+                    {promoMessage.message}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-[#ece7f2] bg-slate-50 px-7 py-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPromoDialog(false);
+                    setPlanPendingPromo(null);
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700"
+                >
+                  Cancel
+                </button>
+
+                <Button
+                  onClick={handleVerifyPromoCode}
+                  disabled={
+                    verifyingCoupon ||
+                    !planPendingPromo ||
+                    !promoSubscriptionId ||
+                    !promoMode ||
+                    !promoCodeInput.trim()
+                  }
+                  className="rounded-xl border border-[#e7d7b4] bg-[#1a1a1a] px-5 py-3 font-semibold text-white hover:bg-black"
+                >
+                  {verifyingCoupon ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Verifying…
+                    </span>
+                  ) : (
+                    "Apply & Continue"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showContactModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-slate-950/60"
               onClick={() => setShowContactModal(false)}
             />
+
             <div className="relative w-full max-w-2xl overflow-hidden rounded-[28px] border border-[#eadcf5] bg-white shadow-2xl">
               <div className="border-b border-[#ece7f2] bg-[#fcf8ff] px-8 py-6">
                 <div className="flex items-start justify-between gap-4">
@@ -978,6 +1616,7 @@ export default function BrandSubscriptionPage() {
                       Tell us what you need and our team will reach out.
                     </p>
                   </div>
+
                   <button
                     onClick={() => setShowContactModal(false)}
                     className="rounded-full p-2 hover:bg-white"
@@ -990,10 +1629,11 @@ export default function BrandSubscriptionPage() {
               <form onSubmit={handleSendContact} className="space-y-4 px-8 py-6">
                 {contactToast.type !== "idle" && (
                   <div
-                    className={`rounded-2xl border px-4 py-3 text-sm ${contactToast.type === "success"
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-rose-200 bg-rose-50 text-rose-700"
-                      }`}
+                    className={`rounded-2xl border px-4 py-3 text-sm ${
+                      contactToast.type === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-rose-200 bg-rose-50 text-rose-700"
+                    }`}
                   >
                     {contactToast.message}
                   </div>
@@ -1009,6 +1649,7 @@ export default function BrandSubscriptionPage() {
                       className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-400"
                     />
                   </label>
+
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">Email</span>
                     <input
@@ -1052,6 +1693,7 @@ export default function BrandSubscriptionPage() {
                   >
                     Cancel
                   </button>
+
                   <button
                     type="submit"
                     disabled={contactSubmitting}
@@ -1061,101 +1703,6 @@ export default function BrandSubscriptionPage() {
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        )}
-
-        {showDowngradeModal && selectedPlan && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div
-              className="absolute inset-0 bg-slate-950/60"
-              onClick={() => setShowDowngradeModal(false)}
-            />
-            <div className="relative w-full max-w-2xl overflow-hidden rounded-[28px] border border-[#eadcf5] bg-white shadow-2xl">
-              <div className="border-b border-[#ece7f2] bg-[#fff7ed] px-8 py-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-full bg-orange-100 p-2">
-                      <AlertTriangle className="h-5 w-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-[#250054]">
-                        Before you change your plan
-                      </h3>
-                      <p className="mt-1 text-sm text-slate-600">
-                        Some limits may be reduced when you move plans.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowDowngradeModal(false)}
-                    className="rounded-full p-2 hover:bg-white"
-                  >
-                    <X className="h-5 w-5 text-slate-500" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-5 px-8 py-6">
-                <p className="text-sm leading-7 text-slate-700">
-                  You are moving to{" "}
-                  <span className="font-semibold text-[#250054]">
-                    {capitalize(selectedPlan.name)}
-                  </span>
-                  .
-                </p>
-
-                {featureLoss.length > 0 && (
-                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-5">
-                    <p className="font-semibold text-rose-800">Reduced allowances</p>
-                    <ul className="mt-3 space-y-2 text-sm text-rose-700">
-                      {featureLoss.map((item) => (
-                        <li key={item.key} className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-rose-400" />
-                          <span>
-                            {item.key}: {String(item.from)} → {String(item.to)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-5 text-sm text-orange-900">
-                  Need a better fit instead? Email{" "}
-                  <a href="mailto:support@collabglam.com" className="font-semibold underline">
-                    support@collabglam.com
-                  </a>
-                  .
-                </div>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">
-                    Type CANCEL to confirm
-                  </span>
-                  <input
-                    value={confirmText}
-                    onChange={(e) => setConfirmText(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-fuchsia-400"
-                  />
-                </label>
-              </div>
-
-              <div className="flex flex-col justify-end gap-3 border-t border-[#ece7f2] bg-slate-50 px-8 py-5 sm:flex-row">
-                <button
-                  onClick={() => setShowDowngradeModal(false)}
-                  className="rounded-xl border border-slate-200 bg-white px-5 py-3 font-semibold text-slate-700"
-                >
-                  Keep Current Plan
-                </button>
-                <button
-                  onClick={handleConfirmDowngrade}
-                  disabled={confirmText.trim().toUpperCase() !== "CANCEL" || submittingDowngrade}
-                  className="rounded-xl bg-gradient-to-r from-orange-500 via-pink-500 to-fuchsia-500 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submittingDowngrade ? "Applying…" : "Confirm Change"}
-                </button>
-              </div>
             </div>
           </div>
         )}

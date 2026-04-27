@@ -1,7 +1,7 @@
 // services/brandApi.ts
 import axios from "axios";
 import * as Api from "@/lib/api";
-import { post as libPost } from "@/lib/api";
+import { post as libPost, patch as libPatch } from "@/lib/api";
 
 const BRAND_BASE = "/brand";
 const LIST_BASE = "/list";
@@ -14,7 +14,7 @@ const DELIVERABLE_BASE = "/deliverable";
 const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 const Apply_Base = "/apply";
 const CONTRACT_BASE = "/contract";
-
+const DISPUTE_BASE = "/dispute";
 /** -------------------------
  *  ✅ Response Unwrap Helpers
  *  ------------------------*/
@@ -75,7 +75,7 @@ export function getApiErrorMessage(err: unknown, fallback = "Something went wron
 /** -------------------------
  *  ✅ Request Core (GET/POST only)
  *  ------------------------*/
-type HttpMethod = "GET" | "POST";
+type HttpMethod = "GET" | "POST" | "PATCH";
 type AnyObj = Record<string, any>;
 
 type RequestConfig = {
@@ -145,6 +145,16 @@ async function apiPost<T>(path: string, body?: any, config?: RequestConfig) {
   }
   return apiRequest<T>("POST", path, { data: body, config });
 }
+
+async function apiPatch<T>(path: string, body?: any, config?: RequestConfig) {
+  // Prefer your existing lib patch() if present
+  if (typeof libPatch === "function") {
+    const res = await (libPatch as any)(path, body, config);
+    return unwrap<T>(res as any);
+  }
+  return apiRequest<T>("PATCH", path, { data: body, config });
+}
+
 
 /** -------------------------
  *  ✅ AUTH + SIGNUP
@@ -2038,4 +2048,73 @@ export async function apiUploadImages(files: File[]) {
   files.forEach((file) => formData.append("images", file));
 
   return apiPost<any>(`${CAMPAIGN_BASE}/upload-image`, formData);
+}
+
+export async function apiDisputeCreate(payload: {
+  brandId: string;
+  campaignId: string;
+  influencerId: string;
+  reason: string;
+}) {
+  return apiPost<any>(`${DISPUTE_BASE}/brand/create`, payload);
+}
+
+export async function apiRevokeDispute(payload: {
+  disputeId: string | null;
+  brandId: string | null;
+}) {
+  const { disputeId, brandId } = payload;
+
+  return apiPatch(`${DISPUTE_BASE}/brand/disputes/${disputeId}/revoke`, {
+    brandId,
+  });
+}
+
+export async function apiEditDispute(payload: {
+  disputeId: string;
+  brandId: string | null | undefined;
+  subject: string;
+  description: string;
+  issueType: string[];
+  attachments?: File[];
+  removedAttachmentUrls?: string[];
+}) {
+  const {
+    disputeId,
+    brandId,
+    subject,
+    description,
+    issueType,
+    attachments = [],
+    removedAttachmentUrls = [],
+  } = payload;
+
+  const resolvedBrandId = String(brandId || "").trim();
+
+  if (!resolvedBrandId) {
+    throw new Error("Missing brand ID. Please log in again to edit this dispute.");
+  }
+
+  const form = new FormData();
+
+  form.append("brandId", resolvedBrandId);
+  form.append("subject", subject.trim());
+  form.append("description", description.trim());
+  form.append(
+    "issueType",
+    JSON.stringify(issueType.length > 0 ? issueType : ["other"])
+  );
+
+  attachments.forEach((file) => {
+    form.append("attachments", file);
+  });
+
+  if (removedAttachmentUrls.length > 0) {
+    form.append(
+      "removedAttachmentUrls",
+      JSON.stringify(removedAttachmentUrls)
+    );
+  }
+
+  return apiPatch(`${DISPUTE_BASE}/brand/disputes/${disputeId}/edit`, form);
 }

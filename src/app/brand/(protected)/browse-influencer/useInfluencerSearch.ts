@@ -298,12 +298,12 @@ function mapBackendResult(
   const platform = item.platform || fallbackPlatform;
   const id = String(
     item.userId ||
-      item.id ||
-      item.username ||
-      item.handle ||
-      item.url ||
-      item.link ||
-      ""
+    item.id ||
+    item.username ||
+    item.handle ||
+    item.url ||
+    item.link ||
+    ""
   ).trim();
 
   if (!id) return null;
@@ -669,10 +669,6 @@ export function useInfluencerSearch(platforms: Platform[]) {
         return;
       }
 
-      const explicitHandles = extractExplicitHandles(value);
-      const shouldRunExact =
-        explicitHandles.length > 0 && filters.search.exactHandleBoost !== false;
-
       const { payload, effectiveMode, shouldRunAi } = buildUnifiedPayload(
         value,
         filters,
@@ -684,52 +680,42 @@ export function useInfluencerSearch(platforms: Platform[]) {
       setVisibleCount(PAGE_SIZE);
 
       try {
-        const unifiedPromise = fetch(API_UNIFIED_ENDPOINT, {
+        const response = await fetch(API_UNIFIED_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }).then(async (response) => {
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(data?.error || "Unified search failed");
-          return data;
         });
 
-        const exactPromise = shouldRunExact
-          ? fetchExactUsers(value)
-          : Promise.resolve([]);
+        const unifiedData = await response.json().catch(() => ({}));
 
-        const [unifiedData, exactHits] = await Promise.all([
-          unifiedPromise,
-          exactPromise,
-        ]);
+        if (!response.ok) {
+          throw new Error(unifiedData?.error || "Unified search failed");
+        }
 
         const fallbackPlatform = (payload.platforms?.[0] || "youtube") as Platform;
 
         const unifiedResults = Array.isArray(unifiedData?.results)
           ? (unifiedData.results
-              .map((item: BackendResult) =>
-                mapBackendResult(
-                  item,
-                  item.platform || fallbackPlatform,
-                  item.searchType || "standard"
-                )
+            .map((item: BackendResult) =>
+              mapBackendResult(
+                item,
+                item.platform || fallbackPlatform,
+                item.searchType || "standard"
               )
-              .filter(Boolean) as UiResult[])
+            )
+            .filter(Boolean) as UiResult[])
           : [];
 
-        const merged = mergeResultsPreserveOrder([
-          ...exactHits,
-          ...unifiedResults,
-        ]);
+        const merged = mergeResultsPreserveOrder(unifiedResults);
         const filtered = applyClientFilters(merged, filters);
 
         setAllResults(filtered);
         setLastRaw({
           unified: unifiedData,
-          exact: exactHits,
+          exact: [],
           payload,
           effectiveMode,
-          shouldRunExact,
+          shouldRunExact: false,
           shouldRunAi,
         });
 
@@ -744,7 +730,7 @@ export function useInfluencerSearch(platforms: Platform[]) {
         setLoading(false);
       }
     },
-    [fetchExactUsers, filters, platforms]
+    [filters, platforms]
   );
 
   const loadMore = useCallback(() => {

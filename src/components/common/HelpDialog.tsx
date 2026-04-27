@@ -98,7 +98,7 @@ export default function HelpDialog({
           }}
         >
           <div className="rounded-[18px] border border-neutral-200 bg-white px-3 py-4 shadow-[0_24px_40px_-4px_rgba(0,0,0,0.10),0_0_12px_0_rgba(0,0,0,0.08)]">
-            <div className="mb-2 flex items-center justify-between gap-3 px-1">
+            {/* <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <div>
                 <h2
                   id="help-support-dialog-title"
@@ -110,7 +110,7 @@ export default function HelpDialog({
                   Choose where you want to go next.
                 </p>
               </div>
-            </div>
+            </div> */}
 
             <div className="mt-3 flex flex-col gap-1">
               {items.map((item) => (

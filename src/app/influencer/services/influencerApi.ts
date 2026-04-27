@@ -14,7 +14,7 @@ const DELIVERABLE_BASE = "/deliverable";
 const CAMPAIGN_INVITATION_BASE = "/campaign-invitation";
 const CONTRACT_BASE = "/contract"
 const PAYMENT_BASE = "/payment-details";
-
+const DISPUTE_BASE = '/dispute'
 /** -------------------------
  *  ✅ Response Unwrap Helpers
  *  ------------------------*/
@@ -814,6 +814,28 @@ async function apiPostRaw<T>(path: string, body?: any, config?: RequestConfig) {
   throw new Error("No compatible API client found in @/lib/api (expected request/post methods).");
 }
 
+async function apiPatchRaw<T>(path: string, body?: any, config?: RequestConfig) {
+  const client = resolveClient();
+
+  if (typeof client?.patch === "function") {
+    const res = await client.patch(path, body, config ?? {});
+    return (res?.data ?? res) as T;
+  }
+
+  if (typeof client?.request === "function") {
+    const res = await client.request({
+      method: "PATCH",
+      url: path,
+      data: body,
+      ...(config ?? {}),
+    });
+
+    return (res?.data ?? res) as T;
+  }
+
+  throw new Error("No compatible API client found in @/lib/api (expected patch/request methods).");
+}
+
 export type DeliverableInfluencer = {
   _id?: string;
   name?: string;
@@ -1295,6 +1317,23 @@ export type GetDeliverablesListEnvelope = {
   };
 };
 
+
+export type EditInfluencerDisputeValues = {
+  campaignId?: string;
+  subject: string;
+  description?: string;
+  issueType?: string[];
+  attachments?: File[];
+};
+
+export type EditInfluencerDisputeInput = {
+  disputeId: string;
+  influencerId: string;
+  values: EditInfluencerDisputeValues;
+  removedExistingUrls?: string[];
+  token?: string;
+};
+
 export async function apiGetDeliverablesByInfluencer(
   input: GetDeliverablesByInfluencerInput,
   token?: string
@@ -1622,6 +1661,87 @@ export async function apiGetLiteInfluencerById(
     {
       headers: {
         ...authHeader(token),
+      },
+    }
+  );
+}
+
+
+export async function apiEditInfluencerDispute(input: EditInfluencerDisputeInput) {
+  const disputeId = String(input.disputeId || "").trim();
+  const influencerId = String(input.influencerId || "").trim();
+
+  if (!disputeId) {
+    throw new Error("disputeId is required");
+  }
+
+  if (!influencerId) {
+    throw new Error("influencerId is required");
+  }
+
+  const formData = new FormData();
+
+  formData.append("influencerId", influencerId);
+
+  if (input.values.campaignId) {
+    formData.append("campaignId", input.values.campaignId);
+  }
+
+  formData.append("subject", input.values.subject || "");
+  formData.append("description", input.values.description || "");
+  formData.append(
+    "issueType",
+    JSON.stringify(input.values.issueType?.length ? input.values.issueType : ["other"])
+  );
+  formData.append(
+    "removedAttachmentUrls",
+    JSON.stringify(input.removedExistingUrls || [])
+  );
+
+  (input.values.attachments || []).forEach((file) => {
+    formData.append("attachments", file);
+  });
+
+  return apiPatchRaw<any>(
+    `${DISPUTE_BASE}/influencer/disputes/${encodeURIComponent(disputeId)}/edit`,
+    formData,
+    {
+      headers: {
+        ...authHeader(input.token),
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+}
+
+export type WithdrawInfluencerDisputeInput = {
+  disputeId: string;
+  influencerId: string;
+  reason?: string;
+  token?: string;
+};
+
+export async function apiWithdrawInfluencerDispute(input: WithdrawInfluencerDisputeInput) {
+  const disputeId = String(input.disputeId || "").trim();
+  const influencerId = String(input.influencerId || "").trim();
+
+  if (!disputeId) {
+    throw new Error("disputeId is required");
+  }
+
+  if (!influencerId) {
+    throw new Error("influencerId is required");
+  }
+
+  return apiPatchRaw<any>(
+    `${DISPUTE_BASE}/influencer/disputes/${encodeURIComponent(disputeId)}/revoke`,
+    {
+      influencerId,
+      reason: input.reason || "",
+    },
+    {
+      headers: {
+        ...authHeader(input.token),
       },
     }
   );

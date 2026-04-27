@@ -585,10 +585,10 @@ export default function BrandTopbar({
                 <BellIcon size={16} className="text-[#1A1A1A]" weight="bold"/>
               </button>
             </div>
-            <button className="flex gap-2 item-center font-bold text-xs p-3   border border-bd-subtle place-items-center rounded-lg hover:bg-neutral-50 transition">
+            {/* <button className="flex gap-2 item-center font-bold text-xs p-3   border border-bd-subtle place-items-center rounded-lg hover:bg-neutral-50 transition">
               <BookOpenIcon size={16} weight="bold"/>
               <span>Guide</span>
-            </button>
+            </button> */}
             <div
               className={[
                 "flex items-center gap-2 sm:gap-6 shrink-0",

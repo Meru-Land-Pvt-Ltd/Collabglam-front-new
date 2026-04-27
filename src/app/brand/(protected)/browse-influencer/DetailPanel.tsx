@@ -50,7 +50,8 @@ import {
   pickPostImage,
   toNumber,
 } from '@/components/common/ViewModashClient';
-import { CaretDown, CaretUp } from '@phosphor-icons/react';
+import { CaretDown, CaretDownIcon, CaretUp, CaretUpIcon } from '@phosphor-icons/react';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface DetailPanelProps {
   open: boolean;
@@ -873,35 +874,20 @@ function CampaignInvitePicker({
                   key={item.campaignId}
                   type="button"
                   onClick={() => {
-                    if (checked) {
-                      onSelectedIdsChange(
-                        selectedIds.filter((id) => id !== item.campaignId)
-                      );
-                    } else {
-                      onSelectedIdsChange([...selectedIds, item.campaignId]);
-                    }
+                    onSelectedIdsChange(checked ? [] : [item.campaignId]);
                   }}
                   className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${checked
                     ? 'border border-gray-300 bg-gray-50'
                     : 'border border-transparent hover:bg-gray-50'
                     }`}
                 >
-                  <div
-                    className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] transition ${checked ? 'bg-black' : 'border border-gray-300 bg-white'
-                      }`}
-                  >
-                    {checked && (
-                      <svg
-                        className="h-2.5 w-2.5 text-white"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      >
-                        <path d="M2 6l3 3 5-5" />
-                      </svg>
-                    )}
-                  </div>
+                  <Checkbox
+                    checked={checked}
+                    onCheckedChange={() => {
+                      onSelectedIdsChange(checked ? [] : [item.campaignId]);
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                  />
 
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-gray-100">
                     {imageSrc ? (
@@ -938,7 +924,7 @@ function CampaignInvitePicker({
         )}
       </div>
 
-      <div className="border-t border-gray-100 bg-white px-4 py-4">
+      {/* <div className="border-t border-gray-100 bg-white px-4 py-4">
         <div className="mb-2 text-xs text-gray-500">
           {selectedIds.length
             ? `${selectedIds.length} campaign${selectedIds.length > 1 ? 's' : ''} selected`
@@ -958,7 +944,7 @@ function CampaignInvitePicker({
             ? 'Sending…'
             : `Send Invitation${selectedIds.length > 1 ? 's' : ''}`}
         </button>
-      </div>
+      </div> */}
     </div>
   );
 }
@@ -1115,14 +1101,46 @@ export const DetailPanel = React.memo<DetailPanelProps>(
     const panelMediaKit = useMemo<MediaKit | null>(() => {
       if (!currentPlatformProfile) return null;
 
+      const profileRoot =
+        (raw?.profile as any) ??
+        (data?.profile as any) ??
+        raw ??
+        {};
+
+      const contactList =
+        profileRoot?.contact ??
+        profileRoot?.contacts ??
+        (currentPlatformProfile as any)?.contact ??
+        (currentPlatformProfile as any)?.contacts ??
+        [];
+
       return {
         name: currentPlatformProfile.name,
         country: currentPlatformProfile.country,
         influencerReports: availableProfiles,
         socialProfiles: availableProfiles,
         primaryInfluencerReport: currentPlatformProfile,
+
+        // Admin-only fields consumed by ContactManagementCard
+        contact: contactList,
+        contacts: contactList,
+        email:
+          profileRoot?.email ??
+          profileRoot?.contactEmail ??
+          (currentPlatformProfile as any)?.email ??
+          (currentPlatformProfile as any)?.contactEmail,
+        phone:
+          profileRoot?.phone ??
+          profileRoot?.contactPhone ??
+          (currentPlatformProfile as any)?.phone ??
+          (currentPlatformProfile as any)?.contactPhone,
+      } as MediaKit & {
+        contact?: any[];
+        contacts?: any[];
+        email?: string;
+        phone?: string;
       };
-    }, [availableProfiles, currentPlatformProfile]);
+    }, [availableProfiles, currentPlatformProfile, raw, data]);
 
     const handlePlatformSelect = (profile: InfluencerReport) => {
       onPlatformChange?.(profile);
@@ -2252,61 +2270,159 @@ export const DetailPanel = React.memo<DetailPanelProps>(
                   </div>
 
                   {/* CTA row */}
-                <div className="flex items-center gap-2">
-                  {effectiveHasEmail ? (
-                    <button
-                      onClick={handleMessageNow}
-                      disabled={!canAct}
-                      title={ctaTitle}
-                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium bg-black text-white transition-opacity shadow-sm
-                        ${
-                          canAct
-                            ? ' hover:opacity-90'
-                            : ' cursor-not-allowed opacity-70'
-                        }`}
-                    >
-                      {sendingInvite ? (
-                        <>
-                          <MessageSquare className="h-4 w-4 animate-pulse" />
-                          Sending…
-                        </>
-                      ) : (
-                        <>
-                          <MessageSquare className="h-4 w-4" />
-                          Send Invitation
-                        </>
-                      )}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleSendInvitation}
-                      disabled={!canAct}
-                      title={ctaTitle}
-                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium  bg-black text-white  transition-opacity shadow-sm
-                        ${
-                          canAct
-                            ? ' hover:opacity-90'
-                            : ' cursor-not-allowed opacity-70'
-                        }`}
-                    >
-                      {sendingInvite ? (
-                        <>
-                          <Send className="h-4 w-4 animate-pulse" />
-                          Sending…
-                        </>
-                      ) : (
-                        <>
-                          <Send className="h-4 w-4" />
-                          Send Invitation
-                        </>
-                      )}
-                    </button>
-                  )}
+                  <div className="relative flex items-center">
+                    <div className="inline-flex overflow-hidden rounded-xl bg-black text-white shadow-sm">
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+
+                          if (selectedCampaignIds.length) {
+                            const selectedCampaign = brandCampaigns.find(
+                              (item) => item.campaignId === selectedCampaignIds[0]
+                            );
+
+                            const proxyEmail =
+                              localStorage.getItem('brandProxyEmail') ||
+                              localStorage.getItem('proxyEmail') ||
+                              localStorage.getItem('fromEmail') ||
+                              '';
+
+                            const brandName =
+                              localStorage.getItem('brandName') ||
+                              'CollabGlam';
+
+                            const campaignTitle = selectedCampaign?.campaignTitle || 'your campaign';
+
+                            const subject = `Invitation to Collaborate - ${brandName}`;
+
+                            const initialBody = `Dear ${displayName || displayHandle || 'Creator'},
+
+I hope you are doing well.
+
+We are reaching out to formally invite you to collaborate with ${brandName} for our upcoming campaign, "${campaignTitle}". Based on your creative work and audience alignment, we believe you would be an excellent fit for this project.
+
+Campaign Details
+
+Campaign Name: ${campaignTitle}
+Brand: ${brandName}
+Objective:
+Deliverables Required:
+Compensation:
+Campaign Timeline:
+
+To proceed, please review the full brief using the button below.
+
+If you have any questions or need further clarification, feel free to contact the brand or reach out to CollabGlam Support.
+
+We look forward to the opportunity of working together and hope to have you onboard for this campaign.
+
+Warm regards,
+Team CollabGlam`;
+
+                            const initialHtmlBody = `
+    <p>Dear ${displayName || displayHandle || 'Creator'},</p>
+    <p>I hope you are doing well.</p>
+    <p>
+      We are reaching out to formally invite you to collaborate with <strong>${brandName}</strong>
+      for our upcoming campaign, <strong>"${campaignTitle}"</strong>. Based on your creative work and
+      audience alignment, we believe you would be an excellent fit for this project.
+    </p>
+    <h3>Campaign Details</h3>
+    <p><strong>Campaign Name:</strong> ${campaignTitle}</p>
+    <p><strong>Brand:</strong> ${brandName}</p>
+    <p><strong>Objective:</strong></p>
+    <p><strong>Deliverables Required:</strong></p>
+    <p><strong>Compensation:</strong></p>
+    <p><strong>Campaign Timeline:</strong></p>
+    <p>To proceed, please review the full brief using the button below.</p>
+    <p>
+      If you have any questions or need further clarification, feel free to contact the brand
+      or reach out to CollabGlam Support.
+    </p>
+    <p>
+      We look forward to the opportunity of working together and hope to have you onboard for this campaign.
+    </p>
+    <p>Warm regards,<br /><strong>Team CollabGlam</strong></p>
+  `;
+
+                            setEmailDraft({
+                              campaignIds: selectedCampaignIds,
+                              fromEmail: proxyEmail,
+                              fromName: brandName,
+                              toLabel: displayHandle || handle || '',
+                              subject,
+                              initialBody,
+                              initialHtmlBody,
+                            });
+
+                            setCampaignPickerOpen(false);
+                            setEmailEditorOpen(true);
+                            return;
+                          }
+                          effectiveHasEmail ? handleMessageNow(e) : handleSendInvitation(e);
+                        }}
+                        disabled={!canAct}
+                        title={ctaTitle}
+                        className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-opacity ${canAct ? 'hover:opacity-90' : 'cursor-not-allowed opacity-70'
+                          }`}
+                      >
+                        {sendingInvite && brandId ? (
+                          <>
+                            {effectiveHasEmail ? (
+                              <MessageSquare className="h-4 w-4 animate-pulse" />
+                            ) : (
+                              <Send className="h-4 w-4 animate-pulse" />
+                            )}
+                            Sending…
+                          </>
+                        ) : (
+                          <>
+                            {effectiveHasEmail ? (
+                              <MessageSquare className="h-4 w-4" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
+                            Send Invitation
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCampaignPickerToggle}
+                        disabled={campaignsLoading || loading}
+                        className="inline-flex w-10 items-center justify-center border-l border-white/20 hover:bg-white/10"
+                      >
+                        {campaignsLoading ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : campaignPickerOpen ? (
+                          <CaretUpIcon className="h-4 w-4" />
+                        ) : (
+                          <CaretDownIcon className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    {campaignPickerOpen ? (
+                      <CampaignInvitePicker
+                        open={campaignPickerOpen}
+                        onClose={() => setCampaignPickerOpen(false)}
+                        allItems={brandCampaigns}
+                        items={filteredCampaigns}
+                        selectedIds={selectedCampaignIds}
+                        onSelectedIdsChange={setSelectedCampaignIds}
+                        search={campaignSearch}
+                        onSearchChange={setCampaignSearch}
+                        loading={campaignsLoading}
+                        sending={sendingInvite}
+                        onSend={finalizeCampaignInvitations}
+                      />
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          
+
 
             <div className="p-5">
               {loading ? <LoadingState /> : null}

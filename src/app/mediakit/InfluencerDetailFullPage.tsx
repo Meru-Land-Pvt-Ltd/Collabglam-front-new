@@ -136,6 +136,9 @@ type InfluencerReportShape = {
   subscribers?: number | string;
   engagementRate?: number | string;
   country?: string;
+  location?: string;
+  city?: string;
+  state?: string;
   language?: { name?: string };
   hashtags?: Array<{ tag: string }>;
   popularPosts?: SocialPost[];
@@ -181,6 +184,11 @@ type MediaKitShape = {
   socialProfiles?: InfluencerReportShape[];
   name?: string;
   country?: string;
+  location?: string;
+  city?: string;
+  state?: string;
+  contact?: any[];
+  contacts?: any[];
   languages?: Array<{ name?: string }>;
   email?: string;
   phone?: string;
@@ -264,6 +272,29 @@ function stripHandlePrefix(value?: string | null): string | undefined {
   if (!value) return undefined;
   const cleaned = value.replace(/^@/, '').trim();
   return cleaned || undefined;
+}
+
+function cleanText(value: unknown): string {
+  if (value === undefined || value === null) return '';
+
+  const text = String(value).trim();
+
+  if (
+    !text ||
+    text === '—' ||
+    text === '--' ||
+    text.toLowerCase() === 'null' ||
+    text.toLowerCase() === 'undefined'
+  ) {
+    return '';
+  }
+
+  return text;
+}
+
+function pickFirstText(...values: unknown[]): string | undefined {
+  const found = values.map(cleanText).find(Boolean);
+  return found || undefined;
 }
 
 function normalisePlatform(raw?: string | null): SupportedPlatform {
@@ -396,7 +427,25 @@ function dedupeAndSortPosts(posts: SocialPost[]): SocialPost[] {
     (a, b) => getPostTimestamp(b) - getPostTimestamp(a)
   );
 }
+function dedupePostsPreserveOrder(posts: SocialPost[]): SocialPost[] {
+  const map = new Map<string, SocialPost>();
 
+  for (const post of posts) {
+    const key =
+      post.url ||
+      [
+        post.createdAt ?? post.publishedAt ?? post.postedAt ?? post.date ?? post.created ?? "no-date",
+        post.text ?? "",
+        post.image ?? post.thumbnail ?? "",
+      ].join("__");
+
+    if (!map.has(key)) {
+      map.set(key, post);
+    }
+  }
+
+  return Array.from(map.values());
+}
 function resolveRecentPostsForTable(params: {
   displayedReport: InfluencerReportShape | null;
   primaryReport: InfluencerReportShape | null;
@@ -496,6 +545,75 @@ function resolveRecentPostsForTable(params: {
     ...connectedProfiles.flatMap((profile) => profile?.sponsoredPosts ?? []),
   ]);
 }
+
+function resolvePopularPostsForPanel(params: {
+  displayedReport: InfluencerReportShape | null;
+  primaryReport: InfluencerReportShape | null;
+  data: ReportResponse | null;
+  raw: any;
+  connectedProfiles: InfluencerReportShape[];
+}): SocialPost[] {
+  const { displayedReport, primaryReport, data, raw, connectedProfiles } = params;
+
+  const reportProfile = ((data?.profile as any) ?? {}) as Record<string, any>;
+  const nestedReportProfile = ((reportProfile?.profile as any) ?? {}) as Record<string, any>;
+
+  const popular = dedupePostsPreserveOrder([
+    ...(displayedReport?.popularPosts ?? []),
+    ...(primaryReport?.popularPosts ?? []),
+
+    ...toNormalizedPosts(reportProfile?.popularPosts),
+    ...toNormalizedPosts(nestedReportProfile?.popularPosts),
+
+    ...toNormalizedPosts(raw?.popularPosts),
+    ...toNormalizedPosts(raw?.profile?.popularPosts),
+    ...toNormalizedPosts(raw?.profile?.profile?.popularPosts),
+
+    ...toNormalizedPosts(raw?.providerRaw?.popularPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.popularPosts),
+
+    ...toNormalizedPosts(raw?.mediaKit?.popularPosts),
+
+    ...(raw?.socialProfiles ?? []).flatMap((profile: any) =>
+      toNormalizedPosts(profile?.popularPosts)
+    ),
+    ...(raw?.mediaKit?.socialProfiles ?? []).flatMap((profile: any) =>
+      toNormalizedPosts(profile?.popularPosts)
+    ),
+
+    ...connectedProfiles.flatMap((profile) => profile?.popularPosts ?? []),
+  ]);
+
+  if (popular.length > 0) return popular;
+
+  return dedupeAndSortPosts([
+    ...(displayedReport?.recentPosts ?? []),
+    ...(primaryReport?.recentPosts ?? []),
+
+    ...toNormalizedPosts(reportProfile?.recentPosts),
+    ...toNormalizedPosts(nestedReportProfile?.recentPosts),
+    ...toNormalizedPosts(reportProfile?.posts),
+    ...toNormalizedPosts(nestedReportProfile?.posts),
+
+    ...toNormalizedPosts(raw?.recentPosts),
+    ...toNormalizedPosts(raw?.posts),
+    ...toNormalizedPosts(raw?.profile?.recentPosts),
+    ...toNormalizedPosts(raw?.profile?.posts),
+    ...toNormalizedPosts(raw?.profile?.profile?.recentPosts),
+    ...toNormalizedPosts(raw?.profile?.profile?.posts),
+
+    ...toNormalizedPosts(raw?.providerRaw?.recentPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.posts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.recentPosts),
+    ...toNormalizedPosts(raw?.providerRaw?.profile?.posts),
+
+    ...toNormalizedPosts(raw?.mediaKit?.recentPosts),
+    ...toNormalizedPosts(raw?.mediaKit?.posts),
+
+    ...connectedProfiles.flatMap((profile) => profile?.recentPosts ?? []),
+  ]);
+}
+
 function normalizeHistoryPoint(point: any, fallbackFollowers = 0): ModashStatHistory {
   return {
     month: String(point?.month ?? ''),
@@ -564,6 +682,8 @@ function toInfluencerReportShape(
     stripHandlePrefix(source?.username) ??
     stripHandlePrefix(root?.handle) ??
     stripHandlePrefix(source?.handle);
+
+
 
   const handle =
     root?.handle ??
@@ -649,7 +769,38 @@ function toInfluencerReportShape(
     followers,
     subscribers: source?.subscribers ?? root?.subscribers,
     engagementRate: root?.engagementRate ?? source?.engagementRate,
-    country: source?.country ?? root?.country,
+    country: pickFirstText(
+      source?.country,
+      root?.country,
+      source?.profile?.country,
+      source?.profile?.profile?.country,
+      source?.mediaKit?.country,
+      source?.location?.country,
+      root?.location?.country
+    ),
+    location: pickFirstText(
+      source?.location,
+      root?.location,
+      source?.profile?.location,
+      source?.profile?.profile?.location,
+      source?.mediaKit?.location
+    ),
+    city: pickFirstText(
+      source?.city,
+      root?.city,
+      source?.profile?.city,
+      source?.profile?.profile?.city,
+      source?.location?.city,
+      root?.location?.city
+    ),
+    state: pickFirstText(
+      source?.state,
+      root?.state,
+      source?.profile?.state,
+      source?.profile?.profile?.state,
+      source?.location?.state,
+      root?.location?.state
+    ),
     language:
       typeof source?.language === 'string'
         ? { name: source.language }
@@ -1163,6 +1314,16 @@ function InfluencerDetailFullPageInner({
     }
 
     return resolveRecentPostsForTable({
+      displayedReport,
+      primaryReport,
+      data,
+      raw,
+      connectedProfiles,
+    });
+  }, [displayedReport, primaryReport, data, raw, connectedProfiles]);
+
+  const popularPostsForPanel = useMemo(() => {
+    return resolvePopularPostsForPanel({
       displayedReport,
       primaryReport,
       data,
@@ -1949,7 +2110,7 @@ function InfluencerDetailFullPageInner({
               <RecentPostsTable posts={recentPostsForTable.slice(0, 5) as any} />
             </AccessBlurSection>
 
-            <PopularContentPanel posts={popularPosts.slice(0, 2) as any} />
+            <PopularContentPanel posts={popularPostsForPanel.slice(0, 2) as any} />
           </div>
 
           {(showLookalikeCreators || !canViewRestrictedSections) && lookalikeCreators.length > 0 ? (

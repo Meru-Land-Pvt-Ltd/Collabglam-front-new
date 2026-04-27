@@ -17,6 +17,7 @@ import { VggCardStack } from "@/components/ui/brand/VggAnimatedCard";
 import { apiSignInBrand, getApiErrorMessage } from "../../services/brandApi";
 import { toast, ToastStyles } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { clearClientAuthStorage } from "@/lib/clearClientAuth";
 
 type ErrorKind =
   | "EMAIL_NOT_REGISTERED"
@@ -489,6 +490,14 @@ function BrandLoginContentInner() {
     return "/brand/dashboard";
   };
 
+  const getCreatorLoginHref = () => {
+    const returnUrl = searchParams.get("returnUrl");
+
+    if (!returnUrl) return "/influencer/login";
+
+    return `/influencer/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+  };
+
   const getPostLoginRedirect = (res?: BrandSignInResponse) => {
     const route = res?.route;
 
@@ -542,6 +551,8 @@ function BrandLoginContentInner() {
 
     setLoading(true);
     try {
+      clearClientAuthStorage();
+
       const res = (await apiSignInBrand(
         emailTrimmed,
         password
@@ -614,7 +625,7 @@ function BrandLoginContentInner() {
           </Link>
 
           <Link
-            href="/influencer/login"
+            href={getCreatorLoginHref()}
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
               "!my-0 rounded-m px-l border border-bd-primary text-tx-primary !shadow-none"

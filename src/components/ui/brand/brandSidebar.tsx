@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AnimatePresence,
   LazyMotion,
@@ -30,16 +36,15 @@ import {
   DotsThree,
   House,
   Lightning,
+  MagnifyingGlassIcon,
   NotePencil,
   PaperPlaneTilt,
   Question,
   SignOut,
   UserCircle,
   UserPlus,
-  Users,
   Wallet,
   X,
-  MagnifyingGlassIcon,
 } from "@phosphor-icons/react";
 
 /* -------------------------------- routing -------------------------------- */
@@ -48,7 +53,6 @@ const CAMPAIGN_PREFIX = "/brand/campaign";
 
 const ROUTES: Record<string, string> = {
   dashboard: "/brand/dashboard",
-  // hub: "/brand/influencer",
   create: "/brand/create-campaign",
   campaigns: "/brand/campaign/all",
   campaigns_all: "/brand/campaign/all",
@@ -57,8 +61,8 @@ const ROUTES: Record<string, string> = {
   campaigns_scheduled: "/brand/campaign/scheduled-campaign",
   browse: "/brand/browse-influencer",
   inbox: "/brand/inbox",
-  wallet: "/brand/wallet",
-  invite_user: "/brand/invite-user",
+  wallet: "",
+  invite_user: "",
   notification: "/brand/notifications",
   help: "",
 };
@@ -293,6 +297,25 @@ function formatWalletAmount(amount: number | null) {
   }).format(amount);
 }
 
+function WalletBalancePill({ value }: { value: string }) {
+  return (
+    <div className="ml-1 flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2 text-[11px] font-semibold text-[#1a1a1a]">
+      <img
+        src="/images/dollar_coin.png"
+        alt="coin"
+        className="h-5 w-5 shrink-0"
+      />
+
+      <span
+        className="shrink-0 whitespace-nowrap tabular-nums leading-none"
+        title={value}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 const RowButton = React.memo(function RowButton({
   active,
   icon: Icon,
@@ -318,7 +341,7 @@ const RowButton = React.memo(function RowButton({
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       className={cn(
-        "relative flex items-center overflow-hidden rounded-lg transition-all duration-300",
+        "relative flex min-w-0 items-center overflow-hidden rounded-lg transition-all duration-300 disabled:opacity-100",
         disabled ? "cursor-default" : "cursor-pointer",
         FOCUS_RING,
         REST_NAV,
@@ -342,7 +365,7 @@ const RowButton = React.memo(function RowButton({
         }}
         transition={{ duration: 0.2 }}
         className={cn(
-          "overflow-hidden whitespace-nowrap text-current",
+          "shrink-0 overflow-hidden whitespace-nowrap text-current",
           tight ? "text-[13px]" : "text-[14px]",
           "leading-5"
         )}
@@ -354,7 +377,7 @@ const RowButton = React.memo(function RowButton({
         <m.span
           initial={false}
           animate={{ opacity: 1 }}
-          className="ml-auto inline-flex items-center whitespace-nowrap text-current"
+          className="ml-auto inline-flex shrink-0 items-center whitespace-nowrap text-current"
         >
           {right}
         </m.span>
@@ -395,8 +418,6 @@ export default function BrandSidebar({
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
 
-  /* ------------------------------- responsive ------------------------------ */
-
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const isXl = useMediaQuery("(min-width: 1280px)");
   const isShort = useMediaQuery("(max-height: 800px)");
@@ -420,8 +441,6 @@ export default function BrandSidebar({
   const helpDialogRef = useRef<HTMLDivElement | null>(null);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
-  /* --------------------------------- state -------------------------------- */
-
   const [active, setActive] = useState<string>("dashboard");
   const [campaignOpen, setCampaignOpen] = useState(false);
 
@@ -444,8 +463,6 @@ export default function BrandSidebar({
   const campaignHoverRef = useRef(false);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const hasInitializedCollapsed = useRef(false);
-
-  /* -------------------------------- derived -------------------------------- */
 
   const tight = isShort;
   const railMode = isDesktop && (collapsed || isClosing);
@@ -502,12 +519,6 @@ export default function BrandSidebar({
         icon: House,
         section: "overview",
       },
-      // {
-      //   key: "hub",
-      //   label: "Influencer Hub",
-      //   icon: Users,
-      //   section: "overview",
-      // },
       {
         key: "create",
         label: "Create Campaign",
@@ -544,17 +555,18 @@ export default function BrandSidebar({
         icon: Wallet,
         section: "manage",
       },
-      {
-        key: "invite_user",
-        label: "Invite User",
-        icon: UserPlus,
-        section: "manage",
-        right: (
-          <span className="inline-flex items-center rounded-full border border-[#F2B705] bg-[#FFF8E1] px-2 py-[2px] text-[10px] font-semibold text-[#D4A100]">
-            Soon
-          </span>
-        ),
-      },
+      // Invite User is hidden for now.
+      // {
+      //   key: "invite_user",
+      //   label: "Invite User",
+      //   icon: UserPlus,
+      //   section: "manage",
+      //   right: (
+      //     <span className="inline-flex items-center rounded-full border border-[#F2B705] bg-[#FFF8E1] px-2 py-[2px] text-[10px] font-semibold text-[#D4A100]">
+      //       Soon
+      //     </span>
+      //   ),
+      // },
       {
         key: "help",
         label: "Help & Support",
@@ -579,7 +591,7 @@ export default function BrandSidebar({
 
   const routePairs = useMemo(() => {
     return Object.entries(ROUTES)
-      .filter(([key]) => key !== "campaigns")
+      .filter(([key, path]) => key !== "campaigns" && Boolean(path))
       .map(([key, path]) => ({ key, path }))
       .sort((a, b) => b.path.length - a.path.length);
   }, []);
@@ -589,9 +601,9 @@ export default function BrandSidebar({
   }, []);
 
   const expandedW = useMemo(() => {
-    const min = isXl ? 260 : 240;
-    const max = isXl ? 320 : 300;
-    return Math.round(clamp(vw * 0.18, min, max));
+    const min = isXl ? 320 : 300;
+    const max = isXl ? 380 : 350;
+    return Math.round(clamp(vw * 0.2, min, max));
   }, [clamp, vw, isXl]);
 
   const collapsedW = useMemo(() => {
@@ -656,14 +668,10 @@ export default function BrandSidebar({
   const helpMenuItems = useMemo<Array<{ key: SupportMenuKey; label: string }>>(
     () => [
       { key: "dispute", label: "Dispute" },
-      { key: "report_issue", label: "Report an Issue" },
-      { key: "help_center", label: "Help Center" },
       { key: "privacy_policy", label: "Privacy Policy" },
     ],
     []
   );
-
-  /* -------------------------------- effects -------------------------------- */
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -735,8 +743,7 @@ export default function BrandSidebar({
           if (latestId) window.localStorage.setItem("brandPlanId", latestId);
           else window.localStorage.removeItem("brandPlanId");
 
-          if (latestName)
-            window.localStorage.setItem("brandPlanName", latestName);
+          if (latestName) window.localStorage.setItem("brandPlanName", latestName);
           else window.localStorage.removeItem("brandPlanName");
         } catch {}
       } catch {
@@ -797,8 +804,7 @@ export default function BrandSidebar({
 
     const currentPath = pathname.replace(/\/+$/, "") || "/";
     const match = routePairs.find(
-      ({ path }) =>
-        currentPath === path || currentPath.startsWith(`${path}/`)
+      ({ path }) => currentPath === path || currentPath.startsWith(`${path}/`)
     );
 
     const nextKey =
@@ -834,6 +840,13 @@ export default function BrandSidebar({
         if (cancelled) return;
 
         setBrandLite(data ?? null);
+        const proxyEmail = data?.proxyEmail?.trim() || "";
+
+        if (proxyEmail) {
+          window.localStorage.setItem("proxyEmail", proxyEmail);
+        } else {
+          window.localStorage.removeItem("proxyEmail");
+        }
 
         const nextSubscription =
           data?.subscriptionDetails ?? data?.subscription ?? null;
@@ -885,7 +898,26 @@ export default function BrandSidebar({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [helpDialogOpen]);
 
-  /* ------------------------------- callbacks ------------------------------- */
+  useEffect(() => {
+    if (!helpDialogOpen) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+
+      if (helpDialogRef.current?.contains(target)) return;
+      if (helpAnchorRef.current?.contains(target)) return;
+
+      setHelpDialogOpen(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, { capture: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, {
+        capture: true,
+      } as EventListenerOptions);
+    };
+  }, [helpDialogOpen]);
 
   const setDrawerOpen = useCallback(
     (open: boolean) => {
@@ -948,7 +980,9 @@ export default function BrandSidebar({
           router.push("/brand/help-and-support");
           break;
         case "privacy_policy":
-          router.push("/privacy-policy");
+          if (typeof window !== "undefined") {
+            window.open("/privacy-policy", "_blank", "noopener,noreferrer");
+          }
           break;
         default:
           break;
@@ -1023,8 +1057,11 @@ export default function BrandSidebar({
 
   const renderItem = useCallback(
     (item: Item) => {
-      const isActiveItem = active === item.key;
+      const isHelpOpen = helpDialogOpen;
+
+      const isActiveItem = !isHelpOpen && active === item.key;
       const campaignsActive =
+        !isHelpOpen &&
         item.key === "campaigns" &&
         (active === "campaigns" || isCampaignChildActive);
 
@@ -1036,22 +1073,15 @@ export default function BrandSidebar({
             key={item.key}
             icon={item.icon}
             label={item.label}
-            active={isActiveItem}
+            active={false}
             right={
               !isCollapsed ? (
-                <div className="rounded-lg flex items-center gap-2 border border-neutral-200 py-1 px-2 text-[11px] font-medium text-[#1a1a1a]">
-                  <img
-                    src="/images/dollar_coin.png"
-                    alt="dollar_coin"
-                    className="h-6.5 w-6.5"
-                  />
-                  <span>{walletBalanceLabel}</span>
-                </div>
+                <WalletBalancePill value={walletBalanceLabel} />
               ) : undefined
             }
             tight={tight}
             collapsed={isCollapsed}
-            onClick={() => handleSetActive(item.key)}
+            disabled
           />
         );
       }
@@ -1099,8 +1129,6 @@ export default function BrandSidebar({
       walletBalanceLabel,
     ]
   );
-
-  /* -------------------------------- markup -------------------------------- */
 
   const SidebarBody = (
     <div className="flex h-full flex-col">
@@ -1316,9 +1344,10 @@ export default function BrandSidebar({
               }
 
               const isCampaignActive =
-                campaignOpen ||
-                active === "campaigns" ||
-                isCampaignChildActive;
+                !helpDialogOpen &&
+                (campaignOpen ||
+                  active === "campaigns" ||
+                  isCampaignChildActive);
 
               return (
                 <div key={item.key} className="w-full">
@@ -1389,7 +1418,7 @@ export default function BrandSidebar({
                       >
                         <div className="rounded-lg bg-white pt-1">
                           {(item.children ?? []).map((child) => {
-                            const isSubActive = active === child.key;
+                            const isSubActive = !helpDialogOpen && active === child.key;
 
                             return (
                               <button

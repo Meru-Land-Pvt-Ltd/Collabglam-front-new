@@ -5,12 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   HiOutlineChartBar,
   HiOutlineUsers,
-  HiOutlineCurrencyDollar,
   HiSearch,
 } from "react-icons/hi";
 import { format } from "date-fns";
 import { post } from "@/lib/api";
-import BrandTourModal from "@/components/common/BrandTourModal";
 import { Button } from "@/components/ui/buttonComp";
 
 /* ✅ FULLY MANAGED plan gate (use plan name + plan id) */
@@ -175,7 +173,7 @@ export default function BrandDashboardHome() {
       typeof window !== "undefined" ? localStorage.getItem("brandId") : null;
 
     if (!brandId) {
-      setFatalError("No brandId found in localStorage");
+      router.replace("/brand/login");
       return;
     }
 
@@ -245,7 +243,7 @@ export default function BrandDashboardHome() {
 
       setInboxLoading(false);
     })();
-  }, []);
+  }, [router]);
 
   const filteredCampaigns = useMemo(() => {
     if (!data?.campaigns?.length) return [];
@@ -263,8 +261,9 @@ export default function BrandDashboardHome() {
     if (!q) return inbox;
 
     return inbox.filter((t) => {
-      const hay = `${t.influencer?.name || ""} ${t.subject || ""} ${t.snippet || ""} ${t.status || ""
-        } ${t.lastMessageDirection || ""}`.toLowerCase();
+      const hay = `${t.influencer?.name || ""} ${t.subject || ""} ${t.snippet || ""} ${
+        t.status || ""
+      } ${t.lastMessageDirection || ""}`.toLowerCase();
       return hay.includes(q);
     });
   }, [inbox, inboxSearch]);
@@ -290,7 +289,6 @@ export default function BrandDashboardHome() {
     totalCreatedCampaigns,
     totalHiredInfluencers,
     totalAppliedInfluencers,
-    budgetRemaining,
     campaignsMode,
   } = data;
 
@@ -315,8 +313,9 @@ export default function BrandDashboardHome() {
 
           {/* Summary (✅ hide Hired + Total Applied for FULLY MANAGED) */}
           <div
-            className={`grid grid-cols-1 sm:grid-cols-2 ${isFullyManaged ? "lg:grid-cols-2" : "lg:grid-cols-4"
-              } gap-6`}
+            className={`grid grid-cols-1 sm:grid-cols-2 ${
+              isFullyManaged ? "lg:grid-cols-2" : "lg:grid-cols-4"
+            } gap-6`}
           >
             <StatCard
               icon={<HiOutlineChartBar className="text-[#ef2f5b]" size={32} />}
@@ -377,8 +376,7 @@ export default function BrandDashboardHome() {
                       Browse Influencers
                     </Button>
 
-                    <Button
-                      onClick={() => router.push("/brand/create-campaign")}  >
+                    <Button onClick={() => router.push("/brand/create-campaign")}>
                       Create New Campaign
                     </Button>
                   </div>
@@ -406,7 +404,9 @@ export default function BrandDashboardHome() {
                                 {truncate(c.productOrServiceName || "—", 60)}
                               </div>
                               {!!c.createdAt && (
-                                <div className="text-xs text-gray-500 mt-1">{fmtDate(c.createdAt)}</div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {fmtDate(c.createdAt)}
+                                </div>
                               )}
                             </div>
 
@@ -433,7 +433,9 @@ export default function BrandDashboardHome() {
                           <div className="mt-3 flex items-center justify-between gap-3">
                             <div className="text-sm text-gray-700">
                               <span className="text-gray-500">Budget: </span>
-                              <span className="font-semibold">${Number(c.budget || 0).toLocaleString()}</span>
+                              <span className="font-semibold">
+                                ${Number(c.budget || 0).toLocaleString()}
+                              </span>
                             </div>
 
                             {!isFullyManaged && (
@@ -447,11 +449,16 @@ export default function BrandDashboardHome() {
                                   }
                                 }}
                                 className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 hover:border-gray-300 transition cursor-pointer"
-                                title={c.hasAcceptedInfluencer ? "Open active influencers" : "Open applied influencers"}
+                                title={
+                                  c.hasAcceptedInfluencer
+                                    ? "Open active influencers"
+                                    : "Open applied influencers"
+                                }
                               >
                                 <span
-                                  className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${applied > 0 ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
-                                    }`}
+                                  className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-bold ${
+                                    applied > 0 ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"
+                                  }`}
                                 >
                                   {applied.toLocaleString()}
                                 </span>
@@ -466,10 +473,11 @@ export default function BrandDashboardHome() {
                           {!isFullyManaged && (
                             <div className="mt-3">
                               <span
-                                className={`px-2 py-1 rounded-full text-xs font-semibold ${c.hasAcceptedInfluencer
-                                  ? "bg-indigo-100 text-indigo-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                                  }`}
+                                className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                                  c.hasAcceptedInfluencer
+                                    ? "bg-indigo-100 text-indigo-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                                }`}
                               >
                                 {c.hasAcceptedInfluencer ? "Accepted" : "Not accepted"}
                               </span>
@@ -508,7 +516,6 @@ export default function BrandDashboardHome() {
                       <tbody>
                         {filteredCampaigns.map((c) => {
                           const id = c.campaignsId || c.id;
-                          const applied = Number(c.appliedInfluencersCount || 0);
 
                           return (
                             <tr key={c.id} className="border-b hover:bg-gray-50">
@@ -519,14 +526,19 @@ export default function BrandDashboardHome() {
                                     {truncate(c.productOrServiceName || "—", 40)}
                                   </div>
                                   {!!c.createdAt && (
-                                    <div className="text-xs text-gray-500">{fmtDate(c.createdAt)}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {fmtDate(c.createdAt)}
+                                    </div>
                                   )}
                                 </div>
                               </td>
 
                               {/* Goal (lg+) */}
                               <td className="py-3 pr-4 text-gray-700 hidden lg:table-cell">
-                                <div className="max-w-[280px] xl:max-w-[360px] truncate" title={c.goal || ""}>
+                                <div
+                                  className="max-w-[280px] xl:max-w-[360px] truncate"
+                                  title={c.goal || ""}
+                                >
                                   {c.goal || "—"}
                                 </div>
                               </td>
@@ -546,7 +558,11 @@ export default function BrandDashboardHome() {
                                         router.push(`/brand/influ/all?campaignId=${id}`);
                                       }}
                                       className="group inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 transition hover:border-gray-300 hover:bg-gray-50 cursor-pointer"
-                                      title={c.hasAcceptedInfluencer ? "Open active influencers" : "Open applied influencers"}
+                                      title={
+                                        c.hasAcceptedInfluencer
+                                          ? "Open active influencers"
+                                          : "Open applied influencers"
+                                      }
                                     >
                                       <span className="inline-flex items-center justify-center text-center text-[13px] font-medium text-gray-700 group-hover:text-gray-500">
                                         List
@@ -581,120 +597,119 @@ export default function BrandDashboardHome() {
             </div>
 
             {/* ✅ Inbox hidden for FULLY MANAGED */}
-            
-              <div className="lg:col-span-1 bg-white rounded-lg shadow p-6 flex flex-col min-h-[520px]">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800">Inbox</h3>
-                    <p className="text-xs text-gray-500">Recent conversations</p>
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => router.push("/brand/inbox")}
-                    className="text-xs font-semibold px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition"
-                    title="Open full inbox"
-                  >
-                    Open
-                  </button>
+            <div className="lg:col-span-1 bg-white rounded-lg shadow p-6 flex flex-col min-h-[520px]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">Inbox</h3>
+                  <p className="text-xs text-gray-500">Recent conversations</p>
                 </div>
 
-                {/* Inbox search */}
-                <div className="mt-4 relative">
-                  <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    value={inboxSearch}
-                    onChange={(e) => setInboxSearch(e.target.value)}
-                    placeholder="Search name / subject / message…"
-                    className="w-full pl-10 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-offset-2"
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/brand/inbox")}
+                  className="text-xs font-semibold px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition"
+                  title="Open full inbox"
+                >
+                  Open
+                </button>
+              </div>
 
-                {/* Inbox list */}
-                <div className="mt-4 flex-1 overflow-auto rounded-lg border border-gray-100 divide-y divide-gray-100">
-                  {inboxLoading ? (
-                    <div className="p-4 text-sm text-gray-500">Loading inbox…</div>
-                  ) : inboxError ? (
-                    <div className="p-4 text-sm text-gray-500">{inboxError}</div>
-                  ) : !filteredInbox.length ? (
-                    <div className="p-4 text-sm text-gray-500">No conversations yet.</div>
-                  ) : (
-                    filteredInbox.map((t) => {
-                      const name = t.influencer?.name || "Influencer";
-                      const initial = name.trim().slice(0, 1).toUpperCase();
+              {/* Inbox search */}
+              <div className="mt-4 relative">
+                <HiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={inboxSearch}
+                  onChange={(e) => setInboxSearch(e.target.value)}
+                  placeholder="Search name / subject / message…"
+                  className="w-full pl-10 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-offset-2"
+                />
+              </div>
 
-                      const when = t.lastMessageAt ? fmtDate(t.lastMessageAt, "MMM d") : "";
-                      const whenFull = t.lastMessageAt ? fmtDate(t.lastMessageAt, "MMM d, yyyy") : "";
+              {/* Inbox list */}
+              <div className="mt-4 flex-1 overflow-auto rounded-lg border border-gray-100 divide-y divide-gray-100">
+                {inboxLoading ? (
+                  <div className="p-4 text-sm text-gray-500">Loading inbox…</div>
+                ) : inboxError ? (
+                  <div className="p-4 text-sm text-gray-500">{inboxError}</div>
+                ) : !filteredInbox.length ? (
+                  <div className="p-4 text-sm text-gray-500">No conversations yet.</div>
+                ) : (
+                  filteredInbox.map((t) => {
+                    const name = t.influencer?.name || "Influencer";
+                    const initial = name.trim().slice(0, 1).toUpperCase();
 
-                      const dLabel = dirLabel(t.lastMessageDirection);
+                    const when = t.lastMessageAt ? fmtDate(t.lastMessageAt, "MMM d") : "";
+                    const whenFull = t.lastMessageAt ? fmtDate(t.lastMessageAt, "MMM d, yyyy") : "";
 
-                      const subject = (t.subject || "").trim() || "No subject";
-                      const snippet = (t.snippet || "").trim();
+                    const dLabel = dirLabel(t.lastMessageDirection);
 
-                      return (
-                        <button
-                          key={t.threadId}
-                          type="button"
-                          onClick={() => router.push(`/brand/inbox/${t.threadId}`)}
-                          className="w-full text-left p-3 hover:bg-gray-50 transition flex items-start gap-3"
-                          title="Open conversation"
-                        >
-                          <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-700 shrink-0">
-                            {initial}
-                          </div>
+                    const subject = (t.subject || "").trim() || "No subject";
+                    const snippet = (t.snippet || "").trim();
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="font-semibold text-gray-800 truncate">{name}</div>
+                    return (
+                      <button
+                        key={t.threadId}
+                        type="button"
+                        onClick={() => router.push(`/brand/inbox/${t.threadId}`)}
+                        className="w-full text-left p-3 hover:bg-gray-50 transition flex items-start gap-3"
+                        title="Open conversation"
+                      >
+                        <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-700 shrink-0">
+                          {initial}
+                        </div>
 
-                                <div className="text-sm font-semibold text-gray-700 truncate" title={subject}>
-                                  {subject}
-                                </div>
-                              </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold text-gray-800 truncate">{name}</div>
 
-                              <div className="shrink-0 text-right">
-                                <div className="text-[11px] text-gray-400" title={whenFull}>
-                                  {when}
-                                </div>
-
-                                <div className="mt-1 flex items-center justify-end gap-2">
-                                  {dLabel ? (
-                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">
-                                      {dLabel}
-                                    </span>
-                                  ) : null}
-
-                                  <span
-                                    className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${statusTone(
-                                      t.status || "active"
-                                    )}`}
-                                  >
-                                    {t.status || "active"}
-                                  </span>
-                                </div>
+                              <div className="text-sm font-semibold text-gray-700 truncate" title={subject}>
+                                {subject}
                               </div>
                             </div>
 
-                            {snippet ? (
-                              <div className="mt-1 text-xs text-gray-500 truncate" title={snippet}>
-                                {truncate(snippet, 140)}
+                            <div className="shrink-0 text-right">
+                              <div className="text-[11px] text-gray-400" title={whenFull}>
+                                {when}
                               </div>
-                            ) : (
-                              <div className="mt-1 text-xs text-gray-400 italic">No message preview</div>
-                            )}
+
+                              <div className="mt-1 flex items-center justify-end gap-2">
+                                {dLabel ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">
+                                    {dLabel}
+                                  </span>
+                                ) : null}
+
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${statusTone(
+                                    t.status || "active"
+                                  )}`}
+                                >
+                                  {t.status || "active"}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
+
+                          {snippet ? (
+                            <div className="mt-1 text-xs text-gray-500 truncate" title={snippet}>
+                              {truncate(snippet, 140)}
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-xs text-gray-400 italic">No message preview</div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
-            
+            </div>
           </div>
         </main>
-      </div >
-    </div >
+      </div>
+    </div>
   );
 }
 
@@ -702,8 +717,9 @@ export default function BrandDashboardHome() {
 
 const StatCard = ({ icon, label, value, accentFrom, onClick }: any) => (
   <div
-    className={`bg-white rounded-lg shadow p-5 flex items-center space-x-4 transition-shadow ${onClick ? "cursor-pointer hover:shadow-lg" : ""
-      }`}
+    className={`bg-white rounded-lg shadow p-5 flex items-center space-x-4 transition-shadow ${
+      onClick ? "cursor-pointer hover:shadow-lg" : ""
+    }`}
     onClick={onClick}
   >
     <div className="p-3 rounded-full" style={{ backgroundColor: `${accentFrom}20` }}>

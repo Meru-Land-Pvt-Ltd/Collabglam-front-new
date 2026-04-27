@@ -96,6 +96,7 @@ function normalizeApiPayload(resp: any) {
   ) {
     return resp.data;
   }
+
   return resp;
 }
 
@@ -104,11 +105,13 @@ function getBackendMessage(resp: any) {
   const message =
     payload?.data?.message || payload?.message || "Saved successfully";
   const influencerId = payload?.data?.influencerId;
+
   return influencerId ? `${message} (ID: ${influencerId})` : message;
 }
 
 function getBackendRoute(resp: any): string | undefined {
   const payload = normalizeApiPayload(resp);
+
   return (
     payload?.route ||
     payload?.data?.route ||
@@ -139,12 +142,14 @@ function getStepIndexFromParam(
   if (value === "page1") return 0;
   if (value === "page2") return 1;
   if (value === "page3") return 2;
+
   return null;
 }
 
 function getStepParamFromIndex(index: number): OnboardingStepParam {
   if (index <= 0) return "page1";
   if (index === 1) return "page2";
+
   return "page3";
 }
 
@@ -185,9 +190,7 @@ function normalizeResolvedProfile(raw: any, typedHandle: string) {
     profile?.username || stripAt(profile?.handle || typedHandle)
   ).trim();
 
-  const handle = String(
-    profile?.handle || withAt(username || typedHandle)
-  ).trim();
+  const handle = String(profile?.handle || withAt(username || typedHandle)).trim();
 
   return {
     username: stripAt(username),
@@ -310,6 +313,14 @@ function getPlatformPreview(
     imageUrl: imageUrl || undefined,
     profileUrl: profileUrl || undefined,
   };
+}
+
+function isResolvedForCurrentHandle(status: PlatformState | undefined, handle: string) {
+  return Boolean(
+    status?.resolved &&
+      stripAt(status?.handle || "") === stripAt(handle || "") &&
+      !status?.loading
+  );
 }
 
 const PLATFORM_LIST = [
@@ -468,9 +479,7 @@ function PlatformRow({
   const preview = getPlatformPreview(platformKey, status);
 
   const hasTypedHandle = Boolean(stripAt(handleValue));
-  const isResolvedForCurrentHandle =
-    Boolean(status?.resolved) &&
-    stripAt(status?.handle || "") === stripAt(handleValue || "");
+  const isResolvedForHandle = isResolvedForCurrentHandle(status, handleValue);
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -609,18 +618,18 @@ function PlatformRow({
               type="button"
               onClick={onResolveHandle}
               disabled={
-                !hasTypedHandle || status?.loading || isResolvedForCurrentHandle
+                !hasTypedHandle || status?.loading || isResolvedForHandle
               }
               className={cn(
                 "h-[46px] shrink-0 rounded-[12px] px-4 text-[13px] font-semibold transition",
-                !hasTypedHandle || status?.loading || isResolvedForCurrentHandle
+                !hasTypedHandle || status?.loading || isResolvedForHandle
                   ? "cursor-not-allowed bg-neutral-200 text-neutral-400"
                   : "bg-neutral-900 text-white hover:bg-neutral-800"
               )}
             >
               {status?.loading
                 ? "Verifying..."
-                : isResolvedForCurrentHandle
+                : isResolvedForHandle
                 ? "Verified"
                 : "Verify"}
             </button>
@@ -639,7 +648,7 @@ function PlatformRow({
               <span className="text-red-500">{status.error}</span>
             ) : hasTypedHandle ? (
               <span className="text-neutral-500">
-                Click Verify to check this handle.
+                Continue will verify this handle automatically.
               </span>
             ) : (
               <span className="text-neutral-400">
@@ -740,7 +749,27 @@ export default function InfluencerOnboardingPage() {
     Record<string, PlatformState>
   >({});
 
+  const platformStatesRef = React.useRef<Record<string, PlatformState>>({});
   const resolveSeqRef = React.useRef<Record<string, number>>({});
+
+  React.useEffect(() => {
+    platformStatesRef.current = platformStates;
+  }, [platformStates]);
+
+  const updatePlatformStates = React.useCallback(
+    (updater: React.SetStateAction<Record<string, PlatformState>>) => {
+      setPlatformStates((prev) => {
+        const next =
+          typeof updater === "function"
+            ? (updater as (prevState: Record<string, PlatformState>) => Record<string, PlatformState>)(prev)
+            : updater;
+
+        platformStatesRef.current = next;
+        return next;
+      });
+    },
+    []
+  );
 
   const setStepWithRoute = React.useCallback(
     (stepIndex: number) => {
@@ -798,12 +827,11 @@ export default function InfluencerOnboardingPage() {
 
       return data.selectedPlatforms.every((platform) => {
         const state = platformStates[platform];
+
         return Boolean(
           state &&
             stripAt(state.handle) &&
-            state.resolved &&
-            !state.loading &&
-            !state.error
+            !state.loading
         );
       });
     }
@@ -831,6 +859,7 @@ export default function InfluencerOnboardingPage() {
       if (!selected) {
         const nextSelected = [...prev.selectedPlatforms, platform];
         const nextPrimary = prev.primaryPlatform || platform;
+
         return {
           ...prev,
           selectedPlatforms: nextSelected,
@@ -852,8 +881,9 @@ export default function InfluencerOnboardingPage() {
       };
     });
 
-    setPlatformStates((prev) => {
+    updatePlatformStates((prev) => {
       if (prev[platform]) return prev;
+
       return {
         ...prev,
         [platform]: {
@@ -873,12 +903,12 @@ export default function InfluencerOnboardingPage() {
   };
 
   const resolvePlatformHandle = React.useCallback(
-    async (platform: string, rawHandle: string) => {
+    async (platform: string, rawHandle: string): Promise<boolean> => {
       const token = getToken();
       const cleanHandle = stripAt(rawHandle);
 
       if (!cleanHandle) {
-        setPlatformStates((prev) => ({
+        updatePlatformStates((prev) => ({
           ...prev,
           [platform]: {
             ...prev[platform],
@@ -887,16 +917,17 @@ export default function InfluencerOnboardingPage() {
             resolvedData: undefined,
             loading: false,
             resolved: false,
-            error: undefined,
+            error: "Please enter a handle before continuing.",
           },
         }));
-        return;
+
+        return false;
       }
 
       const seq = (resolveSeqRef.current[platform] || 0) + 1;
       resolveSeqRef.current[platform] = seq;
 
-      setPlatformStates((prev) => ({
+      updatePlatformStates((prev) => ({
         ...prev,
         [platform]: {
           ...prev[platform],
@@ -918,11 +949,11 @@ export default function InfluencerOnboardingPage() {
           token
         );
 
-        if (resolveSeqRef.current[platform] !== seq) return;
+        if (resolveSeqRef.current[platform] !== seq) return false;
 
         const normalized = normalizeResolvedProfile(resp, rawHandle);
 
-        setPlatformStates((prev) => ({
+        updatePlatformStates((prev) => ({
           ...prev,
           [platform]: {
             ...prev[platform],
@@ -934,12 +965,14 @@ export default function InfluencerOnboardingPage() {
             error: undefined,
           },
         }));
+
+        return true;
       } catch (e) {
-        if (resolveSeqRef.current[platform] !== seq) return;
+        if (resolveSeqRef.current[platform] !== seq) return false;
 
         const msg = getResolveProfileUserMessage(e, platform);
 
-        setPlatformStates((prev) => ({
+        updatePlatformStates((prev) => ({
           ...prev,
           [platform]: {
             ...prev[platform],
@@ -951,13 +984,63 @@ export default function InfluencerOnboardingPage() {
             error: msg,
           },
         }));
+
+        return false;
       }
     },
-    [getToken]
+    [getToken, updatePlatformStates]
   );
 
+  const resolveSelectedPlatformsBeforeContinue = React.useCallback(async () => {
+    let allResolved = true;
+
+    for (const platform of data.selectedPlatforms) {
+      const state = platformStatesRef.current[platform];
+      const rawHandle = state?.handle || "";
+
+      if (!stripAt(rawHandle)) {
+        allResolved = false;
+
+        updatePlatformStates((prev) => ({
+          ...prev,
+          [platform]: {
+            ...prev[platform],
+            handle: rawHandle,
+            username: "",
+            resolvedData: undefined,
+            loading: false,
+            resolved: false,
+            error: "Please enter a handle before continuing.",
+          },
+        }));
+
+        continue;
+      }
+
+      const alreadyResolved = isResolvedForCurrentHandle(state, rawHandle);
+
+      if (alreadyResolved) {
+        continue;
+      }
+
+      const didResolve = await resolvePlatformHandle(platform, rawHandle);
+
+      if (!didResolve) {
+        allResolved = false;
+      }
+    }
+
+    if (!allResolved) {
+      setFormError("Please fix the profile verification errors before continuing.");
+    }
+
+    return allResolved;
+  }, [data.selectedPlatforms, resolvePlatformHandle, updatePlatformStates]);
+
   const onHandleChange = (provider: string, value: string) => {
-    setPlatformStates((prev) => ({
+    setFormError(undefined);
+
+    updatePlatformStates((prev) => ({
       ...prev,
       [provider]: {
         ...prev[provider],
@@ -972,17 +1055,21 @@ export default function InfluencerOnboardingPage() {
   };
 
   const onVerifyHandle = (provider: string) => {
-    const rawHandle = platformStates[provider]?.handle || "";
+    const rawHandle = platformStatesRef.current[provider]?.handle || "";
     if (!stripAt(rawHandle)) return;
-    resolvePlatformHandle(provider, rawHandle);
+
+    void resolvePlatformHandle(provider, rawHandle);
   };
 
   async function saveCurrentStep(stepIndex: number) {
     const token = getToken();
 
     if (stepIndex === 0) {
+      const states = platformStatesRef.current;
+
       const page1 = data.selectedPlatforms.map((platform) => {
-        const state = platformStates[platform];
+        const state = states[platform];
+
         return {
           platform,
           handle: state?.handle || "",
@@ -1082,11 +1169,25 @@ export default function InfluencerOnboardingPage() {
     setIsLoading(true);
 
     try {
+      if (onboardStep === 0) {
+        const resolved = await resolveSelectedPlatformsBeforeContinue();
+
+        if (!resolved) {
+          toast({
+            icon: "error",
+            title: "Verification failed",
+            text: "Please check the selected platform handles and try again.",
+          });
+          return;
+        }
+      }
+
       const resp = await saveCurrentStep(onboardStep);
       const backendRoute = getBackendRoute(resp);
 
       if (onboardStep < TOTAL_STEPS - 1) {
         const backendStepIndex = getStepIndexFromParam(backendRoute);
+
         if (backendStepIndex !== null) {
           setStepWithRoute(backendStepIndex);
           return;
@@ -1097,6 +1198,7 @@ export default function InfluencerOnboardingPage() {
       }
 
       clearStoredOnboardingStep();
+
       const msg = getBackendMessage(resp);
       setRedirectToast({ icon: "success", title: "Success", text: msg });
       router.replace("/influencer/dashboards");
@@ -1131,6 +1233,7 @@ export default function InfluencerOnboardingPage() {
 
       if (onboardStep < TOTAL_STEPS - 1) {
         const backendStepIndex = getStepIndexFromParam(backendRoute);
+
         if (backendStepIndex !== null) {
           setStepWithRoute(backendStepIndex);
           return;
@@ -1141,6 +1244,7 @@ export default function InfluencerOnboardingPage() {
       }
 
       clearStoredOnboardingStep();
+
       const msg = resp ? getBackendMessage(resp) : "Onboarding skipped";
       setRedirectToast({ icon: "success", title: "Done", text: msg });
       router.push("/influencer/dashboards");
@@ -1162,7 +1266,7 @@ export default function InfluencerOnboardingPage() {
 
   const subtitle =
     onboardStep === 0
-      ? "Select platforms, enter handles, and verify each one before continuing."
+      ? "Select platforms, enter handles, and continue. We’ll verify each handle before moving ahead."
       : onboardStep === 1
       ? "Tell us what you create and how you prefer to get paid."
       : "Pick your industries, project types, and delivery preferences.";
@@ -1243,7 +1347,8 @@ export default function InfluencerOnboardingPage() {
                   </button>
 
                   <div className="cg-black-description">
-                    <span style={{ fontWeight: 500 }}>{onboardStep + 1}</span> of {TOTAL_STEPS} steps
+                    <span style={{ fontWeight: 500 }}>{onboardStep + 1}</span>{" "}
+                    of {TOTAL_STEPS} steps
                   </div>
                 </div>
 
@@ -1461,7 +1566,9 @@ export default function InfluencerOnboardingPage() {
                   disabled={!currentIsValid || isLoading || page1Resolving}
                 >
                   {isLoading
-                    ? "Saving..."
+                    ? onboardStep === 0
+                      ? "Verifying..."
+                      : "Saving..."
                     : onboardStep === 0 && page1Resolving
                     ? "Verifying handle..."
                     : "Continue"}

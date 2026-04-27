@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   GoogleReCaptchaProvider,
   useGoogleReCaptcha,
@@ -18,6 +18,7 @@ import {
   getApiErrorMessage,
 } from "../../services/influencerApi";
 import { toast, ToastStyles } from "@/components/ui/toast";
+import { clearClientAuthStorage } from "@/lib/clearClientAuth";
 
 type ErrorKind =
   | "EMAIL_NOT_REGISTERED"
@@ -164,6 +165,7 @@ function prettifyRateLimitMessage(msg: string) {
   if (match) {
     const n = match[1];
     const unitRaw = match[2].toLowerCase();
+
     const unit =
       unitRaw === "second"
         ? "seconds"
@@ -277,6 +279,62 @@ function getPostLoginRedirect(res?: SignInResponse) {
   return "/influencer/dashboards";
 }
 
+function normalizeReturnUrl(value?: string | null) {
+  if (!value) return "";
+
+  let current = String(value || "").trim();
+
+  for (let index = 0; index < 2; index += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) break;
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  if (
+    current.startsWith("/") &&
+    !current.startsWith("//") &&
+    !current.includes("://")
+  ) {
+    return current;
+  }
+
+  return "";
+}
+
+function mapDisputeReturnUrlForRole(
+  returnUrl: string,
+  role: "brand" | "influencer"
+) {
+  if (!returnUrl) return "";
+
+  if (role === "influencer") {
+    if (returnUrl === "/brand/disputes") return "/influencer/disputes";
+
+    if (returnUrl.startsWith("/brand/disputes/")) {
+      return returnUrl.replace("/brand/disputes/", "/influencer/disputes/");
+    }
+
+    return returnUrl;
+  }
+
+  if (returnUrl === "/influencer/disputes") return "/brand/disputes";
+
+  if (returnUrl.startsWith("/influencer/disputes/")) {
+    return returnUrl.replace("/influencer/disputes/", "/brand/disputes/");
+  }
+
+  return returnUrl;
+}
+
+function buildHrefWithReturnUrl(basePath: string, returnUrl: string) {
+  if (!returnUrl) return basePath;
+  return `${basePath}?returnUrl=${encodeURIComponent(returnUrl)}`;
+}
+
 async function runRecaptchaCheck(
   executeRecaptcha: ((action: string) => Promise<string>) | undefined,
   action: string
@@ -296,6 +354,7 @@ async function runRecaptchaCheck(
 
 function InfluencerLoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { executeRecaptcha } = useGoogleReCaptcha();
 
   const [authGuardReady, setAuthGuardReady] = React.useState(false);
@@ -309,6 +368,11 @@ function InfluencerLoginContent() {
   const emailTrimmed = email.trim();
   const emailInvalid = !!emailError;
   const passwordInvalid = !!passwordError;
+
+  const getSafeReturnUrl = React.useCallback(() => {
+    const normalized = normalizeReturnUrl(searchParams.get("returnUrl"));
+    return mapDisputeReturnUrlForRole(normalized, "influencer");
+  }, [searchParams]);
 
   const hasActiveInfluencerSession = React.useCallback(() => {
     if (typeof window === "undefined") return false;
@@ -328,14 +392,22 @@ function InfluencerLoginContent() {
   const redirectAuthenticatedInfluencerUser = React.useCallback(() => {
     if (!hasActiveInfluencerSession()) return false;
 
+    const safeReturnUrl = getSafeReturnUrl();
+
+    if (safeReturnUrl) {
+      router.replace(safeReturnUrl);
+      return true;
+    }
+
     const resumeRoute = getStoredInfluencerResumeRoute();
     router.replace(routeToPath(resumeRoute));
     return true;
-  }, [hasActiveInfluencerSession, router]);
+  }, [getSafeReturnUrl, hasActiveInfluencerSession, router]);
 
   React.useEffect(() => {
     const enforceGuestOnlyAccess = () => {
       const redirected = redirectAuthenticatedInfluencerUser();
+
       if (!redirected) {
         setAuthGuardReady(true);
       }
@@ -399,6 +471,8 @@ function InfluencerLoginContent() {
     try {
       await runRecaptchaCheck(executeRecaptcha, "influencer_login");
 
+      clearClientAuthStorage();
+
       const res = (await apiSignInInfluencer(
         emailTrimmed,
         password
@@ -420,7 +494,9 @@ function InfluencerLoginContent() {
         body: JSON.stringify({ token: res.token }),
       });
 
-      const redirectPath = getPostLoginRedirect(res);
+      const safeReturnUrl = getSafeReturnUrl();
+      const redirectPath = safeReturnUrl || getPostLoginRedirect(res);
+
       router.replace(redirectPath);
     } catch (err) {
       const fallback = getApiErrorMessage(err, "Login failed");
@@ -440,6 +516,15 @@ function InfluencerLoginContent() {
   if (!authGuardReady) {
     return <div className="min-h-screen bg-background text-foreground" />;
   }
+
+  const safeReturnUrl = getSafeReturnUrl();
+  const brandReturnUrl = mapDisputeReturnUrlForRole(safeReturnUrl, "brand");
+
+  const brandLoginHref = buildHrefWithReturnUrl("/brand/login", brandReturnUrl);
+  const influencerSignupHref = buildHrefWithReturnUrl(
+    "/influencer/signup",
+    safeReturnUrl
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -475,7 +560,7 @@ function InfluencerLoginContent() {
           </Link>
 
           <Link
-            href="/brand/login"
+            href={brandLoginHref}
             className={cn(
               buttonVariants({ variant: "outline", size: "sm" }),
               "!my-0 rounded-m px-l border border-bd-primary text-tx-primary !shadow-none"
@@ -597,7 +682,7 @@ function InfluencerLoginContent() {
                 <p className="cg-auth-helper">
                   Don’t Have an Account?{" "}
                   <Link
-                    href="/influencer/signup"
+                    href={influencerSignupHref}
                     className="cg-auth-link hover:underline"
                   >
                     Signup
@@ -622,7 +707,11 @@ export default function InfluencerLoginPage() {
         appendTo: "head",
       }}
     >
-      <InfluencerLoginContent />
+      <React.Suspense
+        fallback={<div className="min-h-screen bg-background text-foreground" />}
+      >
+        <InfluencerLoginContent />
+      </React.Suspense>
     </GoogleReCaptchaProvider>
   );
 }

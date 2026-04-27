@@ -12,6 +12,7 @@ import {
   TiktokLogo,
   YoutubeLogo,
   CopyIcon,
+  Info,
 } from "@phosphor-icons/react";
 import { post } from "@/lib/api";
 
@@ -209,10 +210,10 @@ export function InfluencerCard({
     try {
       const userId = String(
         influencer?.userId ||
-          influencer?.modashId ||
-          influencer?.id ||
-          influencer?._id ||
-          ""
+        influencer?.modashId ||
+        influencer?.id ||
+        influencer?._id ||
+        ""
       ).trim();
 
       const selectedPlatform = normalizePlatform(
@@ -254,25 +255,25 @@ export function InfluencerCard({
             "",
           followers: Number(
             influencer?.followers ??
-              influencer?.followerCount ??
-              influencer?.stats?.followers ??
-              0
+            influencer?.followerCount ??
+            influencer?.stats?.followers ??
+            0
           ),
           engagementRate: Number(
             influencer?.engagementRate ??
-              influencer?.stats?.engagementRate ??
-              0
+            influencer?.stats?.engagementRate ??
+            0
           ),
           engagements: Number(
             influencer?.engagements ??
-              influencer?.stats?.engagements ??
-              0
+            influencer?.stats?.engagements ??
+            0
           ),
           averageViews: Number(
             influencer?.averageViews ??
-              influencer?.stats?.avgViews ??
-              influencer?.stats?.views ??
-              0
+            influencer?.stats?.avgViews ??
+            influencer?.stats?.views ??
+            0
           ),
           picture:
             influencer?.picture ||
@@ -298,16 +299,16 @@ export function InfluencerCard({
             "",
           categories: Array.isArray(influencer?.categories)
             ? influencer.categories
-                .map((item: any) =>
-                  typeof item === "string"
-                    ? item
-                    : item?.categoryName ||
-                      item?.subcategoryName ||
-                      item?.name ||
-                      item?.subcategory ||
-                      ""
-                )
-                .filter(Boolean)
+              .map((item: any) =>
+                typeof item === "string"
+                  ? item
+                  : item?.categoryName ||
+                  item?.subcategoryName ||
+                  item?.name ||
+                  item?.subcategory ||
+                  ""
+              )
+              .filter(Boolean)
             : influencer?.category
               ? [String(influencer.category)]
               : [],
@@ -462,8 +463,8 @@ export function InfluencerCard({
               }}
               className="inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-[#111111] px-5 text-[15px] font-semibold text-white shadow-[0_12px_24px_rgba(0,0,0,0.22)] transition hover:translate-y-[-1px] hover:bg-black"
             >
-              <PaperPlaneTilt size={18} weight="regular" />
-              <span>Send an Invite</span>
+              <Info className="h-4 w-4" />
+              <span>View Profile</span>
             </button>
 
             <button
