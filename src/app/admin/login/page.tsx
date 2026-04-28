@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/adminbutton";
 import { Label } from "@/components/ui/label";
 import { HiEye, HiEyeSlash } from "react-icons/hi2";
 import { post } from "@/lib/api";
+import { clearClientAuthStorage } from "@/lib/clearClientAuth";
 
 type AdminUser = {
   _id: string;
@@ -40,6 +41,8 @@ export default function AdminLoginPage() {
     setError(null);
 
     try {
+      clearClientAuthStorage();
+
       const data = await post<{
         token: string;
         admin: AdminUser;

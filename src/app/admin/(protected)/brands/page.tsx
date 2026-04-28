@@ -6,12 +6,9 @@ import Link from "next/link";
 import { Outfit } from "next/font/google";
 import {
   Search,
-  ChevronDown,
-  ChevronRight,
   Building2,
   Mail,
   RefreshCw,
-  MoreHorizontal,
   ShieldCheck,
   Users,
   Briefcase,
@@ -19,36 +16,23 @@ import {
   CheckCircle2,
   XCircle,
   Clock3,
+  Eye,
+  Plus,
+  Pencil,
   Image as ImageIcon,
 } from "lucide-react";
-import {
-  HiChevronDown,
-  HiChevronLeft,
-  HiChevronRight,
-  HiChevronUp,
-  HiOutlineEye,
-  HiOutlinePlus,
-  HiPencil,
-} from "react-icons/hi";
 
-import { get, post } from "@/lib/api";
+import { adminGet, adminPost } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import AdminTable, { type AdminTableColumn } from "../../components/table";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -65,10 +49,7 @@ type SortField =
   | "planName"
   | "createdAt"
   | "expiresAt"
-  | "status"
-  | "assignedRh"
-  | "assignedBme"
-  | "assignedIme";
+  | "status";
 
 interface ApiFeature {
   key: string;
@@ -180,7 +161,7 @@ interface BrandRow {
 }
 
 const DEFAULT_PAGE_SIZE = 10;
-const COL_SPAN = 10;
+const DEFAULT_ROW_OPTIONS = [10, 20, 50, 100] as const;
 
 const FEATURE_LABELS: Record<string, string> = {
   influencer_search_per_month: "Influencer Search",
@@ -199,22 +180,22 @@ const FEATURE_LABELS: Record<string, string> = {
   negotiation_and_followups: "Negotiation",
 };
 
-const SORT_LABELS: Record<SortField, string> = {
-  name: "Brand",
-  email: "Email",
-  planName: "Plan",
-  createdAt: "Created",
-  expiresAt: "Expires",
-  status: "Status",
-  assignedRh: "RH",
-  assignedBme: "BME",
-  assignedIme: "IME",
-};
+function useDebouncedValue<T>(value: T, delay = 400) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timeout);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 function formatDate(value?: string) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
+
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -222,13 +203,14 @@ function formatDate(value?: string) {
   });
 }
 
-function canManageCampaigns(brand: BrandRow) {
-  return brand.planName?.toLowerCase() === "fully_paid" || brand.planName?.toLowerCase() === "fully_managed";
-}
-
 function formatMoney(value: number) {
   if (!value) return "Free";
   return `$${value.toLocaleString()}`;
+}
+
+function canManageCampaigns(brand: BrandRow) {
+  const normalizedPlan = brand.planName.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return normalizedPlan === "fully_paid" || normalizedPlan === "fully_managed";
 }
 
 function getStatusFromApi(brand: ApiBrand): BrandStatus {
@@ -289,28 +271,15 @@ function initials(name: string) {
 }
 
 function statusStyles(status: BrandStatus) {
-  if (status === "active") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "archived") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (status === "active") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+
+  if (status === "archived") {
+    return "border-rose-200 bg-rose-50 text-rose-700";
+  }
+
   return "border-amber-200 bg-amber-50 text-amber-700";
-}
-
-function isFullyManagedSubscription(brand: BrandRow) {
-  const normalizedPlan = brand.planName.toLowerCase();
-
-  const managedPlanMatch =
-    normalizedPlan.includes("fully managed") ||
-    normalizedPlan.includes("full managed") ||
-    normalizedPlan.includes("managed");
-
-  const managedFeatureMatch = brand.features.some((feature) =>
-    [
-      "creator_sourcing_and_outreach",
-      "shortlist_delivered",
-      "negotiation_and_followups",
-    ].includes(feature.key)
-  );
-
-  return managedPlanMatch || managedFeatureMatch;
 }
 
 function roleMeta(role: AssignRole) {
@@ -319,25 +288,25 @@ function roleMeta(role: AssignRole) {
       return {
         label: "RH",
         payloadKey: "RHId",
-        valueKey: "assignedRh" as const,
-        idKey: "RHId" as const,
         emptyLabel: "Assign RH",
       };
     case "BME":
       return {
         label: "BME",
         payloadKey: "bdmId",
-        valueKey: "assignedBme" as const,
-        idKey: "bdmId" as const,
         emptyLabel: "Assign BME",
       };
     case "IME":
       return {
         label: "IME",
         payloadKey: "idmId",
-        valueKey: "assignedIme" as const,
-        idKey: "idmId" as const,
         emptyLabel: "Assign IME",
+      };
+    default:
+      return {
+        label: "RH",
+        payloadKey: "RHId",
+        emptyLabel: "Assign RH",
       };
   }
 }
@@ -346,7 +315,24 @@ function isDataUrlImage(value?: string) {
   return !!value && /^data:image\//i.test(value);
 }
 
-const BrandAvatar = ({
+function groupEmployeesByParent(employees: Employee[]) {
+  return employees.reduce<Record<string, Employee[]>>((acc, employee) => {
+    const key = String(employee.parentAdmin || "");
+    if (!key) return acc;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(employee);
+    return acc;
+  }, {});
+}
+
+function buildEmployeeNameMap(employees: Employee[]) {
+  return employees.reduce<Record<string, string>>((acc, employee) => {
+    acc[employee._id] = employee.name;
+    return acc;
+  }, {});
+}
+
+const BrandAvatar = React.memo(function BrandAvatar({
   name,
   profilePic,
   size = "md",
@@ -354,7 +340,7 @@ const BrandAvatar = ({
   name: string;
   profilePic?: string;
   size?: "sm" | "md";
-}) => {
+}) {
   const classes =
     size === "sm"
       ? "h-10 w-10 rounded-2xl text-sm"
@@ -365,7 +351,7 @@ const BrandAvatar = ({
       <img
         src={profilePic}
         alt={name}
-        className={`${classes} border border-slate-200 object-cover bg-slate-100`}
+        className={`${classes} border border-slate-200 bg-slate-100 object-cover`}
       />
     );
   }
@@ -377,9 +363,13 @@ const BrandAvatar = ({
       {initials(name)}
     </div>
   );
-};
+});
 
-const StatusBadge = ({ status }: { status: BrandStatus }) => {
+const StatusBadge = React.memo(function StatusBadge({
+  status,
+}: {
+  status: BrandStatus;
+}) {
   const Icon =
     status === "active"
       ? CheckCircle2
@@ -397,9 +387,9 @@ const StatusBadge = ({ status }: { status: BrandStatus }) => {
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
-};
+});
 
-const SummaryCard = ({
+const SummaryCard = React.memo(function SummaryCard({
   title,
   value,
   icon: Icon,
@@ -409,26 +399,35 @@ const SummaryCard = ({
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   hint: string;
-}) => (
-  <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div className="flex items-center justify-between p-5">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{title}</p>
-        <h3 className="mt-2 text-2xl font-extrabold text-slate-900">{value}</h3>
-        <p className="mt-1 text-xs font-medium text-slate-500">{hint}</p>
+}) {
+  return (
+    <Card className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between p-5">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+            {title}
+          </p>
+          <h3 className="mt-2 text-2xl font-extrabold text-slate-900">{value}</h3>
+          <p className="mt-1 text-xs font-medium text-slate-500">{hint}</p>
+        </div>
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+          <Icon className="h-5 w-5" />
+        </div>
       </div>
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-        <Icon className="h-5 w-5" />
-      </div>
-    </div>
-  </Card>
-);
+    </Card>
+  );
+});
 
-const FeatureUsage = ({ feature }: { feature: ApiFeature }) => {
+const FeatureUsage = React.memo(function FeatureUsage({
+  feature,
+}: {
+  feature: ApiFeature;
+}) {
   if (!feature.limit || feature.limit <= 0) return null;
 
   const percent = Math.min(100, Math.round((feature.used / feature.limit) * 100));
-  const tone = percent >= 90 ? "bg-rose-500" : percent >= 70 ? "bg-amber-500" : "bg-emerald-500";
+  const tone =
+    percent >= 90 ? "bg-rose-500" : percent >= 70 ? "bg-amber-500" : "bg-emerald-500";
 
   return (
     <div className="space-y-1.5 rounded-xl border border-slate-200 bg-white p-3">
@@ -445,103 +444,55 @@ const FeatureUsage = ({ feature }: { feature: ApiFeature }) => {
       </div>
     </div>
   );
-};
+});
 
-const SkeletonRows = () => (
-  <>
-    {Array.from({ length: 6 }).map((_, rowIndex) => (
-      <TableRow key={rowIndex} className="border-slate-100">
-        {Array.from({ length: COL_SPAN }).map((__, cellIndex) => (
-          <TableCell key={cellIndex} className="py-4">
-            <div className="h-4 w-full animate-pulse rounded-full bg-slate-100" />
-          </TableCell>
-        ))}
-      </TableRow>
-    ))}
-  </>
-);
-
-const ExpandedContent = ({ brand }: { brand: BrandRow }) => {
-  const usageFeatures = brand.features.filter((item) => item.limit > 0);
-
+const BrandIdentityCell = React.memo(function BrandIdentityCell({
+  brand,
+}: {
+  brand: BrandRow;
+}) {
   return (
-    <TableRow className="border-slate-100 bg-slate-50/70">
-      <TableCell colSpan={COL_SPAN} className="px-6 py-5">
-        <div className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-            {[
-              { label: "Contact", value: brand.contactName },
-              { label: "Industry", value: brand.industry },
-              { label: "Company Size", value: brand.companySize },
-              { label: "Proxy Email", value: brand.proxyEmail || "—" },
-              { label: "Billing", value: brand.billingCycle === "annual" ? "Annual" : "Monthly" },
-              { label: "Auto Renew", value: brand.autoRenew ? "Enabled" : "Disabled" },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                  {item.label}
-                </p>
-                <p className="mt-2 text-sm font-extrabold text-slate-900">{item.value}</p>
-              </div>
-            ))}
-          </div>
+    <div className="flex min-w-[260px] items-center gap-3">
+      <BrandAvatar name={brand.name} profilePic={brand.profilePic} size="sm" />
 
-          <div className="grid gap-4 xl:grid-cols-[1.4fr,0.6fr]">
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-none">
-              <div className="p-4">
-                <div className="mb-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                    Subscription Usage
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-600">
-                    Metered usage across the current plan.
-                  </p>
-                </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-extrabold text-slate-900">{brand.name}</p>
 
-                {usageFeatures.length > 0 ? (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {usageFeatures.map((feature) => (
-                      <FeatureUsage key={feature.key} feature={feature} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm font-medium text-slate-500">No metered features found.</p>
-                )}
-              </div>
-            </Card>
+        <div className="mt-1 flex flex-col gap-1 text-xs font-medium text-slate-500">
+          <span className="flex items-center gap-1.5 truncate">
+            <Mail className="h-3.5 w-3.5" />
+            {brand.email}
+          </span>
 
-            <Card className="rounded-2xl border border-slate-200 bg-white shadow-none">
-              <div className="p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Brand Media
-                </p>
-
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  {isDataUrlImage(brand.profilePic) ? (
-                    <img
-                      src={brand.profilePic}
-                      alt={brand.name}
-                      className="h-32 w-32 rounded-2xl border border-slate-200 object-cover bg-white"
-                    />
-                  ) : (
-                    <div className="flex h-32 w-32 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-slate-400">
-                      <ImageIcon className="h-6 w-6" />
-                    </div>
-                  )}
-                  <p className="mt-3 text-xs font-medium text-slate-500">
-                    Profile picture is rendered directly when backend returns a data URL.
-                  </p>
-                </div>
-              </div>
-            </Card>
-          </div>
+          {brand.proxyEmail ? (
+            <span className="truncate text-[11px] text-slate-400">
+              Proxy: {brand.proxyEmail}
+            </span>
+          ) : null}
         </div>
-      </TableCell>
-    </TableRow>
+      </div>
+    </div>
   );
-};
+});
 
-const AssigneeCell = ({
+const PlanCell = React.memo(function PlanCell({
+  brand,
+}: {
+  brand: BrandRow;
+}) {
+  return (
+    <div className="space-y-1">
+      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-extrabold text-slate-800">
+        {brand.planName}
+      </span>
+      <p className="text-[11px] font-medium text-slate-500">
+        {formatMoney(brand.amountPaid)} · {brand.billingCycle}
+      </p>
+    </div>
+  );
+});
+
+const AssigneeCell = React.memo(function AssigneeCell({
   brandId,
   currentValue,
   role,
@@ -557,7 +508,7 @@ const AssigneeCell = ({
   onSave: (brandId: string, role: AssignRole, employeeId: string) => Promise<void>;
   disabled?: boolean;
   disabledLabel?: string;
-}) => {
+}) {
   const meta = roleMeta(role);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState("");
@@ -623,7 +574,7 @@ const AssigneeCell = ({
         }}
         className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-[11px] font-bold text-slate-500 transition hover:border-slate-500 hover:text-slate-800"
       >
-        <HiOutlinePlus className="h-3.5 w-3.5" />
+        <Plus className="h-3.5 w-3.5" />
         {meta.emptyLabel}
       </button>
     );
@@ -685,7 +636,321 @@ const AssigneeCell = ({
       </div>
     </div>
   );
-};
+});
+
+const AssigneePanelCard = React.memo(function AssigneePanelCard({
+  title,
+  currentValue,
+  employeeId,
+  brandId,
+  role,
+  options,
+  onSave,
+  disabled,
+  disabledLabel,
+}: {
+  title: string;
+  currentValue: string;
+  employeeId?: string;
+  brandId: string;
+  role: AssignRole;
+  options: Employee[];
+  onSave: (brandId: string, role: AssignRole, employeeId: string) => Promise<void>;
+  disabled?: boolean;
+  disabledLabel?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+        {title}
+      </p>
+
+      <div className="mt-2 min-h-[44px]">
+        {currentValue ? (
+          <>
+            <p className="text-sm font-extrabold text-slate-900">{currentValue}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              {employeeId ? `Mapped ID: ${employeeId}` : "Assigned"}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-slate-400">Not assigned</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              {disabled ? disabledLabel || "Assignment unavailable" : "Ready to assign"}
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <AssigneeCell
+          brandId={brandId}
+          currentValue={currentValue}
+          role={role}
+          options={options}
+          onSave={onSave}
+          disabled={disabled}
+          disabledLabel={disabledLabel}
+        />
+      </div>
+    </div>
+  );
+});
+
+const BrandExpandedPanel = React.memo(function BrandExpandedPanel({
+  brand,
+  rhOptions,
+  getScopedExecOptions,
+  onAssignSave,
+}: {
+  brand: BrandRow;
+  rhOptions: Employee[];
+  getScopedExecOptions: (role: "BME" | "IME", brand: BrandRow) => Employee[];
+  onAssignSave: (brandId: string, role: AssignRole, employeeId: string) => Promise<void>;
+}) {
+  const usageFeatures = brand.features.filter((item) => item.limit > 0);
+  const brandBmeOptions = getScopedExecOptions("BME", brand);
+  const brandImeOptions = getScopedExecOptions("IME", brand);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        {[
+          { label: "Contact", value: brand.contactName },
+          { label: "Industry", value: brand.industry },
+          { label: "Company Size", value: brand.companySize },
+          { label: "Proxy Email", value: brand.proxyEmail || "—" },
+          {
+            label: "Billing",
+            value: brand.billingCycle === "annual" ? "Annual" : "Monthly",
+          },
+          { label: "Auto Renew", value: brand.autoRenew ? "Enabled" : "Disabled" },
+        ].map((item) => (
+          <div
+            key={item.label}
+            className="rounded-2xl border border-slate-200 bg-white p-4"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              {item.label}
+            </p>
+            <p className="mt-2 text-sm font-extrabold text-slate-900">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <Card className="rounded-2xl border border-slate-200 bg-white shadow-none">
+        <div className="p-4">
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+              Assigned Team
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <AssigneePanelCard
+              title="Assigned RH"
+              currentValue={brand.assignedRh}
+              employeeId={brand.RHId}
+              brandId={brand._id}
+              role="RH"
+              options={rhOptions}
+              onSave={onAssignSave}
+            />
+
+            <AssigneePanelCard
+              title="Assigned BME"
+              currentValue={brand.assignedBme}
+              employeeId={brand.bdmId}
+              brandId={brand._id}
+              role="BME"
+              options={brandBmeOptions}
+              onSave={onAssignSave}
+              disabled={!brand.RHId || (!brand.assignedBme && brandBmeOptions.length === 0)}
+              disabledLabel={!brand.RHId ? "Assign RH first" : "No BME under RH"}
+            />
+
+            <AssigneePanelCard
+              title="Assigned IME"
+              currentValue={brand.assignedIme}
+              employeeId={brand.idmId}
+              brandId={brand._id}
+              role="IME"
+              options={brandImeOptions}
+              onSave={onAssignSave}
+              disabled={!brand.RHId || (!brand.assignedIme && brandImeOptions.length === 0)}
+              disabledLabel={!brand.RHId ? "Assign RH first" : "No IME under RH"}
+            />
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-[1.4fr,0.6fr]">
+        <Card className="rounded-2xl border border-slate-200 bg-white shadow-none">
+          <div className="p-4">
+            <div className="mb-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                Subscription Usage
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-600">
+                Metered usage across the current plan.
+              </p>
+            </div>
+
+            {usageFeatures.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {usageFeatures.map((feature) => (
+                  <FeatureUsage key={feature.key} feature={feature} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm font-medium text-slate-500">
+                No metered features found.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border border-slate-200 bg-white shadow-none">
+          <div className="p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+              Brand Media
+            </p>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              {isDataUrlImage(brand.profilePic) ? (
+                <img
+                  src={brand.profilePic}
+                  alt={brand.name}
+                  className="h-32 w-32 rounded-2xl border border-slate-200 bg-white object-cover"
+                />
+              ) : (
+                <div className="flex h-32 w-32 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-slate-400">
+                  <ImageIcon className="h-6 w-6" />
+                </div>
+              )}
+
+              <p className="mt-3 text-xs font-medium text-slate-500">
+                Profile picture is rendered directly when backend returns a data URL.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+});
+
+const ActionIconButton = React.memo(function ActionIconButton({
+  icon: Icon,
+  tooltip,
+  href,
+  disabled = false,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  tooltip: string;
+  href?: string;
+  disabled?: boolean;
+}) {
+  const baseClass =
+    "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-950";
+  const disabledClass =
+    "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed";
+
+  if (disabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={disabledClass}>
+            <Icon className="h-4 w-4" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (href) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            href={href}
+            onClick={(event) => event.stopPropagation()}
+            className={baseClass}
+          >
+            <Icon className="h-4 w-4" />
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(event) => event.stopPropagation()}
+          className={baseClass}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+});
+
+const BrandActionButtons = React.memo(function BrandActionButtons({
+  brand,
+  canEditBrands,
+}: {
+  brand: BrandRow;
+  canEditBrands: boolean;
+}) {
+  const canManage = canManageCampaigns(brand);
+
+  const createDisabled = !canEditBrands || !canManage;
+  const reviewDisabled = !canEditBrands || !canManage;
+
+  const disabledReason = !canEditBrands
+    ? "You do not have brand edit access"
+    : "Available only for fully managed brands";
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="flex items-center justify-end gap-2">
+        <ActionIconButton
+          icon={Eye}
+          tooltip="View details"
+          href={`/admin/brands/view?brandId=${brand._id}`}
+        />
+
+        <ActionIconButton
+          icon={Plus}
+          tooltip={createDisabled ? disabledReason : "Create campaign"}
+          href={`/admin/brands/create-campaign?brandId=${brand._id}`}
+          disabled={createDisabled}
+        />
+
+        <ActionIconButton
+          icon={Pencil}
+          tooltip={reviewDisabled ? disabledReason : "Review campaigns"}
+          href={`/admin/brands/review-campaigns?brandId=${brand._id}`}
+          disabled={reviewDisabled}
+        />
+      </div>
+    </TooltipProvider>
+  );
+});
 
 const AdminBrandPage: NextPage = () => {
   const [brands, setBrands] = useState<BrandRow[]>([]);
@@ -693,7 +958,7 @@ const AdminBrandPage: NextPage = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 400);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -708,10 +973,9 @@ const AdminBrandPage: NextPage = () => {
   const [bmeOptions, setBmeOptions] = useState<Employee[]>([]);
   const [imeOptions, setImeOptions] = useState<Employee[]>([]);
 
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [canEditBrands, setCanEditBrands] = useState(false);
 
-
-  const [canEditBrands, setcanEditBrands] = useState(false);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -720,21 +984,28 @@ const AdminBrandPage: NextPage = () => {
 
       const allowed = permissions.some(
         (item: any) =>
-          String(item?.key || "").toLowerCase().replace(/[\s_-]+/g, "") === "brands" &&
-          item?.isEdit === true
+          String(item?.key || "")
+            .toLowerCase()
+            .replace(/[\s_-]+/g, "") === "brands" && item?.isEdit === true
       );
 
-      setcanEditBrands(allowed);
+      setCanEditBrands(allowed);
     } catch {
-      setcanEditBrands(false);
+      setCanEditBrands(false);
     }
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const fetchBrands = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+
     try {
       setLoading(true);
 
-      const response = await post<BrandListResponse>("/admin/brand/getlist", {
+      const response = await adminPost<BrandListResponse>("/admin/brand/getlist", {
         page,
         limit: pageSize,
         search: debouncedSearch,
@@ -742,31 +1013,38 @@ const AdminBrandPage: NextPage = () => {
         sortOrder,
       });
 
+      if (requestId !== requestIdRef.current) return;
+
       const rawBrands = response.brands || response.data || [];
       const mapped = rawBrands.map(mapBrand);
+      const nextTotal = response.total ?? mapped.length;
+      const nextLimit = response.limit ?? pageSize;
 
       setBrands(mapped);
-      setTotal(response.total ?? mapped.length);
+      setTotal(nextTotal);
       setPage(response.page ?? page);
-      setPageSize(response.limit ?? pageSize);
+      setPageSize(nextLimit);
       setTotalPages(
-        response.totalPages ?? Math.max(1, Math.ceil((response.total ?? mapped.length) / pageSize))
+        response.totalPages ?? Math.max(1, Math.ceil(nextTotal / nextLimit))
       );
       setError(null);
     } catch (err: any) {
+      if (requestId !== requestIdRef.current) return;
       console.error(err);
       setError(err?.message || "Failed to load brands.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [page, pageSize, debouncedSearch, sortBy, sortOrder]);
 
   const fetchAssignees = useCallback(async () => {
     try {
       const [rhResponse, bmeResponse, imeResponse] = await Promise.all([
-        get<EmployeeListResponse>("/admins/get-rm-list"),
-        get<EmployeeListResponse>("/admins/get-executive-list?role=bme"),
-        get<EmployeeListResponse>("/admins/get-executive-list?role=ime"),
+        adminGet<EmployeeListResponse>("/admins/get-rm-list"),
+        adminGet<EmployeeListResponse>("/admins/get-executive-list?role=bme"),
+        adminGet<EmployeeListResponse>("/admins/get-executive-list?role=ime"),
       ]);
 
       if (rhResponse.success) setRhOptions(rhResponse.data ?? []);
@@ -785,85 +1063,95 @@ const AdminBrandPage: NextPage = () => {
     fetchAssignees();
   }, [fetchAssignees]);
 
-  const handleSearch = (value: string) => {
-    setSearch(value);
+  const rhNameMap = useMemo(() => buildEmployeeNameMap(rhOptions), [rhOptions]);
+  const bmeNameMap = useMemo(() => buildEmployeeNameMap(bmeOptions), [bmeOptions]);
+  const imeNameMap = useMemo(() => buildEmployeeNameMap(imeOptions), [imeOptions]);
 
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    searchTimeoutRef.current = setTimeout(() => {
-      setDebouncedSearch(value.trim());
-      setPage(1);
-    }, 400);
-  };
-
-  const handleSort = (field: SortField) => {
-    if (sortBy === field) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(field);
-      setSortOrder("asc");
-    }
-    setPage(1);
-  };
+  const bmeOptionsByRh = useMemo(() => groupEmployeesByParent(bmeOptions), [bmeOptions]);
+  const imeOptionsByRh = useMemo(() => groupEmployeesByParent(imeOptions), [imeOptions]);
 
   const getScopedExecOptions = useCallback(
     (role: "BME" | "IME", brand: BrandRow) => {
       if (!brand.RHId) return [];
+      const key = String(brand.RHId);
 
-      const source = role === "BME" ? bmeOptions : imeOptions;
+      if (role === "BME") {
+        return bmeOptionsByRh[key] ?? [];
+      }
 
-      return source.filter(
-        (employee) => String(employee.parentAdmin || "") === String(brand.RHId)
-      );
+      return imeOptionsByRh[key] ?? [];
     },
-    [bmeOptions, imeOptions]
+    [bmeOptionsByRh, imeOptionsByRh]
   );
 
-  const handleAssignSave = async (brandId: string, role: AssignRole, employeeId: string) => {
-    const meta = roleMeta(role);
+  const handleSort = useCallback(
+    (field: string) => {
+      const typedField = field as SortField;
+      setPage(1);
 
-    await post("/admins/assign-brand", {
-      brandId,
-      [meta.payloadKey]: employeeId,
-    });
+      if (typedField === sortBy) {
+        setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+        return;
+      }
 
-    const source = role === "RH" ? rhOptions : role === "BME" ? bmeOptions : imeOptions;
-    const employee = source.find((item) => item._id === employeeId);
+      setSortBy(typedField);
+      setSortOrder("asc");
+    },
+    [sortBy]
+  );
 
-    setBrands((prev) =>
-      prev.map((brand) => {
-        if (brand._id !== brandId) return brand;
+  const handleAssignSave = useCallback(
+    async (brandId: string, role: AssignRole, employeeId: string) => {
+      const meta = roleMeta(role);
 
-        if (role === "RH") {
+      await adminPost("/admins/assign-brand", {
+        brandId,
+        [meta.payloadKey]: employeeId,
+      });
+
+      setBrands((prev) =>
+        prev.map((brand) => {
+          if (brand._id !== brandId) return brand;
+
+          if (role === "RH") {
+            return {
+              ...brand,
+              assignedRh: rhNameMap[employeeId] || employeeId,
+              RHId: employeeId,
+              assignedBme: "",
+              assignedIme: "",
+              bdmId: "",
+              idmId: "",
+            };
+          }
+
+          if (role === "BME") {
+            return {
+              ...brand,
+              assignedBme: bmeNameMap[employeeId] || employeeId,
+              bdmId: employeeId,
+            };
+          }
+
           return {
             ...brand,
-            assignedRh: employee?.name || employeeId,
-            RHId: employeeId,
-            assignedBme: "",
-            assignedIme: "",
-            bdmId: "",
-            idmId: "",
+            assignedIme: imeNameMap[employeeId] || employeeId,
+            idmId: employeeId,
           };
-        }
+        })
+      );
+    },
+    [rhNameMap, bmeNameMap, imeNameMap]
+  );
 
-        if (role === "BME") {
-          return {
-            ...brand,
-            assignedBme: employee?.name || employeeId,
-            bdmId: employeeId,
-          };
-        }
+  const handleToggleExpand = useCallback((brandId: string) => {
+    setExpandedId((prev) => (prev === brandId ? null : brandId));
+  }, []);
 
-        return {
-          ...brand,
-          assignedIme: employee?.name || employeeId,
-          idmId: employeeId,
-        };
-      })
-    );
-  };
+  const handleLimitChange = useCallback((limit: number) => {
+    setPage(1);
+    setPageSize(limit);
+  }, []);
 
   const statusCounts = useMemo(
     () => ({
@@ -883,28 +1171,86 @@ const AdminBrandPage: NextPage = () => {
     [brands]
   );
 
-  const SortHead = ({
-    field,
-    align = "left",
-  }: {
-    field: SortField;
-    align?: "left" | "center" | "right";
-  }) => (
-    <TableHead
-      className={`cursor-pointer py-4 text-xs font-bold uppercase tracking-[0.14em] text-slate-500 ${align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left"
-        }`}
-      onClick={() => handleSort(field)}
-    >
-      <div
-        className={`flex items-center gap-1 ${align === "center" ? "justify-center" : align === "right" ? "justify-end" : "justify-start"
-          }`}
-      >
-        {SORT_LABELS[field]}
-        {sortBy === field ? (
-          sortOrder === "asc" ? <HiChevronUp className="h-4 w-4" /> : <HiChevronDown className="h-4 w-4" />
-        ) : null}
-      </div>
-    </TableHead>
+  const columns = useMemo<AdminTableColumn<BrandRow>[]>(
+    () => [
+      {
+        id: "name",
+        header: "Brand",
+        sortable: true,
+        sortField: "name",
+        widthClassName: "min-w-[280px]",
+        render: (brand) => <BrandIdentityCell brand={brand} />,
+      },
+      {
+        id: "planName",
+        header: "Plan",
+        sortable: true,
+        sortField: "planName",
+        align: "center",
+        widthClassName: "min-w-[180px]",
+        render: (brand) => <PlanCell brand={brand} />,
+      },
+      {
+        id: "createdAt",
+        header: "Created",
+        sortable: true,
+        sortField: "createdAt",
+        align: "center",
+        render: (brand) => (
+          <span className="text-sm font-semibold text-slate-600">
+            {formatDate(brand.createdAt)}
+          </span>
+        ),
+      },
+      {
+        id: "expiresAt",
+        header: "Expires",
+        sortable: true,
+        sortField: "expiresAt",
+        align: "center",
+        render: (brand) => (
+          <span className="text-sm font-semibold text-slate-600">
+            {formatDate(brand.expiresAt)}
+          </span>
+        ),
+      },
+      {
+        id: "status",
+        header: "Status",
+        sortable: true,
+        sortField: "status",
+        align: "center",
+        render: (brand) => <StatusBadge status={brand.status} />,
+      },
+    ],
+    []
+  );
+
+  const expandable = useMemo(
+    () => ({
+      expandedRowId: expandedId,
+      onToggle: (rowId: string) => handleToggleExpand(rowId),
+      renderExpandedRow: (brand: BrandRow) => (
+        <BrandExpandedPanel
+          brand={brand}
+          rhOptions={rhOptions}
+          getScopedExecOptions={getScopedExecOptions}
+          onAssignSave={handleAssignSave}
+        />
+      ),
+    }),
+    [expandedId, handleToggleExpand, rhOptions, getScopedExecOptions, handleAssignSave]
+  );
+
+  const actions = useMemo(
+    () => ({
+      header: "Actions",
+      align: "right" as const,
+      render: (brand: BrandRow) => (
+        <BrandActionButtons brand={brand} canEditBrands={canEditBrands} />
+      ),
+    }),
+    [canEditBrands]
   );
 
   return (
@@ -923,12 +1269,18 @@ const AdminBrandPage: NextPage = () => {
               </h1>
 
               <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600">
-                Manage brands, review subscription health, assign RH, BME, and IME, and render brand avatars directly from profilePic data URLs.
+                Manage brands, review subscription health, assign RH, BME, and IME,
+                and render brand avatars directly from profilePic data URLs.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" className="rounded-2xl" onClick={fetchBrands} disabled={loading}>
+              <Button
+                variant="outline"
+                className="rounded-2xl"
+                onClick={fetchBrands}
+                disabled={loading}
+              >
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                 Refresh
               </Button>
@@ -941,13 +1293,13 @@ const AdminBrandPage: NextPage = () => {
             title="Total Brands"
             value={total}
             icon={Building2}
-            hint="All listed brands in the current result set"
+            hint="All matched brands from current query"
           />
           <SummaryCard
             title="Active Plans"
             value={statusCounts.active}
             icon={CheckCircle2}
-            hint="Brands currently in active status"
+            hint="Brands currently active on this page"
           />
           <SummaryCard
             title="RH Assigned"
@@ -976,7 +1328,7 @@ const AdminBrandPage: NextPage = () => {
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={search}
-                  onChange={(event) => handleSearch(event.target.value)}
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search by brand, email, plan, or assignee..."
                   className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11 text-sm font-medium shadow-none focus-visible:ring-0"
                 />
@@ -996,266 +1348,37 @@ const AdminBrandPage: NextPage = () => {
             </div>
           </div>
 
-          {error ? (
-            <div className="mx-4 mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 md:mx-5">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-slate-200 hover:bg-transparent">
-                  <TableHead className="w-10 py-4" />
-                  <SortHead field="name" />
-                  <SortHead field="planName" align="center" />
-                  <SortHead field="createdAt" align="center" />
-                  <SortHead field="expiresAt" align="center" />
-                  <SortHead field="status" align="center" />
-                  <SortHead field="assignedRh" align="center" />
-                  <SortHead field="assignedBme" align="center" />
-                  <SortHead field="assignedIme" align="center" />
-                  <TableHead className="py-4 text-right text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {loading ? <SkeletonRows /> : null}
-
-                {!loading && brands.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={COL_SPAN} className="py-12 text-center">
-                      <div className="mx-auto max-w-md space-y-2">
-                        <p className="text-base font-extrabold text-slate-900">No brands found</p>
-                        <p className="text-sm font-medium text-slate-500">
-                          Try adjusting the search or refresh the data.
-                        </p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-
-                {!loading &&
-                  brands.map((brand) => {
-                    const isExpanded = expandedId === brand._id;
-                    const canManage = canManageCampaigns(brand);
-
-                    const brandBmeOptions = getScopedExecOptions("BME", brand);
-                    const brandImeOptions = getScopedExecOptions("IME", brand);
-
-                    return (
-                      <React.Fragment key={brand._id}>
-                        <TableRow
-                          className={`cursor-pointer border-slate-100 transition ${isExpanded ? "bg-slate-50" : "hover:bg-slate-50/70"
-                            }`}
-                          onClick={() => setExpandedId(isExpanded ? null : brand._id)}
-                        >
-                          <TableCell className="pl-4 pr-1">
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-slate-500" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-slate-400" />
-                            )}
-                          </TableCell>
-
-                          <TableCell className="py-4">
-                            <div className="flex min-w-[260px] items-center gap-3">
-                              <BrandAvatar name={brand.name} profilePic={brand.profilePic} size="sm" />
-
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-extrabold text-slate-900">{brand.name}</p>
-
-                                <div className="mt-1 flex flex-col gap-1 text-xs font-medium text-slate-500">
-                                  <span className="flex items-center gap-1.5 truncate">
-                                    <Mail className="h-3.5 w-3.5" />
-                                    {brand.email}
-                                  </span>
-
-                                  {brand.proxyEmail ? (
-                                    <span className="truncate text-[11px] text-slate-400">
-                                      Proxy: {brand.proxyEmail}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-
-                          <TableCell className="py-4 text-center">
-                            <div className="space-y-1">
-                              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-extrabold text-slate-800">
-                                {brand.planName}
-                              </span>
-                              <p className="text-[11px] font-medium text-slate-500">
-                                {formatMoney(brand.amountPaid)} · {brand.billingCycle}
-                              </p>
-                            </div>
-                          </TableCell>
-
-                          <TableCell className="py-4 text-center text-sm font-semibold text-slate-600">
-                            {formatDate(brand.createdAt)}
-                          </TableCell>
-
-                          <TableCell className="py-4 text-center text-sm font-semibold text-slate-600">
-                            {formatDate(brand.expiresAt)}
-                          </TableCell>
-
-                          <TableCell className="py-4 text-center">
-                            <StatusBadge status={brand.status} />
-                          </TableCell>
-
-                          <TableCell className="py-3 text-center" onClick={(event) => event.stopPropagation()}>
-                            <AssigneeCell
-                              brandId={brand._id}
-                              currentValue={brand.assignedRh}
-                              role="RH"
-                              options={rhOptions}
-                              onSave={handleAssignSave}
-                            />
-                          </TableCell>
-
-                          <TableCell className="py-3 text-center" onClick={(event) => event.stopPropagation()}>
-                            <AssigneeCell
-                              brandId={brand._id}
-                              currentValue={brand.assignedBme}
-                              role="BME"
-                              options={brandBmeOptions}
-                              onSave={handleAssignSave}
-                              disabled={!brand.RHId || (!brand.assignedBme && brandBmeOptions.length === 0)}
-                              disabledLabel={!brand.RHId ? "Assign RH first" : "No BME under RH"}
-                            />
-                          </TableCell>
-
-                          <TableCell className="py-3 text-center" onClick={(event) => event.stopPropagation()}>
-                            <AssigneeCell
-                              brandId={brand._id}
-                              currentValue={brand.assignedIme}
-                              role="IME"
-                              options={brandImeOptions}
-                              onSave={handleAssignSave}
-                              disabled={!brand.RHId || (!brand.assignedIme && brandImeOptions.length === 0)}
-                              disabledLabel={!brand.RHId ? "Assign RH first" : "No IME under RH"}
-                            />
-                          </TableCell>
-
-                          <TableCell className="py-4 text-right" onClick={(event) => event.stopPropagation()}>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-slate-500 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
-                                  aria-label="Open actions"
-                                >
-                                  <MoreHorizontal className="h-4.5 w-4.5" />
-                                </button>
-                              </DropdownMenuTrigger>
-
-                              <DropdownMenuContent align="end" className="w-64 rounded-2xl border-slate-200">
-                                <DropdownMenuItem asChild>
-                                  <Link
-                                    href={`/admin/brands/view?brandId=${brand._id}`}
-                                    className="flex items-center gap-2"
-                                  >
-                                    <HiOutlineEye className="h-4 w-4" />
-                                    View details
-                                  </Link>
-                                </DropdownMenuItem>
-
-                                {canEditBrands ? (
-                                  canManage ? (
-                                    <>
-                                      <DropdownMenuItem asChild>
-                                        <Link
-                                          href={`/admin/brands/create-campaign?brandId=${brand._id}`}
-                                          className="flex items-center gap-2"
-                                        >
-                                          <HiOutlinePlus className="h-4 w-4" />
-                                          Create campaign
-                                        </Link>
-                                      </DropdownMenuItem>
-
-                                      <DropdownMenuItem asChild>
-                                        <Link
-                                          href={`/admin/brands/review-campaigns?brandId=${brand._id}`}
-                                          className="flex items-center gap-2"
-                                        >
-                                          <HiPencil className="h-4 w-4" />
-                                          Review campaigns
-                                        </Link>
-                                      </DropdownMenuItem>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <DropdownMenuItem
-                                        disabled
-                                        className="cursor-not-allowed opacity-50 focus:bg-transparent"
-                                      >
-                                        <span className="flex items-center gap-2">
-                                          <HiOutlinePlus className="h-4 w-4" />
-                                          Create campaign
-                                        </span>
-                                      </DropdownMenuItem>
-
-                                      <DropdownMenuItem
-                                        disabled
-                                        className="cursor-not-allowed opacity-50 focus:bg-transparent"
-                                      >
-                                        <span className="flex items-center gap-2">
-                                          <HiPencil className="h-4 w-4" />
-                                          Review campaigns
-                                        </span>
-                                      </DropdownMenuItem>
-                                    </>
-                                  )
-                                ) : null}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-
-                        {isExpanded ? <ExpandedContent brand={brand} /> : null}
-                      </React.Fragment>
-                    );
-                  })}
-              </TableBody>
-            </Table>
-          </div>
-
-          {!loading && brands.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-4 md:px-5">
-              <p className="text-sm font-semibold text-slate-500">
-                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
-              </p>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="rounded-full"
-                  disabled={page === 1}
-                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                >
-                  <HiChevronLeft className="h-4 w-4" />
-                </Button>
-
-                <div className="min-w-[110px] text-center text-sm font-extrabold text-slate-700">
-                  Page {page} / {totalPages}
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="rounded-full"
-                  disabled={page === totalPages}
-                  onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
-                >
-                  <HiChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ) : null}
+          <AdminTable<BrandRow>
+            data={brands}
+            columns={columns}
+            rowKey={(row) => row._id}
+            loading={loading}
+            loadingRows={Math.min(pageSize, 8)}
+            error={error}
+            emptyTitle="No brands found"
+            emptyDescription="Try adjusting the search, filters, or refresh the data."
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+            expandable={expandable}
+            actions={actions}
+            pagination={{
+              page,
+              totalPages,
+              totalItems: total,
+              limit: pageSize,
+              onPageChange: setPage,
+              onLimitChange: handleLimitChange,
+              rowOptions: DEFAULT_ROW_OPTIONS,
+              loading,
+              showRowsSelector: true,
+              showSummary: true,
+            }}
+            className="w-full"
+            tableClassName="min-w-[1200px]"
+            headerRowClassName="border-slate-200 hover:bg-transparent"
+            bodyClassName="[&_tr:last-child]:border-b-0"
+          />
         </Card>
       </div>
     </div>
